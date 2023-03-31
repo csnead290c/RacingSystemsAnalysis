@@ -1,0 +1,527 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<title>{% block title %}Quarter Pro{% endblock %}</title>
+  <h1>Quarter Pro</h1>
+  <p></p>
+  <br/>
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="row">
+      {{ form.submit(class="btn btn-secondary") }}
+    </div>
+    <div class="row">
+
+      <div class="col-lg-4 border p-3">
+        <div class="form-group row">
+          <div class="col-12">
+            <h5 class="text-center">General Data</h5>
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Altimeter.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Altimeter(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Barometer.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Barometer(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Temperature.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Temperature(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Humidity.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Humidity(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_WindSpeed.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_WindSpeed(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_WindAngle.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_WindAngle(class="form-control") }}
+          </div>
+        </div>
+
+        
+
+        <div class="form-group row">
+          {{ form.gc_TrackTemp.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_TrackTemp(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TractionIndex.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_TractionIndex(class="form-control") }}
+          </div>
+        </div>
+
+        <hr>
+
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Vehicle Data</h5>
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Weight.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Weight(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Wheelbase.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Wheelbase(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Rollout.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Rollout(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Overhang.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Overhang(class="form-control") }}
+          </div>
+        </div>
+
+        <hr>
+
+
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Final Drive Data</h5>
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_GearRatio.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_GearRatio(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Efficiency.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_Efficiency(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TireDia.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_TireDia(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TireWidth.label(class="col-sm-7 col-form-label ") }}
+          <div class="col-sm-5">
+            {{ form.gc_TireWidth(class="form-control") }}
+          </div>
+        </div>
+
+      </div>
+      <div class="col-lg-4 border p-3">
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Engine Dyno Data</h5>
+          </div>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-4 col-form-label text-center">RPM</label>
+          <label class="col-4 col-form-label text-center">HP</label>
+          <label class="col-4 col-form-label text-center">Torque</label>         
+        </div>
+
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_1(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_1(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_1(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_2(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_2(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_2(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_3(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_3(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_3(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_4(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_4(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_4(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_5(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_5(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_5(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_6(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_6(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_6(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_7(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_7(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_7(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_8(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_8(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_8(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_9(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_9(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_9(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_10(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_10(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_10(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <div class="col-4 nopadding">
+              {{ form.gc_EngineRPM_11(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineHP_11(class="form-control") }}
+            </div>
+            <div class="col-4 nopadding">
+              {{ form.gc_EngineTQ_11(class="form-control") }}
+            </div>
+        </div>
+        <br>
+
+        <div class="form-group row">
+          {{ form.gc_FuelSystem.label(class="col-sm-4 col-form-label") }}
+          <div class="col-sm-8">
+            {{ form.gc_FuelSystem(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_HPTQMult.label(class="col-sm-6 col-form-label") }}
+          <div class="col-sm-3">
+            {{ form.gc_HPTQMult(class="form-control") }}
+          </div>
+          <button type="submit" class="btn btn-secondary mb-2">Recalc</button>
+        </div>
+        <hr>
+        <br>
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Time Slip</h5>
+          </div>
+        </div>
+        <br>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">60'</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ sixty }}</label>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">330'</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ threethirty }}</label>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">1/8</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ eighth }}</label>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">MPH</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ halfmph }}</label>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">1000'</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ thousand }}</label>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">1/4</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ quarter }}</label>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-5 col-form-label text-right">MPH</label>
+          <label class="col-2 col-form-label">. . . .</label>
+          <label class="col-5 col-form-label">{{ fullmph }}</label>
+        </div>
+        
+        
+        
+      </div>
+      <div class="col-lg-4 border p-3">
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Transmission Data</h5>
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TransType.label(class="col-sm-4 col-form-label") }}
+          <div class="col-sm-8">
+            {{ form.gc_TransType(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_LaunchRPM.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_LaunchRPM(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_SlipStallRPM.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_SlipStallRPM(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_Slippage.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_Slippage(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_LockUp.label(class="col-sm-8 col-form-label") }}
+          <div class="col-sm-2">
+            {{ form.gc_LockUp(class="form-control") }}
+          </div>
+          <div class="col-sm-2">
+
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TorqueMult.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_TorqueMult(class="form-control") }}
+          </div>
+        </div>
+
+        <hr>
+
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">Gear</label>
+          <label class="col-3 col-form-label nopadding text-center">Ratio</label>
+          <label class="col-3 col-form-label nopadding text-center">Efficiency</label>   
+          <label class="col-3 col-form-label nopadding text-center">Shift@</label>  
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">1st-</label>
+          <div class="col-3 nopadding">
+              {{ form.gc_TransGR_1(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_TransEff_1(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_ShiftRPM_1(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">2nd-</label>
+          <div class="col-3 nopadding">
+              {{ form.gc_TransGR_2(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_TransEff_2(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_ShiftRPM_2(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">3rd-</label>
+          <div class="col-3 nopadding">
+              {{ form.gc_TransGR_3(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_TransEff_3(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_ShiftRPM_3(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">4th-</label>
+          <div class="col-3 nopadding">
+              {{ form.gc_TransGR_4(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_TransEff_4(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_ShiftRPM_4(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">5th-</label>
+          <div class="col-3 nopadding">
+              {{ form.gc_TransGR_5(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_TransEff_5(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_ShiftRPM_5(class="form-control") }}
+            </div>
+        </div>
+        <div class="form-group row nopadding">
+          <label class="col-3 col-form-label nopadding text-center">6th-</label>
+          <div class="col-3 nopadding">
+              {{ form.gc_TransGR_6(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_TransEff_6(class="form-control") }}
+            </div>
+            <div class="col-3 nopadding">
+              {{ form.gc_ShiftRPM_6(class="form-control") }}
+            </div>
+        </div>
+        <hr>
+
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Polar Moments of Inertia</h5>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          {{ form.gc_EnginePMI.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_EnginePMI(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TransPMI.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_TransPMI(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_TiresPMI.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_TiresPMI(class="form-control") }}
+          </div>
+        </div>
+        <hr>
+        <div class="row">
+          <div class="col-12">
+            <h5 class="text-center">Aerodynamic Data</h5>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          {{ form.gc_RefArea.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_RefArea(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_DragCoef.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_DragCoef(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_LiftCoef.label(class="col-sm-7 col-form-label") }}
+          <div class="col-sm-5">
+            {{ form.gc_LiftCoef(class="form-control") }}
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+
+
+
+
+
+
+    
+  </form>
+
+
+  
+
+{% endblock %}

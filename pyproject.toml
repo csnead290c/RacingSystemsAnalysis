@@ -7,6 +7,10 @@ authors = ["Replit user <<>>"]
 [tool.poetry.dependencies]
 python = "^3.10"
 Flask = "^2.2.3"
+Flask-WTF = "^1.1.1"
+email-validator = "^1.3.1"
+Flask-Bootstrap = "^3.3.7"
+goto-statement = "^1.2"
 
 [tool.poetry.dev-dependencies]
 

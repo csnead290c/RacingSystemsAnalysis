@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<title>{% block title %}Converter Slip{% endblock %}</title>
+  <h1>Converter Slip Calculator</h1>
+  <p>Enter your vehicle data in the fields below. Press the calculate 
+    button to display the estimated torque converter slip.</p>
+  <br/>
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="row">
+      <div class="col-lg-6">
+        <div class="form-group row">
+          {{ form.gc_TireDiameter.label(class="col-sm-5 col-form-label ") }}
+          <div class="col-sm-7">
+            {{ form.gc_TireDiameter(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_GearRatio.label(class="col-sm-5 col-form-label ") }}
+          <div class="col-sm-7">
+            {{ form.gc_GearRatio(class="form-control") }}
+          </div>
+        </div>
+        </div>
+        <div class="col-lg-6">
+        <div class="form-group row">
+          {{ form.gc_RPM.label(class="col-sm-5 col-form-label ") }}
+          <div class="col-sm-7">
+            {{ form.gc_RPM(class="form-control") }}
+          </div>
+        </div>
+        <div class="form-group row">
+          {{ form.gc_MPH.label(class="col-sm-5 col-form-label ") }}
+          <div class="col-sm-7">
+            {{ form.gc_MPH(class="form-control") }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-12">
+        <div class="form-group row">
+          <div class="col-md-4"></div>
+          <div class="col-md-4">
+            {{ form.submit(class="btn btn-secondary btn-block") }}
+          </div>
+          <div class="col-md-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      
+      <div class="col-lg-6">
+        {% if convSlip %}
+        <div class="form-group row">
+          <label class="col-sm-5 col-form-label " for="convSlip">Converter Slip</label>
+          <div class="col-sm-7">
+            <input class="form-control" id="convSlip" name="convSlip" type="text" value="{{ convSlip }}%" readonly>
+          </div>
+        </div>
+        {% endif %}
+        
+      </div>
+      
+    </div>
+    </form>
+  
+
+{% endblock %}
