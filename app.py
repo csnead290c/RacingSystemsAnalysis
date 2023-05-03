@@ -3,7 +3,6 @@ from forms import NamerForm, WeatherForm, DynoForm, ConverterSlipForm, QuarterPr
 from weather import weather
 from tire import tire
 
-
 from flask_bootstrap import Bootstrap
 # to use it like math.pi
 import math
@@ -177,9 +176,8 @@ def quarterpro():
   ET = (TrackTempEffect**0.25) * (1.8 + 4.2 *
                                   (hpmax / form.gc_Weight.data)**(-1 / 3))
 
-  
   kd = 33
-  if gc_BodyStyle == 8: 
+  if gc_BodyStyle == 8:
     ET = 1.04 * ET
     kd = kd - 1
 
@@ -192,8 +190,6 @@ def quarterpro():
       break
   if z > kd:
     TimePrintInc = 100
-
-
 
   #  CALCULATE STALL SPEED IF LAMBDA WAS INPUT
   if form.gc_SlipStallRPM.data > 220:
@@ -277,26 +273,29 @@ def quarterpro():
                       (form.gc_WindSpeed.data / Z5)**2)
   q = math.copysign(rho * math.pow(abs(WindFPS), 2) / (2 * gc), WindFPS)
 
-
   DragForce = CMU * form.gc_Weight.data + form.gc_DragCoef.data * form.gc_RefArea.data * q
 
   TireDia = form.gc_TireDia.data
 
-  force = TQ * form.gc_GearRatio.data * form.gc_Efficiency.data / (TireSlip * TireDia / 24) - DragForce
+  force = TQ * form.gc_GearRatio.data * form.gc_Efficiency.data / (
+    TireSlip * TireDia / 24) - DragForce
 
   # estimate maximum acceleration from force and weight
   if gc_TransType == 92:
-    Ags0 = 0.88 * force / form.gc_Weight.data #assume 12% misc losses on initial hit of tire
+    Ags0 = 0.88 * force / form.gc_Weight.data  #assume 12% misc losses on initial hit of tire
   else:
-    Ags0 = 0.96 * force / form.gc_Weight.data #assume 4% misc losses on initial hit of tire
-  AgsMax = Ags0 #save AgsMax for print tolerance selection
+    Ags0 = 0.96 * force / form.gc_Weight.data  #assume 4% misc losses on initial hit of tire
+  AgsMax = Ags0  #save AgsMax for print tolerance selection
 
   # assume YCG is 3.75" above static rear axle centerline (to match Pro Stock)
   gc_YCG = (TireDia / 2) + 3.75
 
   TireGrowth, TireCirFt = tire(form.gc_TireWidth.data, TireDia, Vel[L], Ags0)
   TireRadIn = 12 * TireCirFt / (2 * math.pi)
-  deltaFWT = (Ags0 * form.gc_Weight.data * ((gc_YCG - TireRadIn) + (FRCT / form.gc_Efficiency.data) * TireRadIn) + DragForce * gc_YCG) / form.gc_Wheelbase.data
+  deltaFWT = (Ags0 * form.gc_Weight.data *
+              ((gc_YCG - TireRadIn) +
+               (FRCT / form.gc_Efficiency.data) * TireRadIn) +
+              DragForce * gc_YCG) / form.gc_Wheelbase.data
 
   # calculate dynamic front weight and static rear weight for launch conditions
   # set the required static front weight for perfect balance at launch
@@ -309,26 +308,29 @@ def quarterpro():
     StaticRWT = form.gc_Weight.data
 
   # calculate initial max tire force limit based on estimated static rear weight
-  CAXI = (1 - (form.gc_TractionIndex.data - 1) * 0.01) / (TrackTempEffect ** 0.25)
-  CRTF = CAXI * AX * TireDia * (form.gc_TireWidth.data + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ** 2.15)
+  CAXI = (1 -
+          (form.gc_TractionIndex.data - 1) * 0.01) / (TrackTempEffect**0.25)
+  CRTF = CAXI * AX * TireDia * (form.gc_TireWidth.data +
+                                1) * (0.92 + 0.08 * (StaticRWT / 1900)**2.15)
 
   if gc_BodyStyle == 8:
     CRTF = 0.5 * CRTF
 
   AMAX = (CRTF - DragForce) / form.gc_Weight.data
-  SLIP = [0]*60
+  SLIP = [0] * 60
   SLIP[L] = 0
   if Ags0 > AMAX:
-      Ags0 = AMAX
-      SLIP[L] = 1
+    Ags0 = AMAX
+    SLIP[L] = 1
   if Ags0 < AMin:
-      Ags0 = AMin
+    Ags0 = AMin
   AGS[L] = Ags0
 
   # AddListLine   Not sure what this is doing exactly. line 1059
 
   # select a time step to get about 15 calcs during the rollout distance
-  TSMax = DistToPrint[1] * 0.11 * (HP * form.gc_TorqueMult.data / form.gc_Weight.data) ** (-1 / 3)
+  TSMax = DistToPrint[1] * 0.11 * (HP * form.gc_TorqueMult.data /
+                                   form.gc_Weight.data)**(-1 / 3)
   TSMax = TSMax / 15
   if TSMax < 0.005:
     TSMax = 0.005
@@ -341,9 +343,10 @@ def quarterpro():
       #230 TOP OF LOOP FOR GEAR CHANGE
       Shift2PrintTime = time[L] + DTShift
       TimeStep = DTShift
-      
+
       #CALCULATE THE TOTAL CHASSIS INERTIA FOR THIS GEAR
-      ChassisPMI = form.gc_TiresPMI.data + form.gc_TransPMI.data * form.gc_GearRatio.data ** 2 * TGR[iGear] ** 2
+      ChassisPMI = form.gc_TiresPMI.data + form.gc_TransPMI.data * form.gc_GearRatio.data**2 * TGR[
+        iGear]**2
 
       if L > 1:
         loop = 250
@@ -351,11 +354,11 @@ def quarterpro():
 
     if loop < 239:
       #240 TOP OF LOOP FOR VELOCITY STEP INCREMENT
-      TimeStep = TSMax * (AgsMax / Ags0) ** 4  #QProRxCode
+      TimeStep = TSMax * (AgsMax / Ags0)**4  #QProRxCode
 
     if loop < 250:
       #250
-      Jerk = 0    #jerk has units of g's per second
+      Jerk = 0  #jerk has units of g's per second
       Work = time[L] - Time0
       if Work > 0:
         Jerk = (AGS[L] - Ags0) / Work
@@ -363,102 +366,111 @@ def quarterpro():
         Jerk = JMin
       if Jerk > JMax:
         Jerk = JMax
-    
+
       Vel0 = Vel[L]
       Ags0 = AGS[L]
-      TireGrowth, TireCirFt = tire(form.gc_TireWidth.data, TireDia, Vel[L], Ags0)
+      TireGrowth, TireCirFt = tire(form.gc_TireWidth.data, TireDia, Vel[L],
+                                   Ags0)
       RPM0 = EngRPM[L]
       Time0 = time[L]
       if RPM0 == form.gc_LaunchRPM.data and Time0 == 0:
         RPM0 = Stall
         if form.gc_LaunchRPM.data < Stall:
-          Time0 = form.gc_EnginePMI.data *(Stall - form.gc_LaunchRPM.data) / 250000
+          Time0 = form.gc_EnginePMI.data * (Stall -
+                                            form.gc_LaunchRPM.data) / 250000
       Dist0 = Dist[L]
 
       #calc tire slip from traction index, track temp and downtrack location
-      Work = 0.005 * (form.gc_TractionIndex.data -1)+3*(TrackTempEffect-1)
-      TireSlip = 1.02 + Work * (1 - (Dist0 / 1320) ** 2)
-    
+      Work = 0.005 * (form.gc_TractionIndex.data - 1) + 3 * (TrackTempEffect -
+                                                             1)
+      TireSlip = 1.02 + Work * (1 - (Dist0 / 1320)**2)
+
       DSRPM0 = DSRPM
       L = L + LAdd
       Gear[L] = iGear
       LAdd = 0
-    
+
       #SELECT NEXT VELOCITY TO MEET VARIOUS OBJECTIVES (ShiftFlag < 2)
-      Vel[L] = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep ** 2 / 2
-    
+      Vel[L] = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep**2 / 2
+
       if ShiftFlag == 2:
         loop = 270
         continue
-    
+
       # don't let TimeStep exceed K7 steps per TimePrintInc
       print(TimePrintInc)
       print(K7)
-      tmpchk =TimePrintInc / K7
-      
+      tmpchk = TimePrintInc / K7
+
       if TimeStep > tmpchk:
         TimeStep = TimePrintInc / K7
-    
+
       # don't let TimeStep exceed TimePrint
       if TimeStep > (TimePrint - Time0):
         TimeStep = TimePrint - Time0
-    
+
       # don't let TimeStep exceed 4.5 steps to distance print
       if iDist > 1:
-        Work = ((DistToPrint[iDist] - DistToPrint[iDist - 1]) / Vel0) / 4.5 #increased from 2.0 7/11/99
+        Work = ((DistToPrint[iDist] - DistToPrint[iDist - 1]) /
+                Vel0) / 4.5  #increased from 2.0 7/11/99
         if TimeStep > Work:
           TimeStep = Work
-    
+
       if TimeStep > 0.05:
-        TimeStep = 0.05   #reduced from .2 7/11/99
-    
-      Vel[L] = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
-    
+        TimeStep = 0.05  #reduced from .2 7/11/99
+
+      Vel[
+        L] = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
+
       # don't let TimeStep exceed shift points
       if Vel0 > 0 and RPM0 > Stall and iGear < NGR:
         Work = Vel0 * (ShiftRPM[iGear] + 5) / RPM0
         if Vel[L] > Work:
           Vel[L] = Work
           TimeStep = (Vel[L] - Vel0) / (Ags0 * gc)
-    
+
       # don't let TimeStep exceed distance print
-      DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ** 2 / 2
+      DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep**2 / 2
       if DistStep >= (DistToPrint[iDist] - DistTol):
-        Vel[L] = math.sqrt(Vel0 ** 2 + 2 * Ags0 * gc * (DistToPrint[iDist] - Dist0))
+        Vel[L] = math.sqrt(Vel0**2 + 2 * Ags0 * gc *
+                           (DistToPrint[iDist] - Dist0))
 
     if loop < 271:
       #270
       # ENTRY POINT FOR VELOCITY REVISION TO MATCH DISTANCE, TIME, OR SHIFT POINT PRINTS
-      VelSqrd = Vel[L] ** 2 - Vel0 ** 2
+      VelSqrd = Vel[L]**2 - Vel0**2
       DSRPM = TireSlip * Vel[L] * 60 / TireCirFt
-    
+
       if mTimer == True:
         loop = 999  #Patrick - see QProRxCode for other tests
-        continue 
+        continue
 
       #PERFORM CLUTCH AND CONVERTER CALCULATIONS
       LockRPM = DSRPM * form.gc_GearRatio.data * TGR[iGear]
       EngRPM[L] = form.gc_Slippage.data * LockRPM
 
-      if gc_TransType == 100: #clutch
+      if gc_TransType == 100:  #clutch
         if EngRPM[L] < Stall:
           if iGear == 1 or form.gc_LockUp.data == False:
             EngRPM[L] = Stall
-        ClutchSlip = LockRPM/EngRPM[L]
+        ClutchSlip = LockRPM / EngRPM[L]
       else:
-        if iGear == 1 or form.gc_LockUp.data == False: # non lock-up converter
+        if iGear == 1 or form.gc_LockUp.data == False:  # non lock-up converter
           zStall = Stall
           SlipRatio = form.gc_Slippage.data * LockRPM / zStall
 
           if L > 2:
             if SlipRatio > 0.6:
-              zStall = zStall * (1 + (form.gc_Slippage.data - 1) * (SlipRatio - 0.6) / ((1 / form.gc_Slippage.data) - 0.6))
+              zStall = zStall * (1 + (form.gc_Slippage.data - 1) *
+                                 (SlipRatio - 0.6) /
+                                 ((1 / form.gc_Slippage.data) - 0.6))
             SlipRatio = form.gc_Slippage.data * LockRPM / zStall
           ClutchSlip = 1 / form.gc_Slippage.data
 
           if EngRPM[L] < zStall:
             EngRPM[L] = zStall
-            Work = form.gc_TorqueMult.data - (form.gc_TorqueMult.data - 1) * SlipRatio
+            Work = form.gc_TorqueMult.data - (form.gc_TorqueMult.data -
+                                              1) * SlipRatio
             ClutchSlip = Work * LockRPM / zStall
         else:  #lock-up converter
           EngRPM[L] = 1.005 * LockRPM
@@ -474,24 +486,33 @@ def quarterpro():
       HP = HP * ClutchSlip
 
       #CALCULATE DRAG FORCES (FRICTION, VISCOUS AND AERODYNAMIC)    'Patrick - QProRx includes prevailing wind speed
-      WindFPS = math.sqrt(Vel[L] ** 2 + 2 * Vel[L] * (form.gc_WindSpeed.data / Z5) * math.cos(math.pi * form.gc_WindAngle.data / 180) + (form.gc_WindSpeed.data / Z5) ** 2)
-      q = math.copysign(1, WindFPS) * rho * abs(WindFPS) ** 2 / (2 * gc)
+      WindFPS = math.sqrt(Vel[L]**2 + 2 * Vel[L] *
+                          (form.gc_WindSpeed.data / Z5) *
+                          math.cos(math.pi * form.gc_WindAngle.data / 180) +
+                          (form.gc_WindSpeed.data / Z5)**2)
+      q = math.copysign(1, WindFPS) * rho * abs(WindFPS)**2 / (2 * gc)
 
       #increase frontal area based on tire growth (crude method! - check QProRxCode Patrick)
       if gc_BodyStyle == 8:
-        RefArea2 = form.gc_RefArea.data + ((TireGrowth - 1) * TireDia / 2) * form.gc_TireWidth.data / 144
+        RefArea2 = form.gc_RefArea.data + (
+          (TireGrowth - 1) * TireDia / 2) * form.gc_TireWidth.data / 144
       else:
-        RefArea2 = form.gc_RefArea.data + ((TireGrowth - 1) * TireDia / 2) * (2 * form.gc_TireWidth.data) / 144
+        RefArea2 = form.gc_RefArea.data + (
+          (TireGrowth - 1) * TireDia / 2) * (2 * form.gc_TireWidth.data) / 144
 
       DownForce = form.gc_Weight.data + form.gc_LiftCoef.data * RefArea2 * q
       cmu1 = CMU - (Dist0 / 1320) * CMUK
-      DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel[L]) + form.gc_DragCoef.data * RefArea2 * q
+      DragForce = cmu1 * DownForce + 0.0001 * DownForce * (
+        Z5 * Vel[L]) + form.gc_DragCoef.data * RefArea2 * q
       DragHP = DragForce * Vel[L] / 550
 
       #calculate dynamic weight on front tires
       TireRadIn = 12 * TireCirFt / (2 * math.pi)
       #FRCT should really be variable at this point, getting closer to 1 downtrack
-      deltaFWT = (Ags0 * form.gc_Weight.data * ((gc_YCG - TireRadIn) + (FRCT / form.gc_Efficiency.data) * TireRadIn) + DragForce * gc_YCG) / form.gc_Wheelbase.data
+      deltaFWT = (Ags0 * form.gc_Weight.data *
+                  ((gc_YCG - TireRadIn) +
+                   (FRCT / form.gc_Efficiency.data) * TireRadIn) +
+                  DragForce * gc_YCG) / form.gc_Wheelbase.data
       DynamicFWT = gc_StaticFWt - deltaFWT
 
       #calculate wheelie bar weight
@@ -506,9 +527,11 @@ def quarterpro():
       if DynamicRWT < 0:
         DynamicRWT = form.gc_Weight.data
       #RWT(L) = dynamicRWT    'QProRxCode
-      CRTF = CAXI * AX * TireDia * (form.gc_TireWidth.data + 1) * (0.92 + 0.08 * (DynamicRWT / 1900) ** 2.15)
+      CRTF = CAXI * AX * TireDia * (form.gc_TireWidth.data +
+                                    1) * (0.92 + 0.08 *
+                                          (DynamicRWT / 1900)**2.15)
       if gc_BodyStyle == 8:
-          CRTF = 0.5 * CRTF
+        CRTF = 0.5 * CRTF
 
       AMAX = ((CRTF / TireGrowth) - DragForce) / form.gc_Weight.data
 
@@ -542,19 +565,20 @@ def quarterpro():
       if ChasAccHP < 0:
         ChasAccHP = 0
 
-      k=0
-        
+      k = 0
+
     if loop < 281:
       #280 ITERATION TO CONVERGE INERTIA TRANSIENT check QProRxCode
 
       k = k + 1
       dtkl = time[L] - Time0
-      Work = (2 * math.pi / 60) ** 2 / (12 * 550 * dtkl)
+      Work = (2 * math.pi / 60)**2 / (12 * 550 * dtkl)
       HPEngPMI = EngAccHP * Work
       HPChasPMI = ChasAccHP * Work
 
       HP = (HPSave - HPEngPMI) * ClutchSlip
-      HP = ((HP * TGEff[iGear] * form.gc_Efficiency.data - HPChasPMI) / TireSlip) - DragHP
+      HP = ((HP * TGEff[iGear] * form.gc_Efficiency.data - HPChasPMI) /
+            TireSlip) - DragHP
       PQWT = 550 * gc * HP / form.gc_Weight.data
       AGS[L] = PQWT / (Vel[L] * gc)
 
@@ -564,30 +588,23 @@ def quarterpro():
       loop = 999
 
     #if loop < 301:
-      #300
+    #300
 
     #if loop < 306:
-      #305
+    #305
 
     #if loop < 331:
-      #330
+    #330
 
     #if loop < 341:
-      #340
+    #340
 
     #if loop < 351:
-      #350
+    #350
 
     if loop == 999:
       #calcoutputexit
       break
-      
-
-  
-
-  
-
-  
 
   # Stopping at code line 1140 (out of about 1500...)
 
