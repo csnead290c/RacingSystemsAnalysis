@@ -96,17 +96,21 @@ export function vb6Converter(
 }
 
 /**
- * VB6 clutch model.
+ * VB6 clutch model (HP-based).
  * 
- * VB6 Source: TIMESLIP.FRM lines 1148-1152
+ * VB6 Source: TIMESLIP.FRM lines 1148-1152, 1176-1178
  * 
  * VB6 Algorithm:
  * 1. Calculate lock RPM: LockRPM = wheelRPM * gearRatio * finalDrive
  * 2. Calculate engine RPM with slippage: EngRPM = slippage * LockRPM
  * 3. Clamp engine RPM to slip/stall RPM minimum (1st gear or no lock-up)
- * 4. Calculate clutch slip (coupling factor): ClutchSlip = LockRPM / EngRPM
+ * 4. Calculate clutch slip: ClutchSlip = LockRPM / EngRPM
+ * 5. Get HP from engine curve at EngRPM
+ * 6. Scale HP by ClutchSlip: HP_eff = HP * ClutchSlip
+ * 7. Convert back to torque: T_eff = (HP_eff * 5252) / EngRPM
+ * 8. Apply gear ratios: Twheel = T_eff * gearRatio * finalDrive
  * 
- * @param engineTorque - Engine torque (lb-ft)
+ * @param engineHP - Engine HP at current RPM
  * @param engineRPM - Engine RPM (from wheel speed, unused - recalculated)
  * @param wheelRPM - Wheel RPM (output shaft)
  * @param gearRatio - Current gear ratio
@@ -118,7 +122,7 @@ export function vb6Converter(
  * @returns Wheel torque, effective engine RPM, and coupling factor
  */
 export function vb6Clutch(
-  engineTorque: number,
+  engineHP: number,
   _engineRPM: number,
   wheelRPM: number,
   gearRatio: number,
@@ -147,10 +151,21 @@ export function vb6Clutch(
   
   const ClutchSlip = LockRPM / EngRPM_out;
   
-  // VB6: TIMESLIP.FRM:1178
+  // VB6: TIMESLIP.FRM:1176-1178
+  // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+  // HP = gc_HPTQMult.Value * HP / hpc
   // HP = HP * ClutchSlip
-  // Torque is proportional to HP at same RPM, so:
-  const Twheel = engineTorque * ClutchSlip * gearRatio * finalDrive;
+  //
+  // VB6 scales HP by ClutchSlip, then converts to torque
+  // We receive HP at EngRPM_out, so scale it:
+  const HP_eff = engineHP * ClutchSlip;
+  
+  // Convert HP back to torque at EngRPM_out
+  // T = (HP * 5252) / RPM
+  const T_eff = EngRPM_out > 0 ? (HP_eff * 5252) / EngRPM_out : 0;
+  
+  // Apply gear ratios
+  const Twheel = T_eff * gearRatio * finalDrive;
   
   return { Twheel, engineRPM_out: EngRPM_out, coupling: ClutchSlip };
 }

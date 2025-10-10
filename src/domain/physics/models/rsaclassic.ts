@@ -263,13 +263,28 @@ class RSACLASSICModel implements PhysicsModel {
       const wheelRPM = (state.v_fps * 60) / (2 * Math.PI * tireRadius_ft);
       
       if (clutch) {
-        // VB6 clutch model (TIMESLIP.FRM:1148-1152)
+        // VB6 clutch model (TIMESLIP.FRM:1148-1152, 1176-1178)
+        // VB6 calculates EngRPM first, then gets HP at that RPM, then scales by ClutchSlip
         const slipRPM = clutch.slipRPM ?? clutch.launchRPM ?? 0;
         const slippage = clutch.slipRatio ?? 1.0025; // VB6 default: 1.0025 + slipRPM/1000000
         const lockup = clutch.lockup ?? false;
+        
+        // Calculate EngRPM_out (slip-clamped RPM)
+        const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
+        let EngRPM_out = slippage * LockRPM;
+        if (EngRPM_out < slipRPM) {
+          if (state.gearIdx === 0 || !lockup) { // gear 1 (0-indexed) or no lockup
+            EngRPM_out = slipRPM;
+          }
+        }
+        
+        // VB6: Get HP at EngRPM_out (TIMESLIP.FRM:1176)
+        // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+        const hp_at_EngRPM = wheelTorque_lbft(EngRPM_out, engineParams, currentGearEff) * EngRPM_out / 5252;
+        
         const result = vb6Clutch(
-          tq_lbft, 
-          rpm, 
+          hp_at_EngRPM,  // HP at EngRPM_out, not at wheel RPM
+          EngRPM_out, 
           wheelRPM, 
           gearRatio, 
           finalDrive ?? 3.73, 
