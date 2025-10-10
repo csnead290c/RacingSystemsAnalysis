@@ -13,11 +13,12 @@ import { maybeShift } from '../drivetrain/shift';
 import { maxTractive_lb, type TireParams } from '../tire/traction';
 import { stepEuler, createInitialState, type StepForces } from '../core/integrator';
 import { lbToSlug } from '../core/units';
-import { g, FPS_TO_MPH } from '../vb6/constants';
+import { g, FPS_TO_MPH, CMU } from '../vb6/constants';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
 import { vb6Converter, vb6Clutch, vb6DirectDrive } from '../vb6/driveline';
+import { vb6LoadedRadiusFt } from '../vb6/tires';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -77,13 +78,12 @@ class RSACLASSICModel implements PhysicsModel {
       warnings.push('Missing env.elevation - required for VB6 air density');
     }
     
-    // Tire radius from multiple sources (prefer tireRolloutIn for VB6 parity)
+    // VB6 tire radius calculation (TIMESLIP.FRM:683-687, 1036, 1197)
+    // VB6 uses either tire diameter or rollout (circumference)
     let tireRadius_ft: number;
-    if (vehicle.tireRolloutIn) {
-      tireRadius_ft = (vehicle.tireRolloutIn / 12) / Math.PI;
-    } else if (vehicle.tireDiaIn) {
-      tireRadius_ft = (vehicle.tireDiaIn / 12) / 2;
-    } else {
+    try {
+      tireRadius_ft = vb6LoadedRadiusFt(vehicle.tireDiaIn, vehicle.tireRolloutIn);
+    } catch {
       warnings.push('Missing vehicle.tireDiaIn or vehicle.tireRolloutIn - required for VB6 parity');
       tireRadius_ft = (28 / 12) / 2; // Emergency fallback
     }
@@ -286,12 +286,13 @@ class RSACLASSICModel implements PhysicsModel {
         env.elevation ?? 0           // Emergency fallback (warning added above)
       );
       
-      // VB6 rolling resistance torque
-      // TODO: Verify rrCoeff default against VB6 source
-      const rrCoeff = vehicle.rrCoeff ?? 0.015;
-      const T_rr = vb6RollingResistanceTorque(vehicle.weightLb, rrCoeff, tireRadius_ft);
+      // VB6 rolling resistance torque (TIMESLIP.FRM:1019, 1192-1193)
+      // Uses CMU coefficient (0.025 for Quarter Jr/Pro)
+      const cmu = vehicle.rrCoeff ?? CMU; // Allow override, default to VB6 CMU
+      const T_rr = vb6RollingResistanceTorque(vehicle.weightLb, cmu, tireRadius_ft);
       
-      // VB6 aerodynamic drag torque
+      // VB6 aerodynamic drag torque (TIMESLIP.FRM:1017, 1019, 1193)
+      // Uses dynamic pressure q = rho * v² / (2 * gc)
       const T_drag = vb6AeroTorque(rho, cd ?? 0.38, frontalArea_ft2 ?? 22, state.v_fps, tireRadius_ft);
       
       // For integrator compatibility, compute equivalent drag/roll forces

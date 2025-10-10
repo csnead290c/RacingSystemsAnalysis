@@ -41,6 +41,12 @@ export const RSTD = 1545.32;
 /** Z5 constant: 3600 / 5280 (hours/mile to seconds/foot) - TIMESLIP.FRM:542 */
 export const Z5 = 3600 / 5280;
 
+/** CMU: Rolling resistance coefficient for Quarter Jr/Pro - TIMESLIP.FRM:552 */
+export const CMU = 0.025;
+
+/** CMUK: Distance-dependent CMU reduction for Quarter Jr/Pro - TIMESLIP.FRM:553 */
+export const CMUK = 0.01;
+
 /** Time tolerance (seconds) - TIMESLIP.FRM:554 */
 export const TimeTol = 0.002;
 
