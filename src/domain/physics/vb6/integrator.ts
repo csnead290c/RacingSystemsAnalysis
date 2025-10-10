@@ -130,7 +130,13 @@ export function vb6Step(
 /**
  * Check if gear shift should occur.
  * 
- * TODO: Verify VB6 shift logic (RPM threshold, delay, etc.)
+ * VB6 Source: TIMESLIP.FRM lines 1336-1340, 1355, 1433
+ * 
+ * VB6 Algorithm:
+ * 1. Check if within tolerance of shift RPM: Abs(ShiftRPM - EngRPM) < ShiftRPMTol
+ * 2. ShiftRPMTol = 10 (or 20 if ShiftRPM > 8000)
+ * 3. Set ShiftFlag = 1 when within tolerance
+ * 4. Execute shift: iGear = iGear + 1
  * 
  * @param state - Current simulation state
  * @param params - Simulation parameters
@@ -148,8 +154,16 @@ export function vb6CheckShift(
     return gearIndex;
   }
 
-  // Check if RPM exceeds shift point
-  if (shiftRpm[gearIndex] !== undefined && engineRPM >= shiftRpm[gearIndex]) {
+  // VB6: TIMESLIP.FRM:860
+  // ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
+  const ShiftRPMTol = shiftRpm[0] > 8000 ? 20 : 10;
+
+  // VB6: TIMESLIP.FRM:1336-1340, 1355
+  // If Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
+  const targetShiftRPM = shiftRpm[gearIndex];
+  if (targetShiftRPM !== undefined && Math.abs(targetShiftRPM - engineRPM) < ShiftRPMTol) {
+    // VB6: TIMESLIP.FRM:1433
+    // If ShiftFlag = 1 Then ShiftFlag = 2: iGear = iGear + 1
     return gearIndex + 1;
   }
 

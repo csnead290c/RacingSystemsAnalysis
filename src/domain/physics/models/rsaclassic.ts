@@ -164,13 +164,23 @@ class RSACLASSICModel implements PhysicsModel {
     
     const timeslip: Array<{ d_ft: number; t_s: number; v_mph: number }> = [];
     
-    // Track rollout completion
+    // VB6 rollout and timing (TIMESLIP.FRM:815-817, 1380)
+    // DistToPrint(1) = gc_Rollout.Value / 12
+    // If gc_Rollout.Value > 0 Then time(L) = 0  (reset clock at rollout)
     let rolloutCompleted = false;
     let t_at_rollout = 0;
     
-    // Track timeslip points
+    // VB6 timeslip points (TIMESLIP.FRM:816-817)
+    // DistToPrint(2) = 30, (3) = 60, (4) = 330, (5) = 594, (6) = 660, (7) = 1000, (8) = 1254, (9) = 1320
     const timeslipPoints = [60, 330, 660, 1000, finishDistance_ft];
     let nextTimeslipIdx = 0;
+    
+    // VB6 trap speed windows (TIMESLIP.FRM:1619-1627)
+    // Eighth:  594-660 ft (66 ft window)
+    // Quarter: 1254-1320 ft (66 ft window)
+    // TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)  [time-averaged speed]
+    let t_at_594 = 0;
+    let t_at_1254 = 0;
     
     // Previous state for acceleration calculation
     let prevV_fps = 0;
@@ -369,13 +379,29 @@ class RSACLASSICModel implements PhysicsModel {
         state.gearIdx = newGearIdx;
       }
       
-      // Track rollout completion
+      // VB6 rollout completion (TIMESLIP.FRM:1380)
+      // If gc_Rollout.Value > 0 Then time(L) = 0
       if (!rolloutCompleted && state.s_ft >= rolloutFt) {
         rolloutCompleted = true;
         t_at_rollout = state.t_s;
       }
       
-      // Collect timeslip points
+      // VB6 trap speed window tracking (TIMESLIP.FRM:1619-1627)
+      // Case 5: SaveTime = time(L)  '594 ft
+      // Case 8: SaveTime = time(L)  '1254 ft
+      if (t_at_594 === 0 && state.s_ft >= 594) {
+        t_at_594 = state.t_s;
+      }
+      if (t_at_1254 === 0 && state.s_ft >= 1254) {
+        t_at_1254 = state.t_s;
+      }
+      
+      // VB6 timeslip points (TIMESLIP.FRM:1617-1626)
+      // Case 3: TIMESLIP(1) = time(L)  '60 ft
+      // Case 4: TIMESLIP(2) = time(L)  '330 ft
+      // Case 6: TIMESLIP(3) = time(L)  '660 ft
+      // Case 7: TIMESLIP(5) = time(L)  '1000 ft
+      // Case 9: TIMESLIP(6) = time(L)  '1320 ft
       while (nextTimeslipIdx < timeslipPoints.length && 
              state.s_ft >= timeslipPoints[nextTimeslipIdx]) {
         const distance = timeslipPoints[nextTimeslipIdx];
@@ -415,9 +441,35 @@ class RSACLASSICModel implements PhysicsModel {
       warnings.push('max_time_exceeded');
     }
     
-    // Calculate final ET and MPH
+    // VB6 final ET and trap speed calculation (TIMESLIP.FRM:1621, 1626-1627)
+    // TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)  [eighth mile trap]
+    // TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime)  [quarter mile trap]
+    // Z5 = 3600 / 5280 (converts fps to mph)
     const measuredET = rolloutCompleted ? state.t_s - t_at_rollout : state.t_s;
     const finalMPH = state.v_fps * FPS_TO_MPH;
+    
+    // VB6 trap speeds: time-averaged over 66 ft windows
+    const Z5 = 3600 / 5280;
+    let eighthMileTrapMPH: number | undefined;
+    let quarterMileTrapMPH: number | undefined;
+    
+    if (t_at_594 > 0 && state.t_s > t_at_594) {
+      // Eighth mile trap: 594-660 ft (66 ft window)
+      const t_at_660 = state.t_s; // Current time (should be at or past 660)
+      const deltaT = t_at_660 - t_at_594;
+      if (deltaT > 0) {
+        eighthMileTrapMPH = Z5 * 66 / deltaT;
+      }
+    }
+    
+    if (t_at_1254 > 0 && state.t_s > t_at_1254) {
+      // Quarter mile trap: 1254-1320 ft (66 ft window)
+      const t_at_1320 = state.t_s; // Current time (should be at or past 1320)
+      const deltaT = t_at_1320 - t_at_1254;
+      if (deltaT > 0) {
+        quarterMileTrapMPH = Z5 * 66 / deltaT;
+      }
+    }
     
     // Final kinetic energy (DEV only)
     // Translational: KE = 0.5 × m × v²
@@ -440,65 +492,18 @@ class RSACLASSICModel implements PhysicsModel {
       });
     }
     
-    // Compute window MPH from traces
+    // VB6 trap speeds: time-averaged over 66 ft windows (TIMESLIP.FRM:1621, 1626-1627)
+    // TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)  [eighth mile trap]
+    // TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime)  [quarter mile trap]
+    // Z5 = 3600 / 5280 (converts to mph)
     const windowMPH: { e660_mph?: number; q1320_mph?: number } = {};
     
-    if (traces.length > 0) {
-      // Helper: interpolate at distance
-      const interpAtS = (s_ft: number): { t_s: number; v_fps: number } => {
-        for (let i = 0; i < traces.length - 1; i++) {
-          const p1 = traces[i];
-          const p2 = traces[i + 1];
-          
-          if (s_ft >= p1.s_ft && s_ft <= p2.s_ft) {
-            const t = (s_ft - p1.s_ft) / (p2.s_ft - p1.s_ft);
-            const t_s = p1.t_s + t * (p2.t_s - p1.t_s);
-            const v_mph = p1.v_mph + t * (p2.v_mph - p1.v_mph);
-            return { t_s, v_fps: v_mph / FPS_TO_MPH };
-          }
-        }
-        
-        // Outside range - return closest
-        if (s_ft < traces[0].s_ft) {
-          return { t_s: traces[0].t_s, v_fps: traces[0].v_mph / FPS_TO_MPH };
-        }
-        const last = traces[traces.length - 1];
-        return { t_s: last.t_s, v_fps: last.v_mph / FPS_TO_MPH };
-      };
-      
-      // Helper: average velocity between distances
-      const avgVfpsBetween = (s0: number, s1: number): number => {
-        const p0 = interpAtS(s0);
-        const p1 = interpAtS(s1);
-        const distance_ft = s1 - s0;
-        const time_s = p1.t_s - p0.t_s;
-        
-        if (time_s <= 0) {
-          return (p0.v_fps + p1.v_fps) / 2;
-        }
-        
-        return distance_ft / time_s;
-      };
-      
-      // Compute eighth mile trap (594-660 ft)
-      if (finishDistance_ft >= 660) {
-        try {
-          const avgVfps = avgVfpsBetween(594, 660);
-          windowMPH.e660_mph = avgVfps * FPS_TO_MPH;
-        } catch {
-          // Ignore if traces don't cover this range
-        }
-      }
-      
-      // Compute quarter mile trap (1254-1320 ft)
-      if (finishDistance_ft >= 1320) {
-        try {
-          const avgVfps = avgVfpsBetween(1254, 1320);
-          windowMPH.q1320_mph = avgVfps * FPS_TO_MPH;
-        } catch {
-          // Ignore if traces don't cover this range
-        }
-      }
+    if (eighthMileTrapMPH !== undefined) {
+      windowMPH.e660_mph = eighthMileTrapMPH;
+    }
+    
+    if (quarterMileTrapMPH !== undefined) {
+      windowMPH.q1320_mph = quarterMileTrapMPH;
     }
     
     // Energy summary logging (DEV only)
@@ -552,7 +557,7 @@ class RSACLASSICModel implements PhysicsModel {
           lockupAt_ft: lockupAt_ft,
         } : undefined,
         rollout: {
-          rolloutIn: rolloutIn,
+          rolloutIn: rolloutIn ?? 12,
           t_roll_s: t_at_rollout,
         },
         fuel: fuel ? {
@@ -568,7 +573,7 @@ class RSACLASSICModel implements PhysicsModel {
             quarter: { start: 1254, end: 1320, distance: 66 },
           },
           timeslipPoints: [60, 330, 660, 1000, 1320],
-          rolloutBehavior: 'ET clock starts after rollout distance',
+          rolloutBehavior: 'ET clock starts after rollout distance (TIMESLIP.FRM:1380)',
         },
       },
     };
