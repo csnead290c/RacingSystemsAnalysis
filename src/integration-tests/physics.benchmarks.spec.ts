@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { getModel } from '../domain/physics';
 import { LEGACY_BENCHMARKS } from '../domain/physics/fixtures/benchmarks';
-import { BENCHMARK_CONFIGS } from '../domain/physics/fixtures/benchmark-configs';
+import { BENCHMARK_CONFIGS, validateBenchmarkConfig } from '../domain/physics/fixtures/benchmark-configs';
 import type { RaceLength } from '../domain/physics/fixtures/benchmarks';
 
 // Helper that runs the worker-free model (unit-test context) synchronously.
@@ -121,6 +121,9 @@ describe('RSACLASSIC Parity vs Legacy RSA Printouts', () => {
             return;
           }
 
+          // Validate config has all required VB6 parameters
+          validateBenchmarkConfig(config);
+
           // Build input from config
           const input = {
             vehicle: {
@@ -170,23 +173,57 @@ describe('RSACLASSIC Parity vs Legacy RSA Printouts', () => {
           const etDelta = res.et_s - target.et_s;
           const mphDelta = measuredMPH - target.mph;
 
+          // Strict VB6 parity tolerances
+          const STRICT_ET_TOL = 0.05;  // ±0.05s
+          const STRICT_MPH_TOL = 1.0;  // ±1.0 mph
+
           // Report failures with details
-          const etPass = Math.abs(etDelta) <= target.tolET_s;
-          const mphPass = Math.abs(mphDelta) <= target.tolMPH;
+          const etPass = Math.abs(etDelta) <= STRICT_ET_TOL;
+          const mphPass = Math.abs(mphDelta) <= STRICT_MPH_TOL;
 
           if (!etPass || !mphPass) {
-            console.log(`\n${bm.name} ${len} FAILED:`);
+            console.log(`\n${'='.repeat(80)}`);
+            console.log(`${bm.name} ${len} FAILED VB6 PARITY:`);
             console.log(
-              `  ET:  expected ${target.et_s.toFixed(2)}s ± ${target.tolET_s.toFixed(2)}s, got ${res.et_s.toFixed(2)}s (Δ ${etDelta >= 0 ? '+' : ''}${etDelta.toFixed(3)}s) ${etPass ? '✓' : '✗'}`
+              `  ET:  expected ${target.et_s.toFixed(3)}s ± ${STRICT_ET_TOL.toFixed(2)}s, got ${res.et_s.toFixed(3)}s (Δ ${etDelta >= 0 ? '+' : ''}${etDelta.toFixed(3)}s) ${etPass ? '✓' : '✗'}`
             );
             console.log(
-              `  MPH: expected ${target.mph.toFixed(1)} ± ${target.tolMPH.toFixed(1)}, got ${measuredMPH.toFixed(1)} (Δ ${mphDelta >= 0 ? '+' : ''}${mphDelta.toFixed(1)}) ${mphPass ? '✓' : '✗'}`
+              `  MPH: expected ${target.mph.toFixed(1)} ± ${STRICT_MPH_TOL.toFixed(1)}, got ${measuredMPH.toFixed(1)} (Δ ${mphDelta >= 0 ? '+' : ''}${mphDelta.toFixed(1)}) ${mphPass ? '✓' : '✗'}`
             );
+
+            // Print early trace table (first 0.4s at 0.02s steps)
+            console.log(`\n  Early Trace (first 0.4s):`);
+            console.log(`  ${'─'.repeat(78)}`);
+            console.log(`  ${'t_s'.padEnd(8)} ${'s_ft'.padEnd(8)} ${'v_mph'.padEnd(8)} ${'rpm'.padEnd(8)} ${'gear'.padEnd(6)} ${'Twheel'.padEnd(8)} ${'T_drag'.padEnd(8)} ${'T_rr'.padEnd(8)}`);
+            console.log(`  ${'─'.repeat(78)}`);
+            
+            if (res.traces && res.traces.length > 0) {
+              for (let t = 0; t <= 0.4; t += 0.02) {
+                // Find closest trace point
+                const trace = res.traces.reduce((prev, curr) => 
+                  Math.abs(curr.t_s - t) < Math.abs(prev.t_s - t) ? curr : prev
+                );
+                
+                // Format: t_s, s_ft, v_mph, rpm, gear, (Twheel, T_drag, T_rr not in traces)
+                console.log(
+                  `  ${trace.t_s.toFixed(3).padEnd(8)} ` +
+                  `${trace.s_ft.toFixed(2).padEnd(8)} ` +
+                  `${trace.v_mph.toFixed(2).padEnd(8)} ` +
+                  `${trace.rpm.toFixed(0).padEnd(8)} ` +
+                  `${(trace.gear + 1).toString().padEnd(6)} ` +
+                  `${'N/A'.padEnd(8)} ` +
+                  `${'N/A'.padEnd(8)} ` +
+                  `${'N/A'.padEnd(8)}`
+                );
+              }
+            }
+            console.log(`  ${'─'.repeat(78)}`);
+            console.log(`${'='.repeat(80)}\n`);
           }
 
-          // Assert within tolerance
-          expect(Math.abs(etDelta)).toBeLessThanOrEqual(target.tolET_s);
-          expect(Math.abs(mphDelta)).toBeLessThanOrEqual(target.tolMPH);
+          // Assert strict VB6 parity tolerances
+          expect(Math.abs(etDelta)).toBeLessThanOrEqual(STRICT_ET_TOL);
+          expect(Math.abs(mphDelta)).toBeLessThanOrEqual(STRICT_MPH_TOL);
 
           // Optional split anchors (e.g., 60 ft)
           if (target.anchors?.t60_s) {
