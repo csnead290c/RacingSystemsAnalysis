@@ -327,7 +327,8 @@ class RSACLASSICModel implements PhysicsModel {
       
       // VB6 aerodynamic drag torque (TIMESLIP.FRM:1017, 1019, 1193)
       // Uses dynamic pressure q = rho * v² / (2 * gc)
-      const T_drag = vb6AeroTorque(rho, cd ?? 0.38, frontalArea_ft2 ?? 22, state.v_fps, tireRadius_ft);
+      // Note: cd and frontalArea_ft2 are required - validation should catch if missing
+      const T_drag = vb6AeroTorque(rho, cd!, frontalArea_ft2!, state.v_fps, tireRadius_ft);
       
       // For integrator compatibility, compute equivalent drag/roll forces
       // (Integrator expects forces, but we've already applied torques)

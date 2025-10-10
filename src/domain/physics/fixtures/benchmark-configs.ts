@@ -73,18 +73,27 @@ export interface ExtendedVehicleConfig {
  * Validate that a benchmark config has all required VB6 parameters.
  * Throws detailed error if any required fields are missing.
  * 
+ * This ensures VB6 parity by preventing silent defaults in the simulation.
+ * All values must come from actual VB6 printouts.
+ * 
  * @param config - Benchmark config to validate
  * @throws Error with list of missing fields
  */
 export function validateBenchmarkConfig(config: ExtendedVehicleConfig): void {
   const missing: string[] = [];
   
+  // Check required environment parameters (VB6 air density calculation)
+  if (config.env.elevation === undefined) missing.push('env.elevation');
+  if (config.env.barometerInHg === undefined) missing.push('env.barometerInHg');
+  if (config.env.temperatureF === undefined) missing.push('env.temperatureF');
+  if (config.env.humidityPct === undefined) missing.push('env.humidityPct');
+  
   // Check required vehicle parameters
   if (!config.vehicle.weightLb) missing.push('vehicle.weightLb');
   if (!config.vehicle.tireDiaIn && !config.vehicle.tireRolloutIn) {
     missing.push('vehicle.tireDiaIn OR vehicle.tireRolloutIn');
   }
-  if (!config.vehicle.rolloutIn) missing.push('vehicle.rolloutIn');
+  if (config.vehicle.rolloutIn === undefined) missing.push('vehicle.rolloutIn');
   if (!config.vehicle.rearGear && !config.vehicle.finalDrive) {
     missing.push('vehicle.rearGear OR vehicle.finalDrive');
   }
@@ -95,13 +104,47 @@ export function validateBenchmarkConfig(config: ExtendedVehicleConfig): void {
     missing.push('vehicle.shiftRPM[]');
   }
   
-  // Check required aerodynamics
+  // Check required aerodynamics (VB6 drag calculation)
   if (config.vehicle.frontalArea_ft2 === undefined) missing.push('vehicle.frontalArea_ft2');
   if (config.vehicle.cd === undefined) missing.push('vehicle.cd');
+  
+  // Check required rolling resistance (VB6 uses CMU = 0.025 if not specified)
+  // We allow this to be optional since VB6 has a default
   
   // Check required torque curve
   if (!config.vehicle.torqueCurve || config.vehicle.torqueCurve.length === 0) {
     missing.push('vehicle.torqueCurve[]');
+  } else {
+    // Validate torque curve has either hp or tq_lbft
+    const hasValidData = config.vehicle.torqueCurve.every(pt => 
+      pt.rpm !== undefined && (pt.hp !== undefined || pt.tq_lbft !== undefined)
+    );
+    if (!hasValidData) {
+      missing.push('vehicle.torqueCurve[] must have rpm and (hp OR tq_lbft) for each point');
+    }
+  }
+  
+  // Validate converter parameters if present
+  if (config.vehicle.converter) {
+    if (config.vehicle.converter.stallRPM === undefined) {
+      missing.push('vehicle.converter.stallRPM (required if converter present)');
+    }
+    if (config.vehicle.converter.torqueMult === undefined) {
+      missing.push('vehicle.converter.torqueMult (required if converter present)');
+    }
+    if (config.vehicle.converter.slipRatio === undefined) {
+      missing.push('vehicle.converter.slipRatio (required if converter present)');
+    }
+  }
+  
+  // Validate clutch parameters if present
+  if (config.vehicle.clutch) {
+    if (config.vehicle.clutch.slipRPM === undefined && config.vehicle.clutch.launchRPM === undefined) {
+      missing.push('vehicle.clutch.slipRPM OR vehicle.clutch.launchRPM (required if clutch present)');
+    }
+    if (config.vehicle.clutch.slipRatio === undefined) {
+      missing.push('vehicle.clutch.slipRatio (required if clutch present)');
+    }
   }
   
   // Validate gear ratios and shift RPM match
@@ -125,7 +168,8 @@ export function validateBenchmarkConfig(config: ExtendedVehicleConfig): void {
     throw new Error(
       `Benchmark config '${config.name}' is missing required VB6 parameters:\n` +
       missing.map(f => `  - ${f}`).join('\n') +
-      `\n\nAll required fields must be present from VB6 printouts - NO DEFAULTS ALLOWED.`
+      `\n\nAll required fields must be present from VB6 printouts - NO DEFAULTS ALLOWED.` +
+      `\nThis ensures VB6 parity by preventing silent defaults in the simulation.`
     );
   }
 }
