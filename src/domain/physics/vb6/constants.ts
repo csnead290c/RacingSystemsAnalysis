@@ -56,6 +56,11 @@ export const KV = 0.02 / Z5;
 /** K7 constant (steps per time print increment) - TIMESLIP.FRM:556 */
 export const K7 = 9.5;
 
+/** AMin: Minimum acceleration (ft/s²) - TIMESLIP.FRM:547-548 */
+// Reduced from 0.05 to 0.004 for Quarter Jr/Pro to implement Buell rev limit option
+// Note: was 0.004 for BVPro already
+export const AMin = 0.004;
+
 // ===== Derived Constants =====
 
 /** Horsepower to foot-pounds per second conversion */

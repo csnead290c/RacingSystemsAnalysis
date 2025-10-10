@@ -11,9 +11,10 @@ import { maybeShift } from '../drivetrain/shift';
 // import { drag_lb } from '../aero/drag'; // Replaced with direct calculation
 // import { rolling_lb } from '../aero/rolling'; // Replaced with direct calculation
 import { maxTractive_lb, type TireParams } from '../tire/traction';
-import { stepEuler, createInitialState, type StepForces } from '../core/integrator';
+import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
-import { g, FPS_TO_MPH, CMU } from '../vb6/constants';
+import { g, FPS_TO_MPH, CMU, gc, AMin } from '../vb6/constants';
+import { vb6AccelClamp } from '../vb6/accelClamp';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
@@ -339,34 +340,44 @@ class RSACLASSICModel implements PhysicsModel {
       // Note: cd and frontalArea_ft2 are required - validation should catch if missing
       const T_drag = vb6AeroTorque(rho, cd!, frontalArea_ft2!, state.v_fps, tireRadius_ft);
       
-      // For integrator compatibility, compute equivalent drag/roll forces
-      // (Integrator expects forces, but we've already applied torques)
+      // VB6 force calculations (TIMESLIP.FRM:1221)
+      // Convert torques to forces at contact patch
       const F_drag = T_drag / tireRadius_ft;
       const F_roll = T_rr / tireRadius_ft;
       
-      // Calculate maximum traction
-      const F_max = maxTractive_lb(vehicle.weightLb, tireParams, env.tractionIndex);
+      // VB6: PQWT = net wheel thrust (lb_f)
+      // PQWT = F_wheel - F_drag - F_roll
+      let PQWT = F_wheel - F_drag - F_roll;
       
-      // Limit tractive force to traction limit
-      const F_trac = Math.min(F_wheel, F_max);
+      // VB6 maximum traction (TIMESLIP.FRM:1054, 1216)
+      // AMAX = (CRTF - DragForce) / Weight
+      // For now, use our traction model to get F_max, then convert to AMax
+      const F_max = maxTractive_lb(vehicle.weightLb, tireParams, env.tractionIndex);
+      const AMax = F_max / vehicle.weightLb; // Convert to acceleration (ft/s²)
+      
+      // VB6 acceleration clamping (TIMESLIP.FRM:1221-1228)
+      // AGS(L) = PQWT / (Vel(L) * gc)
+      // Apply AMin and AMax limits, rescale PQWT
+      const clampResult = vb6AccelClamp({
+        PQWT,
+        v_fps: state.v_fps,
+        gc,
+        AMin,
+        AMax,
+      });
+      
+      PQWT = clampResult.PQWT;
+      const AGS = clampResult.AGS; // Clamped acceleration (ft/s²)
       
       // Check for wheel slip
-      if (F_wheel > F_max && !warnings.includes('wheel_slip')) {
+      if (clampResult.SLIP === 1 && !warnings.includes('wheel_slip')) {
         warnings.push('wheel_slip');
       }
-      
-      // Build forces for integrator
-      const forces: StepForces = {
-        tractive_lb: F_trac,
-        drag_lb: F_drag,
-        roll_lb: F_roll,
-        mass_slugs: mass_slugs,
-      };
       
       // Energy accounting (DEV only)
       // Energy = Force × Distance, where distance = velocity × time
       const distance_step = state.v_fps * dt_s; // ft
-      E_engine_total += F_trac * distance_step;
+      E_engine_total += F_wheel * distance_step;
       E_drag_total += F_drag * distance_step;
       E_rr_total += F_roll * distance_step;
       
@@ -380,8 +391,15 @@ class RSACLASSICModel implements PhysicsModel {
         E_driveline_loss += drivelineLoss * angular_distance;
       }
       
-      // Integrate one step
-      state = stepEuler(dt_s, state, forces);
+      // VB6 integration (using clamped acceleration)
+      // Semi-implicit Euler: v(t+dt) = v(t) + a * dt, s(t+dt) = s(t) + v(t+dt) * dt
+      const v_new_fps = state.v_fps + AGS * dt_s;
+      const s_new_ft = state.s_ft + v_new_fps * dt_s;
+      const t_new_s = state.t_s + dt_s;
+      
+      state.v_fps = v_new_fps;
+      state.s_ft = s_new_ft;
+      state.t_s = t_new_s;
       
       // Check for shift
       const newGearIdx = maybeShift(state.rpm, state.gearIdx, drivetrain);
