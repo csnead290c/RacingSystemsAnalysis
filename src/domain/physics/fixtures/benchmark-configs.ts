@@ -1,7 +1,9 @@
 /**
  * Extended vehicle configurations for legacy benchmark validation.
  * Values pulled from Quarter Pro / Quarter Jr printouts.
- * Some items marked TODO to tighten once we wire every field exactly.
+ * 
+ * IMPORTANT: All required VB6 parameters must be present - NO DEFAULTS.
+ * Use validateBenchmarkConfig() to ensure completeness.
  */
 
 export type FuelType = 'GAS' | 'METHANOL' | 'NITRO';
@@ -20,26 +22,33 @@ export interface ExtendedVehicleConfig {
     tractionIndex?: number;
   };
   vehicle: {
+    // REQUIRED: Core vehicle parameters (no defaults allowed)
     weightLb: number;
+    tireDiaIn?: number; // Either this OR tireRolloutIn required
+    tireRolloutIn?: number; // Either this OR tireDiaIn required
+    rolloutIn: number;
+    rearGear?: number; // Either this OR finalDrive required
+    finalDrive?: number; // Either this OR rearGear required
+    gearRatios: number[]; // [g1,g2,...] - REQUIRED
+    shiftRPM: number[]; // Per-gear upshift RPM - REQUIRED
+    
+    // REQUIRED: Aerodynamics (no defaults allowed)
+    frontalArea_ft2: number;
+    cd: number; // Drag coefficient
+    
+    // REQUIRED: Torque curve (no defaults allowed)
+    torqueCurve: { rpm: number; hp?: number; tq_lbft?: number }[];
+    
+    // OPTIONAL: Additional parameters
     wheelbaseIn?: number;
     overhangIn?: number;
-    tireDiaIn?: number;
     tireWidthIn?: number;
-    tireRolloutIn?: number;
-    rolloutIn?: number;
-
-    frontalArea_ft2?: number;
-    cd?: number;
     liftCoeff?: number;
-
-    rearGear?: number;
-    finalDrive?: number; // alias of rearGear
     transEff?: number;
+    gearEff?: number[]; // Per-gear efficiency
+    rrCoeff?: number; // Rolling resistance coefficient
 
-    gearRatios?: number[]; // [g1,g2,...]
-    gearEff?: number[]; // per-gear eff, optional
-    shiftRPM?: number[]; // per-gear upshift rpm
-
+    // OPTIONAL: Launch device (converter OR clutch)
     converter?: {
       launchRPM?: number;
       stallRPM?: number;
@@ -56,9 +65,69 @@ export interface ExtendedVehicleConfig {
       lockup?: boolean;
     };
 
-    powerHP?: number; // fallback if no torqueCurve
-    torqueCurve?: { rpm: number; hp?: number; tq_lbft?: number }[]; // allow hp-only rows
+    powerHP?: number; // Deprecated - use torqueCurve instead
   };
+}
+
+/**
+ * Validate that a benchmark config has all required VB6 parameters.
+ * Throws detailed error if any required fields are missing.
+ * 
+ * @param config - Benchmark config to validate
+ * @throws Error with list of missing fields
+ */
+export function validateBenchmarkConfig(config: ExtendedVehicleConfig): void {
+  const missing: string[] = [];
+  
+  // Check required vehicle parameters
+  if (!config.vehicle.weightLb) missing.push('vehicle.weightLb');
+  if (!config.vehicle.tireDiaIn && !config.vehicle.tireRolloutIn) {
+    missing.push('vehicle.tireDiaIn OR vehicle.tireRolloutIn');
+  }
+  if (!config.vehicle.rolloutIn) missing.push('vehicle.rolloutIn');
+  if (!config.vehicle.rearGear && !config.vehicle.finalDrive) {
+    missing.push('vehicle.rearGear OR vehicle.finalDrive');
+  }
+  if (!config.vehicle.gearRatios || config.vehicle.gearRatios.length === 0) {
+    missing.push('vehicle.gearRatios[]');
+  }
+  if (!config.vehicle.shiftRPM || config.vehicle.shiftRPM.length === 0) {
+    missing.push('vehicle.shiftRPM[]');
+  }
+  
+  // Check required aerodynamics
+  if (config.vehicle.frontalArea_ft2 === undefined) missing.push('vehicle.frontalArea_ft2');
+  if (config.vehicle.cd === undefined) missing.push('vehicle.cd');
+  
+  // Check required torque curve
+  if (!config.vehicle.torqueCurve || config.vehicle.torqueCurve.length === 0) {
+    missing.push('vehicle.torqueCurve[]');
+  }
+  
+  // Validate gear ratios and shift RPM match
+  if (config.vehicle.gearRatios && config.vehicle.shiftRPM) {
+    const numGears = config.vehicle.gearRatios.length;
+    const numShifts = config.vehicle.shiftRPM.length;
+    // shiftRPM should have numGears-1 entries (no shift after last gear)
+    if (numShifts !== numGears - 1 && numShifts !== numGears) {
+      missing.push(`vehicle.shiftRPM[] length mismatch (${numShifts} shifts for ${numGears} gears)`);
+    }
+  }
+  
+  // Validate gear efficiency if present
+  if (config.vehicle.gearEff && config.vehicle.gearRatios) {
+    if (config.vehicle.gearEff.length !== config.vehicle.gearRatios.length) {
+      missing.push(`vehicle.gearEff[] length mismatch (${config.vehicle.gearEff.length} vs ${config.vehicle.gearRatios.length} gears)`);
+    }
+  }
+  
+  if (missing.length > 0) {
+    throw new Error(
+      `Benchmark config '${config.name}' is missing required VB6 parameters:\n` +
+      missing.map(f => `  - ${f}`).join('\n') +
+      `\n\nAll required fields must be present from VB6 printouts - NO DEFAULTS ALLOWED.`
+    );
+  }
 }
 
 // NOTE: These configs are transcribed from your Quarter Pro / Jr sheets.

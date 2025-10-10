@@ -31,7 +31,16 @@ export interface VB6State {
  * VB6 simulation parameters.
  */
 export interface VB6Params {
-  /** Time step (seconds) - TODO: Use exact VB6 value (0.001 or 0.002) */
+  /** 
+   * Time step (seconds) - VB6 uses adaptive timestep
+   * Initial: TSMax = rollout * 0.11 * (HP * TorqueMult / Weight)^(-1/3) / 15
+   * Min: 0.005s (TIMESLIP.FRM:1064)
+   * Max: 0.05s (TIMESLIP.FRM:1120)
+   * Adaptive: TimeStep = TSMax * (AgsMax / Ags0)^4 (TIMESLIP.FRM:1082)
+   * 
+   * For our fixed-timestep implementation, use 0.002s as a reasonable compromise
+   * that matches VB6's TimeTol = 0.002 (TIMESLIP.FRM:554)
+   */
   dt_s: number;
   /** Rollout distance (feet) */
   rolloutFt: number;

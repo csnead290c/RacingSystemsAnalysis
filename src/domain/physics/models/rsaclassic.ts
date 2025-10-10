@@ -31,29 +31,54 @@ class RSACLASSICModel implements PhysicsModel {
   simulate(input: SimInputs): SimResult {
     const { vehicle, env, raceLength } = input;
     
+    // Initialize warnings array early
+    const warnings: string[] = [];
+    
     // Determine finish distance
     const finishDistance_ft = raceLength === 'EIGHTH' ? 660 : 1320;
     
-    // Resolve parameters with defaults
-    const cd = vehicle.cd ?? 0.38;
-    const frontalArea_ft2 = vehicle.frontalArea_ft2 ?? 22;
-    // TODO: liftCoeff for downforce/lift (vehicle.liftCoeff ?? 0.0)
-    // rrCoeff now computed inline where needed
-    const transEff = vehicle.transEff ?? 0.9;
-    const finalDrive = vehicle.finalDrive ?? vehicle.rearGear ?? 3.73;
-    const gearRatios = vehicle.gearRatios ?? [1.0];
+    // Resolve parameters (VB6 parity mode: NO DEFAULTS for critical parameters)
+    const cd = vehicle.cd;
+    const frontalArea_ft2 = vehicle.frontalArea_ft2;
+    const transEff = vehicle.transEff;
+    const finalDrive = vehicle.finalDrive ?? vehicle.rearGear;
+    const gearRatios = vehicle.gearRatios;
     const gearEff = vehicle.gearEff; // Per-gear efficiency, optional
-    const shiftRPM = vehicle.shiftRPM ?? [];
+    const shiftRPM = vehicle.shiftRPM;
     
-    // Tire radius from multiple sources
-    const tireRadius_ft = vehicle.tireDiaIn
-      ? (vehicle.tireDiaIn / 12) / 2
-      : vehicle.tireRolloutIn
-        ? (vehicle.tireRolloutIn / 12) / Math.PI
-        : (28 / 12) / 2; // Default 28" diameter
+    // Validate required parameters
+    if (!cd) {
+      warnings.push('Missing vehicle.cd (drag coefficient) - required for VB6 parity');
+    }
+    if (!frontalArea_ft2) {
+      warnings.push('Missing vehicle.frontalArea_ft2 - required for VB6 parity');
+    }
+    if (!gearRatios || gearRatios.length === 0) {
+      warnings.push('Missing vehicle.gearRatios[] - required for VB6 parity');
+    }
+    if (!shiftRPM || shiftRPM.length === 0) {
+      warnings.push('Missing vehicle.shiftRPM[] - required for VB6 parity');
+    }
+    if (!finalDrive) {
+      warnings.push('Missing vehicle.finalDrive or vehicle.rearGear - required for VB6 parity');
+    }
+    
+    // Tire radius from multiple sources (prefer tireRolloutIn for VB6 parity)
+    let tireRadius_ft: number;
+    if (vehicle.tireRolloutIn) {
+      tireRadius_ft = (vehicle.tireRolloutIn / 12) / Math.PI;
+    } else if (vehicle.tireDiaIn) {
+      tireRadius_ft = (vehicle.tireDiaIn / 12) / 2;
+    } else {
+      warnings.push('Missing vehicle.tireDiaIn or vehicle.tireRolloutIn - required for VB6 parity');
+      tireRadius_ft = (28 / 12) / 2; // Emergency fallback
+    }
     const tireDiaIn = tireRadius_ft * 2 * 12;
     
-    const rolloutIn = vehicle.rolloutIn ?? 12;
+    const rolloutIn = vehicle.rolloutIn;
+    if (!rolloutIn) {
+      warnings.push('Missing vehicle.rolloutIn - required for VB6 parity');
+    }
     
     // Convert torque curve HP to TQ if needed
     let torqueCurve = vehicle.torqueCurve;
@@ -78,15 +103,15 @@ class RSACLASSICModel implements PhysicsModel {
     const mass_slugs = lbToSlug(vehicle.weightLb);
     
     // Rollout distance
-    const rolloutFt = rolloutIn / 12;
+    const rolloutFt = (rolloutIn ?? 12) / 12;
     
-    // Drivetrain configuration
+    // Drivetrain configuration (with emergency fallbacks)
     const drivetrain: Drivetrain = {
-      ratios: gearRatios,
-      finalDrive: finalDrive,
-      transEff: transEff,
+      ratios: gearRatios ?? [1.0],
+      finalDrive: finalDrive ?? 3.73,
+      transEff: transEff ?? 0.9,
       tireDiaIn: tireDiaIn,
-      shiftRPM: shiftRPM,
+      shiftRPM: shiftRPM ?? [],
     };
     
     // Engine parameters
@@ -102,8 +127,10 @@ class RSACLASSICModel implements PhysicsModel {
     };
     
     // Integration parameters
-    // TODO: Use exact VB6 dt value once verified from QTRPERF.BAS (likely 0.001 or 0.002)
-    const dt_s = 0.002; // Temporary: 2ms timestep (changed from 0.005 to match VB6)
+    // VB6 uses adaptive timestep (TIMESLIP.FRM:1082): TimeStep = TSMax * (AgsMax / Ags0)^4
+    // Min: 0.005s (TIMESLIP.FRM:1064), Max: 0.05s (TIMESLIP.FRM:1120)
+    // For fixed-timestep implementation, use 0.002s matching VB6's TimeTol (TIMESLIP.FRM:554)
+    const dt_s = 0.002; // VB6 TimeTol = 0.002s (TIMESLIP.FRM:554)
     const maxTime_s = 15; // Safety cap
     const traceInterval_s = 0.01; // Collect traces every 10ms
     
@@ -122,7 +149,6 @@ class RSACLASSICModel implements PhysicsModel {
     }> = [];
     
     const timeslip: Array<{ d_ft: number; t_s: number; v_mph: number }> = [];
-    const warnings: string[] = [];
     
     // Track rollout completion
     let rolloutCompleted = false;
@@ -152,6 +178,14 @@ class RSACLASSICModel implements PhysicsModel {
     let minFuelScale = 1.0;
     let maxFuelScale = 1.0;
     
+    // Energy accounting (DEV only - for debugging VB6 parity)
+    let E_engine_total = 0;      // Total energy from engine (ft-lb)
+    let E_drag_total = 0;         // Total energy lost to aero drag (ft-lb)
+    let E_rr_total = 0;           // Total energy lost to rolling resistance (ft-lb)
+    let E_driveline_loss = 0;     // Total driveline losses (ft-lb)
+    let E_kinetic_trans = 0;      // Final translational kinetic energy (ft-lb)
+    let E_kinetic_rot = 0;        // Final rotational kinetic energy (ft-lb) - if VB6 used it
+    
     // Integration loop
     while (state.s_ft < finishDistance_ft && state.t_s < maxTime_s) {
       // Calculate RPM from current speed
@@ -165,7 +199,7 @@ class RSACLASSICModel implements PhysicsModel {
       // Calculate engine torque first (needed for driveline)
       let currentGearEff = gearEff && gearEff[state.gearIdx] !== undefined
         ? gearEff[state.gearIdx]
-        : transEff;
+        : (transEff ?? 0.9);
       currentGearEff = Math.max(0.9, Math.min(1.0, currentGearEff));
       let tq_lbft = wheelTorque_lbft(rpm, engineParams, currentGearEff);
       
@@ -191,14 +225,14 @@ class RSACLASSICModel implements PhysicsModel {
       tq_lbft = tq_lbft * M_fuel;
       
       // VB6 driveline: converter, clutch, or direct drive
-      const gearRatio = gearRatios[state.gearIdx];
+      const gearRatio = (gearRatios ?? [1.0])[state.gearIdx] ?? 1.0;
       const wheelRPM = (state.v_fps * 60) / (2 * Math.PI * tireRadius_ft);
       
       if (clutch) {
         // VB6 clutch model
         const slipRPM = clutch.slipRPM ?? clutch.launchRPM ?? 0;
         const lockup = clutch.lockup ?? false;
-        const result = vb6Clutch(tq_lbft, rpm, wheelRPM, gearRatio, finalDrive, slipRPM, lockup);
+        const result = vb6Clutch(tq_lbft, rpm, wheelRPM, gearRatio, finalDrive ?? 3.73, slipRPM, lockup);
         drivelineTorqueLbFt = result.Twheel;
         effectiveRPM = result.engineRPM_out;
         clutchCoupling = result.coupling;
@@ -208,7 +242,7 @@ class RSACLASSICModel implements PhysicsModel {
         // VB6 converter model (1st gear only)
         const stallRPM = converter.stallRPM ?? 3000;
         const torqueMult = converter.torqueMult ?? 2.0;
-        const result = vb6Converter(tq_lbft, rpm, wheelRPM, gearRatio, finalDrive, stallRPM, torqueMult);
+        const result = vb6Converter(tq_lbft, rpm, wheelRPM, gearRatio, finalDrive ?? 3.73, stallRPM, torqueMult);
         drivelineTorqueLbFt = result.Twheel;
         effectiveRPM = result.engineRPM_out;
         
@@ -219,7 +253,7 @@ class RSACLASSICModel implements PhysicsModel {
         converterSteps++;
       } else {
         // Direct drive (no converter/clutch, or converter in higher gears)
-        drivelineTorqueLbFt = vb6DirectDrive(tq_lbft, gearRatio, finalDrive);
+        drivelineTorqueLbFt = vb6DirectDrive(tq_lbft, gearRatio, finalDrive ?? 3.73);
         effectiveRPM = rpm;
       }
       
@@ -243,7 +277,7 @@ class RSACLASSICModel implements PhysicsModel {
       const T_rr = vb6RollingResistanceTorque(vehicle.weightLb, rrCoeff, tireRadius_ft);
       
       // VB6 aerodynamic drag torque
-      const T_drag = vb6AeroTorque(rho, cd, frontalArea_ft2, state.v_fps, tireRadius_ft);
+      const T_drag = vb6AeroTorque(rho, cd ?? 0.38, frontalArea_ft2 ?? 22, state.v_fps, tireRadius_ft);
       
       // For integrator compatibility, compute equivalent drag/roll forces
       // (Integrator expects forces, but we've already applied torques)
@@ -268,6 +302,23 @@ class RSACLASSICModel implements PhysicsModel {
         roll_lb: F_roll,
         mass_slugs: mass_slugs,
       };
+      
+      // Energy accounting (DEV only)
+      // Energy = Force × Distance, where distance = velocity × time
+      const distance_step = state.v_fps * dt_s; // ft
+      E_engine_total += F_trac * distance_step;
+      E_drag_total += F_drag * distance_step;
+      E_rr_total += F_roll * distance_step;
+      
+      // Driveline loss = difference between engine torque and wheel torque
+      // Loss = (engine_torque × gear × final × eff_loss) × angular_distance
+      const engineTorqueAtWheel = tq_lbft * gearRatio * (finalDrive ?? 3.73);
+      const drivelineLoss = engineTorqueAtWheel - drivelineTorqueLbFt;
+      if (drivelineLoss > 0) {
+        // Angular distance = linear distance / radius
+        const angular_distance = distance_step / tireRadius_ft; // radians
+        E_driveline_loss += drivelineLoss * angular_distance;
+      }
       
       // Integrate one step
       state = stepEuler(dt_s, state, forces);
@@ -327,6 +378,18 @@ class RSACLASSICModel implements PhysicsModel {
     // Calculate final ET and MPH
     const measuredET = rolloutCompleted ? state.t_s - t_at_rollout : state.t_s;
     const finalMPH = state.v_fps * FPS_TO_MPH;
+    
+    // Final kinetic energy (DEV only)
+    // Translational: KE = 0.5 × m × v²
+    E_kinetic_trans = 0.5 * mass_slugs * state.v_fps * state.v_fps;
+    
+    // Rotational: KE_rot = 0.5 × I × ω²
+    // I = moment of inertia (slug-ft²), ω = angular velocity (rad/s)
+    // For wheels: I ≈ m_wheel × r², ω = v / r
+    // Simplified: KE_rot ≈ 0.5 × m_wheel × v²
+    // TODO: Add proper rotational inertia if VB6 used it
+    const wheelMass_slugs = lbToSlug(vehicle.weightLb * 0.05); // Assume 5% of vehicle weight in wheels
+    E_kinetic_rot = 0.5 * wheelMass_slugs * state.v_fps * state.v_fps;
     
     // Ensure we have a timeslip entry at finish
     if (timeslip.length === 0 || timeslip[timeslip.length - 1].d_ft !== finishDistance_ft) {
@@ -396,6 +459,31 @@ class RSACLASSICModel implements PhysicsModel {
           // Ignore if traces don't cover this range
         }
       }
+    }
+    
+    // Energy summary logging (DEV only)
+    // @ts-ignore - import.meta.env.DEV is available in Vite
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+      const E_total_in = E_engine_total;
+      const E_total_out = E_drag_total + E_rr_total + E_driveline_loss;
+      const E_total_kinetic = E_kinetic_trans + E_kinetic_rot;
+      const E_balance = E_total_in - E_total_out - E_total_kinetic;
+      
+      console.log(`\n=== ENERGY SUMMARY: ${vehicle.name ?? 'Unknown'} ===`);
+      console.log(`ET: ${measuredET.toFixed(3)}s, Trap MPH: ${finalMPH.toFixed(1)}`);
+      console.log(`\nEnergy In:`);
+      console.log(`  Engine:           ${(E_engine_total / 1000).toFixed(1)} k-ft-lb`);
+      console.log(`\nEnergy Out:`);
+      console.log(`  Aero Drag:        ${(E_drag_total / 1000).toFixed(1)} k-ft-lb (${(100 * E_drag_total / E_total_in).toFixed(1)}%)`);
+      console.log(`  Rolling Resist:   ${(E_rr_total / 1000).toFixed(1)} k-ft-lb (${(100 * E_rr_total / E_total_in).toFixed(1)}%)`);
+      console.log(`  Driveline Loss:   ${(E_driveline_loss / 1000).toFixed(1)} k-ft-lb (${(100 * E_driveline_loss / E_total_in).toFixed(1)}%)`);
+      console.log(`  Total Losses:     ${(E_total_out / 1000).toFixed(1)} k-ft-lb (${(100 * E_total_out / E_total_in).toFixed(1)}%)`);
+      console.log(`\nFinal Kinetic Energy:`);
+      console.log(`  Translational:    ${(E_kinetic_trans / 1000).toFixed(1)} k-ft-lb (${(100 * E_kinetic_trans / E_total_in).toFixed(1)}%)`);
+      console.log(`  Rotational:       ${(E_kinetic_rot / 1000).toFixed(1)} k-ft-lb (${(100 * E_kinetic_rot / E_total_in).toFixed(1)}%)`);
+      console.log(`  Total Kinetic:    ${(E_total_kinetic / 1000).toFixed(1)} k-ft-lb (${(100 * E_total_kinetic / E_total_in).toFixed(1)}%)`);
+      console.log(`\nEnergy Balance:     ${(E_balance / 1000).toFixed(1)} k-ft-lb (${(100 * Math.abs(E_balance) / E_total_in).toFixed(1)}% error)`);
+      console.log(`===\n`);
     }
     
     // Build result
