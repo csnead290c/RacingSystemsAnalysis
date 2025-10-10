@@ -197,6 +197,15 @@ class RSACLASSICModel implements PhysicsModel {
     let minC = 1.0;
     let lockupAt_ft: number | undefined = undefined;
     
+    // VB6 launch conditions (TIMESLIP.FRM:1006)
+    // VB6: EngRPM(L) = gc_LaunchRPM.Value
+    // Initialize engine RPM to launch RPM before first timestep
+    if (clutch) {
+      state.rpm = clutch.launchRPM ?? clutch.slipRPM ?? 0;
+    } else if (converter) {
+      state.rpm = converter.launchRPM ?? converter.stallRPM ?? 0;
+    }
+    
     // Fuel tracking
     const fuel = (input as any).fuel as 'GAS' | 'METHANOL' | 'NITRO' | undefined;
     let minFuelScale = 1.0;
