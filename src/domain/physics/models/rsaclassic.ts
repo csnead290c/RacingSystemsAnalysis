@@ -243,20 +243,44 @@ class RSACLASSICModel implements PhysicsModel {
       const wheelRPM = (state.v_fps * 60) / (2 * Math.PI * tireRadius_ft);
       
       if (clutch) {
-        // VB6 clutch model
+        // VB6 clutch model (TIMESLIP.FRM:1148-1152)
         const slipRPM = clutch.slipRPM ?? clutch.launchRPM ?? 0;
+        const slippage = clutch.slipRatio ?? 1.0025; // VB6 default: 1.0025 + slipRPM/1000000
         const lockup = clutch.lockup ?? false;
-        const result = vb6Clutch(tq_lbft, rpm, wheelRPM, gearRatio, finalDrive ?? 3.73, slipRPM, lockup);
+        const result = vb6Clutch(
+          tq_lbft, 
+          rpm, 
+          wheelRPM, 
+          gearRatio, 
+          finalDrive ?? 3.73, 
+          slipRPM,
+          slippage,
+          state.gearIdx + 1, // Convert to 1-based
+          lockup
+        );
         drivelineTorqueLbFt = result.Twheel;
         effectiveRPM = result.engineRPM_out;
         clutchCoupling = result.coupling;
         minC = Math.min(minC, clutchCoupling);
         
-      } else if (converter && state.gearIdx === 0) {
-        // VB6 converter model (1st gear only)
+      } else if (converter) {
+        // VB6 converter model (TIMESLIP.FRM:1154-1172)
         const stallRPM = converter.stallRPM ?? 3000;
         const torqueMult = converter.torqueMult ?? 2.0;
-        const result = vb6Converter(tq_lbft, rpm, wheelRPM, gearRatio, finalDrive ?? 3.73, stallRPM, torqueMult);
+        const slippage = converter.slipRatio ?? 1.05; // VB6 typical slippage
+        const lockup = converter.lockup ?? false;
+        const result = vb6Converter(
+          tq_lbft, 
+          rpm, 
+          wheelRPM, 
+          gearRatio, 
+          finalDrive ?? 3.73, 
+          stallRPM, 
+          torqueMult,
+          slippage,
+          state.gearIdx + 1, // Convert to 1-based
+          lockup
+        );
         drivelineTorqueLbFt = result.Twheel;
         effectiveRPM = result.engineRPM_out;
         
