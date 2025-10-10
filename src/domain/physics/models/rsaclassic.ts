@@ -46,7 +46,7 @@ class RSACLASSICModel implements PhysicsModel {
     const gearEff = vehicle.gearEff; // Per-gear efficiency, optional
     const shiftRPM = vehicle.shiftRPM;
     
-    // Validate required parameters
+    // Validate required vehicle parameters
     if (!cd) {
       warnings.push('Missing vehicle.cd (drag coefficient) - required for VB6 parity');
     }
@@ -61,6 +61,20 @@ class RSACLASSICModel implements PhysicsModel {
     }
     if (!finalDrive) {
       warnings.push('Missing vehicle.finalDrive or vehicle.rearGear - required for VB6 parity');
+    }
+    
+    // Validate required environment parameters
+    if (env.barometerInHg === undefined) {
+      warnings.push('Missing env.barometerInHg - required for VB6 air density');
+    }
+    if (env.temperatureF === undefined) {
+      warnings.push('Missing env.temperatureF - required for VB6 air density');
+    }
+    if (env.humidityPct === undefined) {
+      warnings.push('Missing env.humidityPct - required for VB6 air density');
+    }
+    if (env.elevation === undefined) {
+      warnings.push('Missing env.elevation - required for VB6 air density');
     }
     
     // Tire radius from multiple sources (prefer tireRolloutIn for VB6 parity)
@@ -263,12 +277,13 @@ class RSACLASSICModel implements PhysicsModel {
       // Note: drivelineTorqueLbFt already includes gear ratios and final drive
       const F_wheel = drivelineTorqueLbFt / tireRadius_ft;
       
-      // VB6 air density calculation (exact formula from QTRPERF.BAS)
+      // VB6 air density calculation (exact formula from QTRPERF.BAS:1290-1335)
+      // Uses exact VB6 Weather() subroutine with saturation vapor pressure polynomial
       const rho = vb6AirDensitySlugFt3(
-        env.barometerInHg ?? 29.92,
-        env.temperatureF ?? 59,
-        env.humidityPct ?? 50,
-        env.elevation ?? 0
+        env.barometerInHg ?? 29.92, // Emergency fallback (warning added above)
+        env.temperatureF ?? 59,      // Emergency fallback (warning added above)
+        env.humidityPct ?? 50,       // Emergency fallback (warning added above)
+        env.elevation ?? 0           // Emergency fallback (warning added above)
       );
       
       // VB6 rolling resistance torque
