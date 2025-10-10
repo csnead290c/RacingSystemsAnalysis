@@ -1,0 +1,1434 @@
+
+
+
+
+
+
+          RSA
+   Computer Software
+    for Drag Racers
+
+
+
+
+
+CLUTCH Pro
+Version 3.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+Racing Systems Analysis
+-----------------------
+
+
+
+
+
+
+
+Racing Systems Analysis
+
+
+
+
+
+
+
+CLUTCH Pro
+Version 3.0
+
+
+By: Patrick Hale
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Copyright 2005 RSA
+             Phoenix, Arizona  USA
+             www.QUARTERjr.com
+
+
+
+
+
+
+COPYRIGHT
+
+Copyright 2005 by RSA.  All rights reserved.  No part of this publication may be reproduced, transmitted, stored in a retrieval system, or translated into any language or computer language, in any form or by any means; electronic, mechanical, magnetic, optical, chemical, manual or otherwise; without the prior written consent of Racing Systems Analysis.
+
+
+
+
+
+
+
+
+
+DISCLAIMER
+
+RSA reserves the right to revise this publication and to make changes from time to time in the context hereof, without the obligation of RSA to notify any person of such revision or change.
+
+
+
+
+
+
+
+
+
+
+
+
+ii
+
+
+
+
+TABLE OF CONTENTS
+
+
+CHAPTER 1:  INTRODUCTION
+
+General . . . . . . . . . . . . . . . . 11
+Installing the program disk . . . . . . 14
+
+
+CHAPTER 2:  CLUTCH Pro SOFTWARE TOUR
+
+Getting started . . . . . . . . . . . . 21
+Optimizing your clutch. . . . . . . . . 2-5
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+The command menus . . . . . . . . . . . 31
+File: Open. . . . . . . . . . . . . . . 31
+File: Save. . . . . . . . . . . . . . . 32
+File: Save As . . . . . . . . . . . . . 32
+File: Restore . . . . . . . . . . . . . 33
+File: Print . . . . . . . . . . . . . . 33
+File: Exit. . . . . . . . . . . . . . . 33
+
+
+CHAPTER 4:  INPUT DATA
+
+How to input. . . . . . . . . . . . . . 41
+
+General data. . . . . . . . . . . . . . 42
+Racetrack data. . . . . . . . . . . . . 4-4
+Polar moments of inertia data . . . . . 4-5
+
+Clutch arm data . . . . . . . . . . . . 47
+Clutch spring and disk data . . . . . . 49
+Clutch forces @ launch data . . . . . .4-11
+
+
+
+
+                                        iii
+
+
+
+
+
+CHAPTER 4:  INPUT DATA (continued)
+
+Engine dyno data. . . . . . . . . . . .412
+
+Motorcycle final drive ratio worksheet.4-14
+
+Polar moment of inertia worksheets. . .4-16
+
+Static plate force worksheet. . . . . .4-19
+Effective friction area worksheet . . .4-22
+
+
+
+
+CHAPTER 5:  CALCULATED PARAMETERS
+
+Calculated CLUTCH Pro output. . . . . . 51
+
+Clutch plate force. . . . . . . . . . . 5-1
+Clutch forces @ lockup. . . . . . . . . 5-2
+Clutch forces @ launch with air gap . . 5-3
+Clutch forces @ launch w/zero air gap . 5-3
+Clutch torque capacity graph. . . . . . 5-6
+Clutch details. . . . . . . . . . . . . 5-7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+iv
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+
+General
+
+The CLUTCH Pro software from RSA quickly determines how changing variables in a modern drag race clutch setup affect the performance of the racecar, both at the starting line, and in low and high gear.
+
+
+Today, in this 21st century, the sport of drag racing has attained a level of sophistication that makes the personal computer an essential tool for all racers to use, Professional and Sportsman alike.
+
+
+The QUARTER Pro and QUARTERjr programs for drag racecar performance simulation started it all off, first becoming commercially available back in 1985.  Today, thousands of racers just like yourself, already have the QUARTERjr and ENGINEjr software in their "toolbox".
+
+
+Now, CLUTCH Pro unlocks the power and convenience of the PC for every drag racer who needs to know how to set up their clutch to optimize their racecar's performance.
+
+
+The winning combination is the quest of all drag racers.  "How much static should I run?  How many disks?  How much counter weight will keep the clutch from burning up but not pull down the motor?"
+
+
+                                        11
+
+
+
+
+These are but a few of the many decisions a racer must make when setting up a new racecar, or when trying to adapt to changing weather and track conditions and make an existing racecar quicker and faster.
+
+
+
+In the past, the approach has usually been to copy what the next guy has in his bell housing, and then start changing things, one at a time.
+
+
+
+This is a costly, time consuming process which usually ends up with several DNQ's, worn out clutch disks and floaters, and a cabinet full of worthless spare parts.
+
+
+
+You can't afford to try everything at the same time and varying track and weather conditions can cloud the results of even the best backtoback testing.
+
+
+
+With competitive drag racing being a contest of hundredths, or even thousandths of a second, or just fractions of a MPH, only a computer can provide the necessary consistency and accuracy to optimize your clutch setup for the best overall quarter- mile performance.
+
+
+
+
+12
+
+
+
+
+RSA (Racing Systems Analysis) was started in 1978 by Patrick Hale, a local drag racer from Arizona.  After drag racing several racecars while attending Mechanical Engineering school at Arizona State University; he developed the well-known QUARTER Pro and ENGINE Pro computer programs.  Now, he has made CLUTCH Pro available for drag race clutch setup and performance prediction.
+
+
+
+The services of RSA are also available to customize CLUTCH Pro to your specific needs; and to write new, engineering analysis type software for other applications.  Give RSA a call or e-mail.  We will be happy to discuss these possibilities, and future RSA products with you.
+
+
+
+
+
+
+
+	        Patrick Hale
+                   President, MSME
+
+	        Racing Systems Analysis
+	        Phoenix, Arizona  USA
+
+	        Phone: 602.992.2586
+                   Web:   www.QUARTERjr.com
+
+
+
+
+
+                                        13
+
+
+
+
+Installing the program disk
+
+
+1. Start by inserting the CLUTCH Pro program CD into the CD drive in your PC.
+
+
+2. Use the mouse to select Run from the Start menu.
+
+
+3. In the Command Line box, type d:setup.exe depending on which drive you are using to read the CLUTCH Pro program CD.
+
+
+4. Use the mouse to click the OK button.
+
+
+5. Follow the instructions displayed on your computer monitor.  When you are finished, remove the CLUTCH Pro program CD.
+
+
+6. The setup process creates a folder named CLUTCH Pro in the Program Files group.  This folder contains the icon for the CLUTCH Pro software which has the name CLUTCH.exe.
+
+
+7.  You can now create a Shortcut for the CLUTCH.exe file and Send it to the Windows desktop if you like.  You normally do this by right-clicking the mouse on the CLUTCH.exe program icon and then choosing Create Shortcut from the drop-down list.
+
+
+
+1-4
+
+
+
+CHAPTER 2:  CLUTCH Pro SOFTWARE TOUR
+
+
+
+Getting Started
+
+In this chapter, we will walk you through a sample, hands on, racecar clutch setup analysis.  So please sit at your computer while you read this chapter.  CLUTCH Pro is designed to be very easy to use, even for the first time or novice computer user.
+
+
+
+Use the mouse to double-click on the application icon in the CLUTCH Pro folder or on the Windows desktop Shortcut you created for CLUTCH.exe.
+
+
+
+The splash screen identifying the version of the CLUTCH Pro program you have will now appear.  This will be followed by the main CLUTCH Pro program screen including a menu of commands.  By choosing one of the items from the menus, you command CLUTCH Pro to do whatever you choose.
+
+
+
+To begin, let's take a quick look at the CLUTCH Pro program screen.  The main CLUTCH Pro program screen contains all the data necessary to perform the clutch force analysis and performance calculations for both the low and high gear Lockup RPM, and Launch RPM (for non-motorcycle clutches).
+
+
+
+                                        2-1
+
+
+
+
+General information about the dragstrip weather conditions, polar moments of inertia, and low gear ratio of the racecar are included.  There is a complete engine horsepower and torque table from the dyno, and clutch disk, spring, and arm data.  Two different styles or types of arms may be modeled in the clutch setup.
+
+
+
+Any of these input data values may easily be changed using the editing features of CLUTCH Pro which are fully described in Chapter 4 of this manual.
+
+
+
+Now slowly press the tab key a few times and watch how the cursor moves around the CLUTCH Pro program screen.  When you get to the Engine Dyno Data you must use the arrow keys to navigate instead.
+
+
+
+You can also use the mouse to select any input variable to modify.  Single-clicking on the variable value allows you to insert and delete.  Double-clicking allows direct replacement of the input variable value.
+
+
+
+That's all there is to it!  Try changing the counter weight of the first column Mfg.Style arm to 1 gram.  Remember to press the enter key after typing 1.
+
+
+
+2-2
+
+
+
+
+Whenever an input variable value is changed, detailed engine and clutch performance calculations are completed, and all the output parameters and graphs are updated on the main program screen.
+
+
+
+The calculated output from CLUTCH Pro includes a table and graph of clutch plate forces vs. engine RPM.  It also includes the calculated RPM that the clutch will lockup in both low gear and high gear, and the corresponding clutch forces and unit friction loadings in pounds per square inch (PSI).  The Clutch Torque Capacity graph shows how the engine and clutch are working together.
+
+
+
+For all non-motorcycle style clutches, CLUTCH Pro output also includes the plate forces at the starting line with the engine at Launch RPM, for both the clutch pedal engaged and released conditions.  Detailed descriptions of all the calculated output parameters are included in Chapter 5.
+
+
+
+Now back to the counterweight change . . . is the Lockup RPM in Low too high?  Perhaps raising the static 100 lbs will do the trick?  Or maybe adding 2 grams to each clutch arm?  These are the types of questions CLUTCH Pro was designed to answer, quickly and economically.
+
+
+
+                                        2-3
+
+
+
+
+CLUTCH Pro also includes powerful calculation worksheets available by pressing any one of the six Worksheet buttons at any time.  The Worksheet buttons are located next to their corresponding input variables and have a ... symbol on them.  Try pressing the Static Plate Force Worksheet button located at the Static Plate Force input variable location now.
+
+
+The Static Plate Force Worksheet will be displayed for easily calculating the spring static plate force.  The  Static Plate Force Worksheet variables are described starting on page 4-19 of this manual.
+
+
+The static plate force is automatically calculated as you enter the worksheet data.  Press the close box in the upper right-hand corner to return to the CLUTCH Pro screen when you are finished using the worksheet.
+
+
+Note that the static plate force from the worksheet does not automatically transfer to the main CLUTCH Pro screen.  You must still input any new value for yourself.
+
+
+CLUTCH Pro also includes help screens available by pressing one of the three Help buttons at any time.  The Help buttons are located next to their corresponding input variables and have a ? symbol on them.  Try pressing the Traction Index Help button located at the Traction Index input variable location now.
+
+
+2-4
+
+
+
+
+The Traction Index help screen is included with CLUTCH Pro to conveniently illustrate the choices available for the input Traction Index.  Press the close box in the upper right-hand corner of the help screen to return to the CLUTCH Pro main screen.
+
+
+Selecting the Exit command from the File menu, or clicking the program close box in the upper right-hand corner, will return your computer to the Windows desktop.
+
+
+
+Optimizing Your Clutch
+
+Okay, so now that you know a little more about how the CLUTCH Pro software works and what inputs are required, how do you go about optimizing your clutch and racecar performance.  This section of the CLUTCH Pro manual is intended to give you the tools and methods to get the most out of your clutch system.
+
+
+First off we need to define the function of a clutch:  a clutch is a device used to transmit torque between an input and output shaft that operate at different speeds.  A clutch can not multiply torque like a torque converter.  The torque output from a clutch will always equal the torque input.  When the clutch is slipping, the output torque will still equal the input torque but power will be lost (in the form of heat) because the output RPM is lower than the input RPM.
+
+
+                                        2-5
+
+
+
+
+For a drag racecar, the clutch must slip when leaving the starting line.  When staged, the clutch output RPM is zero whereas the engine RPM is way up there, usually on an engine rev-limiter of some kind.
+
+
+
+The clutch must slip until the clutch disk RPM (basically the transmission input shaft RPM or simply vehicle speed) catches up with the engine RPM.  It takes a certain amount of time and distance downtrack to accelerate the powertrain and racecar to catch up with the engine RPM.
+
+
+
+Under ideal conditions where traction is not a limitation, the best racecar performance will be obtained when the maximum output torque is provided by the slipping clutch.  This means the clutch setup must ensure that the engine RPM remains constant at the peak torque RPM (determined from the engine dyno data) until the downtrack catch up point.
+
+
+
+Thus, in the ideal perfect world, you would stage with the engine at peak torque RPM, let out the clutch, and the engine RPM would remain relatively constant or flat during the clutch slipping and catch up time.
+
+
+
+
+2-6
+
+
+
+
+Real world dynamic (time dependent) effects of the rev-limiter, clutch disk air gap, clutch pedal release, and heating of the friction surfaces prevent this ideal, perfect clutch operation.
+
+
+
+In the real world, you're using a two-step rev-limiter set a few hundred RPM below the engine peak torque RPM when staging and let out the clutch.  The engine RPM changes very quickly and might remain relatively constant or flat while the clutch is slipping, finally taking off again when the racecar catches up with the engine in low gear.  The RPM where the engine and clutch RPM come together is called the Lockup RPM.
+
+
+
+Any time the Lockup RPM is not at the peak torque RPM while the clutch is slipping you are losing potential racecar performance!  However, having the Lockup RPM below the peak torque RPM is much, much worse than having it lockup above the peak torque RPM.
+
+
+
+The CLUTCH Pro software is designed to accurately predict the Lockup RPM of your clutch setup for your engine and racecar combination.  The first step in using the CLUTCH Pro software is to create a baseline computer model.
+
+
+
+
+
+                                        2-7
+
+
+
+
+The baseline computer model should be created from your best run to date.  Input all the weather condition and racecar data, engine dyno data, and the physical measurements of the clutch disks, springs, and manufacturer and style of the clutch arms or levers.  The only real unknown is the friction coefficient of your clutch disk and plate material combination.
+
+
+
+Pressing the Help button next to the Friction Coefficient input variable will bring up a Help screen with typical values for the friction coefficient for a variety of clutch materials.  Select the appropriate value for the clutch materials you're using and enter it for the Friction Coefficient.
+
+
+
+Now, how does the CLUTCH Pro calculated Lockup RPM in low gear compare to what the racecar actually did?  If it's off, adjust the Friction Coefficient to make it match.  All the other CLUTCH Pro input variables are usually easy to measure or calculate.  The only real unknown or fudge factor in CLUTCH Pro is the Friction Coefficient.
+
+
+
+Congratulations!  You have just created the baseline CLUTCH Pro computer model for your clutch and racecar combination!
+
+
+
+
+2-8
+
+
+
+
+The next step is to optimize your low gear Lockup RPM to achieve optimum racecar performance.  If the low gear Lockup RPM is not at the engine peak torque RPM you can now use CLUTCH Pro to determine how to change your clutch setup to make it match.
+
+
+
+After that, look at the high gear Lockup RPM.  Is it higher than the minimum RPM the engine sees in high gear?  If so, the clutch is going to slip a little at the beginning of high gear just like it did in low, until the driveshaft speed catches up with the engine.
+
+
+
+What's the solution?  Reduce the static and increase the centrifugal to steepen the clutch torque capacity curve with engine RPM.  This will usually reduce the Lockup RPM in high gear slightly.
+
+
+
+For non-motorcycle clutches try changing the Launch RPM.  Watch the Clutch Plate Force and Clutch Torque Capacity Graph as you make these changes.
+
+
+
+In summary, CLUTCH Pro takes virtually all the guess work out of adjusting a modern, drag racing clutch.  The four basic steps in using CLUTCH Pro to optimize your clutch setup are:
+
+
+                                        2-9
+
+
+
+
+1.  Create a baseline model from your best
+    run to date.
+
+2.  Adjust the Friction Coefficient to
+    match the Low gear Lockup RPM from your
+    baseline run at the race track.
+
+3.  Adjust the clutch variables to properly
+    match the Low gear Lockup RPM to the
+    engine peak torque RPM.
+
+4.  Check the High gear Lockup RPM.  Change
+    the static and centrifugal forces to
+    prevent the clutch from slipping in
+    High while keeping the Low gear Lockup
+    RPM at the engine peak torque RPM.
+
+
+
+CLUTCH Pro is also very useful for figuring out how to change your clutch setup for changing weather and track conditions.  Once you have created a baseline, matched model for your racecar and clutch setup, simply input the new weather conditions (from run-to-run or track-to-track) and use CLUTCH Pro to determine how much counterweight is needed to keep the Low gear Lockup RPM exactly where you want it!
+
+
+                            
+Good luck and have fun!  The remaining chapters of this manual provide you with the detailed knowledge and skills necessary to fully exploit the power and versatility of CLUTCH Pro and your Windows PC.
+
+
+
+
+2-10
+
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+
+Six Windows menu commands; Open, Save, Save As, Restore, Print and Exit, are used with CLUTCH Pro to specify the command option desired.  These menu options may generally be selected anytime while running the program.
+
+
+This chapter of the CLUTCH Pro manual contains a complete, detailed description for each of the command menu options.
+
+
+
+File: Open
+
+The Open command is used to retrieve from the disk and display on the CLUTCH Pro program screen a previously saved data document.  Selecting Open from the File menu will cause a standard Windows dialog box to appear, awaiting the selection of a CLUTCH Pro data document.  Once the input data document is selected, the data values are retrieved and displayed on the CLUTCH Pro program screen.
+
+
+The Open command can be used to open an existing data document so that it may be modified as desired.  The retrieved input data can also serve as a base for building another CLUTCH Pro data document to be saved using the Save As option described on the next page.
+
+
+
+                                        3-1
+
+
+
+
+
+File: Save
+
+The Save command is used to save all the "current" clutch data to a file on the hard disk using the current data document name.  If the current data document is "Untitled", a file named CLUTCH.RSA will be created and saved on your hard disk.  This File: menu item is also directly available on the Command Menu.
+
+
+When you select the Save command, the "current" clutch setup is saved to the data file and the graphs are updated to show only the "current" data - that is, the "old" data is completely removed.
+
+
+
+
+File: Save As
+
+The Save As command is used to save the current input data on your hard disk with a new data document name.  You must always select Save As from the File menu for this command.
+
+
+
+
+
+
+
+
+
+
+
+
+3-2
+
+
+
+
+
+File: Restore
+
+The Restore command is used to retrieve from the hard disk and display on the CLUTCH Pro screen the last previously "saved" CLUTCH Pro data document file.  This File: menu item is also directly available on the Command Menu.
+
+
+When you select the Restore command, the clutch setup will go back to the last "saved" clutch setup.  The graphs are updated and will now only contain information on this (new) "current" setup until you start making changes to the input data values again.
+
+
+
+File: Print
+
+The Print command is used to make a complete, printed copy of both the input data and the calculated output parameters from CLUTCH Pro.  Selecting the Print command in the File menu at any time will cause the printer to start printing.
+
+
+
+File: Exit
+
+The Exit command in the File menu can be used at any time to exit the CLUTCH Pro program and return to the Windows desktop.  You may also exit CLUTCH Pro by pressing the close box in the upper right hand corner of the main program screen.
+
+                                        3-3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3-4
+
+
+
+CHAPTER 4:  INPUT SCREEN
+
+
+
+How to Input
+
+
+The Input Screen is where the editing the required input variables takes place.  This chapter of the CLUTCH Pro manual contains a complete, detailed description of all the input variables.
+
+
+Before getting into the definitions of the input variables, let's discuss how you provide input to CLUTCH Pro via your computer keyboard and mouse.
+
+
+The mouse is used to select the input variable to be changed.  Most of the input variables are edited by selecting them with the mouse and simply typing in a new value.
+
+
+If you make a mistake when typing, use the Back Space key to backup and erase, and then reenter your data.  A maximum of five digits may be input for the numeric variables.  If more than five digits are entered, the excess will be ignored.  Only numeric inputs are allowed.
+
+
+Also, if you enter a value outside the range of acceptable variable inputs, you will receive a warning message on the screen and CLUTCH Pro will automatically change the value to be within the established CLUTCH Pro limits.
+
+                                        41
+
+
+
+
+Pressing the Tab key (or the Return or Enter keys) signifies the end of the variable entry.  The Tab key will also advance the cursor to the next input data variable.  Pressing the Return or Enter keys will hold the cursor in the current input variable location.
+
+
+Some of the data values are determined by selecting from a drop-down menu.  An example of this type of input is the Fuel System:  Simply use the mouse to click the Fuel System: list box and a menu will appear showing the possible selections.  Click the mouse button on the Fuel System: that you are modeling.
+
+
+The remainder of this chapter of the CLUTCH Pro manual contains a complete, detailed description for each of the input vehicle variables.  A complete description of the six CLUTCH Pro Worksheets is also included beginning on page 4-14.
+
+
+
+General Data
+
+
+Barometer - If you input a value between 24 and 31, CLUTCH Pro assumes it to be the local dragstrip barometric pressure expressed in inches of Mercury (in. Hg).  The "standard atmosphere" Barometer is normally set at 29.92 in. Hg.  Normal input values for the Barometer are between 28 and 30.
+
+
+42
+
+
+
+
+note: optionally, you can enter an altimeter value in the Barometer field if you prefer.  See Altimeter input below.
+
+
+Altimeter - The local dragstrip altimeter reading expressed in feet - with the knob dial-in barometer setting at 29.92 in Hg.  Normal input values for the Altimeter are between 0 and 2000.
+
+
+Temperature = The dragstrip ambient air temperature expressed in degrees Fahrenheit (deg F).  This value is also known as the "dry bulb" temperature.  Normal input values for the dragstrip Temperature are between 45 and 110.
+
+
+Relative Humidity = The local relative humidity at the dragstrip expressed in percent (%).  Normal input values for the Relative Humidity are between 15 and 90.
+
+
+** Special Note: Weather Conditions **
+
+Always input the actual, measured Temperature and Relative Humidity!  Never use "relative", "corrected" or "density altitude" for the Altimeter in CLUTCH Pro!
+
+
+
+Low Gear Ratio = The overall transmission low gear ratio.  Normal input values for the transmission Low Gear Ratio are between 2.20 and 3.50.
+
+
+                                        4-3
+
+
+
+
+Rear Gear Ratio = The gear ratio of the final drive.  Normal input values for the Rear Gear Ratio are between 3.07 and 6.50.  Motorcycles must use the Final Drive Ratio Worksheet described on page 4-14 to determine the overall final drive ratio.
+
+
+Tire Rollout = The tire circumference expressed in inches.  This dimension is obtained by measuring the circumference of a properly inflated tire without the weight of vehicle being supported by the tire.  Normal input values for the Tire Rollout are between 75 and 118.
+
+
+
+Racetrack Data
+
+Estimated 60 ft Time = The racecar 60 ft time that CLUTCH Pro will use to estimate the Max Acceleration, expressed in seconds.  Normal input values for the Estimated 60 ft Time are between 1.0 and 1.5.
+
+
+Max Acceleration = The maximum acceleration to be used to evaluate the dynamic engine and clutch system responses, expressed in g's.  This value can be obtained by one of three methods:
+
+     1) from the Estimated 60 Ft Time
+     2) measured on-track with a g-meter
+     3) calculated using the QUARTER Pro
+        simulation programs.
+
+Normal input values for the Max Acceleration are between 1.5 and 3.0.
+
+4-4
+
+
+
+Traction Index = Specifies the dragstrip traction conditions.  The best traction is obtained for an input Traction Index of 1 and represents the best traction ever demonstrated at the best racetrack. 
+
+The Traction Index is a very strong function of how much race track surface preparation has been done.  National Events are always better than Divisional Events.  Average racetrack traction for local bracket events has a value of 5 or 6.  Press the Traction Index Help button to see some examples for Traction Index.
+
+
+
+Polar Moments of Inertia Data
+
+The polar moment of inertia of the powertrain components are necessary to compute the power and torque required to accelerate these rotating masses.  The definition of, and methods used to accurately calculate polar moments of inertia are very complex, but can be found in many Engineering handbooks.  CLUTCH Pro requires units for the polar moments of inertia to be inlbs sec*sec.
+
+
+You are strongly encouraged to use the three Polar Moment of Inertia Worksheets described on  pages 4-16 through 4-18 to estimate the polar moment of inertia for the following three groups of vehicle powertrain components:
+
+ - Engine + Flywheel + Clutch
+ - Transmission + Driveshaft
+ - Tires + Wheels + Ring Gear
+
+                                        4-5
+
+
+
+
+
+Engine + Flywheel + Clutch = The polar moment of inertia of the powertrain components that rotate relative to engine speed.  These components include the crankshaft, connecting rods, camshaft, blower, flywheel, clutch, and transmission input shaft, etc.  Normal input values for the engine polar moment of inertia are between 2.0 and 5.0.
+
+
+
+
+Transmission + Driveshaft = The polar moment of inertia of those components that rotate relative to the transmission output shaft speed.  These include the main and output transmission shafts, planetary gear sets, couplers, driveshafts and the final drive pinion gear.  Normal input values for the transmission polar moment of inertia are between 0.1 and 0.8.
+
+
+
+
+Tires + Wheels + Ring Gear = The polar moment of inertia of those components that rotate at the wheel and tire speed.  These include the ring gear and spool, axles, brake rotors, wheels, and tires, etc.  The final drive polar moment of inertia is usually dominated by the tire's effect.  Normal input values for the final drive polar moment of inertia are between 20 and 60.
+
+
+
+
+4-6
+
+
+
+
+Clutch Arm Data
+
+
+Two different styles or types of clutch arms may be used in the CLUTCH Pro analysis at the same time.  For example, each arm may be of a different style and have a different amount of counterweight.
+
+
+
+Mfg.Style Code = The code name for one of the clutch arm descriptions stored within CLUTCH Pro.  Press the Mfg.Style Help button to see the descriptions of the available arms.
+
+You may select the clutch Mfg.Style by either typing in the desired code name or by using the mouse to double click on the description of the desired Mfg.Style on the Help screen.
+
+
+
+Number of Arms = The number of arms used in the clutch setup of this style.  Normal input values for the Number of Arms are between 3 and 6.
+
+
+
+Total Counter Wt = The total mass of counter weight attached to the arms of this style, measured in grams.  Normal input values for the Total Counter Wt are between 0 and 50.
+
+
+
+
+                                        4-7
+
+
+
+
+Counter Wt/Arm = The mass of the attached counter weight on one arm measured in grams.  Normal input values for the Counter Wt/Arm are between 0 and 15.
+
+
+
+
+Ring Height = The installed ring height of the clutch pressure plate.  The Ring Height determines clutch arm angle and changes the overall characteristics of the clutch.  Follow your clutch manufacturer's recommendations for Ring Height.
+
+
+note:  CLUTCH Pro does not automatically account for the change in Static Plate Force that may result from a change in Ring Height.  Use the Static Plate Force Worksheet to determine the new Static Plate Force and input this value after changing the Ring Height.
+
+
+
+
+Arm Depth = The installed depth or distance that the clutch arms are below the ring/ or cover reference measurement location, expressed in inches.  Not all clutch designs have adjustments for the arm angle independent of the Ring Height.  Arm Depth will only appear on the CLUTCH Pro program screen for clutch arm Mfg.Style Codes that require this dimension.  Follow your clutch manufacturer's recommendations for measuring the Arm Depth.
+
+
+
+4-8
+
+
+
+
+Return Spring = The manufacturer's rating for the return springs, expressed in lbs.   Normal values for the Return Spring are between 3 and 15.  Return springs are sometimes used in Motorcycle clutches to initially prevent the clutch arms from making contact with the back of the pressure plate.  Centrifugal forces acting on the clutch arm and counter weight are required to overcome the return springs.
+
+
+Once the return spring forces are overcome, (usually at a lower engine/clutch pressure plate RPM) the return springs simply act like a negative static force.  That is, they reduce the static (i.e. constant or fixed with RPM) force component provided by the clutch springs.
+
+
+
+
+Clutch Spring and Disk Data
+
+Static Plate Force = The total static plate force provided by the clutch springs, expressed in pounds (lbs).  Normal input values for the Static Plate Force are between 200 and 900.  See page 419 for a description of the Static Plate Force Worksheet.
+
+
+Number of Disks = The total number of disks in the clutch.  Normal input values for the Number of Disks are between 2 and 6.
+
+
+
+
+                                        4-9
+
+
+
+
+Total Disk Weight = The total weight of all the clutch disks, measured in pounds (lbs).  Normal input values for the Total Disk Weight are between 4 and 8.
+
+
+Outer Disk Diameter = The outer diameter of the clutch disk friction surface, measured in inches.  Normal input values for the Outer Diameter are between 7 and 10.
+
+
+Inner Disk Diameter = The inner diameter of the clutch disk friction surface, measured in inches.  Normal input values for the Inner Diameter are between 5 and 7.
+
+                                        
+Effective Friction Area = The effective friction surface area of the clutch, expressed as a percent of the maximum area.  Typically, there are slots or holes in some of the friction components causing a reduction in available surface area.  Normal input values for the Effective Friction Area are between 85 and 95.  See page 422 for a description of the Effective Friction Area Worksheet.
+
+
+Friction Coefficient = The friction coefficient of the clutch disk, floater and pressure plate materials combination.  This value can only be obtained by testing and is a function of several items - the friction material itself, hardness and temperature; and also the floater and pressure plate materials, surface finish and coatings.  Press the Help button to see normal values for the Friction Coefficient.
+
+4-10
+
+
+
+
+
+Clutch Forces @Launch Data (non-motorcycle)
+
+
+The calculation of Clutch Forces @ Launch requires the input of the starting line or launch RPM (usually set by an engine rev-limiter) and the clutch air gap.
+
+Note: These two variables are not included in the motorcycle version of CLUTCH Pro.
+
+
+
+Launch RPM = The engine RPM that the vehicle is launched from at the dragstrip starting line.  Normal input values for the Launch RPM are between 4,500 and 12,000.
+
+
+
+With Air Gap = The clutch disk air gap measured in inches.  Typical input values for With Air Gap are between .040 and .060.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       4-11
+
+
+
+Engine Dyno Data
+
+The engine dyno data is input as a table of horsepower (or torque) as a function of engine speed.  The engine dyno input is for the "standard" ambient conditions of sea level elevation, 29.92 in Hg, 60 deg F and no humidity (i.e. dry air).  This is the same "standard" that most aftermarket, racing and high performance engines are rated at.
+
+A maximum of 10 RPM power points may be input to CLUTCH Pro.  The button located next to the lower right hand corner of the Engine Dyno Data table may be pressed at any time to graphically display the input HP and torque curves vs RPM.  You may also use the mouse the double click anywhere on the Engine Dyno Data table to display the engine HP and torque graph.  Pressing the close box in the upper right hand corner of this screen will return you to the CLUTCH Pro main screen.
+
+The engine dyno data is "referred" to the local dragstrip conditions specified by the General Data, based on the SAE (Society of Automotive Engineers) J1349 Standard method for the CLUTCH Pro Lockup RPM analysis.
+
+
+
+RPM = The engine speed expressed in revolutions per minute (RPM).  Normal input values for the engine dyno data RPM are between 2,000 and 12,000.  A blank or zero input indicates the end of the engine power table inputs.
+
+
+
+4-12
+
+
+
+
+HP = The engine power expressed in horsepower.  Normal input values for the engine HP are between 200 and 3,000.  The corresponding Torque for the input HP is automatically calculated and displayed by CLUTCH Pro.
+
+
+Torque = The engine torque expressed in ftlbs.  Normal input values for the engine Torque are between 150 and 2,500.  The corresponding HP for the input Torque is automatically calculated and displayed.
+
+
+
+Fuel System: = a drop-down menu to select which type of fuel and fuel system are to modeled by CLUTCH Pro.
+
+
+
+HP/Torque Multiplier = A multiplier on the engine dyno data.  This multiplier can be used to easily modify the input engine dyno data to match a known vehicle performance level or to perform a sensitivity study.  Normal input values for the HP/Torque Multiplier are between 0.9 and 1.1.
+
+
+Recalc = Pressing the Recalc button will cause all the HP and Torque data values to be recalculated using the current HP/Torque Multiplier.  The new values will be displayed in the engine dyno data table, and the HP/Torque Multiplier will be reset to 1.0.
+
+
+
+                                       4-13
+
+
+
+
+THE CLUTCH Pro WORKSHEETS
+
+
+CLUTCH Pro contains six calculation worksheets which are included to help you estimate some of the more detailed input values.  Normally, the worksheets are used like any calculator you might pull out, to simply calculate a value.  It is up to you to decide whether to use the calculated worksheet value on the main CLUTCH Pro program screen or not.
+
+
+However, if you double click the calculated worksheet value - it will automatically be transferred to main CLUTCH Pro program screen and the worksheet will be closed.  This is a nice shortcut to use when you are satisfied with the worksheet calculation!
+
+
+
+
+
+Motorcycle Final Drive Ratio Worksheet
+
+
+The Motorcycle Final Drive Ratio Worksheet is selected by pressing the Final Drive Ratio Worksheet button located at the Final Drive Ratio input variable position.  Control is returned to the CLUTCH Pro program screen by pressing the close box when you are finished using the worksheet.
+
+
+
+
+
+
+4-14
+
+
+
+
+The Motorcycle Final Drive Ratio Worksheet is included with the motorcycle version of CLUTCH Pro to quickly calculate the overall Final Drive Ratio for your motorcycle.  Each of the Motorcycle Final Drive Ratio Worksheet variables are fully described in the following paragraphs.
+
+
+
+High Gear Ratio = The high (or final) gear ratio in the transmission, normally 1.0.
+
+
+
+Primary Drive Speed Reduction = The speed reduction between the motorcycle engine crankshaft and transmission mainshaft.  Normal values for the Primary Drive Speed Reduction are around 1.8.
+
+
+
+Countershaft Sprocket Teeth = The number of teeth on the countershaft sprocket.  Normal values for the Countershaft Sprocket Teeth are between 12 and 18.
+
+
+
+Rear Wheel Sprocket Teeth = The number of teeth on the rear wheel sprocket.  Normal values for the Rear Wheel Sprocket Teeth are between 40 and 50.
+
+
+
+
+
+
+
+                                       4-15
+
+
+
+
+Polar Moment of Inertia Worksheets
+
+
+The Polar Moment of Inertia Worksheets are selected by pressing the Polar Moment of Inertia Worksheet buttons located at one of the three Polar Moment of Inertia input variable positions:
+
+ - Engine + Flywheel + Clutch
+ - Transmission + Driveshaft
+ - Tires + Wheels + Ring Gear
+
+
+Control is returned to the CLUTCH Pro screen by pressing the close box in the upper right hand corner when you are finished using the worksheets.
+
+
+The Polar Moment of Inertia Worksheets are included with CLUTCH Pro to help you quickly estimate the three Polar Moments of Inertia for your vehicle that are required to accurately predict clutch Lockup RPM for low and high gear.  Each of the Polar Moment of Inertia Worksheets and their corresponding variables are fully described on the following pages.
+
+
+
+Engine + Flywheel + Clutch Worksheet
+
+Crankshaft Weight = The weight of the bare engine crankshaft measured in pounds (lbs).  Normal values for the Crankshaft Weight are between 40 and 65.
+
+
+
+4-16
+
+
+
+
+Crankshaft Stroke = The stroke of the engine crankshaft measured in inches.  Normal values for the Crankshaft Stroke are between 3.0 and 4.5.
+
+
+Flywheel + Clutch Weight = The combined weight of the flywheel, pressure plate, clutch disks, floaters, springs, arms, bolts, etc. measured in pounds (lbs).  Normal values for the Flywheel + Clutch Weight are between 20 and 50.
+
+
+Flywheel Diameter = The outer diameter of the flywheel ring gear, measured in inches.  Normal values for the Flywheel Diameter are between 8 and 14.
+
+
+
+Transmission + Driveshaft Worksheet
+
+Transmission Type = a drop-down menu to select which type of transmission is being modeled by CLUTCH Pro.
+
+
+Transmission Weight = The weight of the bare transmission expressed in pounds (lbs).  Normal values for the Transmission Weight are between 60 and 120.
+
+
+Case Diameter = The local diameter of the transmission case housing the transmission gears expressed in inches.  Normal values for the Case Diameter are between 4 and 10.
+
+
+
+                                       4-17
+
+
+
+
+Tires + Wheels + Ring Gear Worksheet
+
+
+Tire Weight = The individual weight of each driving tire expressed in pounds (lbs).  This value can be measured or obtained from the tire manufacturer.  Normal values for the Tire Weight are between 20 and 50.
+
+
+
+The Tire Diameter may be input in two ways:
+
+Tire Rollout = The driving tire circumference expressed in inches.  Normal input values for the Tire Rollout are between 75 and 118.
+
+Tire Diameter = The driving tire diameter expressed in inches.  Normal values for the Tire Diameter are between 24 and 37.
+
+
+
+Wheel Weight = The individual weight of each wheel expressed in pounds (lbs).  This value can be measured or obtained from the wheel manufacturer.  Normal values for the Wheel Weight are between 10 and 20.
+
+
+
+Wheel Diameter = The outer rim diameter of the wheel expressed in inches.  This value can be measured or obtained from the wheel manufacturer.  Normal values for the Wheel Diameter are between 13 and 17.
+
+
+
+
+4-18
+
+
+
+
+Static Place Force Worksheet
+
+
+The Static Plate Force Worksheet is selected by pressing the Static Plate Force Worksheet button located next to the Static Plate Force input variable position.  Control is returned to the main CLUTCH Pro program screen by pressing the close box when you are finished using the worksheet.
+
+
+The Static Plate Force Worksheet is included with CLUTCH Pro to help you quickly determine the static plate force provided by the clutch springs.  Each of the Static Plate Force Worksheet variables is fully described in the following paragraphs.
+
+
+Number of Springs = the total number of springs in the clutch assembly.  Normal values for the Number of Springs are between 3 and 6.
+
+
+
+The next two variables, on the next page, Spring Rate and Spring Base Pressure, may be input either on a single spring basis, or on a total clutch basis.  The total clutch basis is entered under the column containing the Number of Springs entry.  CLUTCH Pro will automatically calculate and display the other column's corresponding values.
+
+
+
+
+                                       4-19
+
+
+
+
+
+Spring Base Pressure = the force in pounds that the springs provide at the reference Ring Height when the adjusters (or Motorcycle shims) are in the base position, that is, zero turns (or no added shims).  This data is best obtained from the clutch manufacturer but can also be measured.  Normal values for the total clutch Spring Base Pressure are between 0 and 300.
+
+
+
+Spring Rate = the spring rate, expressed in pounds (lbs) per turn.  Note:  Motorcycle clutch springs are rated in pounds (lbs) per inch.  This data is best obtained from the clutch manufacturer, but can be measured for each spring and adjuster assembly.  Normal values for the single Spring Rate are between 20 and 40.
+
+ 
+
+Delta Ring Height = the change in ring height from the Base Pressure reference ring height expressed in inches.  Normal values for the Delta Ring Height are between -.050 and +.050.
+
+
+note:  CLUTCH Pro does not automatically account for the change in Static Plate Force that may result from a change in Ring Height on the main program screen.  Use the Static Plate Force Worksheet and the Delta Ring Height variable to determine the new Static Plate Force and input this value after changing the Ring Height.
+
+
+4-20
+
+
+
+
+For clutches with threaded adjusters:
+
+Adjuster Location = the number of turns the clutch spring adjusters are turned from the base position.  Normal values for the Adjuster Location are between 0 and 5.
+
+
+
+Adjuster threads per inch = the number of threads per inch on the spring adjuster screw.  Normal values for the Adjuster threads per inch are between 16 and 24.
+
+
+
+
+For clutches using shim adjusters:
+
+Shim Thickness = the thickness of the added shims used under the pressure plate springs from the base position, expressed in inches.  Normal values for the Shim Thickness are between 0.0 and .250.
+
+
+
+
+Auto-Calculate Option:
+
+Using the right mouse button when opening the Static Plate Force Worksheet commands CLUTCH Pro to automatically calculate how many turns (or shim thickness) are required to provide the input Static Place Force value on the main CLUTCH Pro program screen.  This is a very handy feature to use once all the Static Plate Force Worksheet values have been properly input.
+
+
+                                       4-21
+
+
+
+Effective Area Worksheet
+
+The Effective Area Worksheet is selected by pressing the Effective Area Worksheet button located next to the Effective Friction Area input variable position.  Control is returned to the main CLUTCH Pro program screen by pressing the close box when you are finished using the worksheet.
+
+
+The Effective Friction Area Worksheet is included with CLUTCH Pro to help you quickly estimate the effective surface area percentage of your clutch, accounting for both holes and slots.  Each of the Effective Friction Area Worksheet variables is fully described in the following paragraphs.
+
+
+Number of Slots = the number of radial slots cut into each clutch disk.  A solid disk has no slots.  Normal values for the Number of Slots are between 0 and 6.
+
+Slot Width = the width of the slots measured in inches.  Normal values for the Slot Width are between .25 and .375.
+
+
+Number of Holes = the number of holes drilled in either the pressure plate or floater of the clutch assembly.  Normal values for the Number of Holes are between 0 and 40.
+
+Hole Diameter = the diameter of the holes drilled in the floater or pressure plate, measured in inches.  Normal values for the Hole Diameter are between .125 and .250.
+
+4-22
+
+
+
+CHAPTER 5:  CALCULATED PARAMETERS
+
+The calculated parameters from CLUTCH Pro allow the prediction of the performance of any drag racecar clutch setup - during the launch, and both in low gear and high gear.
+
+
+All the CLUTCH Pro calculated output is included on the same screen as the input variables, and is highlighted with a yellow background.  Please refer to the output of the sample clutch analysis on your computer monitor to get a complete understanding of the calculated CLUTCH Pro output.
+
+
+The CLUTCH Pro calculated output is contained in six distinct sections:
+
+  - Clutch Plate Force
+  - Clutch Forces @ Lockup
+  - Clutch Forces @ Launch with Air Gap
+  - Clutch Forces @ Launch w/Zero Air Gap
+  - Clutch Torque Capacity Graph
+  - Clutch Details
+
+
+Clutch Plate Force
+
+Clutch Plate Force includes a graph and table of the clutch plate forces vs. RPM -  calculated at each of the engine dyno data RPM values.  This data contains the centrifugal force and also the total force applied by the pressure plate.  The total force is simply the sum of the static and centrifugal forces.  The white circles highlight the clutch plate forces where the "saved" and "current" clutch plate forces are the same, and also at the Launch RPM.
+
+                                        5-1
+
+
+
+
+A very powerful option included in CLUTCH Pro allows for direct comparison of the "saved" and "current" clutch plate forces.  This option is selected by using the mouse to double click anywhere on the Clutch Plate Force graph.  A larger version of the Clutch Plate Force graph will appear.
+
+
+You can use either the mouse or cursor keys (up, down, right and left arrow) to select an engine RPM for comparison purposes.  The values for each data set will be displayed as well as their calculated difference.  When you are finished using this option, press the close box in the upper right hand corner of the screen.
+
+
+
+
+Clutch Forces @ Lockup
+
+
+In low gear, the engine RPM must be controlled by the clutch setup to provide the maximum force possible to the racetrack as the vehicle leaves the starting line.  Typically, the RPM should never be lower than the engine RPM at peak torque, as this provides the best launch acceleration.  On slick tracks, it may be necessary to raise the Lockup RPM above peak torque to reduce the torque delivered to the tires and help prevent tire spin.
+
+
+
+
+
+
+5-2
+
+
+
+                             
+In high gear, the effective load on the clutch is much greater, and the clutch will normally slip or lockup at a higher RPM.  It is necessary to control the clutch Lockup RPM in high gear to prevent the clutch from slipping excessively during the downtrack gear changes.  This usually means adjusting the balance between the static and centrifugal forces to narrow the spread in Lockup RPM between low and high gear (or changing the Launch RPM for non-motorcycle style clutches).
+
+
+
+Lockup RPM = The calculated lockup RPM of the engine/clutch combination.  Below this RPM the clutch can be expected to slip.  Above the Lockup RPM, the clutch should be effectively locked up with minimal slippage ... less than 0.5 percent.
+
+
+
+Plate Force = The total force applied by the clutch to the friction surfaces at Lockup RPM.  Plate Force is the sum of the static and centrifugal forces.
+
+
+
+Friction PSI = The calculated resultant unit friction force of the clutch at Lockup RPM expressed in pounds per square inch (PSI).  The Friction PSI is useful for determining how much total surface area is required to get consistent clutch engagement and performance.  Normal values for the Friction PSI are between 10 and 50.
+
+
+                                        5-3
+
+
+
+
+Auto-Select Options:
+
+Clutch Pro contains two very powerful tools used to automatically determine the clutch setup required to get any desired Lockup RPM in both low and high gear.  These tools are selected by using the mouse to right click on either the calculated Low Gear or High Gear Lockup RPM values.
+
+
+A small tool window will pop-up containing an input for the desired Lockup RPM, and several option buttons for commanding how CLUTCH Pro is to obtain this RPM.  These option buttons may include Counter Weight, Static and Launch RPM.
+
+
+Simply type in the desired Lockup RPM and use the mouse to specify which input variable CLUTCH Pro is to use to match the desired Lockup RPM.  Then sit back and watch, as CLUTCH Pro automatically determines exactly how to set up your clutch to get the exact clutch Lockup RPM you desire!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+5-4
+
+
+
+
+CLUTCH Forces @ Launch - with Air Gap
+
+note: Clutch Forces @ Launch are only calculated for non-motorcycle clutches.
+
+
+Plate Force = The total clutch plate force that is held back by the throw-out bearing on the starting line ... the clutch pedal is depressed, the Air Gap is set and the engine is at Launch RPM.  Plate Force is the sum of both the static and centrifugal forces for this initial condition.
+
+
+
+CLUTCH Forces @ Launch - with Zero Air Gap
+
+
+Plate Force = The total clutch plate force applied to the friction surfaces at Launch RPM at Zero Air Gap ... after the clutch pedal is released.  Plate Force is the sum of both the static and centrifugal forces.
+
+
+Friction PSI = The calculated resultant unit friction force of the clutch at Launch RPM with Zero Air Gap expressed in pounds per square inch (PSI).  The Friction PSI is useful for determining how much total surface area is required to get consistent clutch "hit" and engagement.  Normal values for the Friction PSI are between 20 and 50.
+
+
+
+
+
+
+
+                                        5-5
+
+
+
+Clutch Torque Capacity Graph
+
+The Clutch Torque Capacity graph illustrates how both the engine torque and clutch torque capacity vary with RPM in both low and high gears.  The clutch torque capacity is in black and the engine torque is in red.  The upper pair of lines are for high gear and lower two lines for low gear.
+
+
+The intersection points of these two pair of lines (highlighted by the white circles) determine the Lockup RPM in low and high gear, and the numeric values are also displayed on the graph.
+
+
+When the engine torque line is above the clutch torque capacity line, the clutch can be expected to slip.  It can't hold all the torque the engine is capable of delivering.  Slippage will occur, heat will be generated and clutch friction material will be ground away to help absorb the excess energy.  When the clutch torque capacity is greater than the engine torque line, the clutch will effectively lockup and not slip.
+
+
+The Clutch Torque Capacity graph also contains both the "current" engine torque and clutch torque capacity lines as well as the "saved" data.  The "current" lines are thicker and darker than the "saved" data.
+
+
+As you change input values, this powerful CLUTCH Pro feature allows you to visually see the effect of each change on the calculated low and high gear Lockup RPM.
+
+5-6
+
+
+
+
+Clutch Details
+
+
+Double clicking anywhere on the Clutch Torque Capacity Graph will bring up a powerful Clutch Details screen.  The clutch plate load changes that result from small changes to the clutch settings at three different engine RPM values are calculated and displayed for your convenience.
+
+
+Using the Clutch Details screen will allow you to quickly determine how various adjustments to your clutch will affect the total clutch plate force in lbs.  When you are finished using this option, press the close box in the upper right hand corner of the screen.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        5-7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+5-8

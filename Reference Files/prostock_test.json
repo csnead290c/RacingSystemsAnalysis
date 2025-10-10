@@ -1,0 +1,85 @@
+{
+  "note": "test case for QUARTER Pro version 3.2",
+  "elevationFeet": 32,
+  "temperatureF": 75,
+  "barometerInHg": 29.92,
+  "humidityPercent": 55,
+  "trackTempF": 105,
+  "weightLb": 2355,
+  "wheelbaseIn": 107,
+  "rolloutIn": 9,
+  "overhangIn": 40,
+  "refAreaSqFt": 18.2,
+  "dragCoef": 0.24,
+  "liftCoef": 0.1,
+  "dyno": {
+    "engineRPM": [
+      7000,
+      7250,
+      7500,
+      7750,
+      8000,
+      8250,
+      8500,
+      8750,
+      9000,
+      9250,
+      9500
+    ],
+    "engineHP": [
+      1078,
+      1131,
+      1177,
+      1216,
+      1251,
+      1274,
+      1288,
+      1300,
+      1297,
+      1269,
+      1222
+    ],
+    "engineTQ": [
+      808.8253316072451,
+      819.3295566930534,
+      824.231528399764,
+      824.0734002801927,
+      821.2990988966425,
+      811.0535005648408,
+      795.8495241483054,
+      780.3138635171937,
+      756.8877742385259,
+      720.5330612913962,
+      675.587529203044
+    ],
+    "count": 11
+  },
+  "gearRatios": [
+    2.6,
+    1.9,
+    1.5,
+    1.2,
+    1,
+    0
+  ],
+  "gearEfficiencies": [
+    0.99,
+    0.991,
+    0.992,
+    0.993,
+    0.994,
+    0
+  ],
+  "shiftRpm": [
+    9400,
+    9400,
+    9400,
+    9400,
+    0,
+    0
+  ],
+  "launchRpm": 7200,
+  "stallRpm": 7600,
+  "torqueMultiplier": 1,
+  "converterSlipPercent": 1.004
+}

@@ -1,0 +1,166 @@
+/**
+ * VB6-ported integration loop structure.
+ * 
+ * TODO: Replace with exact VB6 math once QTRPERF.BAS integration loop is ported.
+ * This is a placeholder that matches the expected structure.
+ */
+
+// import { g } from './constants'; // TODO: Use for rotational inertia calculations
+
+/**
+ * VB6 simulation state.
+ */
+export interface VB6State {
+  /** Time (seconds) */
+  t_s: number;
+  /** Distance (feet) */
+  s_ft: number;
+  /** Velocity (feet/second) */
+  v_fps: number;
+  /** Engine RPM */
+  engineRPM: number;
+  /** Current gear index (0-based) */
+  gearIndex: number;
+  /** Alias for engineRPM (for compatibility) */
+  rpm: number;
+  /** Alias for gearIndex (for compatibility) */
+  gearIdx: number;
+}
+
+/**
+ * VB6 simulation parameters.
+ */
+export interface VB6Params {
+  /** Time step (seconds) - TODO: Use exact VB6 value (0.001 or 0.002) */
+  dt_s: number;
+  /** Rollout distance (feet) */
+  rolloutFt: number;
+  /** Tire radius (feet) */
+  tireRadiusFt: number;
+  /** Final drive ratio */
+  finalDrive: number;
+  /** Gear ratios (array, 0-based) */
+  gearRatios: number[];
+  /** Transmission efficiency per gear (optional, default 0.92-0.96) */
+  transEffPerGear?: number[];
+  /** Shift RPM for each gear (array, 0-based) */
+  shiftRpm: number[];
+  /** Shift delay (seconds, optional, default 0) */
+  shiftDelay_s?: number;
+  /** Traction cap (lbf, optional, undefined = no cap) */
+  tractionCapLbf?: number;
+  /** Vehicle mass (slugs) */
+  massSlug: number;
+}
+
+/**
+ * VB6 integration step (forward Euler).
+ * 
+ * TODO: Replace with exact VB6 integration method once QTRPERF.BAS is ported.
+ * Current implementation uses simple forward Euler: dv = a*dt, ds = v*dt
+ * 
+ * @param state - Current simulation state
+ * @param params - Simulation parameters
+ * @param wheelTorqueLbFt - Wheel torque (lb-ft)
+ * @param dragTorqueLbFt - Drag torque (lb-ft)
+ * @param rrTorqueLbFt - Rolling resistance torque (lb-ft)
+ * @returns Updated state
+ */
+export function vb6Step(
+  state: VB6State,
+  params: VB6Params,
+  wheelTorqueLbFt: number,
+  dragTorqueLbFt: number,
+  rrTorqueLbFt: number
+): VB6State {
+  const { dt_s, tireRadiusFt, massSlug, tractionCapLbf } = params;
+
+  // Net torque at wheel
+  const T_net = wheelTorqueLbFt - dragTorqueLbFt - rrTorqueLbFt;
+
+  // Convert torque to force at wheel
+  const F_wheel = T_net / tireRadiusFt;
+
+  // Apply traction cap if specified
+  const F_trac = tractionCapLbf !== undefined 
+    ? Math.min(Math.max(0, F_wheel), tractionCapLbf)
+    : Math.max(0, F_wheel);
+
+  // TODO: Verify VB6 uses F = ma or includes rotational inertia
+  // Acceleration: a = F / m
+  const a_fps2 = F_trac / massSlug;
+
+  // TODO: Verify VB6 integration method (Euler vs RK2 vs RK4)
+  // Forward Euler integration
+  const v_new = state.v_fps + a_fps2 * dt_s;
+  
+  // TODO: Check if VB6 uses ds = v*dt or ds = v*dt + 0.5*a*dt^2
+  // Position update (simple Euler)
+  const s_new = state.s_ft + state.v_fps * dt_s;
+  
+  // Time update
+  const t_new = state.t_s + dt_s;
+
+  // TODO: Verify VB6 RPM calculation from wheel speed
+  // Calculate engine RPM from wheel speed
+  const gearRatio = params.gearRatios[state.gearIndex];
+  const wheelRPM = (v_new * 60) / (2 * Math.PI * tireRadiusFt);
+  const engineRPM = wheelRPM * gearRatio * params.finalDrive;
+
+  return {
+    t_s: t_new,
+    s_ft: s_new,
+    v_fps: v_new,
+    engineRPM: engineRPM,
+    gearIndex: state.gearIndex, // Gear shifts handled externally
+    rpm: engineRPM, // Alias
+    gearIdx: state.gearIndex, // Alias
+  };
+}
+
+/**
+ * Check if gear shift should occur.
+ * 
+ * TODO: Verify VB6 shift logic (RPM threshold, delay, etc.)
+ * 
+ * @param state - Current simulation state
+ * @param params - Simulation parameters
+ * @returns New gear index (same if no shift)
+ */
+export function vb6CheckShift(
+  state: VB6State,
+  params: VB6Params
+): number {
+  const { gearIndex, engineRPM } = state;
+  const { shiftRpm, gearRatios } = params;
+
+  // Don't shift if already in top gear
+  if (gearIndex >= gearRatios.length - 1) {
+    return gearIndex;
+  }
+
+  // Check if RPM exceeds shift point
+  if (shiftRpm[gearIndex] !== undefined && engineRPM >= shiftRpm[gearIndex]) {
+    return gearIndex + 1;
+  }
+
+  return gearIndex;
+}
+
+/**
+ * Create initial VB6 state.
+ * 
+ * @param initialRPM - Initial engine RPM (e.g., launch RPM)
+ * @returns Initial state
+ */
+export function vb6InitialState(initialRPM: number = 0): VB6State {
+  return {
+    t_s: 0,
+    s_ft: 0,
+    v_fps: 0,
+    engineRPM: initialRPM,
+    gearIndex: 0,
+    rpm: initialRPM, // Alias
+    gearIdx: 0, // Alias
+  };
+}

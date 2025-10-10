@@ -1,0 +1,96 @@
+/* Design tokens for light and dark themes */
+
+:root[data-theme='light'] {
+  /* Colors */
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-surface-alt: #e9ecef;
+  --color-text: #213547;
+  --color-muted: #6c757d;
+  --color-accent: #007bff;
+  --color-accent-hover: #0056b3;
+  --color-border: #dee2e6;
+  --color-error: #dc3545;
+  --color-success: #28a745;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.15);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Layout */
+  --size-container: 1100px;
+
+  /* Header */
+  --color-header-bg: #343a40;
+  --color-header-text: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  /* Colors */
+  --color-bg: #1a1a1a;
+  --color-surface: #2d2d2d;
+  --color-surface-alt: #3a3a3a;
+  --color-text: #e9ecef;
+  --color-muted: #adb5bd;
+  --color-accent: #4a9eff;
+  --color-accent-hover: #3182ce;
+  --color-border: #495057;
+  --color-error: #f56565;
+  --color-success: #48bb78;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Layout */
+  --size-container: 1100px;
+
+  /* Header */
+  --color-header-bg: #1a1a1a;
+  --color-header-text: #e9ecef;
+}
+
+/* Apply theme colors to body */
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}

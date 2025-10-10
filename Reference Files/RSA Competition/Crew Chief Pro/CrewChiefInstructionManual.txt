@@ -1,0 +1,573 @@
+Crew Chief Pro Drag Racing Software -Table of Contents 
+License Agreement --------------------------------------------------------Page: 3 STOP! Before You Begin ---------------------------------------------------Page: 4 Installing CREW CHIEF on Your Computer --------------------------------------Page: 5 Setting Up Your Program For The First Time --------------------------------------Page: 5 Changing Setup Information -------------------------------------------------Page: 6 Changing Data Entry Screens ------------------------------------------------Page: 6 Crew Chief Pro 7.0 Updates --------------------------------------------------Page: 7 The Main Data Entry Screen -------------------------------------------------Page: 8 Entering or Modifying a Racing Run --------------------------------------------Page: 8 Event Log Book View -----------------------------------------------------Page: 11 Correcting Mistakes in the Data ----------------------------------------------Page: 12 Other Useful Features on the Main Screen ---------------------------------------Page: 12 Understanding Combinations/Databases ----------------------------------------Page: 13 Adding a New Combination and its Components -----------------------------------Page: 14 Special Information For Team License Users -------------------------------------Page: 16 Printing Tech Cards ------------------------------------------------------Page: 17 Car Setup Section -------------------------------------------------------Page: 18 Adding or Modifying Race Tracks ---------------------------------------------Page: 19 Searching For A Run -----------------------------------------------------Page: 20 Printing Racing Reports ---------------------------------------------------Page: 21 Deleting A Run ---------------------------------------------------------Page: 22 ET Prediction Terms and Definitions ------------------------------------------Page: 22 Understanding Weather Conditions --------------------------------------------Page: 22 Tuning for Different Weather Conditions ----------------------------------------Page: 24 Predicting an E.T. -------------------------------------------------------Page: 25 Predicting a Throttle Stop Timer ----------------------------------------------Page: 27 If the ET or Throttle Stop Prediction is not accurate ---------------------------------Page: 29 Aggressive vs. Conservative Use of the Program -----------------------------------Page: 30 Live Linking to Paging Weather Stations ----------------------------------------Page: 31 Automatically Determining Factors --------------------------------------------Page: 33 Adjusting Prediction Factors Manually -----------------------------------------Page: 34 
+Using Crew Chief Pro to Graph your Pager Output ---------------------------------Page: 35 Graphing Runs By Using The Graphing Menu ------------------------------------Page: 36 Integration with Data Acquisition Programs --------------------------------------Page: 37 Entering Opponent Information and Computing Margin of Victory -------------------------------------------------------------Page: 37 Run Completion --------------------------------------------------------Page: 38 Integrating with iCard Receivers ----------------------------------------------Page: 39 Instant Opponent Statistics and “Finish Line Decision Manager” ------------------------------------------------------------Page: 43 View Competition Ladders --------------------------------------------------Page: 45 Backing Up & Restoring The Race Data Files -------------------------------------Page: 47 Accounting Program -----------------------------------------------------Page: 47 Adding Video to Race Files -------------------------------------------------Page: 48 Exiting From The Program -------------------------------------------------Page: 48 
+How to Use Video Help ----------------------------------------------------Page: 49 Technical Support, Updates, & Other Phone Numbers -------------------------------Page: 49 About The Authors -------------------------------------------------------Page: 49 
+
+
+	
+ 
+
+
+ 
+	
+ 		 	 !"#$%& 	'()*#++, -.'()*#)),)% /0'11 2,'	3,1 
+
+
+License Agreement 
+This is a legal agreement between you, the end user, and Crew Chief Pro Software, Mapleton, IL. By opening this software you are agreeing to be bound by the terms of this agreement. If you do not agree to the terms of this agreement, promptly return the disk package and accompanying items (including written materials and binders or other containers) to Crew Chief Pro Software, for a full refund. 
+CONFIDENTIAL INFORMATION 
+This is an unpublished work, which is a trade secret, created from 1989-2008. Crew Chief Pro Software owns all rights to this work and intends to maintain it in confidence to preserve its trade secret status. Crew Chief Pro Software reserves the right to protect this work as an unpublished copyrighted work in the event of an inadvertent or deliberate unauthorized publication. Crew Chief Pro Software also reserves its rights under the copyright laws to protect this work as a published work. Those having access to this work may not copy it, use it, or disclose the information contained in it without the written authorization of Crew Chief Pro Software. Unauthorized use will result in prosecution. 
+1)  Grant of License. Crew Chief Pro Software grants to you the right to use one copy of the enclosed Crew Chief Pro Software Drag Racing Program (the SOFTWARE) on a single terminal connected to a single computer (i.e. with a single CPU). You may not network the SOFTWARE or otherwise use it on more than one computer or computer terminal at the same time.  
+2)  COPYRIGHT. The SOFTWARE is owned by Crew Chief Pro Software and is protected by United States Copyright Laws and International Treaty provisions. Therefore, you must treat the SOFTWARE like any other copyrighted material (e.g. a book or musical recording) EXCEPT that you may either (a) make ONE copy of the SOFTWARE solely for the backup or archival purposes, or (b) transfer the SOFTWARE to a single hard disk provided you keep the original solely for backup or archival purposes. You may not copy the written materials accompanying the SOFTWARE.  
+3  OTHER RESTRICTIONS. You may not rent or lease the SOFTWARE. You may not use, copy, modify, reverse engineer, decompile, disassemble, or transfer the SOFTWARE or any copy in whole or part except as expressly provided in this license, or without the express WRITTEN consent of Crew Chief Pro Software. All rights not expressly granted are reserved by Crew Chief Pro Software. If you are found to have violated any of these restrictions you hearby agree to pay damages to Crew Chief Pro Software in the minimum amount of $3,000.00 US Dollars plus any and all attorney fees, court fees, and investigative fees. Should you provide our intellectual property to another company to compete with Crew Chief Pro Software then Crew Chief Software, Inc. will ask for damages that you caused to our business and other fees that will be substantially higher.  
+LIMITED WARRANTY  
+
+Crew Chief Pro Software warrants that the SOFTWARE will perform substantially in accordance with the accompanying written materials for a period of 90 days from the date of receipt. NO OTHER WARRANTEES. Crew Chief Pro Software DISCLAIMS ALL OTHER WARRANTIES, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, WITH RESPECT TO THE SOFTWARE AND THE ACCOMPANYING WRITTEN MATERIALS. 
+NO LIABILITY FOR CONSEQUENTIAL DAMAGES. IN NO EVENT SHALL Crew Chief Pro Software OR ITS SUPPLIERS BE LIABLE FOR ANY DAMAGE WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR THE LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, OR OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OR INABILITY TO USE THIS Crew Chief Pro Software PRODUCT, EVEN IF Crew Chief Pro Software HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. 
+This agreement also applies to any Update, improvement, and enhancement to the program now and in the future, whether provided by diskettes, CD-ROM, E-mail, downloaded from our web site, or modem File Transfers. 
+Copyright 1989-2008 Crew Chief Pro Software 
+5029 Diamond Point 
+Mapleton, IL 61547 
+(309) 688-2990 or (309) 208-1486 
+
+
+STOP! Before You Begin 
+Minimum Computer Requirements: 
+The computer should run Microsoft Windows XP or above operating system. A Pentium processor of 800 MHz or faster is required. The storage requirements are 100 megabytes of Hard Drive space. Crew Chief Pro requires at least 128 megabytes of RAM (more is better). 
+Printer: Any printer will work. 
+
+Computer Appearance Settings: 
+Your Computer Monitor must have a screen display set to a minimum of 1024x768. To verify this setting Right Click on an Open Section of your Windows Desktop and choose PROPERTIES. Under the SETTINGS tab check to verify these settings. 
+You should also set the Font Size for Menus to SMALL FONTS (8 point or under) under the Advanced Button on this Properties screen. 
+
+Weather Instruments: 
+A good set of weather gauges are required. We recommend a good quality Barometer or Altimeter with a Wet Bulb and Temperature gauge, with either Analog or Digital readouts. Altimeter, Barometer, Humidity, and Wet Bulb gauges are supported. $30 K-Mart gauges are not accurate in most cases and will cause incorrect predictions. If winning is important then invest in some good quality fixed placement gauges. We do not recommend hand held units if you carry them around, gauges must be stationary to work properly! 
+If you want only the best, most accurate weather instruments, call us! We have several models, including Paging Trailer Stations which transmit our Crew Chief PRO predictions every 2 minutes! Our Crew Chief Weather Stations are packaged with a Humidity gauge, Temperature, Barometric Pressure, and a Wind Meter. These gauges are very heavy duty and designed for decades of use. Because we buy so many we can offer these to you for less than anyone else. If your interested call us for details at (309) 688-2990. 
+
+Updates: 
+Access to the Internet is recommended. We publish updates every week. It is a good practice to download updates every 1 ­2 weeks!. Call us for the latest password. 
+
+Evaluations: 
+If you want us to evaluate your predictions then we will need to see your run files. You will need to attach these 3 files to an E-Mail message to don@crew-chief.com 
+C:\crewchief7\RACE.DBF C:\crewchief7\COMBO.DBF C:\crewchief7\TRACK.DBF 
+With this information we can test your runs to help us further refine the Crew Chief design, and we can recommend changes to your for ET and Throttle Stop factors, as well as keeping a backup for you. 
+
+Installing CREW CHIEF on Your Computer 
+To set up the program to run under Windows and place an icon shortcut on your desktop, follow these steps: 
+1)  Install the CD-ROM into it’s drive. The installation should start automatically. If it does not then Click on Start Button on the lower left of your Windows desktop screen. Choose RUN from the Start Menu. Type in D:\SETUP.EXE D: is the drive letter of your CD Drive.  
+2)  Let the program install. An Icon will appear on your main windows desktop automatically.  
+3)  Test the program by clicking on the new icon you just made. Crew Chief PRO should begin, if not call us.  
+
+Setting Up Your Program For The First Time 
+
+
+(!) Important (!) 
+The program will automatically go into the Program Setup screen. If you make a mistake in this screen you can reopen it by choosing SETUP from the menu on the top of the screen, then choosing the PROGRAM SETUP option. This Setup information will be used to create any new Combination or Databases. Keep in mind, each Combination/Database you create can have different setup information. Examine the section of this instruction manual called ADDING OR MODIFYING COMBINATIONS for help with this important issue. 
+Your Weather Gauge selection determines the next 2 fields. First, choose the type of Humidity Measuring Gauge you use (Percent Relative Humidity or Wet Bulb). The next field is the type of Pressure Measuring Gauge (Barometer or Altimeter). PLEASE NOTE: you can change gauge types on the fly in the weather screen, however, you setup the default choices here for faster data entry because your choice is automatically highlighted anywhere this type of information is requested. 
+Now choose the type of racing you do. Bracket racing, Class Racing, Super Class Racing, or Professional Racing. This choice tells the program what to ask for in the dial in field. 
+If you use throttle stops those fields will be visible on the Main Entry Screen discussed later. You can also select to have the Racing Engine Sound on start up and if you want the main picture on the front screen to print on the reports (T=True F=False). The next prompt is for Auto Flow to next field. This means if you fill up a field it will automatically advance to the next field WITHOUT PRESSING ENTER. If you enter N then you will have to press enter to move to the next field. Now choose SAVE AND EXIT. 
+. 
+
+Changing Setup Information 
+From the Setup Menu located on the top of the screen you can change the program's setup and default values. To access this menu use your mouse and click on the menu SETUP -or-hold the ALT key and then press the letter E . From this menu you can change the Program Setup information, Data Entry Screens, Printer Setups, Race Combinations, and Friends and Contacts. 
+To change information about your vehicle select PROGRAM SETUP. In this screen you can setup or change the default 
+
+
+Changing Data Entry Screens 
+One of our most impressive design features is the ability to change screens to fit a racer's needs. We can tailor all the data entry screens to fit your needs and quickly update your program with those changes. It doesn't matter what class of racing you are in, or what type of vehicle you race, we can design a screen around your needs. Please call us to download the newest versions of the screen files. If we are able to create a special form for you we will. 
+To change the default data entry screens, activate the SETUP menu choose CHANGE DATA ENTRY SCREENS. To change data entry screens for a combination simply save the combination and you will be asked then to pick. 
+Please note: THE MAIN SCREEN WILL NOT CHANGE UNTIL YOU RESTART Crew Chief. Other screens are changeable on the fly, without the need to restart the program. Choose the screens you want. The next time you start the program your Main Screen choice will take effect. 
+Crew Chief Pro 7.0 Updates 
+Because this program is changing all the time, it is recommended that you update the software every week or so. YOU WILL NEED A PASSWORD TO ACCESS THIS! This service is free for one year from date of purchase, each subsequent year the cost is around $99 per year, depending on version and other factors that may raise or lower this amount. 
+1) Call us at 309-688-2990 or 309-208-1486 for the latest password. 
+2) Go to our web site at www.crewchiefpro.com 
+3) Click on UPDATE FILE button link. 
+4) Choose DOWNLOAD UPDATE FILE. 
+5) Enter your new password, then click on Submit button. Now click on the UPDATE7.EXE file. 
+6) Save the file to Disk. A Save As Dialog box will appear. It is recommended that you save it to MY DOCUMENTS Folder on your computer. The file name should be filled in already, it will be called UPDATE7.EXE or simply UPDATE7 
+7) After the file downloads (normally 10-15 minutes) click on OPEN or RUN. Click on UNZIP to extract the files. 
+8) If you did not run it immediately then find the UPDATE7 file on your computer using SEARCH. Double Click on the file. Choose UNZIP to perform the update. 
+
+NOTES & QUESTION AREA 
+
+
+The Main Data Entry Screen 
+The Main Data Entry Screen is next and is the most common view of the program. On the top you will see the Menus. These can be activated by clicking the name with a mouse. Once the menu drops down, there will be more choices. Select the choice by pressing the highlighted letter in the menu, or use the up and down arrow keys, or the mouse. You may choose another menu by pressing the right or left arrow keys. 
+
+Below the Quick Keys is the MESSAGE LINE. Please remember to view the Message Line for instructions on how to proceed with the data input. Take your time, it is much easier to enter the run information right the first time than fly through it and then have to go back and fix it later. 
+Follow the instructions below to enter your runs properly into the Crew Chief Drag Racing program. 
+
+Entering or Modifying a Racing Run 
+In the Race Date field enter a date. (mm/dd format Example: 02/14/2008 is entered as 02/14) and press the Enter Key. The date will automatically be changed to the proper year. If the race was in 2007 then enter 2007 for the year. The system will now prompt you to enter the run number. The run number is: 
+1  for the 1st run on this race date  
+2  for the second run on this race date  
+3  for the third run and so on for this race date  
+
+If the system does NOT find this run number on this date, a box will appear in the upper right that says “Adding New Run...”. The ET fields will become blank so you can enter the information. If the system DOES find a run with the same date and run number, all the information about this run will be displayed immediately. If you think you are entering a new run, but the ET information fields are not blank before you enter the data, then you may be overwriting an existing run! Remember: Use the ENTER KEY each time. Many customers who run into problems use the mouse and click all over the screen. Just use the Enter Key and everything will fall into place. 
+You will be asked to enter the time of day the race was run, remember to use a consistent time sequence. For example, if you enter 4.05 pm make sure you stick with that sequence rather than switching between 4.05 pm and 16.04 hours. For customers who are using the Paging Enabled Version, Crew Chief Software will look up the weather at the time you put in the Time field. The Time on Your Computer must match the Track Time. Otherwise we will look up the wrong weather readings. 
+Pick the lane and then the round (for example T1 for Time Run #1), or E2 for Elimination Round #2. Next the Combinations/Database Pick List is displayed. You may have to click with the Mouse if you do not see your database listed. 
+This is the most important area of Crew Chief and is further discussed later in the manual under Adding or Modifying Combinations. Simply select the one you are using and press enter or click on it with the mouse. You can add a combination or modify an existing combination by clicking on the COMBINATIONS Menu button on the Top of this screen. 
+The Race Track list will appear. Select the track with the arrow keys and press enter, or double click on the selection with the mouse. If you do not see the track you want click on the TRACK Menu on top of this screen to add a track to the program. See the section of the manual labeled ADDING OR MODIFYING RACE TRACKS. 
+The highlight will now be in the Delay Box field. Type in the number (if any) and press Enter. The Reaction Time Field is next, simply enter the reaction time with a PERIOD FIRST. For instance, your reaction time is .557, enter a PERIOD THEN 557. Now press enter and the highlight will move to the 60 foot time. Now proceed to enter the rest of the ET fields. This should be simple and if any field is not known simply leave it blank. 
+After entering the Mile Per Hour fields, notice the "Calculated Horsepower" Field (if your screen has one), located in the lower middle of the screen. This field displays the horsepower your vehicle is making based on several factors at the 1/8th mile mark. This field is updated after the speed of the Quarter Mile MPH is entered. 
+Throttle stop timers are next. Also located in this section is the throttle stop plate RPM setting. This is the RPM when the throttle stop is engaged, or if your stop permits enter the number of turns on the stop plate. 
+The next fields you will encounter is the Weather Section. The only OPTIONAL FIELDS are the Track Temperature and Tire Temperature. This screen contains all the weather data fields, and will display all the calculated weather information. We have included fields for your weather station’s Density and Adjusted or Corrected Altitudes. We even have a field for Grains, and if your weather station does not calculate this then we will do it for you. Since weather is such an important area, remember not to guess, get a set of good weather gauges and use them properly. Please note the Wind Direction and Wind Speed fields. The wind direction is in degrees and you should use the wind diagram picture (however crude it is) for the direction in degrees. This is a simple screen but carries major importance if the rest of the program is to be used to it's fullest potential. Remember Head Wind is between 345 degrees and about 15 degrees based on a 360 degree range. Side wind on the RIGHT DOOR is 90 degrees, and on the LEFT DOOR is 270 degrees. Tail Wind is 180 Degrees. 
+
+After you enter the weather information the screen will update the Corrected Altitude, Density Altitude, Pressure Altitude, Oxygen Density, Relative Oxygen Density, and Vapor Pressure. 
+The biggest problem is that some racers are using $30 K-Mart weather gauges and expecting accuracy. This causes the ET predictions to fail because the range of weather doesn't match the ETs. Poor weather gauges will confuse the program even if the combination does pass our Pre-Prediction tests. Good weather gauges are a required! 
+If you want some EXCELLENT QUALITY gauges, call us! We have several models, however, they are not cheap. We offer PAGING WEATHER STATIONS. These come with a pager that beeps you at 2 minute intervals with all the new weather information and predictions. We also have Hand Held Weather Stations. If your interested call us for details at 
+(309) 688-2990. We prefer handhelds to be stationary for best results. Please do not walk around with the hand held units and read the weather data. They must be stationary for awhile before they can accurately read air quality. Visit us on the web at www.crewchiefpro.com and view the weather stations page for up to the moment specials. 
+The prompt for the next field depends on COMBINATION information. Enter your DIAL IN, or ESTIMATED ET, or CLASS type in the next field located in the top right hand comer of the screen. If you chose ET Racing in your Combination's Setup it will ask for your DIAL IN. If you chose CLASS RACING it will ask for class time 
+(i.e. Index), and if you chose PROFESSIONAL RACING it will ask what your crew chief tuned the vehicle to run. If this isn't an Elimination's Run you can use this feature to check your tuning skills by comparing what you thought it would run vs. what it ACTUALLY ran. The OFF BY field will tell you how far off you were. 
+Next are the Carb Jetting, Ignition Timing, then Launch RPM, Tire Pressures, and basic Suspension Setup. 
+Once you press Enter on the Basic Suspension Setup you will be in the section labeled "Comments". This is the large box on the bottom of the form.. These comments give a driver's and crew’s view of the run. Enter comments to help you remember the run later on, such as how the traction felt, if the engine bogged off the line, how straight the pass was, burnout Info, or anything else you want to add. You can use the Search Menu to lookup runs that contain words or even letters stored in the Comments field. 
+After entering information in the comments field, YOU MUST PRESS ENTER to move the highlight to the SAVE RUN Button. Remember you must save each run, either Click on SAVE or press enter on Notes and SAVE will be highlighted. 
+
+Event Log Book View 
+We have also included an Event Log Book View Screen to display information similar to your paper log book. Below is a sample of the screen. We have also included Split Time Intervals on the bottom of each column. You may display up to 15 runs at a time. This screen will only show the CURRENT COMBINATION’S RUNS, not all of the runs. To switch back to Single Run View click on OK RETURN on the bottom of the screen. To see this screen CLICK on the button that says Event Logbook, or the keyboard shortcut is CONTROL + L. On Top of each column is the word “See It”, click on it to take you to that run. We 
+
+If you would like to see runs not in order the LOG VIEW MENU has an option called PICK SEPARATE RUNS TO VIEW. A pick list screen will appear. Select Runs by pressing ENTER on each one, the word OK will appear to the right of each one chosen. Choose up to 10 runs. If you accidentally choose the wrong one in the pick list simply press ENTER again and it will be cleared. When you are finished click on CONTINUE and the log view will have just those runs visible. 
+
+Correcting Mistakes in the Data 
+If you notice a problem with a run or want to change information and re-save the run, follow these steps. 
+A) If the proper run is not already on the screen go to the DATE field, enter the DATE and then the RUN NUMBER and press enter. If you need to find the run using another method follow the directions discussed in the section “Searching For A Run” later in the manual. Once the RUN information appears make any changes, then go on to step b. 
+B) Click on SAVE RUN to Save the changes. 
+
+Other Useful Features on the Main Screen 
+You are able to switch runs on the main screen with these handy buttons. The only item we should need to note is the All Check Box. When this is checked then All runs for any database are processed by the buttons. If you just want to click through the Database that is on the screen at the time UNCheck All and it will ONLY show that particular database when it moves between runs. 
+
+On the top of the form towards the left is a picture of a Calendar, like this: 
+Once you click on this control every Date that runs exist on your system. It will look like this when it is clicked: 
+
+
+Now just click on a Date with the mouse and a search screen will appear with those runs listed. You can pick one run from the list. 
+
+Understanding Combinations/Databases 
+The program has the ability to track separate databases or combinations of components or parts on your racing vehicle. We created the program to calculate which combinations work best and allow you to easily pick from, and add to, a list of commonly used combinations. The most important reason is to keep separate databases for each combination. This will stop runs from one combination from contaminating runs from another combination, especially important when the ET or in the case of super classes, your index is different. 
+Let's use an example here, say you run a super comp car with a 6000 stall converter that normally runs close to an 8.90 ET. At several tracks however, you cannot launch that hard or you will spin the tires past the 60ft mark. For these tracks you have to launch at 5200. If we change the launch RPM then the Throttle Stop Timer will change. If we keep ALL the runs together Crew Chief will not understand why the ET and Throttle Stop relationship is different. We should make a COMBINATION for both 6000 RPM LAUNCH SUPER COMP and one for 5200 LAUNCH SUPER COMP. We then store the runs for the 6000 LAUNCH separate from the 5200 LAUNCH. This way the Crew Chief Program understands the ET and Throttle Stop relationships and can accurately predict either the ET or the Throttle Stop Timers. 
+The power of the Crew Chief PRO software is each COMBINATION can have it’s own default information, ET and Throttle Stop formulas, and Wind Factors. Examine the screen below and see how these combinations are named. Notice the combinations for his different Super Comp indexes, some with different launch RPMs or timers. We have Bracket racing for 1/8th Mile and ¼ Mile, and Bad Runs (you should enter ALL runs so you don’t make the same mistakes twice). When you 
+
+Another example would be installing a different torque converter with a 1000 RPM higher stall speed. If you make this change and the car runs a 9.80, you will confuse the program since it won't understand why the car’s ET picked up so much. This will result in poor ET and Throttle Stop Prediction or none at all. Runs from the old converter will mix with the new runs resulting in useless confusion. By setting up a combination for each major change you make to your race car, you will accomplish 4 things: 
+1) Separate ET and Throttle Stop formulas for each combination. You can adjust each combination’s formulas to fit your vehicle. If you use a different throttle stop formula at Denver than you use at Houston this would be an example of the power of 
+combinations. Since each combination has separate formulas it will be easier to fine tune the predictions for each. Remember, 
+Super Comp, Super Gas, and Super Street MUST have their own combination names. 
+2) Runs from the old combination won't contaminate the new runs. You can have as many different combinations as you want stored in our program. 
+3) Save yourself time when entering a brand new run because each combination can have it’s own set of default information. This information is already filled in when you pick a combination and that means you do not have to type it in each time. 
+4) You no longer have to write detailed information of what you did, you can just select the 6000 LAUNCH SUPER COMP which helps identify components or situations that were used. 
+One more example of how different combinations can be used: Some race cars run their best right off the trailer in the morning. These cars then slow down each time they run after that. If we create a combination called FIRST RUN OF THE DAY, and only store these runs in it, the ET prediction program will have 2 benefits. 1) Late afternoon ET predictions won't look at the first ran of the day for any ET predictions -which will result in more realistic predictions. 2) If you have your first round of Elimination's in the morning you can pull up yesterday's first run and do an ET prediction with the FIRST RUN OF THE DAY combination. This way, the ET prediction will ONLY look at the first run of each day to predict the ET or Throttle Stop. 
+The first time you use the combinations program it may seem like extra work, however, the whole goal is track how combinations of parts work on your car. This type of information requires some input on your part. Once properly entered, the program will be more accurate, and that is why you bought it in the first place. 
+
+Adding a New Combination and its Components 
+To get to the Form to Add a Database, click on Combo/Database Menu on the Top of the Main Form. 
+If you already have a good working combination then highlight it first before you Add a new Database. If not then simply Click on the ADD NEW button on the top right of the Combination/Database Form. Enter a name to give this combination and press the enter key. Next, enter the default information for this combination. This information will be displayed on the main screen when entering a run, and is designed to SAVE TIME when entering a run. Much of this information is the same as the SETUP screen when you first setup your Crew Chief program. 
+If you have a Throttle Stop you will pop into another screen about these settings. You will need to answer questions related to timer movement and ET changes, and timer movement and corrected altitude changes. These numbers are your USUAL timer changes for Density or Corrected Altitude and each .01 change of ET. For example, if your timer needs to be lowered by . 024 for each hundredth in ET, then put .024 in the Timer change per .01 ET. Furthermore, if each 165 ft of Density Altitude equals .01 change in the ET then put this number in the field. Unless you know for sure use the DEFAULT NUMBERS and let the program test and decide for itself. You will also need to put a number in the Timer change per 1 MPH wind speed. Normally this field is .0010 to .0040 but only your experience will tell. 
+These Throttle Stop numbers are for Your Prediction Formula, and they help us determine what your vehicle normally runs verses the Predicted Throttle Stop Numbers we will give you. You will receive both numbers so you can decide which one works best. 
+Now choose the type of track this combination is used on. If you choose 1/8 Mile no run information will appear on the Main Screen past the 1/8 MPH field. 
+Now choose the type of vehicle you race for WIND CORRECTIONS calculations. This part of the program is unique because it allows you to change the aerodynamic factors we use in ET predictions. The more your vehicle is affected by increased wind the higher you want to make this number. This also allows combinations to be adjusted if they are more susceptible to wind changes. Use the default Wind Factors for now. 
+The highlight will move to the button "SAVE". Press ENTER to Save the combination. 
+
+* Factors Page Above 
+Check Boxes under MISC. Section 
+These check boxes are used to tell the program how to handle the placement of the decimal point (period) when entering runs. This is a great time saver because if you answer this correctly you do not need to place a decimal at all, we will do it all for you. If you get this wrong you will not be able to enter a run over 10 seconds because the decimal will get in the way. 
+You can also disable the Delay Box field for use on a foot brake car or Junior Dragster. 
+
+Special Information For Team License Users 
+NOTE; if you have the optional Team License, and use multiple cars, please be aware of the proper way to enter RUN NUMBERS. WE STORE RUNS BASED ON THE DATE AND THE RUN NUMBER. Each Vehicle must have it's own set of run numbers. The first vehicle will Start with a run number of 1 for the first run of the day, while second vehicle's runs must start with 21 instead of 1. The third vehicle will start with 31, and the Fourth vehicle will begin with 41. For example, if you raced on 4/13/2000, the first car's run number is 1, the second car's first run number will be 21, the third vehicle is 31. The second run of the day will be as follows: First vehicle is 2, the second vehicle is 22, the third vehicle is 32 and the fourth vehicle's second run of the day is 42. If you both use the same race date and run number, you will overwrite the first car's run with the second car's run information. If you have the Team License you should name your combinations to reflect the numbering sequence. ALWAYS BEGIN EACH COMBINATION WITH THE VEHICLE ORDER NUMBER. This is very important for several reasons. First, if you are racer number 4, and entering or modifying a run you can quickly get to your COMBINATION SET in the COMBINATIONS PICK LIST, by pressing the number 4. This moves the highlight down to your section instantly of the COMBINATIONS. For example, racer #2 will begin each of his or her combinations with the number 2 in front of any text. For example: 
+2 -6200 Stall ¼ Mile 2 -5300 Stall 1/8th Mile 3 -Mike Jr. Dragster 1/8th 3 -Mike Jr. Dragster New Clutch 1/8th 
+When you create combinations like these, it is much easier to remember how to number the runs. Also, Crew Chief PRO allows you to change Data Entry Screens for each vehicle. If you say YES to this prompt the current ADDITIONAL TUNING (F2) and NITROUS screen choices will be displayed in boxes for you to choose. Remember to press ENTER to choose each one as the mouse doesn't work the same way here. 
+
+Printing Tech Cards 
+One of the most annoying thing you must do before you can race is filling out your track's Tech Card. Now, you can let the Crew Chief program do this for you. 
+All you do is click on the Menu that says 'TECH CARD". Enter your NHRA or IHRA number and fill in the required information about your vehicle and safety equipment, and SAVE it. This will even print the SFI Numbers and Serial Numbers on your equipment right on the lines. You can download the latest version from our web site. 
+All you do is enter the information once, and then choose the type of tech card from the drop down list, and click on PRINT TECH CARD. The next time you need to print the card all the information will be saved. We will add the ability to print any track's tech cards, just fax or send a copy of it and we will program the card and e-mail it to you. WE CAN PRINT THE BACK OF TECH CARDS ALSO! To print the back of a tech card choose it from the drop down list of available tech cards, and look for Back Side of Tech Card for your track. This even works on the little 5" x 5" Bracket Race tech cards most tracks use. 
+
+Always begin by printing on a blank page to verify that the correct orientation is used and that the printed text is in the correct area. It is also a good idea to write the word "front top" on the test page before you put it in the printer. When the page prints out, the printed text should go right over the words you wrote, if everything is set properly. Hold the test page over the tech card, then hold both up to a light source and verify everything is where it is supposed to be. 
+Take a look at the samples on the next page of some printed tech cards. Don’t hesitate to have us make your track’s tech card part of Crew Chief. 
+
+
+We include NHRA National and Division Tech Card, the NHRA National ET Bracket Race Tech Card, the IHRA National Event Tech Card, and many race tracks own style of tech card. 
+If you want us to add your local track’s tech card call us. We may have you fax us a copy or tell us how we can alter an existing tech card to fit your track. 
+
+Car Setup Section 
+
+Just click on the Car Setup Tab on the top left of the screen to view this form. This screen allows you to: 
+1)  Enter Clutch/Converter, gear shift RPM, and comments about the gear change  
+2)  Enter carburetor or fuel injection settings, and turbo or supercharger information  
+3)  Enter ignition timing settings  
+4)  Enter exhaust temperature readings  
+5)  Enter suspension settings for all 4 corners  
+6)  Enter cylinder Leakdown readings  
+
+This screen uses information from the Vehicle Setup Screen and Combination/Database Entry Screens for items such as Fuel System. 
+This information can be reviewed within the Reports Menu by selecting Main Reports Menu and choosing the report information you want. 
+
+Adding or Modifying Race Tracks 
+You may add an unlimited number of race tracks to our program. Simply select a name and add the other information. You can add or change information any time. NOTE: Do not delete the tracks you do not use, just overwrite their names with tracks you use. This screen looks similar to this: 
+
+Choose Add New to add a new track to the race track directory. Add the name and other information and then choose SAVE to save the information to disk. To modify a track simply select the track name from the scrolling list and press enter. You can now edit any information in the fields. When done select SAVE to store the changes. 
+NOTE: Do not delete the tracks you do not use, just overwrite their names with tracks you use. This is much faster than deleting tracks and entering new ones. The track INDIANAPOLIS RACEWAY PARK, is the default track, IF YOU DO NOT USE THIS TRACK overwrite it with your most commonly used track name. The default track name comes up automatically when you enter a new run. 
+
+Searching For A Run 
+To Search for a run press the FUNCTION KEY F3 or clicking on the Menu called Search. A menu will appear with many different search criteria that allow you to find a run by virtually any information stored in the program. 
+You can search by: 
+Date, Track, Racing Combination, E.T.'s including Quarter, 1000 Ft, 1/8th, 330 Ft, 60 Ft, and even reaction times Weather Conditions (including Temp, Baro, Altimeter, Humidity, Wet Bulb, and Corrected Altitude), Timing, Clutch, Comments Fields on Main Screen, Comments field for the Fuel System and Nitrous Oxide systems, Fuel Injection or Carburetor Settings, Tire Pressure, Rear Axle, Nitrous Oxide, Split Time Intervals and anything else you need. 
+EXAMPLE: Say you want to find all the runs at one race track. Choose the option By Race Track and press enter. Now a popup menu appears which will allow you to choose the track you want. After choosing the track all the runs that you have made at that track will appear in another screen, simply choose the one you want and press enter to have all the information about that run appear. If you want to look up one run, and you know both the run date and run number, you can simply return to the run date field and enter the correct run date then enter the correct run number and the information associated with the run will display. 
+Notice on the top of the screen where there are BOXES for Date, ##, R/T, 60’, 330’, 660’, 1000’, 1320 etc. You can RESORT the display order by clicking on these boxes. Say you want to resort the display by the QUICKEST 660’ (1/8TH Mile), click on the 660’ Box and it will sort by the quickest 660’ times. If you CLICK AGAIN, the sort order will reverse to the SLOWEST time. Each one of these boxes will do this. 
+
+
+Printing Racing Reports 
+To print reports either select the REPORTS MENU by pressing the FUNCTION KEY F7, or Holding the ALT key and the Letter R, or use the Mouse to select the Reports Menu or Button. Once in the Reports Menu you can select from the following Sub Menus and Reports: Main Reports Menu -Where you decide what report you want to see, between what dates, and what order you want 
+it to appear. 
+To use the Main Reports Menu to view a certain Report, activate the REPORTS menu by pressing the Function Key F7. When the drop down menu appears choose MAIN REPORTS MENU. After entering the dates you want to see, decide what report details you want to see. The main difference is the information on the reports. The "Crew Chief'program ships with many 
+different types of reports:  
+Report Name  Information on Report  
+All Race Times Report With Averages  Most common report with averages for ET  
+Carburetor Settings Report  Carb settings and ETs  
+Fuel Injection Settings Report  Fuel Injection with ETs  
+Ignition Settings Report  Ignition Timing with ETs  
+Mechanical Fuel Injection Settings  Fuel Injection with ETs Weather Information Report Weather  
+Info with ETs  
+Split Time Increment Interval Report  Split Time Increments with ETs  
+Suspension Settings Report  Suspension Info with ETs  
+Converter/Clutch, T-Stop, Delay Box Info  Torque Converter Info with ETs  
+Shift RPM and Comments  Shift, Launch RPMs with ETs Compare Your Run With  
+Competition Run Comparison with ETs  
+Race Times with Comments  Similar to lst Report with comments  
+Combination Analysis Comparison Report  Very Useful Report !  
+Wind Information and Weather Data  Similar to Weather but with wind  
+Junior Dragster Report  Jr. Dragster Info Only  
+Automatic Trans Converter, T-Stops Etc.  Similar to Converter Report  
+Exhaust Temperatures and Race Info  Similar to lst Report with Exhaust Temps  
+Motorcycle Report  Mechanical Injected Funny Bike Report  
+Exhaust Temperatures For Motorcycle  Similar to lst Report with Exhaust Temps  
+Nitrous Oxide Report  Nitrous Info and ETs  
+How Far is ET from Dial In 1/8th Mile  Good Report for consistency  
+How Far is ET from Dial In ¼  Good Report for consistency  
+Race Time with Engine, Trans, Water Temp  Lists Temps on Car and Ets  
+Compare Your Run With Competitor  Shows your ET with Competitors Below  
+
+If you need to add another report with other information, call, we may be able to add a report quickly so you can download it. Reports are constantly being updated, call for the most recent lists. There are currently about 30 reports that ship with the program. 
+Try several reports to see which ones you like the best. Many races have been won with the information supplied in these reports. Use the information available to you, it can make a difference! 
+
+Deleting A Run 
+There is no limit to the number of runs you can store, so unless there is a problem with a run there is no good reason to delete it. We do NOT recommend deleting any runs even if the whole car is rebuilt, old runs help you understand how to best utilize the program, and are invaluable in testing and training with the program. If you have a problem with a run that was entered you can delete it using the following steps: 
+A) If you know the Date of the run and the run number enter them in their respective fields and press enter to have that run's information appear on the screen. When all the run information appears choose the FILE menu on the top left-hand comer of the screen (Alt Key and Letter F or Click with mouse). Now choose Delete This Run from the drop down menu. The run will be deleted immediately. 
+B) If you do not know which run to delete use one of the search tools to find it. (See Searching For A Run). 
+Once all the ran information appears choose the FILE menu on the top left-hand comer of the screen (Alt Key and Letter F 
+or Click with mouse). Then choose Delete This Run from the drop down menu. The run will be deleted immediately. 
+
+
+ET Prediction Terms and Definitions 
+First, lets walk through some terms so you will understand what Crew Chief needs. The following pages will walk you through the actual ET Prediction procedures. 
+Baseline Run: The Run you want to use to base your predictions on. This run must have weather measurements and ET 
+information. Normally, the Baseline Run will be your most recent good run, which is representative of your 
+car's performance, or a run under similar weather conditions. Failure to choose the correct baseline run 
+will result in poor predictions. 
+Predicted ET: The ET predicted for the New conditions based on the Baseline ET, the Baseline and New Run weather conditions and parameters from either Standard or Custom ET prediction calculations. 
+HP Correction: The horsepower correction factor, which represents the actual BP generated relative to sea level conditions 
+(29.92 in Hg, 0% RH, 59 Deg F.) The convention used in this program is that BP corrections greater than one represent conditions "better" than sea level, while values less than one are for "worse" conditions 
+
+Understanding Weather Conditions 
+Either a percent relative humidity gauge or a wet bulb (otherwise known as a psychrometer ) may be selected for humidity instruments. For pressure instruments, you may select between a barometer or altimeter. The default instrument selections can be changed at any time. You may also make your selections when entering a run. 
+Relative Humidity The percent relative humidity, as read from a dial (analog) or digital relative humidity gauge. Relative humidity is the percent water saturation in the air for a given temperature. Relative humidity measurements may be entered to the nearest 0.1 %. 
+Wet Bulb Temperature The temperature read on a wet bulb thermometer. If you are using a wet/dry bulb (psychrometer) for humidity readings the value can be entered to the nearest 0.1 degree. 
+Barometer Reading The absolute barometric pressure (sometimes called the station pressure), expressed in inches of mercury (in.Hg). Barometric pressure may be recorded to the nearest 0.01 in Hg. A barometer reading of 29.92 in Hg corresponds to a pressure altitude of zero feet. 
+Altitude / Pressure Altitude The absolute pressure altitude measured by an altimeter, expressed in feet. An altimeter reading of zero feet corresponds to a barometric pressure of 29.92 in.Hg. Crew Chief Pro 7.00 Page: 22 
+Temperature 
+The air temperature, (or dry bulb temperature, if you're using a wet/dry bulb for temperature and humidity readings) in degrees Fahrenheit, normally measured just prior to the baseline or new run. Temperatures can be entered to the nearest 0.1 degree. 
+Corrected Altitude A calculated equivalent altitude for the current conditions (temperature, humidity/wet bulb and barometric pressure/altitude). At a Sea Level track, if the Barometric pressure reading is 29.92 in.Hg, with a 0% Relative Humidity, and 59 degrees F, you would need to elevate the numbers to the corrected altitude to achieve the same performance conditions. Zero feet of corrected altitude corresponds to sea level conditions. Higher altitudes are "worse" conditions, and visa-versa. This may not match Density Altitudes. This is OUR version of Corrected Altitude and may not match other calculators and weather instruments since we factor in other conditions. 
+Vapor Pressure The pressure exerted by water vapor in the atmosphere at the current temperature and percent saturation (i.e. relative humidity or wet bulb temperature). 
+Track Temperature The track’s surface temperature, normally measured by a contact pyrometer. This value is recorded for reference only. It is not used in ET prediction calculations but should be closely monitored for performance penalties. If hot tracks affect your ET then this is the perfect example of a new combination for this exact purpose. 
+Wind Speed & Direction Wind speed is expressed in MPH. Wind direction is in degrees (counterclockwise). For example, a direct head wind is zero degrees, a cross wind from the passenger side is 90 degrees, a direct tailwind is 180 degrees. Wind corrections are analyzed in ET prediction calculations and use special wind correction factors. Please contact us for details on how to adjust for different body styles. 
+Relative Oxygen Density The percent oxygen density, relative to sea-level air (29.92 in Hg, 0% RH and 59 degrees F). Values higher than 100% indicate more atmospheric oxygen than sea level conditions. This value corrects for atmospheric moisture (i.e. humidity), so that higher Relative Oxygen Densities always result in more horsepower. 
+Relative Air Density The percent air density, relative to sea-level air. Values higher than 100% indicate higher air densities than sea level conditions. Humid air has a higher air density due to the "weight" of moisture in the air, but higher Relative Air Densities do not always correspond to increased horsepower output. Relative Oxygen Densities or HP Corrections are better indicators of horsepower output. Relative Air Density, however, does directly affect aerodynamic resistance since higher air densities create more aerodynamic drag. 
+Actual Air Density 
+The air density expressed on a absolute basis , not relative to sea level air. 
+
+Tuning for Different Weather Conditions 
+Understanding how your vehicle reacts to weather is critical for the success of the program. After you have 20 or so runs in the program, you should be able to see a trend in your vehicle’s performance related to weather conditions. The program attempts to determine, through sophisticated statistical and trend analysis, how your vehicle tends to react to weather conditions. Once we can determine the effects weather has on your vehicle, we can generate better ET and Throttle Stop Predictions. 
+You need to determine which weather conditions make your car run faster. For instance, if the first run in the morning is always. 05 quicker than any other run of the day, you may want to check your temperature gauge. Many temperature gauges read inaccurately in the mourning and after 4:30 PM. Try this: Reduce the Temperature by 2 degrees and see if the prediction is closer to actual. This works at night also. It is a very powerful trick that we give our customers, but do yourself a favor, don’t tell anyone else. If your gauge checks out OK then create another COMBINATION for these early morning runs. Then the ET prediction isn't looking at runs from other parts of the day when determining ET predictions for early morning runs. Always use a run from this combination as a baseline before predicting the ET. Perfecting this will allow you to dial much better and not corrupt afternoon combinations with early morning runs, which would result in ET predictions that may not be accurate. The goal is to understand what effects weather has on your race car, and create combinations that reflect these changes. 
+Another area to watch is the Horsepower Correction factor. This factor, along with others, can show a trend in the MPH of the vehicle. If you race with a throttle stop Horsepower Correction Factor increases will cause your throttle stop RPM to increase, and the ET will pick up more than you think. As the vehicle's HP Correction factor drops so should the ET predictions. Failure to read HP Correction Factor increases or decreases will result in ET predictions that will be quicker or slower than you anticipate. Not every car follows these rules, and your experience will dictate how accurate the predictions will be. 
+Understanding Relative Air Density and it's affect on aerodynamics will help with ET predictions. If your vehicle slows when this reading is higher then note this when it comes time to do ET predictions. 
+Most importantly, track how your jetting affects your ET by closely monitoring when the vehicle unexpectedly picks up or slows down. If your jetting is incorrect the vehicle can pick up or slow down with no warning. We see this often if we can't slow a car down with a throttle stop timer under certain conditions. It also becomes painfully obvious when the vehicle won't run the number when it has all day long. Some runs are quicker or slower even though the Corrected Altitude is the same. Many vehicles react to 
+Humidity in unpredictable ways, especially if jetting is not correct. Just because the corrected or density 
+altitudes are similar does not mean the engine will run the same. Pay close attention to 
+all weather data, not just Corrected or Density Altitude. 
+
+Predicting an E.T. 
+To predict an ET for your vehicle perform these simple steps: 
+1)  Enter a run on the screen, or pull up an existing run. The run on the screen is referred to as the “BASELINE RUN”. We Prefer to use EITHER THE LAST GOOD RUN YOU MADE OR A RUN WHICH IS SIMILAR to the existing conditions. This run must be using the SAME COMBINATION or database. If you are predicting an 1/8th mile you must have an 1/8th Mile combination selected!  
+2)  Click on the PREDICT Tab.  
+3)  The Predict screen will appear with either the last weather entered in the weather fields OR if you have a paging weather station version of Crew Chief the current weather will appear. You will notice the predictions are already displayed for  
+
+
+Notice the picture above, this is an 1/8th Mile ET Prediction. 
+1)  The first column is called Base Line. This Information is pulled from the run on the main entry form.  
+2)  The second column is called Current. This information is entered by You, or from your weather station. We only need Temperature, Humidity, and Barometer and the Estimated 60 foot times. The rest are optional.  
+3)  The third column, called Difference shows how much each weather parameter has changed. Notice the Color of the boxes, they are RED if we feel you will slow down, or GREEN if we feel you will speed up.  
+4)  The fourth column, called ET Change shows you how much Crew Chief feels each of the weather parameters will actually effect the ET. In the example above we feel the temperature is worth .006 Quicker, the Humidity is .004 Slower, and the Barometer is .0025 Quicker. The main difference we see is the Estimated 60 foot which is .0320 Quicker.  
+5)  The far right area is the actual Predictions. This example shows that Crew Chief #1 Predictions is 4.805, Vapor Pressure is 4.811, and Your Way Formula is similar at 4.810.  
+
+The Bottom of the Prediction form has the Pager Output button and Weather On or Off Button. If you bought one of our paging weather stations then you can click on the Pager Output button and have the predictions sent to your pager automatically in about 2 minute intervals. 
+The Weather On button will start or stop the automatic entry of weather from your weather station. We might need to stop the automatic input to analyze the trend or put in the weather that we think will happen when we run. If you do not do this then in 15 seconds any input you entered will be overwritten automatically. 
+
+Predicting a Throttle Stop Timer 
+To predict an ET for your vehicle perform these simple steps: 
+1)  Enter a run on the screen, or pull up an existing run. The run on the screen is referred to as the “BASELINE RUN”. We Prefer to use EITHER THE LAST GOOD RUN YOU MADE OR A RUN WHICH IS SIMILAR to the existing conditions. This run must be using the SAME COMBINATION or database. If you are predicting an 1/8th mile you must have an 1/8th Mile combination selected!  
+2)  Click on the PREDICT Tab.  
+3)  The Predict screen will appear with either the last weather entered in the weather fields OR if you have a paging weather  
+
+
+Notice the picture above, this is an 1/4 Mile Throttle Stop Prediction. 
+1)  The first column is called Base Line. This Information is pulled from the run on the main entry form.  
+2)  The second column is called Current. This information is entered by You, or from your weather station. We only need Temperature, Humidity, and Barometer and the Estimated 60 foot times. The rest are optional.  
+3)  The third column, called Difference shows how much each weather parameter has changed. Notice the Color of the boxes, they are RED if we feel you will slow down, or GREEN if we feel you will speed up.  
+
+4) The fourth column, called ET Change shows you how much Crew Chief feels each of the weather parameters will actually effect the ET. In the example above we feel the temperature is worth .0444 Quicker, the Humidity is .0403 Quicker, and the Barometer is .002 Quicker. The Estimated 60 foot is .0162 Quicker. 
+5) The far right area is the actual Predictions. This example shows that Crew Chief #1 Predictions is 2.116, Vapor Pressure is 2.099, and Your Way Formula is completely different at 1.945. This is why we have multiple formulas. 2 of the 3 are close, and Your Way Formula is calculated differently, so it’s answer is different. 
+6) The Throttle Stop Ratio is displayed next to Your Way Formula. 
+**** Always double check your Estimated 60 Foot Time **** 
+*** Paging Enabled Users **** 
+The Bottom of the Prediction form has the Pager Output button and Weather On or Off Button. If you bought one of our paging weather stations then you can click on the Pager Output button and have the predictions sent to your pager automatically in about 2 minute intervals. 
+The Weather On button will start or stop the automatic entry of weather from your weather station. We might need to stop the automatic input to analyze the trend or put in the weather values that you think will happen when you run later. If you do not do this then in 15 seconds any input you entered will be overwritten automatically. 
+****************************** 
+Similar Runs 
+After an ET or Throttle Stop prediction, double check the results by choosing Similar Runs (runs within +/-200 Ft. Density Altitude AND the same combination). Similar Runs is an invaluable tool to make the final decision, and will show you what you have done in the past. Just your Baseline's COMBINATION is shown, not all your runs and combinations. 
+Which Number Do I Use? 
+This depends on how many runs you have entered. If you are a Throttle Stop Racer then use the number that seems closest to you. Remember, YOUR FORMULA is your own ratio numbers. If you have just started with the program and you are unsure of your own ratio numbers, then use CREW CHIEF #1 or VAPOR PRESSURE if they appear to be close. These are very precise calculations with very aggressive comparisons. 
+If you are an ET Racer then use the number that seems closest to your gut instinct. Experience will tell which one should be used. 
+
+
+
+
+If the ET or Throttle Stop Prediction is not accurate 
+First, double check the data you entered. Many times the ET is cross entered, such as 10.09 instead of 10.90. We see this all the time, so before calling us make sure it is correct. The easiest way to do this is with the EVENT LOGBOOK REPORT. This report shows Split Time Intervals for all runs you made that weekend. If any runs give widely different split times then this is the sign that the Ets entered are incorrect. 
+Second, take the wind out of the prediction. If the wind speed or direction is causing problems then set the wind speed and direction to the exact same as the baseline information. If this fixes the prediction then we will adjust your wind control factors. 
+Third, choose a different BASELINE RUN. Sometimes the Baseline Run chosen is not the best run to use. Some baseline runs, although close in ET or Weather, can result in large changes in Predicted ETs or Throttle Stop timer settings, even though the run looks OK. You may not see anything wrong with the run, but the computer may calculate more aggressive timer settings compared to a baseline run that is slower or quicker. If this is the case, pick a different Baseline Run, and compare. If all you have is runs that you had to hit the brakes ENTER THE E.T. YOU WOULD HAVE RUN, instead of what you actually ran. If you actually ran a 10.01 but your experience and the 1000 ft times say it would have been a 9.91, then enter 9.91 as the ET. This can happen if you are racing in the later rounds and continue to choose new baseline runs each time. Pay close attention to the difference in the Throttle Stop timers, if any round the ET and Weather change very little but the predicted timer does, the Baseline Run needs to be changed. For Example: 
+Run Number  ET  Timer #2  Corrected Altitude  
+1  9.991  2.43  1,201  
+2  9.887  2.11  1,275  
+3  9.941  2.28  1,295  
+
+4  9.904  2.209  1,245  
+5  9.909  2.201  1,240  
+6  9.895  2.143  1,255  
+
+In this case, the baseline run kept changing, and the timer settings kept dropping. If we use run number 4 as the baseline for the remaining runs the prediction will be more accurate. This is due to the run number 5, which wasn't a representative run because the timer was set to make the vehicle run quicker yet it ran a slower ET. When this run was used as a baseline, the timer settings were too aggressive and the run proved to be to quick. Use number 3 or 4 as the baseline and try again. Sometimes a run farther apart will result in better predictions. 
+Forth, For ET racers examine Your Formula. If this number is closer to the number you expect use it instead. This number uses the prediction formulas but they are applied to “Your Way” factors that your experience has shown. For Throttle Stop Racers always compare YOUR FORMULA and VAPOR PRESSURE to Crew Chief #1. If “Your Formula” is way off then the factors need to be adjusted. Call Us at (309) 688-2990 if this is the case, we can help you figure it out. 
+Fifth, adjust the Factors. Sometimes those other factors are too aggressive or conservative and this can cause some problems. NOTE: Watch out here -call us before you do this. Click on the Tab that says "Factors" and call us at (309) 688-2990 if this is the case, we can help you figure it out. Make small changes unless we tell you otherwise. 
+Sixth: Try 2 or 3 different baseline runs when you are serious about ET or Throttle Stop Predictions. You will see the difference in the timer settings or the ET predictions, and with this information, be able to make an educated guess which baseline run will work best. If there is little or no difference, then the predictions should be extremely accurate. 
+Weather Gauges cause many Problems. We recommend the best set of gauges you can afford. We recommend fixed units mounted around your trailer. Hand Held Portable units do not work well if you carry them around! We 
+believe most problems occur when racers use $30 K-Mart weather gauges and expect them to be accurate. This causes the ET predictions to fail because the range of weather doesn't match the ETs. Good weather gauges are a must and we sell the best, call us at (309) 688-2990! 
+Other Ideas 
+Most importantly, track how your jetting affects your ET by closely monitoring when the vehicle unexpectedly picks up or slows down. If your jetting is incorrect the vehicle can pick up or slow down with no warning. We see this when we can't slow a car down with a throttle stop timer under certain conditions. It also becomes painfully obvious when the vehicle won't run the number when it has all day long. 
+If our program said you should run an 8.90 and you run an 8.94 first check your 60ft. times, and your 60ft-330ft time intervals to see if wheel spin was a problem. If your 60ft-330ft interval was not close to the average for this interval you need to work on your traction, or leave at a lower RPM. Sometimes you have to go slow in order to be racing in the money rounds. ALWAYS CHECK YOUR THROTTLE STOP RPM BEFORE RACING, AS THE WEATHER GETS BETTER OR WORSE THE STOP RPM MAY CLIMB, OR FALL, CAUSING FLUCTUATIONS WITH THE PREDICTIONS. 
+If these are all OK, then look at the Wind Correction factors, especially if this is a windier day. If the wind seems to make more of a difference than it should, take the wind speed numbers out of the CHANGES SINCE BASELINE and see if this helps. Call us if this is the case, so we may be able to give you some ideas on what to do. If the Wind cannot be accurately measured then DO NOT ENTER WIND SPEED! 
+If this race runs into the evening try this. Reduce the indicated temperature 1-2 DEGREES for each hour after dark. This amazing trick helps quite often because the temperature gauges hold residual heat and do not cool down quick enough. Also, try reducing the temp by 2 -4 degree in the morning for runs before 9.00 am. 
+
+
+Aggressive vs. Conservative Use of the Program Aggressive 
+If you are an aggressive driver who likes to drive the finish line, try this. If you need a 9.90 ET and are good at the finish line, set the TARGET ET to 9.89-9.895. This way the vehicle is almost guaranteed to be too quick. As long as you are good at judging the finish line, you should get to the stripe first. If you never drive it out the back door this may be a good option for you, Be careful, this will result in Breakouts often, be ready to tap the brakes. Finally, never use one of these runs for ET prediction, always store these runs under a combination called TOO QUICK or something similar. YOU MUST USE RUN COMPLETION on these runs (or put in what it SHOULD have run in the ET fields), or it will cause ET or Throttle Stop predictions to be inaccurate. 
+
+Conservative 
+If you are a conservative users who likes to run wide open all the way through , try this. If you need a 9.90 ET and are good at the Finish Line, set the TARGET ET to 9.906 to a 9.915. This way the vehicle should be a tick to slow, with little chance of breaking out. If you always drive it out the back door, and are concerned about breakouts, this may be a good option for you. Be careful, this will result in your car being second to the finish line often. You can use these runs for ET prediction since they are wide open, solid runs. This is a good way to sneak up on someone who drives aggressively because you do not have to be as aggressive, you can rely on the other person breaking out. Plus, your runs will be consistent. 
+
+Live Linking to Paging Weather Stations 
+If you have one of the Paging Style Weather Stations offered by Altalab, Altronics, and others we can interface directly with these systems and send OUR predictions over the pagers you already have. This requires a special upgrade called Crew Chief Pro 7.0 Pager Enabled Version. An activation code is required. There is no special procedures other than performing a normal ET or Throttle Stop Prediction. On the bottom of the screen you will see a button that says PAGER OUTPUT. 
+The FIRST TIME you use this screen you will need to setup the program for your weather station. Click on Pager Setup Tab and choose your Weather Station, then make sure the COMMUNICATIONS PORT is correct. There is a button that say List Ports. This should try to find the port where your weather station is trying to communicate. After selecting the proper port you should click on Compare Which Altitude, most people select Weather Station DA or AA. 
+
+Now comes the amazing part. You will need to tell us How you want to Compare Altitudes. Do you want the pager to tell you how much the DA or AA has changed from the BASELINE RUN or from the Time You Clicked on Pager Output. For example: I want the pager to tell me the Density Altitude and how much is has changed from the run I have on the screen. In this example the Baseline run had a Density Altitude of 2572, and now it is Up 405 feet to 2977. This is what the pager output would read: 
+Crew Chief Pro Crew Chief #1: 8.907 VP Formula: 8.918 Your Formula: 8.912 DA: 2977 Up 405 ft T = 79.1 B = 29.23 H= 55.9 12 @ 330 
+Now, if I wanted the Altitude Comparison to happen from the time I click on Pager Output this example would read differently. Lets say that I clicked on the Pager Output button 10 minutes ago, and now the DA is up 23 feet more than 10 minutes ago. The pager would look like this. 
+Crew Chief Pro Crew Chief #1: 8.907 VP Formula: 8.918 Your Formula: 8.912 DA: 2977 Up 23 ft T = 79.1 B = 29.23 H= 55.9 12 @ 330 
+YOU SHOULD ONLY HAVE TO DO THIS THE FIRST TIME, AFTER THAT SIMPLY CLICK ON 
+START PAGING. 
+After you setup the program properly the first time, verify the computer settings, then click on START PAGING. The screen should show all the current readings and the Throttle Stop or ET Predictions. We will also show the Crew Chief Density Altitude, Vapor Pressure, Oxygen Density, Instant Wind Speed, Average Wind Speed, and Wind Direction. Screen updates happen every 
+10 seconds or so depending on system speed. 
+Below is a sample Pager Output that shows the predictions. Your pager system will show up to 3 Predictions plus the Density Altitude, wind information, Temperature, Humidity, and Barometer. 
+Every 2 minutes Crew Chief Pro 7.0 will automatically update your pager. 
+We sell Altalab, Altronics, and other companies Weather Stations with pagers, all which are Crew Chief Pro 7.0 compatible. We also stock hand held weather stations also. Call or visit us online at 
+
+www.crewchiefpro.com 
+NOTE: Because only one program can use a specific serial port, disable any other program attempting to write to any serial port first. You must DISABLE Palm Pilot “HOT SYNC” from automatically starting each time Windows starts. Also, exit out of Altalab’s Merlin or Altronic’s Log Book before beginning Pager Output mode of Crew Chief. 
+
+
+Automatically Determining Factors 
+Click on Choose Runs Tab which will test, and possibly adjust, your combination's factors automatically. This form will be similar to this below: 
+
+This form is fairly easy to use. The top of this form has a list of all your runs in this particular database. The middle area has the Baseline Run from your main screen. The bottom area shows the Ratios we calculated. To use the form you simply Double Click on Each Run you want to test. The left most column called “Use” will change from NO to Yes. Every line that begins with Yes is being evaluated. Crew Chief Pro will calculate all the ratios for changes in weather. You should pick at least 3 runs ( good runs ). Watch carefully Each Time for the DA and AA Ratios to react similar or higher than the numbers listed above. For Gasoline engines you should see the DA Ratio around 150 -250. If you run on Alcohol then the DA Ratio could be 500 or higher with the AA Ratio at 200 -400. 
+If the DA Ratio is below 100 then normally the run does not make sense. If it is below 50 then double click on the run again to unselect it. If all the runs have bogus DA Ratio or AA Ratios then the Baseline Run is probably the only good run you have or it is a bad run and should not be a baseline run. 
+Once you double click on at least 3 runs the fields on the right called Ave DA Ratio, Ave AA Ratio will show you corrected averages for those runs. In this example the run that is selected is calculating a 154 DA Ratio, which I could live with. I know that my car is normally about 185 feet per .01 in ET. However the Ave DA Ratio is not where it should be and these runs do not follow my normal predictions. This means that some of the runs I have selected did not follow the weather as they should have. Why you ask, the reason is simple. I was testing at Cordova Dragway Park in Illinois on a Friday night and the track was not very good past the 1000ft mark because too many street cars had their Air Conditioning on before they ran and they dripped water. So some of the runs hooked up perfectly, such as my baseline run of 8.907 and some did not. This can also happen from comparisons between tracks also. Each track is different, so pick runs from the same tracks if possible. 
+If the Ratios look OK then click on the UPDATE FACTORS Button on the bottom right and the factors will be updated if they need to be. If they are not OK then the next section below covers Manual Adjustments of Factors. 
+If you are ET Racing with no throttle stop then the T-Stop Ratio, and Adjusted ET boxes will not be visible. 
+Crew Chief Pro 7.00 Page: 33 
+
+
+Adjusting Prediction Factors Manually 
+Crew Chief will use it’s last factors entered until you either overwrite them on your own, or use our Automated method. If you 
+
+This form allows you to override the factors for everything, and once done you can click on the PREDICT Page to the left and it will immediately adjust the prediction formulas. Be very careful to not change anything drastic, small changes are useful unless you know exactly what your car does. We recommend writing the factors down before you change them, just in case. 
+Here are some recommendations to begin with, and remember each car is different so you will have to experiment. 
+Weather Parameter Gasoline Alcohol 
+Temperature .00415 .00207 Humidity 11.97 10.77 Barometer Down .0997 .1255 Barometer Up .0423 .0603 Density Altitude ( leave at zero unless you turn off the above factors ) Adjusted Altitude 95 227 Vapor Pressure .14923 .14923 
+Head Wind ( Both depend on vehicle -the higher the number the more your car is affected by wind ) Side Wind ( Both depend on vehicle -start at 35 ) 60 Foot ( Both depend on vehicle -start at 1.40 ) 
+To Print this Screen you can try Control + P which should make a screen image that can be printed. 
+There is NO Save Button on this form. Changes are written directly to the database so write the previous values down before you change them. 
+
+Using Crew Chief Pro to Graph your Pager Output 
+With Crew Chief Pro 7.0 you can graph all the weather readings that happened while your weather station was properly connected to Crew Chief. This feature is fantastic to analyze what happened while you were in staging, and racing. You can graph Corrected and Density Altitude, Temperature, Humidity, Barometer, Wind Speed and Direction, Vapor Pressure, Oxygen Density, Oxygen Altitude, and the Predictions for each Throttle Stop formula and ET Prediction formulas. 
+You can print the graphs to study further. This is a powerful tool to verify how your vehicle responds to weather conditions. You can choose what the graph looks like from a pick list. We recommend the Line Graph for ease of understanding. 
+Directions: 
+
+Double Click on any Graph to see it Full Screen 
+4 Separate graphs will appear that are constantly updating every 30 seconds or so. In the middle the current weather readings are displayed. On the bottom middle are a few buttons and drop down lists. There is a Print Report button that will print every reading the program took, plus all predictions we made. 
+Below that is Weather Statistics. This form is very cool. It shows the Minimum, Maximum, and Average weather readings for the entire day, PLUS the weather at specific intervals during the day. This form looks like the form on the next page. 
+You are able to Change the Graph Date on the bottom middle. You are currently able to store 1000 days of weather! So I can go back several years and see all the weather readings at Indy for the whole week in order to compare it with current weather. 
+To the right of this there is the drop down list for Change Graph Type. This ONLY applies to the bottom right graph, but you can change it to any number of choices. 
+
+** Weather Statistics Form ** 
+You can print this form on most computers by holding down the Control Key and Tapping the Letter P. This will create a form image that should be able to be printed. 
+
+Graphing Runs By Using The Graphing Menu 
+Crew Chief PRO 2 comes with the ability to graph virtually anything you want. Use this feature to graph ETs, Corrected and Density Altitudes, Throttle Stops, and more. It is very simple to use and works exactly the same way as Graphing Pager Output. The only difference is you will use the GRAPH MENU located on the top of the screen. 
+
+Integration with Data Acquisition Programs 
+Crew Chief Pro 7.0.0 will integrate with most high end data acquisition programs automatically. The benefit is you can store your data acquisition files within Crew Chief Pro 7.0.0. When you pull up a run in Crew Chief Pro 7.0.0 you can click on the Menu called Data Acquisition, which will automatically pull up the graphing software used by your data acquisition program, with that run already loaded. 
+It currently works seamlessly with RacePak. We are also a dealer for RacePak so if you want a system consider this a shameless plug for our services. 
+
+Entering Opponent Information and Computing Margin of Victory 
+Click on Opponent Information Tab. This screen will show the COMPETITORS INFORMATION. Once entered the program will calculate many things, however, the most important is Margin of Victory to a ¼ of an inch and Run Completion. 
+The third way to enter opponents information is using the OPPONENTS MENU on the top of the screen. This screen allows you to enter many opponents at once. For example, someone from our team sits in the staging lanes during time trials and elimination's and writes down each opponent number, name, their ET, MPH, and comments. We then type this into the program. When elimination's start we can PRINT a Report of all opponents or just our class. We then know their ET and MPH and can 
+
+The Margin of Victory works very well. The ¼ Mile will show when on the track the lead changed hands. We also calculate how many feet and inches you won or lost by. Very fun and useful information. 
+
+Run Completion 
+The Run Completion is useful if you let off or had to brake during a run. We will calculate what the ET would have been and where on the track your braking took place. We will also update the Margin Of Victory with this NO BRAKE ET information. 
+
+Click on CHANGE ET to have the program save the NO BRAKE ET instead of the actual ET. If you do not do this the program cannot use the run for predictions. 
+Integrating with iCard Receivers 
+A new feature in Crew Chief Pro 7.0 is the optional iCard Receiver Module. When this module is plugged in you will be able to receive run data for all classes right within Crew Chief. The main benefits are: 
+1) See all your competitor’s run information including reaction time, mph, etc. 
+2) Automatically Enter Your Run. You will no longer have to enter the ET or MPH, we will do this for you. 
+3) Print a “Cheat Sheet” instead of buying them at the track. 
+4) Set up a “Watch List” of important competitors so you can quickly find and track their runs. 
+5) Eliminate surprises, you will know everything about your opponent that they know. Current Price is $299.00 
+
+The form has TABS across the top that allow you to view different information. There is the View All Runs Tab, which shows you all the runs that have been downloaded. On this form you can Search by date, Race Session, Class, and by Driver’s Name. 
+
+Launching iCard 
+Either Double Click on the iCard RX icon on your computer or open Crew Chief and click on the ICARD menu on the top right. When it pops up and asks “START iCard SOFTWARE?” Choose YES. Leave iCard software running all day long. 
+Make sure the antenna is pointing up and not attached to any metal directly. Better reception is available if you can get it outside. 
+. 
+Using iCard in Crew Chief Pro Software 
+Return to Crew Chief Software. IF this is the First Day of an Event and there are cars running down the track then the next step is to click on GET DATA. A screen will appear that looks like the next page. 
+
+Again, If this is the First day of an event you would choose LOAD ALL NEW RUNS. This will DELETE THE PREVIOUS EVENT and replace all the runs with today’s runs. Keep in mind, the runs are still there, just not front and center. If you do not want to delete the previous runs then choose ADD RUNS TO EXISTING RUNS which will join the last event with this one. 
+
+Double Click on the Top File if it is from Today. That is all you have to do. You do not need to repeat this for the entire weekend if the correct file is chosen. 
+Once you select on of these choices Crew Chief will automatically load any new runs EVERY 60 SECONDS without any assistance from you. YOU DO NOT NEED TO RELOAD THE RUNS AGAIN until the next EVENT, we will do it all automatically. 
+
+Entering Your Runs From iCard into Crew Chief 
+The next Tab is View Your Runs, which are just your runs apart from everyone else’s. To have Crew Chief enter your run for you follow these directions. 
+1) Find the Run You Want To Enter, DOUBLE CLICK on it. A menu will pop up with options to ENTER THIS RUN INTO CREW CHIEF PRO as the top selection. (This menu also has Move To Watch List, Print, Reload Data, and Remove From Watch List.). 
+
+2) Click on ENTER THIS RUN INTO CREW CHIEF PRO. Another form will pop up that asks you to DOUBLE CLICK to select the DATABASE you want this run put under, then it will ask you to Pick the Race Track, then confirm the Run Number. If you run a throttle stop then enter that information into this form also. 
+3) Click on Load Into Crew Chief. Your Done! This program will also ENTER YOUR WEATHER for you if you use one of our Paging Weather Stations. We will also enter your Opponent into the program as well. It takes just 3 milliseconds to finish the job compared to 3 minutes for you to do it. 
+
+Using the “Watch List” Feature 
+The next tab has VIEW WATCH LIST. This tab is very important, as all your important competitors should be placed here. You 
+
+To place an opponent on the list find his or her run, then DOUBLE CLICK on it and choose “Move to Watch List”. That is all you have to do. Now click on the Watch List Tab and every time that person makes a pass they will be moved to this screen. 
+To delete the entire list click on CLEAR LIST, it will not disappear until you come back to this form. To Delete one person DOUBLE CLICK on their name and choose Remove From Watch List. 
+
+Instant Opponent Statistics and “Finish Line Decision Manager” 
+To view this form DOUBLE CLICK on your next opponent’s run and choose FINISH LINE MANAGER and INSTANT OPPONENT STATISTICS. This form will calculate: 
+* 
+Number of Runs in Each Lane 
+
+* 
+Average Reaction Time, 60ft, and all ET and MPH in Each Lane 
+
+* 
+WHERE YOU SHOULD BE COMPARED TO YOUR OPPONENT AT THE 330, 660, 1000, and mph timers! 
+
+
+
+Finish Line Decision Manager will help you to decide whether to take the stripe or not based on the calculated information. 
+NOTE: If you are a Dial In Class then you will need to Estimate your opponents Dial In and Your Own. This is done on the far right fields towards the bottom labeled DIAL IN. Every time you press Enter everything recalculates automatically. 
+
+Setting Up Your Information 
+
+If there are any race cars in the list click on each one and then click on DELETE CAR. To add your car click on the Car Number Field and put your car number in, then press enter and add your class. The class name is important. For example: Super Gas = SG * Super Comp = SC * Super Street = SST * Super Rod = SR * Quick Rod = QR 
+
+
+
+View Competition Ladders 
+A new feature in Crew Chief Pro 7.0 is the ability to View Competition Ladders. This is a quick and painless feature, to use it follow these directions: 
+1) Launch the iCard Module in Crew Chief as shown above. 
+2) After the session is completed click on the LADDER Tab. A form pops up similar to this: 
+
+You will select from the drop down list the class you want. Then in the right side the Qualifying Order is displayed. It will look like the next page. 
+
+Now simply Click on the button called Show Ladder towards the bottom. The ladder form will appear 
+
+
+Backing Up & Restoring The Race Data Files 
+BACKUP Race Data Files 
+We cannot be responsible for your data. If you don't backup your run data and the files get deleted, destroyed, or corrupted, you will be the only one to blame. Go to an electronics store and spend $15 on a thumb drive. Backup Each Week. This does not backup the entire Crew Chief Program files, just the DATA files. If you wish to backup the entire directory use a backup program for this. 
+From the FILE menu on the top left-hand comer of the screen choose BACKUP DATA FILES. A screen will appear with Disk drives to backup to. Choose either A Drive or B Drive and press enter. The data files, indexes, and other important files will be copied. 
+
+RESTORE Race Data Files 
+Use this feature to RESTORE the Race Data Files From a backup -or -to TRANSFER RACE INFORMATION FROM A LAPTOP TO YOUR MAIN SYSTEM OR VICE VERSA. 
+From the FILE menu on the top left-hand comer of the screen choose RESTORE DATA FILES. A screen will appear with Disk drives to RESTORE from. The data files, indexes, and other important files will be copied back over the current data. Warning: All previous data will be deleted! 
+
+
+Accounting Program 
+The Accounting Program is a simple, yet powerful Income and Expense tracking system. You will find it easy to use, with user defined Income and Expense Codes, automatic tracking of miles driven, and Profit & Loss Analysis. 
+
+Follow the instructions on the screen and refer to the message line on the bottom of the screen. 
+Adding Income or Expense Codes 
+To Add or Modify the Income or Expense Codes used in the Accounting Program simply select the ACCOUNTING Menu on the Top Right side of the screen. You may do tins by holding the ALT key and the Letter A, or use the mouse and click on the 
+Accounting Menu selection. Now choose "ADD INCOME OR EXPENSE CODES" from the menu. A screen will appear that has a list of available Income and Expense Codes. Simply select the code you want to change, or choose NEW to add a new code. When adding a new code all you have to decide is the 3 or 4 digit code, the description of the code, and whether it is an income or expense. Make sure you save any changes. 
+
+Printing Accounting Reports 
+To print Accounting Reports simply go to the ACCOUNTING menu on the top of the screen and choose Print Accounting Reports. You may access this menu by holding the ALT key and the Letter A, or use the mouse and click on the Accounting Menu selection. Select Print Accounting Reports and another screen will appear asking you for the dates you want to report on. 
+Now Enter the correct Starting Date and Ending Date. You must now decide what type of information you want: All income or expense, Income only, Expenses Only, or Show ONE Income or Expense Code Only. Choose Printer or Screen and view the results. 
+
+
+Adding Video to Race Files 
+Pull up an existing run and click on the VIDEO MENU. A form pops up the will ask you to highlight the video file on your computer. 
+This program uses your existing Video program to play your video. You can PAUSE the video, and with the slider control on the bottom move to the desired location without watching the entire video. 
+The next time you open this race run on the main screen it will not ask you which video you want to see, we store the video name with the run so it will automatically fire up when you click on Video. 
+Exiting From The Program 
+To exit the program PROPERLY follow these steps. 
+1)  Get back to the main entry screen (where you start entering a Run).  
+2)  Press the Function Key F12.  
+3)  Use the right arrow key to highlight EXIT and press ENTER and the program will end.  
+
+How to Use Video Help 
+Future releases will have on screen video help files. There will be a small question mark button or icon that looks like a film strip on every form that needs one. Just click on it and a video demonstration will appear allowing you to view an expert using the program. 
+
+
+Technical Support, Updates, & Other Phone Numbers 
+Main Telephone lines are as follows: 
+(309) 
+688-2990 -Main Line to Crew Chief Pro Software 
+
+(309) 
+633-0354 -Fax Line 
+
+
+(309) 208-1486 -Secondary Phone Number Call anytime 24 hours a day, someone is normally available to answer. E-mail Address is: don@crew-chief.com World Wide Web: www.crewchiefpro.com 
+We are always learning and trying different things and with your help we will improve the product every day. 
+
+About The Authors 
+Designed, Programmed, and Tested by Don Higgins, Crew Chief Pro Software, Mapleton, IL 
+(C) copyright 1989-2008 Crew Chief Pro Software. 
+Crew Chief Pro Software was founded in 1988 by Don Higgins and has always been located in the Mapleton, Illinois area. We specialize in "Odd Ball" computer programs that other companies simply don't have any expertise in. Our main focus is our Racing Systems Group which designed the program you are using right now. Because the President of the company is an avid Drag Racer, fan, and car nut, most of our efforts naturally center around Drag Racing and automotive type programs. 
+I have been racing since 1980 where I won on my first attempt at Drag Racing while still in college. Since then I have won many races and keep trying. The Crew Chief Racing Team has 2 Super Gas cars, and 2 Super Comp Dragsters, driven by Larry Bernshausen and Dave Dahlem. I have 2 children who are also avid Drag Racing fans. Brett, who is 18 years old and Caitlin, the feisty 15 year old girl. My son and daughter also raced Jr. Dragsters. 
+I graduated from Creighton University in Omaha, Nebraska in 1984. I like to focus my energies in 2 areas; Computers and Automobiles. I am best known in the Illinois area for expertise with automobile dealerships and specialized computer programs. Crew Chief Pro Software has been developing computer programs since 1986 for a host of businesses, all automotive related. 
+***************************************************************************** 
+Special thanks to Larry Bernshausen and Dave and Judy Dahlem, these people make up the Crew Chief PRO Drag Racing Team and are fantastic racers and a very patient people. This program would not have been anything without Larry’s help and motivation. He was an unwilling test dummy for many features, and he continues to help test many of the newest features of our Crew Chief program. 
+Larry, Dave, and Judy also helped to make our company understand what serious racers really needed. We like to think we returned the favor with several wins in Super Gas, Super Comp, and bracket races while using the Crew Chief program. We have predicted many perfect 9.900 and 8.900 runs over the years. We had many memorable races, including a few near double victories in Super Gas and Super Comp at several races. If you want to see Crew Chief software and weather stations in action come by our trailer, we use one program for Super Gas, Super Comp, ET Brackets, and Jr. Dragster. 
+

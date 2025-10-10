@@ -1,0 +1,2336 @@
+<!DOCTYPE html>
+<html lang="en-US"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WHAT’S NEW in Crew Chief Pro 7.980</title>
+<meta name="robots" content="max-image-preview:large">
+	<style>img:is([sizes="auto" i], [sizes^="auto," i]) { contain-intrinsic-size: 3000px 1500px }</style>
+	<link rel="dns-prefetch" href="https://fonts.googleapis.com/">
+<link rel="alternate" type="application/rss+xml" title="Crew Chief Pro Drag Racing Software and Professional Weather Stations » Feed" href="https://crewchiefpro.com/feed/">
+<link rel="alternate" type="application/rss+xml" title="Crew Chief Pro Drag Racing Software and Professional Weather Stations » Comments Feed" href="https://crewchiefpro.com/comments/feed/">
+<link rel="canonical" href="https://crewchiefpro.com/new-features-enhancements-and-upgrades-to-crew-chief-pro-software/">
+<script async="" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/analytics.js"></script><script type="text/javascript">
+/* <![CDATA[ */
+window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/16.0.1\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/16.0.1\/svg\/","svgExt":".svg","source":{"wpemoji":"https:\/\/crewchiefpro.com\/wp-includes\/js\/wp-emoji.js?ver=6.8.3","twemoji":"https:\/\/crewchiefpro.com\/wp-includes\/js\/twemoji.js?ver=6.8.3"}};
+/**
+ * @output wp-includes/js/wp-emoji-loader.js
+ */
+
+/**
+ * Emoji Settings as exported in PHP via _print_emoji_detection_script().
+ * @typedef WPEmojiSettings
+ * @type {object}
+ * @property {?object} source
+ * @property {?string} source.concatemoji
+ * @property {?string} source.twemoji
+ * @property {?string} source.wpemoji
+ * @property {?boolean} DOMReady
+ * @property {?Function} readyCallback
+ */
+
+/**
+ * Support tests.
+ * @typedef SupportTests
+ * @type {object}
+ * @property {?boolean} flag
+ * @property {?boolean} emoji
+ */
+
+/**
+ * IIFE to detect emoji support and load Twemoji if needed.
+ *
+ * @param {Window} window
+ * @param {Document} document
+ * @param {WPEmojiSettings} settings
+ */
+( function wpEmojiLoader( window, document, settings ) {
+	if ( typeof Promise === 'undefined' ) {
+		return;
+	}
+
+	var sessionStorageKey = 'wpEmojiSettingsSupports';
+	var tests = [ 'flag', 'emoji' ];
+
+	/**
+	 * Checks whether the browser supports offloading to a Worker.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @returns {boolean}
+	 */
+	function supportsWorkerOffloading() {
+		return (
+			typeof Worker !== 'undefined' &&
+			typeof OffscreenCanvas !== 'undefined' &&
+			typeof URL !== 'undefined' &&
+			URL.createObjectURL &&
+			typeof Blob !== 'undefined'
+		);
+	}
+
+	/**
+	 * @typedef SessionSupportTests
+	 * @type {object}
+	 * @property {number} timestamp
+	 * @property {SupportTests} supportTests
+	 */
+
+	/**
+	 * Get support tests from session.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @returns {?SupportTests} Support tests, or null if not set or older than 1 week.
+	 */
+	function getSessionSupportTests() {
+		try {
+			/** @type {SessionSupportTests} */
+			var item = JSON.parse(
+				sessionStorage.getItem( sessionStorageKey )
+			);
+			if (
+				typeof item === 'object' &&
+				typeof item.timestamp === 'number' &&
+				new Date().valueOf() < item.timestamp + 604800 && // Note: Number is a week in seconds.
+				typeof item.supportTests === 'object'
+			) {
+				return item.supportTests;
+			}
+		} catch ( e ) {}
+		return null;
+	}
+
+	/**
+	 * Persist the supports in session storage.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @param {SupportTests} supportTests Support tests.
+	 */
+	function setSessionSupportTests( supportTests ) {
+		try {
+			/** @type {SessionSupportTests} */
+			var item = {
+				supportTests: supportTests,
+				timestamp: new Date().valueOf()
+			};
+
+			sessionStorage.setItem(
+				sessionStorageKey,
+				JSON.stringify( item )
+			);
+		} catch ( e ) {}
+	}
+
+	/**
+	 * Checks if two sets of Emoji characters render the same visually.
+	 *
+	 * This is used to determine if the browser is rendering an emoji with multiple data points
+	 * correctly. set1 is the emoji in the correct form, using a zero-width joiner. set2 is the emoji
+	 * in the incorrect form, using a zero-width space. If the two sets render the same, then the browser
+	 * does not support the emoji correctly.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @private
+	 *
+	 * @param {CanvasRenderingContext2D} context 2D Context.
+	 * @param {string} set1 Set of Emoji to test.
+	 * @param {string} set2 Set of Emoji to test.
+	 *
+	 * @return {boolean} True if the two sets render the same.
+	 */
+	function emojiSetsRenderIdentically( context, set1, set2 ) {
+		// Cleanup from previous test.
+		context.clearRect( 0, 0, context.canvas.width, context.canvas.height );
+		context.fillText( set1, 0, 0 );
+		var rendered1 = new Uint32Array(
+			context.getImageData(
+				0,
+				0,
+				context.canvas.width,
+				context.canvas.height
+			).data
+		);
+
+		// Cleanup from previous test.
+		context.clearRect( 0, 0, context.canvas.width, context.canvas.height );
+		context.fillText( set2, 0, 0 );
+		var rendered2 = new Uint32Array(
+			context.getImageData(
+				0,
+				0,
+				context.canvas.width,
+				context.canvas.height
+			).data
+		);
+
+		return rendered1.every( function ( rendered2Data, index ) {
+			return rendered2Data === rendered2[ index ];
+		} );
+	}
+
+	/**
+	 * Checks if the center point of a single emoji is empty.
+	 *
+	 * This is used to determine if the browser is rendering an emoji with a single data point
+	 * correctly. The center point of an incorrectly rendered emoji will be empty. A correctly
+	 * rendered emoji will have a non-zero value at the center point.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 6.8.2
+	 *
+	 * @private
+	 *
+	 * @param {CanvasRenderingContext2D} context 2D Context.
+	 * @param {string} emoji Emoji to test.
+	 *
+	 * @return {boolean} True if the center point is empty.
+	 */
+	function emojiRendersEmptyCenterPoint( context, emoji ) {
+		// Cleanup from previous test.
+		context.clearRect( 0, 0, context.canvas.width, context.canvas.height );
+		context.fillText( emoji, 0, 0 );
+
+		// Test if the center point (16, 16) is empty (0,0,0,0).
+		var centerPoint = context.getImageData(16, 16, 1, 1);
+		for ( var i = 0; i < centerPoint.data.length; i++ ) {
+			if ( centerPoint.data[ i ] !== 0 ) {
+				// Stop checking the moment it's known not to be empty.
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Determines if the browser properly renders Emoji that Twemoji can supplement.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @private
+	 *
+	 * @param {CanvasRenderingContext2D} context 2D Context.
+	 * @param {string} type Whether to test for support of "flag" or "emoji".
+	 * @param {Function} emojiSetsRenderIdentically Reference to emojiSetsRenderIdentically function, needed due to minification.
+	 * @param {Function} emojiRendersEmptyCenterPoint Reference to emojiRendersEmptyCenterPoint function, needed due to minification.
+	 *
+	 * @return {boolean} True if the browser can render emoji, false if it cannot.
+	 */
+	function browserSupportsEmoji( context, type, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint ) {
+		var isIdentical;
+
+		switch ( type ) {
+			case 'flag':
+				/*
+				 * Test for Transgender flag compatibility. Added in Unicode 13.
+				 *
+				 * To test for support, we try to render it, and compare the rendering to how it would look if
+				 * the browser doesn't render it correctly (white flag emoji + transgender symbol).
+				 */
+				isIdentical = emojiSetsRenderIdentically(
+					context,
+					'\uD83C\uDFF3\uFE0F\u200D\u26A7\uFE0F', // as a zero-width joiner sequence
+					'\uD83C\uDFF3\uFE0F\u200B\u26A7\uFE0F' // separated by a zero-width space
+				);
+
+				if ( isIdentical ) {
+					return false;
+				}
+
+				/*
+				 * Test for Sark flag compatibility. This is the least supported of the letter locale flags,
+				 * so gives us an easy test for full support.
+				 *
+				 * To test for support, we try to render it, and compare the rendering to how it would look if
+				 * the browser doesn't render it correctly ([C] + [Q]).
+				 */
+				isIdentical = emojiSetsRenderIdentically(
+					context,
+					'\uD83C\uDDE8\uD83C\uDDF6', // as the sequence of two code points
+					'\uD83C\uDDE8\u200B\uD83C\uDDF6' // as the two code points separated by a zero-width space
+				);
+
+				if ( isIdentical ) {
+					return false;
+				}
+
+				/*
+				 * Test for English flag compatibility. England is a country in the United Kingdom, it
+				 * does not have a two letter locale code but rather a five letter sub-division code.
+				 *
+				 * To test for support, we try to render it, and compare the rendering to how it would look if
+				 * the browser doesn't render it correctly (black flag emoji + [G] + [B] + [E] + [N] + [G]).
+				 */
+				isIdentical = emojiSetsRenderIdentically(
+					context,
+					// as the flag sequence
+					'\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F',
+					// with each code point separated by a zero-width space
+					'\uD83C\uDFF4\u200B\uDB40\uDC67\u200B\uDB40\uDC62\u200B\uDB40\uDC65\u200B\uDB40\uDC6E\u200B\uDB40\uDC67\u200B\uDB40\uDC7F'
+				);
+
+				return ! isIdentical;
+			case 'emoji':
+				/*
+				 * Does Emoji 16.0 cause the browser to go splat?
+				 *
+				 * To test for Emoji 16.0 support, try to render a new emoji: Splatter.
+				 *
+				 * The splatter emoji is a single code point emoji. Testing for browser support
+				 * required testing the center point of the emoji to see if it is empty.
+				 *
+				 * 0xD83E 0xDEDF (\uD83E\uDEDF) == 🫟 Splatter.
+				 *
+				 * When updating this test, please ensure that the emoji is either a single code point
+				 * or switch to using the emojiSetsRenderIdentically function and testing with a zero-width
+				 * joiner vs a zero-width space.
+				 */
+				var notSupported = emojiRendersEmptyCenterPoint( context, '\uD83E\uDEDF' );
+				return ! notSupported;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Checks emoji support tests.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @param {string[]} tests Tests.
+	 * @param {Function} browserSupportsEmoji Reference to browserSupportsEmoji function, needed due to minification.
+	 * @param {Function} emojiSetsRenderIdentically Reference to emojiSetsRenderIdentically function, needed due to minification.
+	 * @param {Function} emojiRendersEmptyCenterPoint Reference to emojiRendersEmptyCenterPoint function, needed due to minification.
+	 *
+	 * @return {SupportTests} Support tests.
+	 */
+	function testEmojiSupports( tests, browserSupportsEmoji, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint ) {
+		var canvas;
+		if (
+			typeof WorkerGlobalScope !== 'undefined' &&
+			self instanceof WorkerGlobalScope
+		) {
+			canvas = new OffscreenCanvas( 300, 150 ); // Dimensions are default for HTMLCanvasElement.
+		} else {
+			canvas = document.createElement( 'canvas' );
+		}
+
+		var context = canvas.getContext( '2d', { willReadFrequently: true } );
+
+		/*
+		 * Chrome on OS X added native emoji rendering in M41. Unfortunately,
+		 * it doesn't work when the font is bolder than 500 weight. So, we
+		 * check for bold rendering support to avoid invisible emoji in Chrome.
+		 */
+		context.textBaseline = 'top';
+		context.font = '600 32px Arial';
+
+		var supports = {};
+		tests.forEach( function ( test ) {
+			supports[ test ] = browserSupportsEmoji( context, test, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint );
+		} );
+		return supports;
+	}
+
+	/**
+	 * Adds a script to the head of the document.
+	 *
+	 * @ignore
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param {string} src The url where the script is located.
+	 *
+	 * @return {void}
+	 */
+	function addScript( src ) {
+		var script = document.createElement( 'script' );
+		script.src = src;
+		script.defer = true;
+		document.head.appendChild( script );
+	}
+
+	settings.supports = {
+		everything: true,
+		everythingExceptFlag: true
+	};
+
+	// Create a promise for DOMContentLoaded since the worker logic may finish after the event has fired.
+	var domReadyPromise = new Promise( function ( resolve ) {
+		document.addEventListener( 'DOMContentLoaded', resolve, {
+			once: true
+		} );
+	} );
+
+	// Obtain the emoji support from the browser, asynchronously when possible.
+	new Promise( function ( resolve ) {
+		var supportTests = getSessionSupportTests();
+		if ( supportTests ) {
+			resolve( supportTests );
+			return;
+		}
+
+		if ( supportsWorkerOffloading() ) {
+			try {
+				// Note that the functions are being passed as arguments due to minification.
+				var workerScript =
+					'postMessage(' +
+					testEmojiSupports.toString() +
+					'(' +
+					[
+						JSON.stringify( tests ),
+						browserSupportsEmoji.toString(),
+						emojiSetsRenderIdentically.toString(),
+						emojiRendersEmptyCenterPoint.toString()
+					].join( ',' ) +
+					'));';
+				var blob = new Blob( [ workerScript ], {
+					type: 'text/javascript'
+				} );
+				var worker = new Worker( URL.createObjectURL( blob ), { name: 'wpTestEmojiSupports' } );
+				worker.onmessage = function ( event ) {
+					supportTests = event.data;
+					setSessionSupportTests( supportTests );
+					worker.terminate();
+					resolve( supportTests );
+				};
+				return;
+			} catch ( e ) {}
+		}
+
+		supportTests = testEmojiSupports( tests, browserSupportsEmoji, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint );
+		setSessionSupportTests( supportTests );
+		resolve( supportTests );
+	} )
+		// Once the browser emoji support has been obtained from the session, finalize the settings.
+		.then( function ( supportTests ) {
+			/*
+			 * Tests the browser support for flag emojis and other emojis, and adjusts the
+			 * support settings accordingly.
+			 */
+			for ( var test in supportTests ) {
+				settings.supports[ test ] = supportTests[ test ];
+
+				settings.supports.everything =
+					settings.supports.everything && settings.supports[ test ];
+
+				if ( 'flag' !== test ) {
+					settings.supports.everythingExceptFlag =
+						settings.supports.everythingExceptFlag &&
+						settings.supports[ test ];
+				}
+			}
+
+			settings.supports.everythingExceptFlag =
+				settings.supports.everythingExceptFlag &&
+				! settings.supports.flag;
+
+			// Sets DOMReady to false and assigns a ready function to settings.
+			settings.DOMReady = false;
+			settings.readyCallback = function () {
+				settings.DOMReady = true;
+			};
+		} )
+		.then( function () {
+			return domReadyPromise;
+		} )
+		.then( function () {
+			// When the browser can not render everything we need to load a polyfill.
+			if ( ! settings.supports.everything ) {
+				settings.readyCallback();
+
+				var src = settings.source || {};
+
+				if ( src.concatemoji ) {
+					addScript( src.concatemoji );
+				} else if ( src.wpemoji && src.twemoji ) {
+					addScript( src.twemoji );
+					addScript( src.wpemoji );
+				}
+			}
+		} );
+} )( window, document, window._wpemojiSettings );
+
+/* ]]> */
+</script>
+<link rel="stylesheet" id="agency-pro-theme-css" href="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/style.css" type="text/css" media="all">
+<style id="wp-emoji-styles-inline-css" type="text/css">
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+</style>
+<link rel="stylesheet" id="wp-block-library-css" href="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/style_002.css" type="text/css" media="all">
+<style id="classic-theme-styles-inline-css" type="text/css">
+/**
+ * These rules are needed for backwards compatibility.
+ * They should match the button element rules in the base theme.json file.
+ */
+.wp-block-button__link {
+	color: #ffffff;
+	background-color: #32373c;
+	border-radius: 9999px; /* 100% causes an oval, but any explicit but really high value retains the pill shape. */
+
+	/* This needs a low specificity so it won't override the rules from the button element if defined in theme.json. */
+	box-shadow: none;
+	text-decoration: none;
+
+	/* The extra 2px are added to size solids the same as the outline versions.*/
+	padding: calc(0.667em + 2px) calc(1.333em + 2px);
+
+	font-size: 1.125em;
+}
+
+.wp-block-file__button {
+	background: #32373c;
+	color: #ffffff;
+	text-decoration: none;
+}
+
+</style>
+<style id="global-styles-inline-css" type="text/css">
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgba(255, 255, 255, 1), 6px 6px rgba(0, 0, 0, 1);--wp--preset--shadow--crisp: 6px 6px 0px rgba(0, 0, 0, 1);}:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}
+:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}
+:root :where(.wp-block-pullquote){font-size: 1.5em;line-height: 1.6;}
+</style>
+<link rel="stylesheet" id="seed-wnb-css-css" href="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/seed_wnb.css" type="text/css" media="all">
+<link rel="stylesheet" id="google-fonts-css" href="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/css.css" type="text/css" media="all">
+<script type="text/javascript" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/jquery.js" id="jquery-core-js"></script>
+<script type="text/javascript" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/jquery-migrate.js" id="jquery-migrate-js"></script>
+<script type="text/javascript" id="seed-wnb-js-js-extra">
+/* <![CDATA[ */
+var seed_wnb_js_localize = {"msg":"Important Updates!","button_link":"http:\/\/www.crewchiefpro.com\/updates\/index.html","button_label":"Click Here to Download Updates","button_target":"_self"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/seed_wnb.js" id="seed-wnb-js-js"></script>
+<script type="text/javascript" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/backstretch.js" id="agency-pro-backstretch-js"></script>
+<script type="text/javascript" id="agency-pro-backstretch-set-js-extra">
+/* <![CDATA[ */
+var BackStretchImg = {"src":"http:\/\/crewchiefpro.com\/wp-content\/uploads\/2013\/10\/1384006_10200906990986059_978572207_n1.jpg"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/backstretch-set.js" id="agency-pro-backstretch-set-js"></script>
+<link rel="https://api.w.org/" href="https://crewchiefpro.com/wp-json/"><link rel="alternate" title="JSON" type="application/json" href="https://crewchiefpro.com/wp-json/wp/v2/pages/670"><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://crewchiefpro.com/xmlrpc.php?rsd">
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://crewchiefpro.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fcrewchiefpro.com%2Fnew-features-enhancements-and-upgrades-to-crew-chief-pro-software%2F">
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://crewchiefpro.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fcrewchiefpro.com%2Fnew-features-enhancements-and-upgrades-to-crew-chief-pro-software%2F&amp;format=xml">
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-46585805-1', 'crewchiefpro.com');
+  ga('send', 'pageview');
+
+</script><style type="text/css">#bg_color {
+  color: black;
+}
+.wnb-bar-button {
+  color: white;
+  text-shadow: 0 -1px 0 rgba(0,0,0,0.25);
+  background-color: black;
+}
+#wnb-bar {
+  color: black;
+  position: fixed;
+  background-color: #04f91b;
+  background-image: -moz-linear-gradient(top,#04f91b,#03d617);
+  background-image: -ms-linear-gradient(top,#04f91b,#03d617);
+  background-image: -webkit-gradient(linear,0 0,0 100%,from(#04f91b),to(#03d617));
+  background-image: -webkit-linear-gradient(top,#04f91b,#03d617);
+  background-image: -o-linear-gradient(top,#04f91b,#03d617);
+  background-image: linear-gradient(top,#04f91b,#03d617);
+  background-repeat: repeat-x;
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#04f91b',endColorstr='#03d617',GradientType=0);
+}
+</style><link rel="icon" href="https://crewchiefpro.com/wp-content/themes/genesis/images/favicon.ico">
+<style type="text/css">.site-title a { background: url(https://crewchiefpro.com/wp-content/uploads/2013/10/crewchiefpro-logo.jpg) no-repeat !important; }</style>
+<style>body { background-color: #4169e1; }</style>
+<script src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/twemoji.js" defer="defer"></script><script src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/wp-emoji.js" defer="defer"></script></head>
+<body class="wp-singular page-template-default page page-id-670 custom-background wp-theme-genesis wp-child-theme-agency-pro custom-header header-image content-sidebar genesis-breadcrumbs-hidden genesis-footer-widgets-visible agency-pro-blue" itemscope="" itemtype="https://schema.org/WebPage" style="padding-top: 33px;"><div id="wnb-bar"><span>Important Updates!</span> <a href="http://www.crewchiefpro.com/updates/index.html" target="_self"><span class="wnb-bar-button">Click Here to Download Updates</span></a></div><header class="site-header" itemscope="" itemtype="https://schema.org/WPHeader"><div class="wrap"><div class="title-area"><p class="site-title" itemprop="headline"><a href="https://crewchiefpro.com/">Crew Chief Pro Drag Racing Software and Professional Weather Stations</a></p></div><div class="widget-area header-widget-area"><section id="nav_menu-2" class="widget widget_nav_menu"><div class="widget-wrap"><nav class="nav-header" itemscope="" itemtype="https://schema.org/SiteNavigationElement"><ul id="menu-main" class="menu genesis-nav-menu"><li id="menu-item-27" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-home menu-item-27"><a href="http://crewchiefpro.com/" itemprop="url"><span itemprop="name">Home</span></a></li>
+<li id="menu-item-231" class="menu-item menu-item-type-custom menu-item-object-custom current-menu-ancestor current-menu-parent menu-item-has-children menu-item-231"><a href="http://crewchiefpro.com/crew-chief-pro" itemprop="url"><span itemprop="name">Crew Chief Software</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-22" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-22"><a href="https://crewchiefpro.com/crew-chief-pro/" itemprop="url"><span itemprop="name">Crew Chief Pro 7.980 Drag Racing Software ( New version for 2024 )</span></a></li>
+	<li id="menu-item-21" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-21"><a href="https://crewchiefpro.com/crew-chief-pro-jr/" itemprop="url"><span itemprop="name">Crew Chief Pro Junior version 7.980 ( New Version in 2024 )</span></a></li>
+	<li id="menu-item-624" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-624"><a href="https://crewchiefpro.com/nitro-pro-top-fuel-and-funny-car-software/" itemprop="url"><span itemprop="name">“Nitro Pro” Top Fuel / Funny Car Software</span></a></li>
+	<li id="menu-item-699" class="menu-item menu-item-type-post_type menu-item-object-page current-menu-item page_item page-item-670 current_page_item menu-item-699"><a href="https://crewchiefpro.com/new-features-enhancements-and-upgrades-to-crew-chief-pro-software/" aria-current="page" itemprop="url"><span itemprop="name">What’s New?  Crew Chief Pro’s new features</span></a></li>
+	<li id="menu-item-787" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-787"><a href="https://crewchiefpro.com/resources/" itemprop="url"><span itemprop="name">Tools to Help You Learn to Win</span></a></li>
+	<li id="menu-item-1083" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1083"><a href="https://crewchiefpro.com/time-slip-simulator-coaching-tool-for-drivers/" itemprop="url"><span itemprop="name">Time Slip Simulator – Coaching Tool for Drivers</span></a></li>
+	<li id="menu-item-30" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-30"><a href="https://crewchiefpro.com/customer-reviews/" itemprop="url"><span itemprop="name">Testimonials</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-302" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-302"><a href="https://crewchiefpro.com/customers/" itemprop="url"><span itemprop="name">Customers</span></a></li>
+	</ul>
+</li>
+</ul>
+</li>
+<li id="menu-item-23" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-23"><a href="https://crewchiefpro.com/weather-stations/" itemprop="url"><span itemprop="name">Weather Stations</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-3404" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-3404"><a href="https://crewchiefpro.com/non-paging-weather-stations/" title="See List of NON Paging Trailer Weather Stations" itemprop="url"><span itemprop="name">NON Paging Weather Stations</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-3024" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3024"><a href="https://crewchiefpro.com/ultimeter-trailer-weather-center-new-for-2020/" itemprop="url"><span itemprop="name">Ultimeter Trailer Weather Center – New for 2020</span></a></li>
+		<li id="menu-item-3408" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3408"><a href="https://crewchiefpro.com/performaire-pro-weather-center-new-item/" itemprop="url"><span itemprop="name">Performaire PRO Weather Center – Professional Series.</span></a></li>
+		<li id="menu-item-3409" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3409"><a href="https://crewchiefpro.com/computech-cloud-trailer-weather-center/" itemprop="url"><span itemprop="name">Computech Cloud Trailer Weather Center – New item in 2023</span></a></li>
+		<li id="menu-item-481" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-481"><a href="https://crewchiefpro.com/davis-vantage-pro-2/" itemprop="url"><span itemprop="name">Davis Vantage Pro 2</span></a></li>
+		<li id="menu-item-472" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-472"><a href="https://crewchiefpro.com/portatree-weather-station/" itemprop="url"><span itemprop="name">PortaTree Weather Station</span></a></li>
+	</ul>
+</li>
+	<li id="menu-item-3403" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-3403"><a href="https://crewchiefpro.com/paging-trailer-weather-stations/" title="See list of Paging Trailer Weather Stations" itemprop="url"><span itemprop="name">Paging Trailer Weather Stations</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-2274" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2274"><a href="https://crewchiefpro.com/performaire-pro-weather-center-new-item/" itemprop="url"><span itemprop="name">Performaire PRO Weather Center – New Item</span></a></li>
+		<li id="menu-item-2068" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2068"><a href="https://crewchiefpro.com/computech-cloud-trailer-weather-center/" itemprop="url"><span itemprop="name">Computech Cloud Trailer Weather Center – New item in 2020</span></a></li>
+		<li id="menu-item-8276" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-8276"><a href="https://crewchiefpro.com/ultimeter-trailer-weather-center-new-for-2020/" itemprop="url"><span itemprop="name">Ultimeter Trailer Weather Center</span></a></li>
+	</ul>
+</li>
+	<li id="menu-item-3407" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-3407"><a href="https://crewchiefpro.com/hand-held-weather-stations/" itemprop="url"><span itemprop="name">Hand Held Weather Stations</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-110" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-110"><a href="https://crewchiefpro.com/performaire-eclipse-weather-station/" itemprop="url"><span itemprop="name">PerformAIRE ECLIPSE</span></a></li>
+		<li id="menu-item-116" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-116"><a href="https://crewchiefpro.com/computech-race-air-pro-and-race-air/" itemprop="url"><span itemprop="name">Computech Race Air Pro and Race Air</span></a>
+		<ul class="sub-menu">
+			<li id="menu-item-8604" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-8604"><a href="https://crewchiefpro.com/2024/11/04/slottica-moj-przeglad-jednego-z-najbardziej-ekscytujacych-kasyn-online/" itemprop="url"><span itemprop="name">.</span></a></li>
+		</ul>
+</li>
+	</ul>
+</li>
+</ul>
+</li>
+<li id="menu-item-25" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-25"><a href="https://crewchiefpro.com/contact/" itemprop="url"><span itemprop="name">Contact Us</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-26" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-26"><a href="https://crewchiefpro.com/meet-the-team/" itemprop="url"><span itemprop="name">Meet the Team</span></a></li>
+</ul>
+</li>
+<li id="menu-item-1072" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1072"><a href="https://crewchiefpro.com/buy-on-line/" itemprop="url"><span itemprop="name">Buy On-Line</span></a></li>
+<li id="menu-item-3307" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3307"><a href="https://crewchiefpro.com/racepak-data-systems/" itemprop="url"><span itemprop="name">Holley Products</span></a></li>
+</ul></nav></div></section>
+</div></div></header><div class="site-container"><div class="site-inner"><div class="content-sidebar-wrap"><main class="content"><article class="post-670 page type-page status-publish entry" aria-label="WHAT’S NEW in Crew Chief Pro 7.980" itemscope="" itemtype="https://schema.org/CreativeWork"><header class="entry-header"><h1 class="entry-title" itemprop="headline">WHAT’S NEW in Crew Chief Pro 7.980</h1>
+</header><div class="entry-content" itemprop="text">
+<p></p>
+
+
+
+<figure class="wp-block-gallery has-nested-images columns-default is-cropped wp-block-gallery-1 is-layout-flex wp-block-gallery-is-layout-flex"></figure>
+
+
+<p style="text-align: left;"><strong>Here are the Super Cool New Changes:</strong></p>
+<p>New Crew Chief Pro 7.980 ( as of 01/03/2024 we have over 18,900 hours
+ of development time in Crew Chief Pro – Hope you like it ):</p>
+<p>New Email address is:&nbsp;<strong> crewchiefpro50 “at” yahoo.com</strong></p>
+<p>( 03/01/24 – 06/23/2025 ) Refined our new Delta Adjusted Altitude 
+especially for racers using Alcohol.&nbsp; We also added revised 
+starting base factors for better predictions for all fuel types.&nbsp; 
+New formulas for Junior Dragsters were also added in June.&nbsp; I have 
+also added better checks and balances for weather readings that are not 
+valid.&nbsp; The last update was for racers using Computech Cloud 
+weather stations.</p>
+<p>( 12/01/23 – 02/23/2024 ) Added a new Delta Adjusted Altitude that we
+ think does a better job of predicting than regular Density 
+Altitude.&nbsp; This will be displayed on the Run Entry TAB and the 
+Predict ET and Predict Throttle Stop TAB.&nbsp; We’ve also added this to
+ the Crew Chief #1 Formula list.&nbsp; More to come shortly about this 
+new and exciting feature.&nbsp; Also, we added an automatic calculation 
+for 1000 foot ETs if the track is missing this value.</p>
+<p>( 03/05/2023&nbsp; ) We revised the TEXT Messaging option with 
+changes that will make this work without interruption.&nbsp; We revised 
+the Prediction screen with reordered fields so that DA appears just 
+below barometric pressure for easier viewing.&nbsp; Also, we added 
+additional Search features on the form.&nbsp; We also added the Base 
+Date, Run Number, Lane, and Time of Day to the Predict screen, so you 
+know what run you are using.</p>
+<p>(03/05/2022 – 03/27/2022 ) We revised the Data Entry fields so you 
+don’t need decimal points any longer for Reaction Times, ETs, or MPH 
+fields.&nbsp; This is a real time saver, and fixes automatically any 
+data entry errors regarding decimal places.&nbsp; For example, I have a 
+.008 reaction time, in Crew Chief Pro all I do is enter an “8” and press
+ Enter. <img decoding="async" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/AdjustedReactionTimeBEFORE.jpg"></p>
+<p>(05/07/2021 – 03/01/2022 ) Refined the HP Correction formulas, and 
+our new formula option in Crew Chief #1 to improve a new weather 
+variable called, “Vapor Point HP Correction.”&nbsp; We refined the 
+Optimal TS Factor formula for throttle stop racers also in the Crew 
+Chief #1 list.&nbsp; We added the ability to change the Vapor Pressure 
+formula to the old Crew Chief #1 formula which was based on Adjusted 
+Altitude only.&nbsp; Racers would use this by double clicking the label 
+to switch between the two formulas quickly.&nbsp; We also improved the 
+Calculate Ratios area for more information to the racer.</p>
+<p>(08/07/2020 – 02/14/2021 ) Added a new formula option in Crew Chief 
+#1 to improve a new weather variable called, “Vapor Point HP 
+Correction,” which is an improved HP Correction with water 
+content.&nbsp; We will have a webinar about how this works next 
+month.&nbsp; We refined the REPORTS Menu with new reports as well.</p>
+<p>(06/07/2020 – 07/31/2020 ) Added to the REPORTS Menu the ability to 
+print or view reports based on DATE, Database, Only positive reaction 
+times, ( or only RED Lights ).&nbsp; We also added Total Package 
+calculation to the Run Entry TAB.&nbsp; Refined some Prediction formulas
+ as well.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2020/08/total_package.jpg"><img decoding="async" class="size-medium wp-image-3265 alignnone" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/total_package-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/total_package-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/total_package-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/total_package-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/total_package.jpg 1920w" sizes="(max-width: 300px) 100vw, 300px"></a></p>
+<p>(05/07/2020 – 06/06/2020 ) Added Weight into the Corrected to 
+Standard Conditions calculation.&nbsp; This will automatically adjust 
+the Standard ET based on weight changes.&nbsp; Added HELP for Ultimeter 
+Weather Stations under the Help Menu.&nbsp; You can click on Help Menu 
+and see information on how to setup our new Ultimeter Weather Center, 
+and what to do if it stops functioning.</p>
+<p>(05/01/2020 – 05/06/2020 ) Added HELP for TEXT Messaging.&nbsp; You 
+can click on Help Menu and see information on how to setup text 
+messaging option, and what to do if it stops functioning due to an email
+ issue.</p>
+<p>(04/01/2020 – 05/01/2020 ) Changed the Corrected to Standard ET 
+calculation to use the lower of two different formulas we previously 
+used.&nbsp; We also added the ability to Search on the Predict ET or 
+Predict Throttle Stop TAB by RIGHT CLICKING on any field in the Current 
+Column.</p>
+<p>( 10/01/19 – 12/06/19 )&nbsp; Starting with version 7.940, there will
+ be some new features. Here is a list of improvements we finished in the
+ last few days.&nbsp; First, in order to test new mathematical formulas 
+we have introduced a quick way to test without hardly any effort. With 
+this procedure it will be like the run you want to analyze has not been 
+made. We attempt to learn each run but sometimes what happened isn’t 
+always app<span class="text_exposed_show">arent. Follow these directions to test our latest formula.</span></p>
+<div class="text_exposed_show">
+<p>a) Put the Run on the screen that you want to either investigate 
+different formulas -OR- try to create your own formula. Click on PREDICT
+ Tab.</p>
+<p>b) We have added a new way to move all the weather readings over to 
+the Current column. You simply Right Click on the BASE RUN label on the 
+top left of the Predict tab.</p>
+<p>c) Once you Right Click every weather variable will be copied to the 
+CURRENT Weather Column. Also, the Weather ON button will be 
+automatically changed to Weather is OFF so you can manipulate the 
+formulas without new weather readings overwriting the existing values.</p>
+<p>d) Now use the SWITCH TO PREVIOUS Run button on the bottom left to move back to your desired Base Run.</p>
+<p>e) Now change to any formula to see what the result would have been.</p>
+<p>*******************************<br>Also, we have invented a two 
+completely new weather formulas. The first one is for Both throttle stop
+ and ET racers called VAPOR HP CORRECTION. This formula has been in 
+development for about a year and testing for 4 months. See screen shots 
+to find out where to see this in action.</p>
+<p>*******************************</p>
+<p>The Second new formula has been visible for about 2 years but just 
+updated with new features. It is for Throttle Stop racers only, and is 
+called OPTIMAL TS FACTOR. If you check this formula then DO NOT use any 
+other weather factor with it.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2019/12/RightClickHERE.jpg"><img decoding="async" class="alignleft size-medium wp-image-2897" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/RightClickHERE-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/RightClickHERE-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/RightClickHERE-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/RightClickHERE-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/RightClickHERE.jpg 1920w" sizes="(max-width: 300px) 100vw, 300px"></a><a href="http://crewchiefpro.com/wp-content/uploads/2019/12/TestFormulasSTEP_One.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-2898 alignnone" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/TestFormulasSTEP_One-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/TestFormulasSTEP_One-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/TestFormulasSTEP_One-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/TestFormulasSTEP_One-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/TestFormulasSTEP_One.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a><a href="http://crewchiefpro.com/wp-content/uploads/2019/12/newHPCorrectionSetup.jpg"><img loading="lazy" decoding="async" class="alignleft size-medium wp-image-2902" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newHPCorrectionSetup-300x233.jpg" alt="" width="300" height="233" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newHPCorrectionSetup-300x233_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newHPCorrectionSetup-768x597.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newHPCorrectionSetup.jpg 970w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+</div>
+<p>( 08/01/2019 – 09/01/2019 ) We now have the ability to change between
+ the two most common HP Correction Factors. The newer SAE J1349 formula 
+or the ( very old but still relevant ) SAE J607 are available.&nbsp; 
+There is a sizeable difference in the values, but the actual difference 
+between runs is nearly identical. The newer J1349 Formula produces a 
+lower value.&nbsp; Either Double Click on the HP Correction value on the
+ Run Entry TAB and answer Yes or No to change it. Or unde<span class="text_exposed_show">r
+ Weather Station Setup TAB there is a check box for this.&nbsp; Also, we
+ added some info in the upper right for those using Mechanical Injection</span></p>
+<p><span class="text_exposed_show">.<a href="http://crewchiefpro.com/wp-content/uploads/2019/12/HPCorrect1.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-2895 alignnone" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/HPCorrect1-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/HPCorrect1-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/HPCorrect1-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/HPCorrect1-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/HPCorrect1.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></span></p>
+<p>( 05/01/2019 – 06/26/2019 )&nbsp; A new feature in <a class="profileLink" href="https://www.facebook.com/Crew-Chief-Pro-Software-208096655933367/?__tn__=K-R&amp;eid=ARAtuOZk0KbsFv8eUpfw-OA84MWAeE8uY-iB_4javCa28EfrXknEpgSRFO3U4xiMIpTANEJUQaONu9wO&amp;fref=mentions&amp;__xts__%5B0%5D=68.ARBuVGjdREesI5l9jmj1Of_rkrtZ1zp0unwZ9UkzHEGgjygqhAzRYKVpOM7Jm3tW0F_6FYtnSmGr6wDmpyGYXG5TJC6-FRpQuESDL19_WWHtV5Ktm0FdOt1xx5aLHleq25ei4CGZ0FoVO--uM-uI1LGCHi8owbTzuj_mRsDvnO-yyDQ7AcdCpMICBdPCPGYuMzE0gRj3MKe5szshwg" data-hovercard="/ajax/hovercard/page.php?id=208096655933367&amp;extragetparams=%7B%22__tn__%22%3A%22%2CdK-R-R%22%2C%22eid%22%3A%22ARAtuOZk0KbsFv8eUpfw-OA84MWAeE8uY-iB_4javCa28EfrXknEpgSRFO3U4xiMIpTANEJUQaONu9wO%22%2C%22fref%22%3A%22mentions%22%7D" data-hovercard-prefer-more-content-show="1">Crew Chief Pro Software</a>
+ is the ability to add fields to your Run Entry TAB. If you want to 
+track something not displayed, then this is where we put it.To do this, 
+Double Click on whatever the Label says that is located in the circled 
+part of the image. Double clicking here will change what fields are 
+visible on the top right.We have fields for normal stuff, then Injected,
+ Manual Transmission stuff, Turbo stuff, and Booste<span class="text_exposed_show">d with nitrous.** Keep Double Clicking until you see the fields you want **</span></p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2019/12/mainscreenWITHnitrous.jpg"><img loading="lazy" decoding="async" class="alignleft size-medium wp-image-2896" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/mainscreenWITHnitrous-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/mainscreenWITHnitrous-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/mainscreenWITHnitrous-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/mainscreenWITHnitrous-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/mainscreenWITHnitrous.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 03/01/2019 – 03/12/2019 ) Refined the Log Book screen so the Printout Features have more information</p>
+<p>( 01/17/2019 – 02/12/2019 ) Refined the Log Book screen so it now 
+calculates the difference between Relative Humidity between the columns 
+as well.&nbsp; We were asked to do this, and it makes sense.&nbsp; Just 
+took an amazing amount of code to do.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2019/02/logview_with_rh.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-2530 alignleft" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logview_with_rh-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logview_with_rh-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logview_with_rh-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logview_with_rh-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logview_with_rh.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 10/17/2018 – 01/16/2019 ) Refined the Log Book screen and report 
+output to include Ballast and Weight adjustments.&nbsp; Revised the NHRA
+ Tech Cards.&nbsp; Updated the logic that makes sure data entry is 
+controlled better.&nbsp; Fixed the data entry screen for Junior 
+Dragsters.</p>
+<p>( 5/01/2018 – 10/16/2018 ) We now allow you to put Different main 
+screen pictures for EACH Database.&nbsp; The Database Setup form has a 
+3rd Tab where you can double click&nbsp;to&nbsp;choose an image file ( 
+which appears on the Main Run Entry TAB when entering Runs ).</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2018/10/combonewwithpicture.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-2437" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/combonewwithpicture-300x169.jpg" alt="" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/combonewwithpicture-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/combonewwithpicture-768x432.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/combonewwithpicture-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/combonewwithpicture.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>The picture files are optional, so if you don’t choose one the default picture will still appear.</p>
+<p>Revised the Team License section to allow overriding the estimated 60
+ foot times and new weight values.&nbsp; Added more Estimated 60 foot 
+choices.&nbsp; Refined many internal calculations and improved weather 
+recording speeds.</p>
+<p>( 4/01/2018 – 05/01/2018 ) Further revised the Log Book STATS form to
+ add a few more fields.&nbsp; Started working on new prediction formulas
+ for corrections to standard conditions.</p>
+<p>( 3/06/2018 – 03/23/2018 ) Added something pretty cool.&nbsp; Now on 
+the Log Book Forms you have a new&nbsp;Button called STATS.&nbsp; This 
+calls a Form that displays Averages for Both Right and Left Lanes.&nbsp;
+ You can even Trim the <a href="http://crewchiefpro.com/wp-content/uploads/2018/03/LogBookAveragesScreen.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-2239 alignleft" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogBookAveragesScreen-300x164.jpg" alt="" width="300" height="164" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogBookAveragesScreen-300x164_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogBookAveragesScreen-768x420.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogBookAveragesScreen-1024x560.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogBookAveragesScreen.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a>Averages
+ ( where we remove the Hi and Low Values then Average ).&nbsp; 
+Interesting information is displayed.&nbsp; We also display the 
+Difference in Grains between the fields as well.&nbsp; Revised code for 
+new Computech Cloud and Computech finished an update to make their 
+software work better as well.</p>
+<p>( 01/11/2018 – 03/05/2018 ) Made revisions&nbsp;to the Computech 
+Cloud code to make it work better.&nbsp; We are waiting on Computech to 
+finish some updates to their software to complete the changes.&nbsp; We 
+added a table rebuild module to protect the main data tables from 
+destruction.&nbsp; If this happens we rebuild the tables for you and 
+transfer data back into them.&nbsp; Damage happens when you turn off the
+ computer while Crew Chief Pro is running, eventually this can cause 
+problems.</p>
+<p>( 12/16/2017 – 01/10/2018 ) Made revisions&nbsp;to the Team License 
+forms. Adjust the Estimated 60 Foot or use the Drop Down Lists on 60 
+foot to automatically change the estimated 60 foot just like on the 
+regular Predict ET or Predict Throttle Stop Tab.&nbsp; Updated the Log 
+Book printout and screens again to add more capability now and into the 
+future.</p>
+<p>( 11/18/2017 – 12/15/2017 ) Made revisions to the Corrected to 
+Standard ET calculations.&nbsp; These calculations were fully optimized,
+ proven on&nbsp;customer data and my own runs.&nbsp; I also added new 
+Log Book Printouts for better readability when the number of runs 
+exceeds 10.&nbsp; Previously we spun the report sideways and that report
+ didn’t have the space to display all the information.&nbsp; Now we 
+print multiple one page printouts and it can handle up to 27 runs on 3 
+printouts.</p>
+<p>( 09/14/2017 – 09/18/2017 ) Completely revised the CALCULATE RATIOS 
+screen to be in an order of events similar to the way we usually view 
+runs.&nbsp; We revised the screen, controls, and added both Track 
+Temperature ratio analysis and the new throttle stop formula ratio 
+tester.&nbsp; When Calculating Ratios on Throttle Stop Runs we will 
+explain in the middle of the screen how and why we came up with the 
+ratio.&nbsp; See the image below:&nbsp; We now explain how much we think
+ the weather affected the ET and the Throttle Stop number change is 
+calculated into ETs to see what the math would expect the ET to 
+be.&nbsp; ET Racers will NOT see these fields.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/CalculateRatios0917-1.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-2082" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CalculateRatios0917-1-300x164.jpg" alt="CalculateRatios0917" width="300" height="164" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CalculateRatios0917-1-300x164_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CalculateRatios0917-1-768x420.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CalculateRatios0917-1-1024x560.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CalculateRatios0917-1.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 08/02/2017 – 09/14/2017 ) Added new changes to Log Book 
+Screens.&nbsp; We now calculate the differences between runs of the 330 
+foot ( If 1/8th Mile ) or 1000 foot if quarter mile.&nbsp; Makes it easy
+ to see how the runs stack up based on differences at these 
+intervals.&nbsp; Improved the weather station code and added a 
+Diagnostic program to see what the weather station is actually sending 
+us.&nbsp; We improved the code for Track Temperature calculation.&nbsp; 
+Completely revised the CALCULATE RATIOS screen to be in an order of 
+events similar to the way we usually view runs.&nbsp; We revised the 
+screen, controls, and added both Track Temperature ratio analysis and 
+the new throttle stop formula ratio tester.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/logbook1000ftdiff.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-2077" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logbook1000ftdiff-300x164.jpg" alt="logbook1000ftdiff" width="300" height="164" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logbook1000ftdiff-300x164_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logbook1000ftdiff-768x420.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logbook1000ftdiff-1024x560.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/logbook1000ftdiff.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 07/17/2017 – 08/01/2017 )&nbsp; Further revised the factors for 
+Blown Alcohol top dragster and top sportsman formulas ( after Topeka we 
+learned a few things ).&nbsp; We also changed the code that controls 
+Computech Weather Stations.&nbsp; We revised the entry rules for ETs so 
+decimal places are automatically calculated.</p>
+<p>( 06/27/2017 – 07/13/2017 )&nbsp; Revised the factoring module for 
+Supercharged Alcohol fuel types.&nbsp; Now that we have hundreds of 
+customers in Top Dragster and Top Sportsman we have found a better 
+system for predicting them.&nbsp; When you choose this fuel type and 
+click RESET FACTORS it will automatically update to the newest factors.</p>
+<p>( 06/02/2017 – 06/26/2017 )&nbsp;Added TRACK TEMPERATURE to Crew 
+Chief #1 Formula list.&nbsp; When checked it will add the track temp 
+difference into both the 60 foot Estimator and the actual 
+prediction.&nbsp; You can adjust the ratio of ET to temperature.&nbsp; 
+Adds another variable to the prediction we didn’t have before.&nbsp; 
+ONLY affects Crew Chief #1 Formula.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/crewchief1formula.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-2003" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1formula-300x164.jpg" alt="crewchief1formula" width="300" height="164" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1formula-300x164_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1formula-768x420.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1formula-1024x560.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1formula.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>We also added a new formula for Throttle Stop Racers, called Optimal 
+TS Ratio, an experimental formula which does not use any mathematical 
+formula&nbsp;previously tried.&nbsp; This formula is used to predict how
+ much each throttle stop number equals the Optimal setting.&nbsp; There 
+is a factor on both the Small and Large change tabs to control 
+this.&nbsp; We suggest trying this BY ITSELF until we see how it 
+functions.&nbsp; In testing it was very close if the car was 
+dialable.&nbsp; We also VERIFY that the correct ratios are used.&nbsp; 
+Previously we would allow large ratios.&nbsp; Since many racers refer to
+ ratios as large numbers like 2 to 1, we now stop you from literally 
+entering 2.0 in the ratio box, automatically changing the value to the 
+correct .020 number.</p>
+<p>We added LANE to the textboxes that show what base run is used on the Predict tabs.&nbsp; See screen below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/Average_60foot-1.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-2002" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average_60foot-1-300x227.jpg" alt="Average_60foot" width="300" height="227" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average_60foot-1-300x227_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average_60foot-1-768x582.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average_60foot-1-1024x776.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average_60foot-1.jpg 1113w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>We also automatically fix data input errors, for example say your car
+ runs 3.054 at the 1/8th mile.&nbsp; If you enter 3054 without a decimal
+ and press enter we will automatically put the decimal in the right 
+place.&nbsp; This works on all ETs in both Run Entry and Opponent Info 
+TABs.&nbsp; Stops data entry errors instantly.&nbsp; Just press enter 
+and verify the correct values are put in the fields.</p>
+<div id="id_592f7a46e86671587032530" class="text_exposed_root text_exposed">
+<p>( 05/12/2017 – 06/01/2017 )&nbsp; NHRA changed to a&nbsp;new tech 
+card , they added Emergency Contact and changed where the fields were 
+positioned. My suggestion is add a name and a telephone number in the 
+same field. We repositioned virtually every field, front and back.</p>
+<p>We have also added automatic decimal points on the Run Entry and 
+Opponent Information Tabs. So, if you enter 4871 we will change it to 
+4.871 for you. I was tired of forgetting to put decimals on the Oppone<span class="text_exposed_show">nt Tab so the update will fix this.</span></p>
+<div class="text_exposed_show">
+<p>Also, if you enter a run over 10 seconds and you have not setup the 
+database for over 10 second runs we will fix that for you as well. We 
+are trying to speed up data entry by taking some of the complexity and 
+fat fingering errors out of your hands.</p>
+<p>We are still running Research and Development on new weather factors.
+ We are mostly concerned with vapor pressure and dew point vs ambient 
+air temp refactoring. I should get to test some changes this weekend at 
+Chicago.</p>
+<p>We have added Track Temperature to the Crew Chief #1 Formula which is
+ NOT connected to the Estimated 60 Foot but actually affects ET 
+Calculations separately ( however it can also affect 60 foot as well ). 
+So, if you watch track temp and record it this might be a good predictor
+ as well. Eventually there will be a Rule for this where it is linear to
+ a point, then gets very aggressive as the value reaches a Red Line so 
+to speak.</p>
+<p>There are several hundred other improvements as well, but this is already long winded….</p>
+</div>
+</div>
+<p>( 05/01/2017 – 05/10/2017 )&nbsp;Changed the Database Add or Modify 
+form.&nbsp; When adding a new database we now stop you from going 
+backwards and causing a blank database.&nbsp; You won’t be able to 
+access the stored name list until you SAVE a new database ( if you click
+ Add New that is ).&nbsp; I changed the HELP MENU so you can access the 
+training videos far easier.&nbsp; Now a form pops up to ask what video 
+choice you want.&nbsp; Before it was a menu and was difficult to pick a 
+video.</p>
+<p>( 04/25/2017 – 04/30/2017 )&nbsp; Added a new weather station that is
+ coming from Altalab.&nbsp; This will be a NON Paging trailer station 
+called the X4 and will be about half the price of a paging system.&nbsp;
+ It required different code than the paging Altalabs so now we have 
+both.</p>
+<p>( 01/01/2017 – 01/19/2017 ) Added the ability to Switch Runs right 
+next to the Run Date field on the Upper Left of the screen.&nbsp; Many 
+times I realized the need to switch runs but didn’t want to move <a href="http://crewchiefpro.com/wp-content/uploads/2013/12/switchruns.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-1790 aligncenter" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/switchruns-300x182.jpg" alt="switchruns" width="300" height="182" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/switchruns-300x182_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/switchruns.jpg 625w" sizes="auto, (max-width: 300px) 100vw, 300px"></a>the mouse all the way over to the bottom right to do so.&nbsp; Now you can switch runs right next to the Run Date field as well.</p>
+<p>Changed the Manual Transmission fields for Turns of Base to allow smaller numbers to be entered as well.</p>
+<p>( 12/09/2016 – 0/01/2017 ) Adjusted the 1/8th Mile Run Completion 
+calculation when you choose “330 Foot Momentum” to improve 
+accuracy.&nbsp; Made changes to the code to streamline weather readings 
+to speed up data gathering from weather stations ( Amazing what you can 
+do with today’s new software programming ).</p>
+<p>( 12/01/2016 – 12/08/2016 ) Added a new Estimated 60 Foot menu 
+option.&nbsp; Now when you choose “Average 60 Foot for this Database” we
+ will calculate the average 60 foot and put that time into the Estimated
+ 60 Foot field.&nbsp; Useful when the 60 foot has been moving around and
+ you want to average it instead of choosing your own.&nbsp; See the 
+screen shot below.<a href="http://crewchiefpro.com/wp-content/uploads/2013/12/Average60Ft.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-1750 alignleft" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average60Ft-300x250.jpg" alt="average60ft" width="300" height="250" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average60Ft-300x250_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average60Ft-768x640.jpg 768w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/Average60Ft.jpg 853w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 10/01/2016 – 11/26/2016 )&nbsp; Improved the Margin of Victory and 
+Run Completion analysis module.&nbsp; We added better Margin of Victory 
+analysis for 1/8th mile.&nbsp; We improved the 1/4 mile Run Completion 
+formula when you choose “1000 Foot with Momentum” which doesn’t just 
+take the 1000 ft. time but adds further split time intervals into the 
+answer.</p>
+<p>We added the ability to change the color around the Prediction Answer
+ box.&nbsp; Just RIGHT CLICK inside this box and choose any color you 
+want.</p>
+<p>We updated the Calculate Ratios Tab formulations as well.</p>
+<p>( 08/12/2016 – 09/27/2016 ) Many changes, first we are in the process
+ of Adding Rules to the Crew Chief #1 formula prediction so when weird 
+weather pattern happen you can create a rule to change the factors in a 
+modified quadratic equation.&nbsp; For example, say the Grains jumps 30 
+numbers and the Grains formula isn’t keeping up enough we allow a rule 
+to tell us when to adjust this factor and how quickly it will 
+adjust.&nbsp; Sounds complicated but our testing showed that over 115 
+grains that we need to change the ratio, and the resulting predictions 
+were perfect.&nbsp; The factor auto adjusted from 8.25 Grains change = 
+.01 down to .0257 Grains change = .01.&nbsp; This will be going through 
+many changes in the coming weeks as we advance the design and factoring 
+and decide on the rules and control patterns.</p>
+<p>We updated the&nbsp;Opponent Tab&nbsp;calculations a bit,&nbsp;made 
+changes to the Team License area for&nbsp;changing 
+Weight&nbsp;and&nbsp;added more decimal precision on the ratios.</p>
+<p>( 05/28/2016 – 08/11/2016 )&nbsp; We revised the Log Book again since
+ over 10 second ETs were not showing up properly.&nbsp; We revised the 
+LIVE TIMING section to add more robust search features.&nbsp; Revised 
+the Live Timing automatic run entry section to allow for weight instead 
+of throttle stop timers for Junior racers.&nbsp; Modified and improved 
+some behind the scene coding of the prediction area to make it faster 
+and prepare for the next implementation of prediction logic ( more about
+ this in the coming weeks ).&nbsp; Revised some Weather searching to 
+include more items to search.</p>
+<p>( 05/05/2016 – 05/27/2016 ) Added 1000 Foot to Database Screen.&nbsp;
+ Now you can choose 1/4 Mile, 1/8th Mile, and 1000 Foot.&nbsp; When you 
+pick 1000 Foot we shut off the 1/4 Mile fields on the Run Entry 
+Screen.&nbsp; Also, it automatically does Run Completion off 1/8th Mile 
+when running 1000 Foot.&nbsp; Made many changes to other areas in our 
+constant desire to make the program work better and run faster.</p>
+<p>( 04/22/2016 – 05/04/2016 )&nbsp;Made changes to Calculate Ratios Tab
+ when using Throttle Stops.&nbsp; We will now tell you if we believe 
+the&nbsp;ratio&nbsp;to be correct and why.&nbsp; This should help the 
+confusion&nbsp;customers had with the results.&nbsp; We improved the Log
+ Book once again to fit more items in the form.&nbsp; We updated a bunch
+ of other things behind the scenes that allow the program to work a bit 
+faster.&nbsp; Improved Text Messaging field results.</p>
+<p>( 03/20/2016 – 04/20/2016 ) Improved Run Entry by adding a check box 
+to the Car Setup Tab to allow the program to remember certain settings 
+rather than get them from the Database.&nbsp; Settings like Tire 
+Pressure, Launch RPM and a few more were added to the Remembered 
+settings.&nbsp; We also changed the math for 60 Foot Predictions on many
+ choices.</p>
+<p>( 03/02/2016 – 03/18/2016 ) Adjusted the default factors for many 
+fuel types to be more in line with our test results.&nbsp; Improved some
+ areas of the Calculate Ratios Tab.&nbsp; Improved the math on Crew 
+Chief #1 formula by adding some checks and balances.&nbsp; Improved the 
+Event Log Book for up to 25 runs on one screen by extending some fields 
+for better viewing.</p>
+<p>( 02/07/2016 – 03/01/2016 ) Improved integration with Time Slip 
+Simulator, added features to make it faster and more seamless.&nbsp; 
+Improved the Event Log Book screen and reports, adjusted the NHRA Tech 
+card.</p>
+<p>( 02/01/2015 – 02/05/2015 ) Added Calculations to predict 594 foot 
+and 1254 foot ETs for better Run Completion.&nbsp; We have always done 
+this but not displayed them.&nbsp; So now you will get both displayed 
+for Run Completions.</p>
+<p>( 01/04 – 02/01/2015 ) Added Time Slip Simulator for Junior Dragsters
+ AS well as big cars.&nbsp; You can now select Dragster, Door Car, and 
+Junior Dragster from the list in your Database and Opponent Tab.&nbsp; 
+The Junior Dragster also has Junior sounds!</p>
+<p>( 12/01/2015 – 12/25/2015 ) First 2016 version.&nbsp; Changed the Log
+ Book to handle 25 runs side by side.&nbsp; Spent the last month adding 
+changes to allow the Log Book display screen to show more runs. 
+Previously we could display 15 runs side by side with the analysis of 
+each run. That was fine if you were running Super Classes for the 
+weekend, not nearly enough for a big bracket race weekend.</p>
+<p>Now we have stretched and expanded this form to handle 25 runs with 
+mathematical analysis. We even allow you to change how large the form 
+appears on the computer screen. There is full screen mode which tries to
+ compress the information so you can see more of it, and the Normal mode
+ which requires you use the Scroll Bar to move the form over to see more
+ runs.</p>
+<p>Under the Log View Menu you can choose Full Screen or Normal view.&nbsp; This revision took 1000 lines of code amazingly enough.</p>
+<p>( 10/02/2015 – 11/22/2015 ) Added enough new features to create our 
+new version which is 7.90.&nbsp; We added a new feature where we 
+calculate the ET Corrected to Standard Conditions.&nbsp; This means we 
+will show what the ET would be if the weather was considered 
+perfect.&nbsp; We now calculate the Standard ET to include changes in 
+weight of the vehicle.&nbsp; We also calculate Standard ET for throttle 
+stop changes if you are running one.</p>
+<p>( 09/18/2015 – 10/01/2015 ) Added a button on the Prediction TAB 
+called “SEARCH WEATHER”.&nbsp; This button will pop up a screen like 
+this :</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2015/11/search_all_weather.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-1334" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/search_all_weather-300x169.jpg" alt="search_all_weather" width="300" height="169" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/search_all_weather-300x169_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/search_all_weather-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/search_all_weather.jpg 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>When you click on this button you can now Search weather parameters 
+using multiple variables.&nbsp; For example, I needed to Search for 
+Density Altitude of 2000 feet with a Barometric Pressure reading of 
+27.90.&nbsp; When I choose both variables we will show all the runs you 
+have that are similar.&nbsp; You may recall that we already have the 
+ability to search by single variables, but now you can choose virtually 
+any important weather pattern combination.</p>
+<p>( 06/24/2015 – 09/17/2015 ) Added a Slow Responding Computer check 
+box on the Weather Station Setup TAB to help when computers react slowly
+ to weather readings.&nbsp; This is used mostly with Altalab weather 
+stations.&nbsp; We added more memory allocation to Crew Chief Pro, now 
+we take the maximum amount of free memory possible for faster 
+speeds.&nbsp; We updated some prediction logic and factors to improve 
+accuracy.</p>
+<p>We added a Weather Report Screen now to visually show the weather 
+readings and SORT them by any weather factor.&nbsp; This screen is 
+located on&nbsp; the&nbsp; Weather Graphs TAB.&nbsp; We added some 
+checks and balances on the weather readings so that when we see a 
+weather reading out of line we can resolve it.</p>
+<p>( 06/22/2015 – 06/23/2015 ) Added new videos under the HELP MENU, one
+ is the 5 step process my wife Michelle designed, and the other is the 
+JUNIOR DRAGTER webinar we had a few months ago.&nbsp; These videos 
+require internet access in order to view.</p>
+<p>( 05/18/2015 – 06/22/2015 ) Added Blown Alcohol fuel type and 
+factors.&nbsp; If you run&nbsp; Top Dragster or Top Sportsman with a 
+blower and on alcohol then choose this option to use the beginning 
+factors that work well.&nbsp; Keep in mind these factors work great for 
+most cars that don’t overpower the track, but they are a starting 
+point.&nbsp; If the car works and follows weather then Calculate Ratios 
+should be checked if the predictions are not within .01.&nbsp; We 
+updated and revised a few of the formulas for the rest of the 
+predictions.&nbsp; We fixed the Your Chosen Formula drop down list 
+placement where it was covered up on some monitors.&nbsp; We revised the
+ NHRA tech card and are in the process of adding a few more track’s tech
+ cards as well.&nbsp; For TEAM LICENSE customers we have added the 
+ability to predict up to 5 vehicles at once.&nbsp; An important note, 
+running 5 cars at once adds about 1 million calculations, so make sure 
+the computer you are using is fairly new.&nbsp; We have upgraded the 
+Time Slip Simulator integration as well.&nbsp; There are about 500 
+things behind the scenes we improved to make the program a bit faster.</p>
+<p>( 03/29/2015 – 05/27/2015 )&nbsp; Updated Default Factors for common 
+fuel types.&nbsp; Improved weather gathering for Performaire and Altalab
+ Weather Stations.&nbsp; We came up with better information for power 
+saving features to make sure the weather station port&nbsp;didn’t get 
+shut off by the computer.&nbsp; We took off anything that says EZ Plate 
+system because they didn’t like it.&nbsp; We are sorry to the two people
+ we tried to help on this.&nbsp; We also added some new features to make
+ the Factors Tab more understandable.&nbsp; Now when it sees high DA 
+changes it will automatically show the large weather factors tab.&nbsp; 
+We also recommend a change to our #1 Formula and&nbsp;try our Humidity 
+and HP Correction together.&nbsp; For small cubic inch stockers it 
+worked very well in testing.</p>
+<p>( 03/11/2015 – 03/28/2015 ) Added support for the new version of Time
+ Slip Simulator which can now work on your PC without having to have 
+internet each time.&nbsp; You still need internet to download the Time 
+Slip Simulator files but from that point on it will work within Crew 
+Chief Pro.&nbsp; To purchase this subscription either call us or use the
+ Buy On-Line Menu above.</p>
+<p>( 01/29 /2015 – 03/10/2015 ) Further refined Crew Chief #1 Prediction
+ Formulas, with new checks and balances code to make sure everything is 
+right.&nbsp; Before we didn’t choose a default formula and now we 
+do.&nbsp;We revised the code for Time Slip Simulator to make the next 
+version of their program interface perfectly as well.&nbsp; We changed 
+how the weight comes over from the Databases, especially important for 
+multi car teams.&nbsp; Aligned the NHRA tech card again, wish they would
+ stop messing with it….&nbsp; We made changes to the Event LogBook code 
+to show Run Completed Runs in Bright Red above each column.&nbsp; 
+Further revised the Calculate Ratios section for better analysis of 
+throttle stop runs.</p>
+<p>( 01/13/2015 – 01/28/2015 ) We finished integrating Time Slip 
+Simulator with Crew Chief Pro Software.&nbsp; This is an annual 
+subscription to get their service, and it will be invaluable to train 
+racers on top end driving.&nbsp; We will begin taking orders for this 
+today 01/28/2015.&nbsp; We are really excited about this, the power it 
+provides is incredible.&nbsp; Don’t miss out on this, order it today.</p>
+<p>( 01/09/2014 – 01/12/2014 ) BIG NEWS!&nbsp; Started work on 
+incorporating Crew Chief Pro with the Time Slip Simulator.&nbsp; 
+Eventually we will be able to fire up their simulator every time you 
+enter opponents information.&nbsp;&nbsp; As soon as this is ready we 
+will announce it to the drag racing world.&nbsp; Their web site is <a href="http://www.timeslipsim.com/">http://www.timeslipsim.com</a></p>
+<p>We also made changes to the Paging Enabled versions for both Paging 
+and Text Messaging.&nbsp; Some were experiencing issues and changed some
+ things to make sure there could be no issues.</p>
+<p>( 01/03/2015 – 01/08/2015 ) Made changes to the Switch Runs buttons 
+on the Predict ET and Predict Throttle Stop screen.&nbsp; More changes 
+to the Search Screens.&nbsp; Refined internal procedures to make sure 
+invalid factors are automatically corrected.</p>
+<p>( 12/17/2014 – 01/02/2015 ) More changes to the new Crew Chief #1 
+Formula.&nbsp; We revised a few weather factors and logic to make it 
+work even better.&nbsp; First of the big 2015 updates!</p>
+<p>( 11/11/2014 – 12/16/2014 ) Big News!&nbsp; New version 7.80 is out 
+today.&nbsp; We have added a completely revamped Crew Chief #1 
+Prediction Formula.&nbsp; Not as many people use Crew Chief #1 
+Prediction so I decided to test new formulas to replace it.&nbsp; What I
+ came up with is a User Chosen Formula where my customers can choose any
+ combination of weather to affect Crew Chief #1’s Predictions.&nbsp; 
+Keep in mind, if you don’t want to change Crew Chief #1 then it won’t 
+change.&nbsp; To use this feature you must LEFT CLICK on the Crew Chief 
+#1 Prediction answer, then this screen will appear.&nbsp; If after 
+trying the new formula you want to go back to the original formula 
+simply click on the button that says “Use Old Formula”.</p>
+<p style="text-align: center;"><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/crewchief1_pickscreen.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-1013 alignleft" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1_pickscreen-300x163.jpg" alt="crewchief1_pickscreen" width="300" height="163" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1_pickscreen-300x163_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1_pickscreen-1024x556.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/crewchief1_pickscreen.jpg 1280w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p style="text-align: left;">Now you can choose the EXACT Weather 
+Choices you want included in the Crew Chief #1 Prediction.&nbsp; If you 
+want Adjusted Altitude and Grains of Water then put a check in their 
+respective checkboxes.&nbsp; If you look closely you will see the last 
+choice is a Vapor HP Correction, which is a new math formula I created 
+and it has shown progress.</p>
+<p style="text-align: left;">So why did I add complexity into the 
+program?&nbsp; For my “Power Users” who really put effort into analyzing
+ weather patterns this will allow precise predictions.&nbsp; For novice 
+users it will allow you to tinker and learn what these weather terms 
+mean to your car.&nbsp; I believe this will work far better for those 
+racers with Blowers, or Nitrous Oxide.</p>
+<p style="text-align: left;">The FACTORS that control these predictions 
+are unique to this formula, so your Vapor Pressure and Your Way formulas
+ are unchanged.&nbsp; Those Factors are to the right of the Check 
+Boxes.&nbsp; This will be an excellent tool to see which formula works 
+better and why.</p>
+<p style="text-align: left;">We also fixed the weather transfer on New 
+Runs.&nbsp; Before it would bring up the weather choice screen for you 
+to choose, now that screen will appear much less than before.&nbsp; It 
+has been a busy month.</p>
+<p>( 10/02/2014 – 11/11/2014 ) Updated the Weather Transfer function 
+when entering a New Run.&nbsp; Some were reporting problems where the 
+weather at the time of the run was not transferred over to the new run, 
+and this update will find and correct that problem.</p>
+<p>( 09/18/2014 – 10/01/2014 ) More big news!&nbsp; A very major upgrade
+ to our Crew Chief Pro Software.&nbsp; On the Predict ET or Predict 
+Throttle Stop screen you will be able to RIGHT CLICK on any Current 
+Weather field and Crew Chief Pro will search for all runs similar to 
+whatever you chose. No more going back to the Run Data tab and using the
+ Search Menu. Now you can search far eas<span class="text_exposed_show">ier.</span></p>
+<div class="text_exposed_show">
+<p>Next, the bottom of the screen will change to allow you to Choose a 
+Different BaseLine Run right on the Predict Screen. Again, no more going
+ out to the Run Data tab and choosing a different run. Keep in mind we 
+will stay in the same database.</p>
+<p>We have seen several customers with odd sized screen where the 
+Predict Formula drop down list is not where we want it. So now you can 
+Right Click on the list and change the coordinates of where it will be 
+from that point on. You can change the Height and Left hand position.</p>
+<p>Here is a screen shot:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/newpredictwithsearch.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-995" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newpredictwithsearch-300x179.jpg" alt="newpredictwithsearch" width="300" height="179" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newpredictwithsearch-300x179_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newpredictwithsearch-1024x612.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newpredictwithsearch.jpg 1922w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+</div>
+<p>( 08/12/2014 – 09/17/2014 ) Big Changes !!! <strong>Announcing Crew Chief Pro 7.700 version</strong>!
+&nbsp; This new version takes advantage of some new Prediction Logic 
+based on multiple weather factoring.&nbsp; What that means to Drag 
+Racers is we can now Predict ETs or Predict Throttle Stops better than 
+before.&nbsp; How?&nbsp; We have designed the program to have TWO sets 
+of Prediction Factors.&nbsp; One set for runs during the day where the 
+DA doesn’t change as much, and another set for when the DA changes 
+dramatically, such as when a weather front moves in.&nbsp; You probably 
+have seen this happen, it is 85 degrees one day and the next it is 59 
+degrees.&nbsp; While the old way was OK for huge changes like this, 
+there were some shortcomings.&nbsp; Now we can tackle these conditions 
+with ease and not mess up your normal factors.</p>
+<p>We also added different 60 Foot Predictions to coincide with the Pro 
+7.700 version.&nbsp; Calculate Ratios has changed as well, we will 
+automatically update the correct set of factors based on what runs you 
+use.&nbsp; What you will see is on the FACTORS Tab there is another TAB 
+that says “Small Weather Changes” and one that says “Large Weather 
+Changes”.&nbsp; You can adjust one without bothering the other.</p>
+<p>What do you have to do?&nbsp; NOTHING, just download and run Crew 
+Chief as usual.&nbsp; We will add fields to your existing Prediction 
+Factor tables automatically, and populate them with good base 
+factors.&nbsp; You can use it without worrying about anything as it will
+ automatically use the different set of factors when it needs to.</p>
+<p>( 08/06/2014 – 08/11/2014 ) Made even more changes, especially for 
+Weight vs. ET.&nbsp; Now instead of entering the amount of weight you 
+added we have change this to read BALLAST Weight Added.&nbsp; Some were 
+confused about two weight fields ( for good reason ).&nbsp; Now it will 
+say PREDICT BALLAST instead of Predict Weight.&nbsp; We also changed 
+some other labels to be better descriptive.&nbsp; This works on both 
+Juniors and Big Cars where ballast is used to adjust ET.&nbsp; We FIXED 
+the Database setup screen when you chose Ballast Prediction it was not 
+keeping your choice.</p>
+<p>( 08/02/2014 – 08/05/2014 ) Lots of changes again!&nbsp; For Crew 
+Chief Pro customers who use weight to adjust ET then we have made many 
+improvements.&nbsp; Not only to the Junior Dragster predictions but even
+ full size cars and bikes.&nbsp; Weight ratio testing has been improved 
+in the Calculate Ratios TAB.&nbsp; Huge improvement in finding the 
+correct weight ratios.&nbsp; We fixed the weight ratios on the Factors 
+TAB that would change without your knowledge also.&nbsp;&nbsp; For those
+ who use weight to Predict then Calculate Ratios will now show improved 
+calculations on the important factors.</p>
+<p>We also added to the REPORTS MENU the ability to see just the lights 
+over .000 and see the Averages for these runs.&nbsp; We also allow you 
+to average just the red lights.&nbsp;&nbsp; Click on REPORTS Menu on the
+ Top of the Screen.&nbsp; Choose the report you want and look for the 
+Check Boxes on the bottom part that allow you to decide if you want just
+ runs over .000 lights or not.</p>
+<p>We now allow you to enter 594 foot ETs if your track shows 
+this.&nbsp; To make this work go to the TRACKS MENU and choose the track
+ where you race.&nbsp; On the bottom of the screen are check boxes for 4
+ Digit Precision and Show 594 Foot ETs.&nbsp; Make sure you save 
+changes.</p>
+<p>( 07/29/2014 – 08/02/2014 ) Version 2014-0802-F.&nbsp; We made 
+changes to how the weather stations interact with Crew Chief Pro.&nbsp; 
+We spent quite a bit of time with the Performaire trailer station 
+modules.&nbsp; Previously we took 4 readings then saved the weather 
+information.&nbsp; This could be a problem since we didn’t always get 4 
+readings in a row which means we lost several minutes in between.&nbsp; 
+Now we take readings every 15 seconds and make SURE we store them every 
+minute regardless of how many readings we get.&nbsp; We updated the 
+Davis Instruments module for this as well.&nbsp; The Altalab always 
+worked well but we made the same code changes to this weather module as 
+well, just to be sure.&nbsp; We continued development changes on the 
+Junior Dragster version as well.</p>
+<p>( 07/15/2014 – 07/29/2014 ) Made many changes.&nbsp; Updated the IHRA
+ tech card, changed the Cordova Tech Card, changed how weight works on 
+the Junior Dragster version, updated the Finish Line Manager screen and 
+Printout.&nbsp; We revised the ET Predictions especially the Late Night 
+with Humidity, which we also modified specially for the Junior 
+Dragsters.&nbsp; We made changes for the Performaire PCs to make sure we
+ get weather readings consistently and store it more often.&nbsp; Before
+ we waited for 4 readings and stored it, but now we check to see if it 
+has been over a minute to store the results.&nbsp; Made a few revisions 
+to the Davis Weather Station module for the same reason.&nbsp; We also 
+changed how we display the Weight Prediction for the Junior Dragsters, 
+as well as big cars who may be trying to change weight to hit an index.</p>
+<p>For Junior Dragsters the recommended formula to use is the LATE NIGHT
+ WITH HUMIDITY, or the HP Correction Factor one.&nbsp; Also, you may 
+want to use Humidity Adjusted 60 foot or the HP Corrected 60 foot to get
+ the Estimated 60 foot closer.</p>
+<p>( 06/19/2014 – 07/15/2014 ) Revised several prediction formulas 
+again.&nbsp; We have added more support for Junior Dragsters and Weight 
+Predictions.&nbsp; We now allow higher ratios for Juniors.&nbsp; We 
+added a few cool new features.&nbsp; We now allow you to choose what 
+decimal precision you need.&nbsp; Under the TRACKS Menu you can now tell
+ Crew Chief Pro which tracks allows up to 4 digit precision.&nbsp; There
+ is a Check Box on the Track Adding&nbsp;Screen which&nbsp;uses T or F (
+ for True or False ) to tell us to change precision.&nbsp;&nbsp;When you
+ add a run it will accept the entire ET.&nbsp; For example, 10.3456 is 
+now allowed when you set it up to do so.&nbsp; Any track you don’t 
+change will default to 3 digit precision.&nbsp; We are working on 
+finishing the Log Book printouts to have the same precision as 
+well.&nbsp; We revised the Finish Line Manager Report with more 
+information, changed the Cordova Dragway Tech Card, revised the NHRA 
+tech card, and we added a RESTORE button to the SEARCH Screen Options in
+ case you make a mistake on which fields to use.</p>
+<p>( 06/10/2014 – 06/18/2014 ) We have made quite a few changes on the 
+Predict ET and Predict Throttle Stop logic, as well as the Estimated 60 
+Foot section.&nbsp; We renamed the Weather Adjusted 60 Foot to “Density 
+Adjusted 60 Foot” and we added a new item in the list called “DA with 
+Baro and Humidity 60 Foot”.&nbsp; The Density Adjusted 60 foot has been 
+revised slightly.&nbsp; The DA with Baro and Humidity closely follows DA
+ while adjusting the 60 foot for excessive Humidity and Baro 
+changes.&nbsp; After getting caught with a huge change in Humidity last 
+weekend I decided that DA by itself wasn’t good enough and Humidity by 
+itself wasn’t working as well, so I wrote this new formula.&nbsp; For 
+example, this weekend the DA dropped 530 feet but the RH went up 32.9% 
+and everyone’s 60 foot took a hit.&nbsp; The Humidity Adjusted 60 foot 
+was close but the new formula was dead on the the thousandth.&nbsp; If 
+you can estimate your 60 foot better than your opponent your Predictions
+ will be much better.&nbsp; We keep innovating and trying new formulas 
+to make Crew Chief the best it has ever been.</p>
+<p>We further refined the Crew Chief #1 Formula for Both ET and Throttle
+ Stop Predictions.&nbsp; We added the same 60 foot predictions to the 
+TEAM LICENSE version of Crew Chief Pro as well.</p>
+<p>( 06/10/2014 ) After numerous tests we have decided to change a few 
+things on the ET and Throttle Stop Prediction Tab.&nbsp; First, the 
+Estimated 60 Foot drop down list has “Weather Adjusted 60 Foot” which 
+always worked well.&nbsp; We have added a degree of Humidity and 
+Barometric Pressure to the equation, as well as Density 
+Altitude&nbsp;and it appears to work better now.&nbsp; It was nearly 
+perfect this weekend.</p>
+<p>Secondly, we have revised Crew Chief #1 Formula which is based on 
+Adjusted Altitude.&nbsp; We have also added to the formula to include 
+more Humidity changes.&nbsp; In our testing of high humidity situations 
+this formula was far better than the previous design.</p>
+<p>Third, we found that when creating new databases the default formula 
+was being changed, so that is fixed.&nbsp; We adjusted the NHRA tech 
+card slightly, updated the Log Book form and many other changes.</p>
+<p>( 05/13/2014 – 06/04/2014 ) Sorry, been a bit slow getting updates 
+because my wife was injured in a horse fall.&nbsp; We have added some 
+interesting features.&nbsp; First, we are testing a formula change when 
+the DA and Baro get worse or better.&nbsp; If they get worse then the 
+changes become BRIGHT ORANGE to let you know the dreaded “double whammy”
+ may happen to performance.&nbsp; This term is used to describe a 
+weather condition where the jetting moves out of bounds due to poor baro
+ and high DA and your performance will suffer more than you think.&nbsp;
+ On the inverse if they both get better the changes become BRIGHT GREEN 
+to denote enhanced performance which may be faster than we think.&nbsp; 
+After we get done testing the formula will be more aggressive, 
+especially on gas engines.&nbsp; We will let you know how it comes out.</p>
+<p>( 05/06/2014 – 05/12/2014 ) Made changes to the JUNIOR DRAGSTER 
+version so you can tell us how much WEIGHT you added in the bottom left 
+of the screen.&nbsp; We will then calculate how much weight you should 
+need to run if you run an Index Class ( i.e. 7.90 , 8.90 , 11.90 
+).&nbsp; This will work much like a throttle stop and display Weight in 
+giant letters rather than the ET Prediction you more commonly saw.&nbsp;
+ Here is what it looks like AFTER you tell us in the Database Setup 
+Screen that you want to Predict with Weight.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/junior_run_data.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-951" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_run_data-300x187.jpg" alt="junior_run_data" width="300" height="187" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_run_data-300x187_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_run_data-1024x640.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_run_data.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>To activate this you must change the Database as shown below on the SETUP INFO PAGE 2 Tab.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/databasesetupJUNIOR.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-952" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/databasesetupJUNIOR-300x187.jpg" alt="databasesetupJUNIOR" width="300" height="187" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/databasesetupJUNIOR-300x187_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/databasesetupJUNIOR-1024x640.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/databasesetupJUNIOR.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>CALL ME if you can’t figure this out.&nbsp; Once you do it a few times it will be very easy to remember.</p>
+<p>We also fixed the missing Calculated Horsepower value on the Run Entry Tab.</p>
+<p>( 04/22/2014 – 05/05/2014 ) After helping customers at the big Junior
+ Dragster race put on by the Midwest Junior Dragster group we made many 
+changes.&nbsp; We changed the program to remember weight ( especially 
+important for the Junior Dragster Version ).&nbsp; When racers changed 
+weight we didn’t remember it, we always reverted back to the weight 
+stored in the Database.&nbsp; Now if the weight change is less than 50 
+lbs. we will keep the previous weight.&nbsp; We also refined the weight 
+to ET Prediction factors.&nbsp; We are in the process of creating the 
+ability to tell Junior racers how much weight will need to be changed in
+ order to run a 7.90 or 8.90 index.&nbsp; Hopefully ready next week.</p>
+<p>We made plenty of changes for the big car version.&nbsp; Most will be
+ things you don’t see which make the program faster.&nbsp; We added 
+another log book printout and changed some stuff on the Search Screen 
+also.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/searchscreenwithaverages.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-947" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/searchscreenwithaverages-300x99.jpg" alt="searchscreenwithaverages" width="300" height="99" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/searchscreenwithaverages-300x99_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/searchscreenwithaverages-1024x339.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/searchscreenwithaverages.jpg 1885w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 04/16/2014 – 04/22/2014 ) Finished the&nbsp;Mechanical Throttle 
+Stop update so now Crew Chief Pro will calculate which&nbsp;size you 
+need to have for the next run.&nbsp; It will even send this information 
+to the Pager or Text Message if you have those options.</p>
+<p>( 04/11/2014 – 04/15/2014 ) <strong>BIG Changes !&nbsp;</strong> <strong>First,</strong>
+ I have decided to make the Crew Chief Pro program faster by removing 
+seldom used procedures from the main file to individual files.&nbsp; 
+This will reduce the size of the&nbsp; main part of the program by 40% 
+and should increase the speed of execution ( well it does in our testing
+ at least —&nbsp;by a bunch ).</p>
+<p><strong>Second,</strong> we have removed two prediction formulas and 
+replaced them with two simpler versions.&nbsp; Very few customers ever 
+used them since they were about half way down in the list.&nbsp; The 
+people who asked for them originally realized they weren’t as useful as 
+they had hoped anyway, plus&nbsp;I have never been happy with the 
+Relative Humidity &amp; Half DA and the Dew Point and Half DA so they 
+are gone.&nbsp; In their places will be:</p>
+<p>Density Altitude&nbsp;with Dew Point</p>
+<p>Density Altitude with Relative Humidity</p>
+<p>In our testing both of these formulas were much better, plus many 
+racers were hand calculating them so I will make it easier for them.</p>
+<p><strong>Third,</strong> we made changes *again* to the Computech 
+weather station data link.&nbsp; I am not sure why we were having 
+problems getting their HP Correction and density altitude numbers to 
+come over but now it should be fine.</p>
+<p>( 04/01/2014 – 04/10/2014 ) Made many changes.&nbsp; We added a NEW 
+FORMULA in the Prediction Formula List.&nbsp; This one is based on Temp,
+ Humidity, Baro, Grains, and Density Altitude.&nbsp; It will adjust the 
+prediction based on the individual weather readings, PLUS the DA and 
+Grains, however, the DA Factor should be far more than you normally run 
+or it will be too aggressive on gas engines. Contact us for good 
+starting factors for this setup.</p>
+<p>We also put the ability to PRINT the FINISH LINE MANAGER Screen, and 
+the FACTORS Screen.&nbsp; We made more improvements to the Log Book 
+printout and added the same features to the WEIGHT Adjusted Log Book ( 
+for Juniors or others who want to adjust weight quite a bit this is for 
+you ! ).<a href="http://crewchiefpro.com/wp-content/uploads/2013/12/finishlinemanagerprint.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-899 alignleft" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/finishlinemanagerprint-271x300.jpg" alt="finishlinemanagerprint" width="271" height="300" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/finishlinemanagerprint-271x300_002.jpg 271w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/finishlinemanagerprint.jpg 806w" sizes="auto, (max-width: 271px) 100vw, 271px"></a></p>
+<p>( 02/23/2014 – 03/31/2014 ) Made changes to Finish Line Manager 
+because there was a problem with comparisons on 9.90 and 8.90 Index 
+ETs.&nbsp; Updated weather interface with all the weather stations 
+concerning Adjusted Altitude.&nbsp; Made BIG Changes to the Log Book 
+Screen and Printout !!&nbsp; We now show the difference in Reaction 
+Times between each Column, the difference in 60 Foot between each 
+Column, the difference in Density Altitude, and the difference in HP 
+Correction Factors as well.&nbsp; Very useful tool to analyze your 
+runs.&nbsp; See below for a picture.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2014/03/LogbookScreen.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-895" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogbookScreen-300x168_002.jpg" alt="LogbookScreen" width="300" height="168" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogbookScreen-300x168.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogbookScreen-1024x576.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/LogbookScreen.jpg 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>Updated the NHRA Tech Card also.&nbsp; We finished the Throttle Stop 
+Adjusted 60 Foot for those of you who’s throttle stop comes back to full
+ throttle within the 60 foot area.&nbsp; This will automatically adjust 
+the Estimated 60 foot to bring this into the consideration of how the 
+throttle stop prediction should change.</p>
+<p>( 02/05/2014 – 02/22/2014 ) Made improvements to many parts of the 
+program.&nbsp; First, in the Log Book Screen and Printout View we added 
+the Differences between the 60 foot times from one run to the 
+next.&nbsp; This is just like we did below with the Split Time 
+Differences.&nbsp; Very useful tool to compare runs when we calculate 
+the difference for you so it frees up some time you would normally waste
+ figuring it out.&nbsp; Second, we added Averages to the SEARCH 
+Screens.&nbsp; So when you do a Search we will display :</p>
+<p>Average Reaction Time in Both Lanes<br>Average 60 Foot<br>Average 1/8th Mile ET and MPH<br>Average Quarter Mile ET and MPH.</p>
+<p>We changed some of the Text Messaging code to prevent conflicts with 
+timers that run in the Crew Chief Program. We are also adding some new 
+track tech cards this weekend, namely Gainesville Bracket Race Cards 
+since I race there a few times this winter.</p>
+<p>( 01/20/2014 – 02/04/2014 ) New Version: 7.60 .&nbsp; Added new IHRA 
+national and divisional race tech cards but since the only thing I have 
+is a copy it will have to be close until I get another tech card.&nbsp; 
+We changed some of the Margin of Victory calculations for 1/8th 
+Mile.&nbsp; Lots of other internal changes.</p>
+<p>By the way, if you are having problems with weather gathering then 
+call me, I am watching some issues only one or two are having.</p>
+<p>( 01/19/2014 ) We added LANE to the Calculate Ratios TAB so you can make sure you compare same lane runs if possible.</p>
+<p>( 01/09/2014 ) Changed the Single Run Printout because some customers
+ were experiencing ***** in the ET field if they were over 10 Second 
+ETs. We widened the field so this won’t happen on version 2014.0110-a.</p>
+<p>( 01/052014 – 01/08/2014 ) Added new Log Book Screen with Split Time 
+Differences. Before we had split times BUT now we have Split Times and 
+next to these are the differences in Split Times between runs.&nbsp; We 
+also have a new Report with the same information you can print 
+out.&nbsp; See the screen shots below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/SplitsBetweentheSplits.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-857" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplits-300x246.jpg" alt="SplitsBetweentheSplits" width="300" height="246" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplits-300x246_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplits-1024x842.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplits.jpg 1196w" sizes="auto, (max-width: 300px) 100vw, 300px"></a>If you RIGHT CLICK on the Form then these calculations disappear. <a href="http://crewchiefpro.com/wp-content/uploads/2013/12/SplitsBetweentheSplitsReport.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-856" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplitsReport-256x300.jpg" alt="SplitsBetweentheSplitsReport" width="256" height="300" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplitsReport-256x300_002.jpg 256w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/SplitsBetweentheSplitsReport.jpg 816w" sizes="auto, (max-width: 256px) 100vw, 256px"></a></p>
+<p>( 01/01/2014 – 01/04/2014 ) BIG NEWS for Junior Dragsters and 
+Sportsman Racers!&nbsp; For Juniors we added a much better Car Setup TAB
+ with a new Individual Run Report.&nbsp; We added the same for Sportsman
+ racers also.&nbsp; Take a look at the Junior Car Setup Tab and 
+Individual Run Report below.&nbsp; Changes are made every day, so if you
+ have ideas here let us know, Please.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/CarSetupJunior.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-807" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CarSetupJunior-300x187.jpg" alt="CarSetupJunior" width="300" height="187" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CarSetupJunior-300x187_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CarSetupJunior-1024x640.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/CarSetupJunior.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/junior_runreport.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-805" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_runreport-300x187.jpg" alt="junior_runreport" width="300" height="187" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_runreport-300x187_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_runreport-1024x640.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/junior_runreport.jpg 1632w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>Here is the Sportsman Individual Run Report Below.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/sportsman_runreport1.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-809" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/sportsman_runreport1-300x187.jpg" alt="sportsman_runreport" width="300" height="187" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/sportsman_runreport1-300x187_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/sportsman_runreport1-1024x640.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/sportsman_runreport1.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>We also added new fields for the Junior Dragster Version, plus new graphics for all versions.</p>
+<p>We changed the Tire Growth Calculation on the Run Entry TAB to 
+reflect the difference in the Initial Size of the tire. Before we told 
+you the total size of the tire in the traps, now we just tell you how 
+many inches it grew from its initial size.&nbsp; NOTE: this only works 
+if you have a data acquisition system that tells you what the Drive 
+Shaft RPM ( or Jack Shaft in a junior ).&nbsp; We need to know the gear 
+ratio and the initial tire rollout also.</p>
+<p>( 12/26/2013 ) We had requests for one report that will show the ET, 
+the Chassis Setup, the Fuel Setup, the Weather, and Comments.&nbsp; So 
+now in Beta testing is our first attempt.&nbsp; Some people in Comp 
+Eliminator, Stock, and Super Stock asked for this.&nbsp;If you click on 
+the CAR SETUP Tab you will see PRINT REPORT on the bottom Right.&nbsp; 
+This will show this report which you can also send to your 
+printer.&nbsp; Keep in mind this is first attempt and we will be adding 
+them for EFI, Blowers, Juniors and more.&nbsp; This is perfect for 
+people who change the car setup all the time looking for ET.</p>
+<p>We added new graphics for the Junior Dragster version and a separate Car Setup Tab for Juniors.</p>
+<p>( 10/10/2013 – 10/19/2013 ) We just finished a new update for the 
+Computech trailer stations. Previously if their weather station wasn’t 
+connected it caused all sorts of problems with their software, we now 
+have an update that you can decide if you don’t want their weather 
+software to launch automatically when Crew Chief Pro starts. If you go 
+to the Weather Station Setup TAB under the Predict ET or Predict 
+Throttle stop tab you will find the check box on the right about half 
+way down. Uncheck it to stop automatic weather gathering. If you click 
+Weather Is ON button it will start automatically feeding the weather as 
+usual.</p>
+<p>( 10/03/2013 – 10/10/2013 ) For customers with Paging options on 
+their Performaire PC stations we changed the order in which pages come 
+over. If you have the XLITE transmitter you are limited to 100 
+characters, and we have 160 characters that come over. This meant the 
+Predictions were on the first page and you had to manually use the left 
+arrow button to move back. Previously we had Predictions first and then 
+the second page was all the weather readings. Now we have weather 
+readings first, and Predictions second. So now you see Predictions, then
+ if you want to see specific weather you can Left Arrow back.</p>
+<p>We also added a field for the ET change in Dew Point. Previously we 
+used the Humidity ET field for either Humidity or Dew Point depending on
+ Formulas chosen.</p>
+<p>We also changed the Run Completion calculation Tab to include 1/8th 
+Mile ET information. If you choose Run Completion off the 1/8th mile 
+then this will be more relevant.</p>
+<p>We also changed the Density Altitude Prediction. It used to include 
+Grains automatically, but after some complaints we removed Grains from 
+the equation.</p>
+<p>( 10/02/2013 – 10/03/2013 ) Added Average Reaction Time in Both Left 
+and Right Lanes to the bottom of the SEARCH Screen. Every time you click
+ on Search for anything Crew Chief will show you the average reaction 
+time in both lanes.</p>
+<p>( 08/25/2013 – 10/02/2013 ) Added improvements in several areas. 
+Created&nbsp;a new Run Completion calculation called Momentum Run 
+Completion.&nbsp;&nbsp;&nbsp;&nbsp;This was tested extensively on the 
+1/8th mile where the Run Completion using the 330 foot time simply 
+wasn’t accurate enough. New formula&nbsp;will use the split time 
+analysis from the 60 – 330 interval plus the calculated 330 to 660 
+interval to come up with the new No Brake&nbsp;ET. We also added this 
+formula for 1/4 mile but we are still testing it.</p>
+<p>We added new factoring for Calculate Ratios especially for Temperature&nbsp;and tested it for 6 weeks with excellent results.</p>
+<p>( 08/02/2013 – 08/21/2013 ) Added the ability to compare HP 
+Correction&nbsp;on the Pager Output and the Text Message Output. So if 
+you choose this in the Weather Station Setup TAB ( #5 section ) it will 
+show&nbsp;you the HP Correction Factor and how much it is UP or Down 
+from the previous run. We also worked on a bunch of small stuff trying 
+to&nbsp;make the program faster and refined the Junior Dragster stuff a 
+bit more.</p>
+<p>( 07/27/2013 – 08/01/2013 ) Added more stuff for Junior Dragsters. 
+Now in the Fuel type drop down list on the Database Setup Form and 
+the&nbsp;FACTORS TAB you can choose both Junior Dragster and a 12.90 
+Junior&nbsp;Dragster. The 12.90 factors are far different than normal 
+Juniors.&nbsp;&nbsp; Also, we found an issue in our software with 
+Computech weather stations and fixed it. Make sure you download their 
+latest Weather Pro Software also if you are using a Computech. The 
+little propeller on my head&nbsp;is spinning with new ideas so more to 
+come soon.</p>
+<p>( 07/24/2013 – 07/26/2013 ) ATTENTION JUNIOR DRAGSTER RACERS: We have
+ changed the Factors for your type of racing. If your car speeds up when
+ the temperature gets hotter then this update will be important&nbsp;to 
+you. Here is how it works, on the Factors TAB there is a drop down list 
+of Fuel Types. We added Junior Dragster on Alcohol to this list. Write 
+down the Existing factors before you change to this 
+option.&nbsp;&nbsp;After selecting Junior Dragster on Alcohol then click
+ RESET FACTORS on the bottom right, Save the Factors and test it. If you
+ have a 12.90 car then call me for suggestions on factors.</p>
+<p>( 06/02/2013 – 07/23/2013 ) Added HP Correction Factor to Run 
+Entry&nbsp;TAB. If your weather station calculates it then we display 
+it, otherwise we will calculate the number for you. Sped up prediction 
+tab by removing extra calls to weather stations.</p>
+<p>( 05/03/2013 – 06/01/2013 ) Added files into the update to combat 
+security settings on your computers that stopped the instructional 
+videos from playing. Overzealous security settings locked down our 
+videos for some weird reason so if your videos don’t play then this 
+update should help. Updated REPORTS MENU to include some new reports and
+ different sorting order.</p>
+<p>( 04/11/2013 – 05/02/2013 ) Added the ability to change Log Book 
+Views in EACH Database you create. Right now there are two to choose 
+from BUT the possibilities are endless. If you want a particular set of 
+data on your Log Book Printout or Screen then let us know so we can add 
+it. We added WEIGHT to the Log Book screen and printout if you select 
+it. To use this feature just click on DATABASES on the menus at the top.
+ Select the Database you want and go to the Throttle Stop / Misc Info 
+TAB. Look on the bottom right for the list of Log Books and choose the 
+one you want.</p>
+<p>We also added changes to the Pager Output for more information on 
+Performaire PCs with pagers. We also changed the Graph Runs TAB to show 
+more information with check boxes to add other weather variables. We 
+will&nbsp;be adding several more weather stations over the next few 
+weeks to the list of systems we will communicate with.</p>
+<p>( 04/05/2013 – 04/10/2013 ) Made changes to the Backup and Restore 
+features to make sure all the necessary files came over to the backup 
+drive.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Finalized the Kestrel 4250, 
+Computech Race Air and Race Air Pro automatic integration. Plus some 
+other stuff you won’t care about that helps stabilize the program.</p>
+<p>( 03/17/2013 – 04/04/2013 ) Lots of changes to make weather stations 
+work a bit better. Most of you won’t notice anything, and that is OK. 
+Finished live linking with Kestrel 4250 so when you get the download kit
+ from us it will function just like a trailer station.</p>
+<p>( 02/27/2013 – 03/14/2013 ) Changed the menu around a bit for the 
+Watch Instructional Videos. Add the Team License Video to the menu also 
+for easier viewing. Began work on new USB adapters for Windows 8.0.</p>
+<p>( 02/25/2013 – 02/27/2013 ) Finished the new Temperature Checkbox 
+adjustment.&nbsp;&nbsp;This checkbox is next to the Current Temperature 
+on the Predict ET or Throttle Stop TAB. Clicking it will increase the 
+rate of Temperature ET Adjustment when used with the first two formulas,
+ plus the Late Night Temp formula.</p>
+<p>( 02/15/2013 – 02/25/2013 ) Added a few reports to the REPORTS Menu 
+that will now give you the Average for all your runs for Dates you give 
+us. Now at the end of the report the Average for every performance value
+ is calculated. We updated the Finish Line Manager because an error 
+apparently caused by my cat walking across the keyboard that I just 
+found ( there is actually a name for this – it is called Kitty 
+Keyboarding ). He walks on my keyboard all the time, sometimes he sleeps
+ on it when I am dumb enough to keep it out. NEW: We have a SEVEN HOUR 
+training DVD that is available ( yes, 7 hours ) which covers everything 
+the program can do, from simple to complex. When installed it will 
+update all the Instructional Videos under the HELP&nbsp;MENU. There are 
+cool helpful graphics, and we try to answer every&nbsp;question from the
+ basics to the power user. It is $29.95 and worth the money. It took 
+several months to complete the project.</p>
+<p>( 02/05/2013 – 02/15/2013 ) Added the ability to change the Text 
+Color on the Run Entry TAB where the picture is in the middle of the 
+screen.&nbsp;&nbsp;Now you can choose ANY color for the text that sits 
+on top of the picture! We also updated the Database Entry Screens, and 
+updated Calculate Ratios again.</p>
+<p>( 01/14/2013 – 02/05/2013 ) Added Ratio Testing limits for weather to
+ make sure Density Altitude and Adjusted Altitude could not go out of 
+parameters and cause prediction issues. Refined the ET Prediction ratios
+ on Calculate Ratios. Refined the Margin of Victory calculations to 
+eliminate some confusion on how we described who was in the lead at 
+certain points. Refined the Corrected Standard ET calculation which was 
+not updating until after you entered a run. It will now update right 
+after the weather fields. Lots of other technical stuff internally in 
+the program that you won’t care to know…</p>
+<p>( 12/1/2012 – 01/14/2013 ) Added additional weather station support 
+for Davis Instruments to correct issues with barometric pressure.</p>
+<p>( 11/01/2012 – 11/29/2012 ) Further refined new temperature control 
+factor after reviewing numerous customer data and my own. Refined&nbsp; 
+the new plain paper NHRA tech card for use in national events 
+only.&nbsp;&nbsp;&nbsp;I received clarification that the Division races 
+will still need&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; to use the regular tech 
+card. I will try to find out if IHRA will allow me to do this. We are 
+working on a new training CD which will come out in December and will 
+cover 2 hours of what is new and how &nbsp;to use all the features in 
+Crew Chief. Price hasn’t been determined yet.</p>
+<p>( 10/03/2012 – 10/30/2012 ) Lots of changes. We have changed the 
+Temperature Control Factor from predicting how many thousandths of ET 
+per 1 degree of temperature to now it will Predict based on how many 
+degrees it takes to change the ET by .01. On Gas most vehicles take 2 
+degrees to 2 and a half degrees per .01. On Alcohol it will be twice 
+that amount or more. Crew Chief will automatically adjust the factor 
+based on calculating from the existing factor. This will be easier to 
+understand and adjust. We also added NHRA tech cards which you can print
+ WITHOUT an actual Tech card. It will print on plain paper. It may not 
+work on Divisional races but should be accepted at national events.</p>
+<p>( 09/24/2012 – 10/03/2010 ) Updated reports. Added an automatic 
+calculator&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; for Adjusted Altitude on the 
+Run Entry TAB. If your weather station&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+doesn’t have AA then we will calculate it for you ( if you 
+leave&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; the Weather Station Adjusted 
+Altitude at ZERO ). We added a better&nbsp;explanation of the Weight 
+Factor located on the Factors TAB to 
+indicate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; what it means in ET. We also 
+updated the Estimated 60 Foot predictor&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+because before if the number went too far it would revert to 
+the&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; baseline 60 foot, now it will stop at a
+ certain number. The rest&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; of the changes 
+were a blur because I raced so many rounds lately&nbsp; I can’t remember
+ every change I made. 🙂</p>
+<p>( 09/21/2012 – 09/24/2012 ) Added Estimated 60 Foot time to the 
+Comments&nbsp;Section on the Run Entry TAB. So if you have a trailer 
+weather station we will also show you what 60 foot we were predicting at
+ the time&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; of your pass. We also updated 
+the LIVE TIMING Menu area for use with 1320go.com.</p>
+<p>( 08/15/2012 – 09/21/2012 ) Added CURRENT WEATHER to the LOGBOOK 
+Screen.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Now you will see a button that 
+says “CW” right below the Return Icon&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+button. If you click “CW” ( for Current Weather ) then the 
+weather&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; from the Prediction Screen will 
+appear in a separate box so you can&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+compare the weather currently to the runs in the Log Book. Very 
+useful&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; feature. We Added a fail safe for 
+people who accidentally enter the&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; wrong 
+Date. Some people must be very bad at fat fingering the 
+keyboard&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; because I see way too many races 
+entered where the date is 20 years&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; or more
+ into the future. Now if the date is more than 90 days 
+from&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; the computer Date then we will pop up
+ a box and tell you we are going&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; to change
+ the date. We also restored Relative Air Density to 
+the&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Prediction form instead of Air Density
+ Ratio. If this bothers some&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; people then I
+ will add a setup prompt to let you decide what 
+goes&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; on the prediction form. We changed 
+the NHRA Tech Card so it prints&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; better on 
+the back. We added an automatic Delay Box change. If 
+you&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; tell us you have more than zero in the
+ Delay Box on the Database&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; form then we 
+will automatically show delay boxes. Before some 
+customers&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; forgot to tell us to show delay 
+box so we fixed it. We updated the&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; LIVE 
+TIMING Printouts so they have better information. Plus 
+about&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1000 other changes that I can’t 
+remember since I work on this software&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+every single day…</p>
+<p>( 07/19/2012 – 08/14/2012 ) Changed the way opponents are looked up. 
+Now if you have multiple people under one number a List will appear 
+asking you to select the proper driver for that car number. We changed 
+the Margin of Victory for Competition Eliminator type of racing ( as 
+well as heads up class racing ) to reflect a lack of breakouts. We 
+changed the name of the first two prediction formulas to what they 
+actually use to predict. Now they will say “Temp, Barometer and Dew 
+Point” and “Temp, Barometer and Relative Humidity”.</p>
+<p>( 07/03/2012 – 07/18/2012 ) Big changes! Added another run completion
+ calculation. Now you can even Run Complete a 1/4 Mile run using 1000 
+Foot, or off 1/8th – 1000 ft split intervals, and now even off 1/8th 
+Mile. We also added a new drop down list on the factors screen that will
+ allow you to choose type of race fuel. Now the list includes Race Gas, 
+Alcohol, Q-16 Gas, E-85 Mix, and Nitrous Oxide. When you choose one the 
+base factors will automatically update if you choose based on our 
+experience. We also added support for Competition Eliminator Opponent 
+Comparison. Now it won’t show you broke out if you select this setting 
+on the opponent screen.</p>
+<p>( 06/22/2012 – 07/03/2012 ) Added further support for Computech 
+weather&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stations automatic weather feed. 
+Updated factor controls to stop&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; some 
+factors from accidentally being changed to high or low. 
+Refined&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; the Vapor Pressure, Grains, and 
+Wind factor controls. Started work&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; on a 
+new formula that should be out next week.</p>
+<p>( 06/19/2012 – 06/22/2012 ) Update the Live Timing section. If 
+1320go.com&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; does not send the dial in on a 
+throttle stop car then the predictions&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+would not use a default time such as 8.90, 9.90 or 10.90. Now if 
+they&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; don’t send the target ET or dial in 
+we will look it up in the Database&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; and 
+fill it in.<br>Changed the Log Book Printouts and screen display. On the
+ Printout of the Log Book we now moved everything over so customers 
+using 3 hole punched paper don’t get anything cut off in the printout.<br>On the Log Book Screen we changed the DA to the customer entered DA instead of our DA Calculation.<br>We
+ also are hearing reports of computers shutting down because the 
+generator dies. This will damage some files over time and we have now 
+built in more advanced table testing procedures to verify the table 
+before we try to read it. The most common table damaged was the weather 
+station database since it was always the last file open when hooked to a
+ paging weather station. We now completely rebuild it if anything weird 
+is found. We also completely backup the file each time we use it and 
+copy the contents to a text file as a third backup.<br>We changed the 
+name of the Throttle Stop OPTIMAL field label to read “T-Stop Perfect 
+#:”. This is what would have been the perfect throttle stop timer on the
+ run, in order to run right on the index.<br>We changed the checkbox 
+under the Arrow Keys which move a run one at a time to read “Show All 
+Databases”. It used to just read ALL since that is all the room we had. 
+Now I moved things around so it is easier to understand.<br>Plus we 
+improved about 100 internal items that you won’t see in a continuing 
+effort to make the program faster. It is now much faster than even Crew 
+Chief Pro 5 was and Pro 7.50 is about 50 times larger in size. The 
+development software has new file indexing that is much smaller and 
+faster and we are taking advantage of this. The weather table on many 
+customers is growing to over 100 megs which is huge, yet Crew Chief is 
+able to find one time, on any single day in less than 18 milliseconds. 
+Yes, that is sweet…</p>
+<p>( 06/15/2012 – 06/18/2012 ) Changed Text Messaging again to take 
+up&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; less room but still give all the 
+weather data, changed the Screen&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Logbook 
+form to use Your weather station DA instead of Crew 
+Chief’s.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Changed color around the 
+Calculate Ratio’s Baseline Run so 
+customers&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; can find it easier. Also added 
+code that if multiple vehicles are&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; being 
+used the ADD NEW RUN button will not find the largest 
+number&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; and mess up data entry. Now if you 
+have 3 cars it will just put Run&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Number 
+“0” in and you will have to decide which run number to 
+use.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; If just one car it will still work 
+normally by finding the next number&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; to use
+ automatically. We refined the Run Completion calculation 
+again&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; for use with the Split Time Interval
+ method.</p>
+<p>( 06/01/2012 – 06/15/2012 ) Changed the Text Messaging to include 
+Wind&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Speed and Direction before we display
+ Grains because many phones&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; have a text 
+limit and the Wind Speed and Direction were not 
+coming&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; over. We will have a setup change 
+coming where you can decide to&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; do this or 
+revert to the previous display. We made refinements 
+to&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; numerous items to increase processing 
+speed, especially when averaging&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; formulas.
+ We refined the 60 foot predictions and put a few 
+rules&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; in place when the 60 foot changed to
+ much. We changed the screen&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; resolution to
+ work better with laptops. Fixes were made to the way 
+you&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; can change background colors, before 
+if you accidentally double clicked&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; on a 
+box then we brought up a Color Picker box, most of the time 
+you&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; didn’t want to change colors. So now 
+we ask you if you want to change&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; colors 
+and we don’t allow super dark colors because then you can’t 
+read&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; the prompts.</p>
+<p>( 05/30/2012 – 05/31/2012 ) Big Changes both internally and 
+visually&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; on the CALCULATE RATIOS Tab. We 
+have been testing a variation of&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; the HP 
+Correction factor and have decided to change the 
+correlation&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a bit from standards. We found
+ through testing there is a better&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+prediction logic by including another variable into the 
+calculation&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; and it seems to predict right 
+on. We have made changes to this screen&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; so
+ the ET racers can’t click on Adjust For Weather check box ( 
+since&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; that is all you can adjust for ). 
+This will now eliminate *some*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; confusion 
+when analyzing runs. The Adjust for Weather check box 
+will&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; still function for Throttle Stop 
+Racers. Our testing at Immokolee&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; and St. 
+Louis showed that predictions were spot on, however my 
+driving&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stunk the place up.</p>
+<p>( 05/23/2012 – 05/30/2012 ) Added Woodburn Dragway to the list of 
+tracks&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; we print Tech Cards for. Made 
+several other changes to improve speed,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+especially if you pick multiple formulas at once. Changed the 
+color&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; of a few of the screens.</p>
+<p>( 05/15/2012 – 05/23/2012 ) Changed Run Completion so it now 
+works&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; even if you don’t get a 1000 foot 
+time ( on 1/4 Mile Databases ). Some&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+tracks in England and Europe don’t have 1000 foot times so we 
+made&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; some changes for those customers.<br>Added
+ another calculation for the Run Completion Mile Per Hour. This one 
+seems to work better than the other one in testing this month.<br>Modified the NHRA tech card because NHRA cannot seem to use the same printer each week…<br>(
+ 04/08/2012 – 05/15/2012 ) Exciting news! &nbsp;You can now Pick 
+Multiple&nbsp;Prediction Formulas at once! On the drop down Prediction 
+Formulas List on the bottom right of the Predict ET or Predict Throttle 
+Stop TAB you can select Average Prediction Formulas and a box will 
+appear asking you to select which Formulas to include. See picture 
+below:&nbsp; You will actually see the screen changing until it comes up
+ with the final answer. On slower computers I would not choose too many 
+formulas, each formula added takes time to calculate.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/averagepredict3.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-685" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/averagepredict3-300x164.jpg" alt="averagepredict3" width="300" height="164" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/averagepredict3-300x164_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/averagepredict3.jpg 684w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>We also refined the TAB for Car Setup so you have more options on 
+data&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; entry. Keep in mind that Crew Chief 
+Pro will automatically fill in&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; these 
+fields for you, all you need to do is change what has 
+changed.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Also, make sure you enter ALL 
+OPPONENTS. We transfer all of them&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; to the 
+Finish Line Manager Screen automatically.</p>
+<p>( 05/15/2012 ) Part B. Also, did you know you can now change the 
+background colors? Simply double click on the Run Data background colors
+ and pick your own. You can also change them in the Prediction TAB using
+ the same method.</p>
+<p>( 04/07/2012 ) Announced new version – Now it is Crew Chief Pro 
+7.50&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; . What we added is the building 
+blocks of more impressive prediction&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+formula with adjustable logic. Testing is underway now. 
+Eventually&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; you will have prediction Rules 
+setup so you can decide how aggressive&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+certain weather changes will be dealt with. 7.50 has a more 
+robust&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; database engine that will 
+eventually lead to Rules implimentations.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+Rules could be something like Do Not Factor Humidity or Dew 
+Point&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; below a certain Level. Then between 
+this level and another level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; it should be 
+this much effect. Then between this level and this 
+level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; higher we want a more aggressive 
+adjustment. We also added a separate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; page 
+for Carburetors, Fuel Injection, Turbocharged and Fuel 
+Injected,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; and Super Charged setups. 7.50 
+has a more robust data entry capacity.</p>
+<p>( 02/18/2012 – 04/05/2012 ) Made changes to the logic to stop runs 
+that&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; are started but never finished into 
+the Prediction program. This&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; will stop a 
+dead run from confusing the software. Further 
+changes&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; were made to the LIVE TIMING 
+section so now when you select a Date&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; just
+ the classes that ran that day will show. This also means 
+that&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; just the racers names will appear 
+that ran that day also. Further&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; refined 
+the sorting order capabilities. We also had 1320go.com 
+change&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; the file format so it will sort 
+easier and work better within Crew&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Chief 
+Pro. Since we were able to race at several tracks that 
+had&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Live Timing we made many improvements 
+to the features. You will especially&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; like 
+the automatic loading of YOUR runs into 
+Crew&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Chief Pro. A great time saver since 
+it will automatically enter your&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; run, the 
+Weather, and your opponent’s information in a 
+milisecond&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; of time.</p>
+<p>( 01/12/2012 – 02-/18/2012 ) Changed the Vapor Pressure Prediction 
+formula to be more responsive. Adjusted the Grains Prediction Formulas 
+also for the same reason. We ran a few IHRA Races so we updated their 
+tech card. If you go to an IHRA race test it out. We used a Kodak 
+printer and we aren’t exactly positive it works the same way as say a 
+Lexmark printer might.</p>
+<p>( 11/20/2012 – 1/11/2012 ) Added Air Density Ratio to the Run Data 
+form and the Prediction Screen. We calculate the difference between the 
+baseline run and the current conditions also. Added Text Messaging Timer
+ control so you can change how often text messages are sent. Hundreds of
+ other minor things were improved also.</p>
+<p>( 10/09/2100 – 11/20/2011 ) We added the ability to link live weather
+ for the Porta Tree weather station. We added better logic on the Finish
+ Line Manager TAB. We also made improvements to the Run Completion TAB 
+so if you run 1/4 Mile you can choose between two formulas. The 1000 
+foot one, and the new 1/8th Mile to 1000 Foot Split Formula. You can 
+even furnish your own factor for this formula below the drop down list. 
+We improved out Text Messaging area to look up settings for you. We also
+ changed the look of the Fonts used throughout the program. You can now 
+RIGHT CLICK on the Run Data TAB and choose a different Font used 
+throughout the main Crew Chief Software program. Did You Know that you 
+can also change the picture behind the Weather Data Area? You can, just 
+double click on it and put your own picture in its place.</p>
+<p>( 10/08/2011 ) Added Norwalk Raceway Park to the list of Tech Cards 
+that we print. They use a very small tech card so some printers won’t 
+pick it up properly.</p>
+<p>( 09/08/2011 – 10/04/2011 ) Improved Finish Line Manager by now 
+automatically populating the drop down list with every Opponent you have
+ ever entered. So Make Sure you Enter your Opponents! Next time you run 
+this person Finish Line Manager will tell you where to expect them at 
+every interval so you can decide if you want the stripe or not.</p>
+<p>( 09/01/2011 – 09/08/2011 ) Revised the HP Correction Formula logic 
+and factor. Now it returns a factor that is easier to understand and 
+more logical. Adjusted the Crew Chief # 1 Formula when there is a large 
+swing in the Adjusted Altitude ( Not the DA ) so it reflects real world 
+examples better.</p>
+<p>( 08/04/2011 – 08/22/2011 ) Many New Changes! We found an issue when 
+using Density Altitude to Predict. On some customer’s computers the 
+internal designation to use DA was replaced with Adjusted Altitude which
+ caused the DA Answer to be incorrect. We have fixed this. We added the 
+ability to TURN OFF Certain Predictions by simply RIGHT CLICKING ON THE 
+PREDICTION. This will make it invisible, right click again to bring it 
+back. When you Disable a prediction it will NOT appear on the Text 
+Message on your phone. We will soon add this to the Pager Output also. 
+We also developed a new Crew Chief #1 formula for Large Swings in 
+Adjusted Altitude. If you look hard you will see a Check Box next to 
+Weather Station Adjusted Altitude on the Prediction TAB. This will turn 
+on or off the aggressive prediction for large swings in Adjusted 
+Altitude. So far in testing the aggressive prediction has been dead on 
+but your results may vary. We also made many changes to the Tech Card 
+Printing module. Under the Button that reads “Adjust Printout” you can 
+now move the entire report up, down, left, or right by any number of 
+spaces. The reason we did this is the new Kodak Printers seem to move 
+everything over to the LEFT, so now I can force the printout to the 
+right 3 spaces and it all works perfectly. Most will not need this 
+feature but some using a Kodak printer will thank me.</p>
+<p>( 07/12/2011 – 08/03/2011 ) FOR PERFORMAIRE WEATHER STATION OWNERS: 
+We revised the Default Communications module for these weather stations.
+ If you were having issues after long periods of time then this update 
+will help. YOU MUST CHECK the box under the Weather Station SETUP TAB 
+that reads DEFAULT COMMUNICATIONS. Then SAVE the Weather Station 
+Settings, and restart Crew Chief. We also added a check box on the 
+Factors Screen TAB that says “Show Baseline Date and #”. If you check 
+this box then the Baseline Date and Run Number will appear on the 
+Prediction TAB. We revised the Crew Chief #1 Formula for large swings in
+ Adjusted Altitude so it should predict better. More changes are being 
+made for the HP Factor and several other formulas for large swings in 
+weather, stay tuned for these updates.</p>
+<p>( 07/04/2011 – 07/12/2011 ) Added a New Prediction Formula. This one 
+is based on Horse Power Correction Factor. It is now on the bottom of 
+the list. There is also a Factor for this on the FACTORS TAB. You can 
+adjust it yourself but future versions will automatically adjust this 
+when using Calculate Ratios.</p>
+<p>( 07/03/2011 ) Refined the Mechanical Throttle Stop Predictions and 
+Calculate Ratios Calculations. This will work better for NON Electronic 
+Throttle Stop racers ( you know who you are – the guys and gals with the
+ bolt under the foot pedel or on the linkage ). Previous versions did 
+not accept low ratios such as .0035, now that is all fixed. Also refined
+ the Log Book Screen which had a code block that was in commented out 
+and could not run.</p>
+<p>( 07/02/2011 ) Added new communication process for the Performaire 
+Weather Stations. Seems to work better but let me know. Modified some 
+code for the Log Book Screens so they work better.</p>
+<p>( 05/05/2011 – 0629/2011 ) Added Barometric Pressure Adjusted 60 Foot
+ to the Estimated 60 Foot Drop Down list. Worked great in testing when 
+the Baro dropped 20 points. Changed the weather station code for 
+Performaire Weather Stations to be less pickey about the core weather 
+readings. Refined the settings for other weather stations as well.</p>
+<p>( 04/20/2011 – 05/03/2011 ) Added new Estimated 60 Foot drop down 
+list choices. Now you can even have the Estimated 60 Foot automatically 
+update for changes in Vapor Pressure and Relative Humidity. I found out 
+the hard way that 89% humidity kills my car in 60 feet much worse than I
+ ever imagined. So I fixed it, and my last run would have been perfect 
+with my new changes. See picture below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/estimated_60_ft.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-678" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/estimated_60_ft-300x278.jpg" alt="estimated_60_ft" width="300" height="278" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/estimated_60_ft-300x278_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/estimated_60_ft.jpg 542w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 04/12/2011 – 04/19/2011 ) In an attempt to let racers personalize 
+Crew Chief you can now change the Picture behind the Weather Information
+ Area on the Run Data TAB ( where you enter a run ). In this version you
+ will see an image of fire behind the weather information. You can 
+change this to any image you want PROVIDED you can see the Text Prompts 
+for the weather. If you want to put a picture into this area it will 
+work just like the picture screen does. Follow these directions:</p>
+<p>1) Double click on the area inside the weather information. A box 
+will pop up wanting you to Choose A File. If you want to see a bunch of 
+images then Double Click on “Graphics”. We have preloaded a few 
+background images. These files start with “back-” in their file name. 
+Pick any image you want and see if you like it.</p>
+<p>2) You can change the color of the Weather Information LABELS by 
+Double Clicking on the Text that says “Weather and Track Info” located 
+just above where you enter the weather readings. This will change the 
+text from White to Black -or- vice versa.</p>
+<p>3) You can also ROTATE the image by RIGHT CLICKING on the Image. Each Rich Click moves it 90 degrees.</p>
+<p>( 04/07/2011 – 04/11/2011 ) Refined the Database lookup procedures. 
+Before when you picked a database and made a mistake the program would 
+not look up the info again. Now we allow you to pick several times on a 
+new run without a problem in case you make a mistake. The proper 
+information will carry over including Dial In, Throttle Stop ( if they 
+apply ), tire pressures, launch RPMs etc.</p>
+<p>( 04/01/2011 – 04/06/2011 ) Many improvements: When selecting weather
+ from the weather file Crew Chief will now fill in AM or PM depending on
+ the time for you. Weather pick list will now include AM or PM in the 
+list. Added the ability to have new Wind Database that allows you to 
+create your own Description in the list. Now you can create wind factor 
+descriptions such as Vegas Left Lane, or Vegas Right Lane etc. You can 
+even create one that has almost no wind factoring at all, as if the wind
+ is blowing but completely blocked by the bleachers ( such as Vegas last
+ weekend ).</p>
+<p>Added more features in the LIVE TIMING area. This in ongoing but the 
+ability to work better with 1320go.com is improving everyday.</p>
+<p>( 03/08/2011 ) For RacePak customers we can now send weather data to 
+RacePak automatically. After you download the run and put the run into 
+Crew Chief you can click on Get Weather in RacePak and we will send the 
+weather over. See picture below.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/getweather.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-677" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/getweather-300x154.jpg" alt="getweather" width="300" height="154" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/getweather-300x154_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/getweather.jpg 633w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 02/05/2011 – 03/03/2011 ) Added the ability to see Split Time 
+Intervals and MPH Pickup from 1/8th – 1/4 Mile by double clicking on 60 
+Foot label. See picture below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/double_click_60foots.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-679" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/double_click_60foots-300x259.jpg" alt="double_click_60foots" width="300" height="259" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/double_click_60foots-300x259_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/double_click_60foots.jpg 752w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>Added the ability to change from Converter Stall to Driveshaft RPM by
+ double clicking on Converter Stall. If you want to determine TIRE 
+GROWTH you just need to enter Driveshaft RPM at the finish line and we 
+will calculate it for you. Requires that you have the Gear Ratio entered
+ in the Database / Combo Menu. Just subtract the tire rollout from this 
+number. See picture below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/tire_growth.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-672" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/tire_growth-257x300.jpg" alt="tire_growth" width="257" height="300" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/tire_growth-257x300_002.jpg 257w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/tire_growth.jpg 482w" sizes="auto, (max-width: 257px) 100vw, 257px"></a></p>
+<p>Added more descriptive information on the Throttle Stop Calculate 
+Ratios TAB. Now when you try to calculate ratios we tell you how we 
+arrived at the answer. Remember, pick only ONE RUN to calculate throttle
+ stop ratios. For example, I ran a 8.96 on one run, then took 21 numbers
+ out and ran a 8.86. Crew Chief told me I was a .0210 to .01 ratio, 
+which is correct. See picture below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/calculate_tstop_ratio.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-682" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/calculate_tstop_ratio-300x147.jpg" alt="calculate_tstop_ratio" width="300" height="147" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/calculate_tstop_ratio-300x147_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/calculate_tstop_ratio-1024x502.jpg 1024w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/calculate_tstop_ratio.jpg 1178w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>Also added user selectable FONTS for the TABs across the screen. 
+These same Fonts will be used on the Prediction Form TAB, and Opponents 
+TAB. They will also carry over to the LIVE TIMING Menu. To change them 
+RIGHT CLICK on the TAB that says RUN DATA, then choose another Font.</p>
+<p>If you have a slower computer and Crew Chief takes a long time to 
+load then DOUBLE CLICK on the Christmas TREE graphic on the top right of
+ the Picture Screen, this will stop the pictures from Rotating every 2 
+seconds and will make the program load faster. Only necessary if the 
+computer is older. This will speed loading time by about 2000 percent on
+ older computers. New ones won’t see any difference.</p>
+<p>( 01/30/2011 – 1/31/2011 ) Added a Save Opponent Button on the 
+Opponent TAB to make sure you save your Opponent Information properly. 
+We also added a form of Checks and Balances for throttle stop racers on 
+the Optimal Timer field. If you enter a number in the Optimal Throttle 
+Stop that we don’t like we will pop up a box and tell you. Hopefully 
+this will eliminate improper throttle stop ratios people have been 
+forcing the program into.</p>
+<p>( 01/05/2011 – 01/24/2011 ) Added improved Finish Line Decision Maker
+ formula for 1/8th Mile. Improved the Late Night Formulas to work with 
+the Estimated 60 Foot formula first instead of last. Add a super cool 
+icon on the bottom right of an Eagle with an American Flag that JUMPS 
+out at you when you hover the mouse over it ( not useful at all just 
+cool ). Improved the process with Davis Weather Stations. Added the 
+ability to automatically look up the new 1320go.com Live Timing program.
+ We no longer have to make the customer find the file that runs 1320go, 
+we do it all behind the scenes for you so it is One less headache.</p>
+<p>( 12/1/2010 – 12/16/2010 ) Added 2 new formulas to the Prediction 
+Formula drop down list. Both are Late Night Formulas, one is based on 
+Temperature, and the other on Humidity. This focuses the Prediction on 
+one or the other weather parameter and has been very accurate, even if 
+not using it late at night. Improved the Text Messaging internal 
+functions to make it faster also.</p>
+<p>Added improved 1320go.com support and fully tested improvements in 
+Las Vegas. Automatic launching has been improved, and speed of transfer 
+of run information has been improved by about 400%.</p>
+<p>( 10/27/2010 ) Added an Automatic Paging button in the weather 
+station setup tab. This will automatically click the Pager Output button
+ whenever you are on the prediction form. This will be useful for those 
+of us who forget to click Pager Output before going up for a run. Karen 
+Comstock suggested it, and after it happened to me I made the change.</p>
+<p>( 10/26/2010 ) We are part of the JEGS.com Track Tested products on 
+jegs.com. Pretty cool, we have added some things for their new version 
+that will appear automatically on regular versions. Stay tuned… more to 
+come.</p>
+<p>( 10/20/2010 ) Added an 8th picture to the picture screen, right 
+above the Click Here to Start Button. Just double click on it to change 
+it. We also changed the dimensions of the other pictures.</p>
+<p>( 09/25/2010 – 10/04/2010 ) Updated the Calculate Ratios TAB under 
+Predict. Now when you run a throttle stop and want a ratio it will not 
+pop up a box after you accept the new ratio. It will instead move into 
+weather ratios only. This will be less confusing hopefully. It will be 
+completely re-written over the winter but this will help a bunch. 
+Updated the Las Vegas Tech Card. Updated the Columbus, OH Tech Card.</p>
+<p>( 09/19/2010 ) Added 3 digits to the Barometer field for weather stations that give us 3 decimals of readings.</p>
+<p>( 09/18/2010 ) Refined the weather gathering module to verify enough 
+information has come over. We do this to stop zeros from appearing in 
+some weather fields when the weather station does not give us all the 
+information we need. Added a Weather Counter to the Prediction Form to 
+let you know how many times we have received weather information. When 
+this continues to update it’s count you know it is working properly.</p>
+<p>( 09/17/2010 ) Added Las Vegas Bracket Race Tech Card to the database
+ ( both front and back side will print ). Big News! Added the ability to
+ Add your own vehicle type to the drop down list for Wind Factoring. 
+This is pretty cool since you can define your own everything for wind 
+control. You can name your own vehicle as I did below. Plus when you 
+select a vehicle we will fill in the head wind, tail wind, side wind, 
+cross head and cross tail wind factors. If you want to change them 
+simply do so, when you press enter on the Cross Tail Ratio we will save 
+them to the database.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/addnewwind.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-686" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/addnewwind-300x145.jpg" alt="addnewwind" width="300" height="145" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/addnewwind-300x145_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/addnewwind.jpg 772w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 09/16/2010 ) Added Davis Instruments with Paging Capability. Added 
+the ability to change ratios on the Run Entry Form for use with the 
+Optimal Throttle Stop Settings. Added more fields for the Opponent 
+tracking module for use with Finish Line Manager. Adjusted the 
+information for Wind Factors when choosing vehicle type from drop down 
+list. Improved the weather gathering in all weather stations especially 
+if a weather reading was missed.</p>
+<p>( 09/13/2010 ) Refined the Team License screens for Estimated 60 Foot Times.</p>
+<p>( 09/12/2010 ) Added Wind Speed and Wind Direction to the Davis 
+Instruments module. Refined the Wind Factoring even furthur for all 
+weather stations.</p>
+<p>( 09/08/2010 ) Big News for racers with Davis Weather Instruments. 
+After getting my test station back I was able to finalize the Davis 
+Link. It is now part of our weather station selection for the Non Paging
+ version. The paging version will be added when I see one with a pager 
+that I can hook into. Probably about a week for that. This took an 
+entire week to finish and many improvements are planned.</p>
+<p>( 08/25/2010 ) Added a Drop Down List to choose ETs on the Finish 
+Line Manager TAB. Now all you need to do is pick the ET you think your 
+opponent will run from the list and Crew Chief will fill in all the ETs 
+for you, then tell you how many feet and inches you will be apart at 
+every interval so you will know if you should take the stripe or not.</p>
+<p>( 08/25/2010 ) Added new Wind Control procedures to better improve 
+the effects of wind on ET Predictions. We added more quadrants and more 
+logic to the predictions for wind. You may have to review your wind 
+factors after testing to see if the changes need new factors. We have 
+refined where a head wind starts, where a side wind starts and other 
+quadrants. Basically everything changed in the wind factoring.</p>
+<p>( 08/02/2010 ) Huge News! We revamped the Opponent Comparison again, 
+this time we added How Many Feet apart you were in Feet and Inches at 
+every interval. You can now have it do the calculation based on Reaction
+ Time also in the Difference Field. We added an Actual Distance Section 
+to the right of the Difference. Take a look below:</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/opponent_screen1.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-674" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/opponent_screen1-300x187.jpg" alt="opponent_screen1" width="300" height="187" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/opponent_screen1-300x187_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/opponent_screen1.jpg 960w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>( 07/30/2010 – 07/31/2010 ) Changed a bunch of things on the 
+Opponents Screen for use with 1/8th Mile. It will remove anything after 
+the 1/8th mile automatically and restore it for 1/4 Mile.</p>
+<p>( 07/25/2010 – 07/26/2010 ) Worked on 1320go.com integration 
+Saturday, Sunday, and Monday to make it work better and faster. They 
+still have some things to do but our part works far better. Also, when 
+searching by Database the list is now sorted alphabetically. Had this 
+working before but changed something in testing and forgot to bring it 
+back. Brenda Corker brought that to my attention.</p>
+<p>( 07/24/2010 ) Refined the Text Messaging module to be less of a pain
+ when all the info is not entered. Changed the NHRA Tech Card front and 
+back alignment.</p>
+<p>( 07/22/2010 ) Added Payee to the Tech Card front side plus Owner. We added Pants to the back of the tech card also.</p>
+<p>( 07/19/2010 ) Refined the Quick Message Area. Added a procedure to 
+turn off your screen saver and power saving features automatically. Let 
+me know if your screen saver works anymore with Crew Chief running.</p>
+<p>( 07/15/2010 ) Changed the back of the NHRA tech card, moved the jacket and pants etc. down a line.</p>
+<p>( 07/13/2010 ) Changed the Ratio Calculation Page with updated 
+Average Ratios. Turned off Weather Gathering when entering runs to stop 
+the program from delaying keystrokes while typing in information. Added 
+Rotating Pictures on the Picture screen ( the screen you see when you 
+enter Crew Chief ). This will rotate through all the pictures 
+automatically every 2 seconds.</p>
+<p>( 06/30/2010 ) Added the ability to send Quick Messages to the Pager 
+or Text Message that can alert your teammate about the run you just made
+ or info another racer passed to you. You can type anything you want and
+ it will be sent to the Pager or Text Message. Or you can select from 
+commonly used Phrases such as “Lost .01 in 60 Foot”. If you click one of
+ these Phrases then click send it will be sent out immediately.</p>
+<p>( 06/19/2010 ) Added Oahe Speedway in Pierre, SD Tech Card. Added 
+RESET FACTORS Button on the Factors Screen to reset the factors to the 
+default.</p>
+<p>( 05/28/2010) Fixed problems with Weather Station Data when entering a
+ new run. Problems with wrong weather were due to incorrect time stamps 
+on each weather reading. This is fixed now.</p>
+<p>( 05/24/2010) Added a RED BOX on the bottom left of the prediction 
+form for use with Performaire Trailer Stations. This box will show how 
+many readings we have taken and will be easier to see than before. If 
+this number stops moving up then Crew Chief is no longer receiving 
+information from the weather station.</p>
+<p>( 05/22/2010) Added Temperature Factor check when starting program. 
+This will limit some factors from getting too high and causing problems 
+with predictions.</p>
+<p>( 05/21/2010) Change the prompt on the screen when No Throttle Stop was used to avoid confusion.</p>
+<p>( 05/20/2010) Added a Error Box if you enter a bogus ET in the 1000ft
+ time. If you still do it won’t screw up the Run Completion anymore.</p>
+<p>Added Improved See Similar Runs to the Prediction Form. Now it will 
+ask if you want to see other databases also if there are no runs with 
+similar weather in the current database.</p>
+<p>Fixed the Auto Club Raceway tech card.</p>
+<p>( 05/14/2010) Updated NHRA Tech cards again. Changed the button that 
+says “Weather On” to “Weather is On” or “Weather is Off” to be easier to
+ understand.</p>
+<p>Added New Check Boxes on the Predictions Screen that say “Use Wind In
+ Prediction” and “No Wind in Prediction” because some were having 
+problems understanding the old Button. This is much more descriptive 
+now.</p>
+<p>We added a couple of new features on the Opponents Menu.</p>
+<p>Added new NHRA Tech Card. ( Morons keep changing it for no good reason ).</p>
+<p>( 05/11/2010) Changed the code for Text Messaging so it will work properly with Performaire PC weather stations.</p>
+<p><strong>HUGE NEWS</strong>: I added Finish Line Manager to the Main 
+Entry Form as a new TAB.&nbsp; This is really cool. Before Finish Line 
+Manager was buried under the Live Timing part of Crew Chief ( it is 
+still there also ), however we felt not enough people could take 
+advantage of it, so I duplicated the functionality and brought it to the
+ front where it will be easy to find and use. The ETs will be 
+automatically brought over from your run, and your opponent info will be
+ brought over from the Opponents area.&nbsp; You can simply type over 
+the ETs and press enter, the program will instantly recalculate all the 
+Intervals and tell you how many feet apart you and your opponent will be
+ at every interval. Now it even works on 1/8th mile! The new TAB will be
+ 2 over from Predict ET or Predict Throttle Stop.</p>
+<p>* Added Text Message Password, Added Text Message Setup to the SETUP 
+Menu. Found out the settings in GoDaddy.com email addresses if anyone is
+ using one.</p>
+<p>BIG NEWS! Added the abiltity to send TEXT MESSAGES and EMAIL 
+Predictions! You MUST Have the Full Paging Enabled Version to do this 
+and an activation code will be required. Here is how it works- On the 
+Weather Station Setup TAB there is a CheckBox that says “Text Message 
+Also”. Once you check this and setup the addresses properly then 
+everytime you page it will also send text messages up to 3 phones or 3 
+email addresses or a combination of both. YOU MUST HAVE INTERNET ACCESS,
+ AND A VALID EMAIL ACCOUNT TO MAKE THIS WORK! Call me directly, Don 
+Higgins at (309) 208-1486 for help setting this up. If you have a pager 
+you will get the same pages. But you can send a text message to anyone, 
+anywhere in the world with the Predictions and they can help you decide 
+what to do. <a href="http://www.crewchiefpro.com/text-messaging.pdf">Click Here to see all about setting this up.</a></p>
+<p>Changed the colors on the screens so they are less gay ( wife originally picked them out ).</p>
+<p>Added the ability to Right Click on the first Page called Run Data and choose different fonts for your own look.</p>
+<p>Added New Track Temperature to 60 Foot Time Prediction. This is in 
+it’s early stages right now but look for it to be super cool very soon. 
+SEE BELOW FOR PICTURE!</p>
+<p>Added New Prediction Formula based on Density Altitude and Grains ( 
+in the drop down list – the last one in the list ) Grains only effects 
+the last choice, all others still use regular prediction factors.</p>
+<p>Added a Grains Factor to the Factors Screen.</p>
+<p>Added Vapor Pressure to the Density Altitude Formula. Previously the DA Formula supersceeded the Vapor Formula, not anymore.</p>
+<p>Improved the Estimated 60 Foot function. When you click into this 
+field you can override the value without UNClicking the Check box.</p>
+<p>Improved Margin of Victory Calculations.</p>
+<p>Improved the weather station Pick Time form and logic.</p>
+<p>Added new textbox to the right of Reaction Time that tells you 
+exactly what the Delay Box should have been to be Perfect on the Tree.</p>
+<p>Changed the LogBook printout to include Adjusted/Corrected Altutude 
+from your Weather Station ( right below the Density Altitude from your 
+weather station ).</p>
+<p>Changed the Opponent Margin of Victory calculation to handle mutual red lights.</p>
+<p>Made change to DA Calculation on the Prediction Screen. We allow your
+ own number. Previously if you entered a number that was too far away 
+from our calculation we would reset the DA to our calculation. Now we 
+allow a much wider difference.</p>
+<p>Fixed an error in the Predict Using Density Altitude Formula.</p>
+<p>Added a great new feature where Crew Chief Software can now calculate
+ your Estimated 60 Foot if you want us to. See the picture below. Say 
+the weather gets worse by 900 feet, we will automatically calculate how 
+much 60 foot you should lose automatically. Every time the weather 
+changes so will the 60 Foot.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/newestimated60foot.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-675" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newestimated60foot-300x172.jpg" alt="newestimated60foot" width="300" height="172" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newestimated60foot-300x172_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/newestimated60foot.jpg 960w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>We have added to the Factors TAB the ability to change this also. In 
+the future we will refine this even more but right now it works 
+perfectly in testing.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/dafactoradjustment.jpg"><img loading="lazy" decoding="async" class="alignnone size-medium wp-image-680" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/dafactoradjustment-300x67.jpg" alt="dafactoradjustment" width="300" height="67" srcset="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/dafactoradjustment-300x67_002.jpg 300w, WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/dafactoradjustment.jpg 738w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p>We also changed the Live Timing Screen Reports slightly.</p>
+<p>Added a double click to the Humidity label to change it to Wet Bulb 
+readings for those weather stations that do not display Relative 
+Humidity.</p>
+<p>Made additional changes to the Team License area for changing current 60 foot times.</p>
+<p>Changed the Adjusted Altitude for Performaire Trailer Weather 
+Stations if they don’t have Oxygen Sensors. We were not pulling this 
+info before and now we are.</p>
+<p>Adjusted NHRA tech card alignment.</p>
+<p>Changed the Team License section to eliminate problems when removing cars.</p>
+<p>Added RIGHT CLICK on Run Date and Run Number fields so you can change
+ the DATE and Number on STORED Runs without our help ( We store runs by 
+the run date and run number so in the past if you had the wrong date or 
+run number you had to call us to help you fix it – Not Anymore ).</p>
+<p>We also added MASON-DIXON Dragway’s Tech Card. We added a back of 
+this tech card also ( even though there are no printed fields ) for 
+Sponsor Information and race wins the announcers like to know.</p>
+<p>Added new fields to store original ET and MPH in the Opponent 
+Information TAB. Now when you examine the Opponent Information to see 
+how close a race was THEN do a Run Completion we will remember what the 
+original ET and MPH were so the Opponent Information will always tell 
+you what really happened in a race. If you forget you can NOW edit the 
+fields on the Opponent Information TAB to the original numbers and save 
+the run.</p>
+<p>Added Performaire PC Paging Support for their new PC when you add 
+their transmitter to it. We will be refining this in the coming weeks 
+also.</p>
+<p>Made DIAL IN on the Opponent Information TAB red in color since too many people did not see it.</p>
+<p>Changed Wind Control in Performaire Trailer Stations.</p>
+<p>Changed the Log View Printout by moving the Split Time Intervals down below the Weather Readings.</p>
+<p>Changed some Team License items on the Prediction screen.</p>
+<p>Changed some tech cards to better line up.</p>
+<p>Added new Car Setup Features with expanded Jetting Information. If 
+you run twin 4 barrels there is a picture of twin carbs, otherwise there
+ is a picture of a single carb. This is setup in the Database Combo 
+Menu, there is now a check box that asks if you use 2 Carburetors. We 
+now have fields for all jets, air bleeds, squirters and float height.</p>
+<p>Added a button on the main screen under Carb Jetting that will pop up a detailed picture of the jets.</p>
+<p>Added Rocky Mountain Raceways and Woodburn Dragstrip to the list of Tech Cards that we print. ( Updated again )</p>
+<p>Added new communication module to better communicate with weather 
+stations. This should not require any changes on your part, but it will 
+work better.</p>
+<p>Added an interface to 1320go.com LIVE TIMING. This will work just 
+like the ICARD system did. You will need an internet connection and 
+subscribe to 1320go.com to make this work. ICard ( or Simcast as it is 
+called now ) will still work perfectly also.<br>STAY TUNED: MORE CHANGES ARE COMING!</p></div></article></main><aside class="sidebar sidebar-primary widget-area" role="complementary" aria-label="Primary Sidebar" itemscope="" itemtype="https://schema.org/WPSideBar"><section id="search-3" class="widget widget_search"><div class="widget-wrap"><h4 class="widget-title widgettitle">Search</h4>
+<form class="search-form" method="get" action="https://crewchiefpro.com/" role="search" itemprop="potentialAction" itemscope="" itemtype="https://schema.org/SearchAction"><input class="search-form-input" type="search" name="s" id="searchform-2" placeholder="Search this website" itemprop="query-input"><input class="search-form-submit" type="submit" value="Search"><meta content="https://crewchiefpro.com/?s={s}" itemprop="target"></form></div></section>
+
+		<section id="recent-posts-3" class="widget widget_recent_entries"><div class="widget-wrap">
+		<h4 class="widget-title widgettitle">Recent Blog Posts</h4>
+
+		<ul>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/30/serendipitous-pursuits-with-the-enigmatic-apple-of/">Serendipitous Pursuits with the Enigmatic Apple of Fortune</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/30/enchanting-realms-of-adventure-with-super-ufa-slot/">Enchanting Realms of Adventure with Super Ufa Slot Jili</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/30/discovering-the-enchantment-of-wild-robin-casino-6/">Discovering the Enchantment of Wild Robin Casino Experiences</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/30/exploration-des-symphonies-ludiques-de-spingranny/">Exploration des Symphonies Ludiques de Spingranny Casino</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/29/exploring-the-cosmic-frontier-the-thrill-of-the/">Exploring the Cosmic Frontier The Thrill of the Astronaut Game</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/29/embracing-chance-in-a-colorful-pixelated-world/">Embracing Chance in a Colorful Pixelated World</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/29/chasing-luck-through-pixels-the-allure-of-crossy/">Chasing Luck Through Pixels The Allure of Crossy Road Betting</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/26/enchantment-and-luck-the-allure-of-clover-magic/">Enchantment and Luck The Allure of Clover Magic Casino</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/26/enchanting-journeys-within-the-clover-magic-realm/">Enchanting Journeys Within the Clover Magic Realm</a>
+									</li>
+											<li>
+					<a href="https://crewchiefpro.com/2025/09/25/l-intrigant-voyage-d-un-coq-a-travers-le-casino/">L’Intrigant Voyage d’un Coq à Travers le Casino</a>
+									</li>
+					</ul>
+
+		</div></section>
+</aside></div></div><div class="footer-widgets"><div class="wrap"><div class="widget-area footer-widgets-1 footer-widget-area"><section id="text-2" class="widget widget_text"><div class="widget-wrap"><h4 class="widget-title widgettitle">Common Sense Software</h4>
+			<div class="textwidget"><h5>4417 Enterprise Drive<br>
+Bartonville, Illinois<br>
+<a href="tel:3096882990">Phone (309) 688-2990</a><br>
+<a href="mailto:crewchiefpro@live.com"><img src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/green-email-icon.jpg" alt="Contact Don Higgins of Crew Chief Drag Racing Software" height="50" width="55" \=""></a><a href="mailto:crewchiefpro@live.com">Email Us</a></h5>
+</div>
+		</div></section>
+</div><div class="widget-area footer-widgets-2 footer-widget-area"><section id="text-4" class="widget widget_text"><div class="widget-wrap">			<div class="textwidget"><p><img src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/BIONDO_logo-e1383180208414.jpg" alt="Biondo Racing Products" \=""></p>
+<p><a href="http://jegs.com/" target="_blank"><img src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/jegsDotCom_Logo.jpg" alt="Jegs Performance Auto Parts" \=""></a></p>
+<p><img src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/racepak_logo.jpg" alt="Racepak Data Systems" \=""></p>
+<p><img src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/AIM_Sports.png" \=""></p>
+</div>
+		</div></section>
+</div><div class="widget-area footer-widgets-3 footer-widget-area"><section id="text-3" class="widget widget_text"><div class="widget-wrap"><h4 class="widget-title widgettitle">Connect with the Crew Chief Team</h4>
+			<div class="textwidget"></div>
+		</div></section>
+</div></div></div><footer class="site-footer" itemscope="" itemtype="https://schema.org/WPFooter"><div class="wrap"><div class="gototop"><p style="text-align:center">[footer_backtotop]</p></div><div><p style="text-align:center">Copyright
+ ©&nbsp;2025 Common Sense Software (dba Crew Chief Pro Software). All 
+Rights Reserved. Crew Chief Pro &amp; Crew Chief Pro Jr. are trademarks 
+of Common Sense Software. </p></div></div></footer></div><script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"\/*"},{"not":{"href_matches":["\/wp-*.php","\/wp-admin\/*","\/wp-content\/uploads\/*","\/wp-content\/*","\/wp-content\/plugins\/*","\/wp-content\/themes\/agency-pro\/*","\/wp-content\/themes\/genesis\/*","\/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+<style id="core-block-supports-inline-css" type="text/css">
+/**
+ * Core styles: block-supports
+ */
+.wp-block-gallery.wp-block-gallery-1 {
+	--wp--style--unstable-gallery-gap: var( --wp--style--gallery-gap-default, var( --gallery-block--gutter-size, var( --wp--style--block-gap, 0.5em ) ) );
+	gap: var( --wp--style--gallery-gap-default, var( --gallery-block--gutter-size, var( --wp--style--block-gap, 0.5em ) ) );
+}
+
+</style>
+<script type="text/javascript" id="q2w3_fixed_widget-js-extra">
+/* <![CDATA[ */
+var q2w3_sidebar_options = [{"use_sticky_position":false,"margin_top":0,"margin_bottom":0,"stop_elements_selectors":"","screen_max_width":0,"screen_max_height":0,"widgets":[]}];
+/* ]]> */
+</script>
+<script type="text/javascript" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/frontend.min.js" id="q2w3_fixed_widget-js"></script>
+
+<div class="backstretch" style="left: 0px; top: 0px; overflow: hidden; margin: 0px; padding: 0px; height: 827px; width: 1485px; z-index: -999999; position: fixed;"><img style="position: absolute; margin: 0px; padding: 0px; border: medium; width: 1485px; height: 990px; max-height: none; max-width: none; z-index: -999999; left: 0px; top: -81.5px;" src="WHAT%E2%80%99S%20NEW%20in%20Crew%20Chief%20Pro%207.980_files/1384006_10200906990986059_978572207_n1.jpg"></div></body></html>

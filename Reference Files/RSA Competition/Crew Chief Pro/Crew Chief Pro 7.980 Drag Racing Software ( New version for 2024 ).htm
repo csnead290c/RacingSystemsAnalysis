@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en-US"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crew Chief Pro 7.980 Drag Racing Software ( New version for 2024 )</title>
+<meta name="robots" content="max-image-preview:large">
+	<style>img:is([sizes="auto" i], [sizes^="auto," i]) { contain-intrinsic-size: 3000px 1500px }</style>
+	<link rel="dns-prefetch" href="https://fonts.googleapis.com/">
+<link rel="alternate" type="application/rss+xml" title="Crew Chief Pro Drag Racing Software and Professional Weather Stations » Feed" href="https://crewchiefpro.com/feed/">
+<link rel="alternate" type="application/rss+xml" title="Crew Chief Pro Drag Racing Software and Professional Weather Stations » Comments Feed" href="https://crewchiefpro.com/comments/feed/">
+<link rel="canonical" href="https://crewchiefpro.com/crew-chief-pro/">
+<script async="" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/analytics.js"></script><script type="text/javascript">
+/* <![CDATA[ */
+window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/16.0.1\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/16.0.1\/svg\/","svgExt":".svg","source":{"wpemoji":"https:\/\/crewchiefpro.com\/wp-includes\/js\/wp-emoji.js?ver=6.8.3","twemoji":"https:\/\/crewchiefpro.com\/wp-includes\/js\/twemoji.js?ver=6.8.3"}};
+/**
+ * @output wp-includes/js/wp-emoji-loader.js
+ */
+
+/**
+ * Emoji Settings as exported in PHP via _print_emoji_detection_script().
+ * @typedef WPEmojiSettings
+ * @type {object}
+ * @property {?object} source
+ * @property {?string} source.concatemoji
+ * @property {?string} source.twemoji
+ * @property {?string} source.wpemoji
+ * @property {?boolean} DOMReady
+ * @property {?Function} readyCallback
+ */
+
+/**
+ * Support tests.
+ * @typedef SupportTests
+ * @type {object}
+ * @property {?boolean} flag
+ * @property {?boolean} emoji
+ */
+
+/**
+ * IIFE to detect emoji support and load Twemoji if needed.
+ *
+ * @param {Window} window
+ * @param {Document} document
+ * @param {WPEmojiSettings} settings
+ */
+( function wpEmojiLoader( window, document, settings ) {
+	if ( typeof Promise === 'undefined' ) {
+		return;
+	}
+
+	var sessionStorageKey = 'wpEmojiSettingsSupports';
+	var tests = [ 'flag', 'emoji' ];
+
+	/**
+	 * Checks whether the browser supports offloading to a Worker.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @returns {boolean}
+	 */
+	function supportsWorkerOffloading() {
+		return (
+			typeof Worker !== 'undefined' &&
+			typeof OffscreenCanvas !== 'undefined' &&
+			typeof URL !== 'undefined' &&
+			URL.createObjectURL &&
+			typeof Blob !== 'undefined'
+		);
+	}
+
+	/**
+	 * @typedef SessionSupportTests
+	 * @type {object}
+	 * @property {number} timestamp
+	 * @property {SupportTests} supportTests
+	 */
+
+	/**
+	 * Get support tests from session.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @returns {?SupportTests} Support tests, or null if not set or older than 1 week.
+	 */
+	function getSessionSupportTests() {
+		try {
+			/** @type {SessionSupportTests} */
+			var item = JSON.parse(
+				sessionStorage.getItem( sessionStorageKey )
+			);
+			if (
+				typeof item === 'object' &&
+				typeof item.timestamp === 'number' &&
+				new Date().valueOf() < item.timestamp + 604800 && // Note: Number is a week in seconds.
+				typeof item.supportTests === 'object'
+			) {
+				return item.supportTests;
+			}
+		} catch ( e ) {}
+		return null;
+	}
+
+	/**
+	 * Persist the supports in session storage.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @param {SupportTests} supportTests Support tests.
+	 */
+	function setSessionSupportTests( supportTests ) {
+		try {
+			/** @type {SessionSupportTests} */
+			var item = {
+				supportTests: supportTests,
+				timestamp: new Date().valueOf()
+			};
+
+			sessionStorage.setItem(
+				sessionStorageKey,
+				JSON.stringify( item )
+			);
+		} catch ( e ) {}
+	}
+
+	/**
+	 * Checks if two sets of Emoji characters render the same visually.
+	 *
+	 * This is used to determine if the browser is rendering an emoji with multiple data points
+	 * correctly. set1 is the emoji in the correct form, using a zero-width joiner. set2 is the emoji
+	 * in the incorrect form, using a zero-width space. If the two sets render the same, then the browser
+	 * does not support the emoji correctly.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @private
+	 *
+	 * @param {CanvasRenderingContext2D} context 2D Context.
+	 * @param {string} set1 Set of Emoji to test.
+	 * @param {string} set2 Set of Emoji to test.
+	 *
+	 * @return {boolean} True if the two sets render the same.
+	 */
+	function emojiSetsRenderIdentically( context, set1, set2 ) {
+		// Cleanup from previous test.
+		context.clearRect( 0, 0, context.canvas.width, context.canvas.height );
+		context.fillText( set1, 0, 0 );
+		var rendered1 = new Uint32Array(
+			context.getImageData(
+				0,
+				0,
+				context.canvas.width,
+				context.canvas.height
+			).data
+		);
+
+		// Cleanup from previous test.
+		context.clearRect( 0, 0, context.canvas.width, context.canvas.height );
+		context.fillText( set2, 0, 0 );
+		var rendered2 = new Uint32Array(
+			context.getImageData(
+				0,
+				0,
+				context.canvas.width,
+				context.canvas.height
+			).data
+		);
+
+		return rendered1.every( function ( rendered2Data, index ) {
+			return rendered2Data === rendered2[ index ];
+		} );
+	}
+
+	/**
+	 * Checks if the center point of a single emoji is empty.
+	 *
+	 * This is used to determine if the browser is rendering an emoji with a single data point
+	 * correctly. The center point of an incorrectly rendered emoji will be empty. A correctly
+	 * rendered emoji will have a non-zero value at the center point.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 6.8.2
+	 *
+	 * @private
+	 *
+	 * @param {CanvasRenderingContext2D} context 2D Context.
+	 * @param {string} emoji Emoji to test.
+	 *
+	 * @return {boolean} True if the center point is empty.
+	 */
+	function emojiRendersEmptyCenterPoint( context, emoji ) {
+		// Cleanup from previous test.
+		context.clearRect( 0, 0, context.canvas.width, context.canvas.height );
+		context.fillText( emoji, 0, 0 );
+
+		// Test if the center point (16, 16) is empty (0,0,0,0).
+		var centerPoint = context.getImageData(16, 16, 1, 1);
+		for ( var i = 0; i < centerPoint.data.length; i++ ) {
+			if ( centerPoint.data[ i ] !== 0 ) {
+				// Stop checking the moment it's known not to be empty.
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Determines if the browser properly renders Emoji that Twemoji can supplement.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @private
+	 *
+	 * @param {CanvasRenderingContext2D} context 2D Context.
+	 * @param {string} type Whether to test for support of "flag" or "emoji".
+	 * @param {Function} emojiSetsRenderIdentically Reference to emojiSetsRenderIdentically function, needed due to minification.
+	 * @param {Function} emojiRendersEmptyCenterPoint Reference to emojiRendersEmptyCenterPoint function, needed due to minification.
+	 *
+	 * @return {boolean} True if the browser can render emoji, false if it cannot.
+	 */
+	function browserSupportsEmoji( context, type, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint ) {
+		var isIdentical;
+
+		switch ( type ) {
+			case 'flag':
+				/*
+				 * Test for Transgender flag compatibility. Added in Unicode 13.
+				 *
+				 * To test for support, we try to render it, and compare the rendering to how it would look if
+				 * the browser doesn't render it correctly (white flag emoji + transgender symbol).
+				 */
+				isIdentical = emojiSetsRenderIdentically(
+					context,
+					'\uD83C\uDFF3\uFE0F\u200D\u26A7\uFE0F', // as a zero-width joiner sequence
+					'\uD83C\uDFF3\uFE0F\u200B\u26A7\uFE0F' // separated by a zero-width space
+				);
+
+				if ( isIdentical ) {
+					return false;
+				}
+
+				/*
+				 * Test for Sark flag compatibility. This is the least supported of the letter locale flags,
+				 * so gives us an easy test for full support.
+				 *
+				 * To test for support, we try to render it, and compare the rendering to how it would look if
+				 * the browser doesn't render it correctly ([C] + [Q]).
+				 */
+				isIdentical = emojiSetsRenderIdentically(
+					context,
+					'\uD83C\uDDE8\uD83C\uDDF6', // as the sequence of two code points
+					'\uD83C\uDDE8\u200B\uD83C\uDDF6' // as the two code points separated by a zero-width space
+				);
+
+				if ( isIdentical ) {
+					return false;
+				}
+
+				/*
+				 * Test for English flag compatibility. England is a country in the United Kingdom, it
+				 * does not have a two letter locale code but rather a five letter sub-division code.
+				 *
+				 * To test for support, we try to render it, and compare the rendering to how it would look if
+				 * the browser doesn't render it correctly (black flag emoji + [G] + [B] + [E] + [N] + [G]).
+				 */
+				isIdentical = emojiSetsRenderIdentically(
+					context,
+					// as the flag sequence
+					'\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F',
+					// with each code point separated by a zero-width space
+					'\uD83C\uDFF4\u200B\uDB40\uDC67\u200B\uDB40\uDC62\u200B\uDB40\uDC65\u200B\uDB40\uDC6E\u200B\uDB40\uDC67\u200B\uDB40\uDC7F'
+				);
+
+				return ! isIdentical;
+			case 'emoji':
+				/*
+				 * Does Emoji 16.0 cause the browser to go splat?
+				 *
+				 * To test for Emoji 16.0 support, try to render a new emoji: Splatter.
+				 *
+				 * The splatter emoji is a single code point emoji. Testing for browser support
+				 * required testing the center point of the emoji to see if it is empty.
+				 *
+				 * 0xD83E 0xDEDF (\uD83E\uDEDF) == 🫟 Splatter.
+				 *
+				 * When updating this test, please ensure that the emoji is either a single code point
+				 * or switch to using the emojiSetsRenderIdentically function and testing with a zero-width
+				 * joiner vs a zero-width space.
+				 */
+				var notSupported = emojiRendersEmptyCenterPoint( context, '\uD83E\uDEDF' );
+				return ! notSupported;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Checks emoji support tests.
+	 *
+	 * This function may be serialized to run in a Worker. Therefore, it cannot refer to variables from the containing
+	 * scope. Everything must be passed by parameters.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @private
+	 *
+	 * @param {string[]} tests Tests.
+	 * @param {Function} browserSupportsEmoji Reference to browserSupportsEmoji function, needed due to minification.
+	 * @param {Function} emojiSetsRenderIdentically Reference to emojiSetsRenderIdentically function, needed due to minification.
+	 * @param {Function} emojiRendersEmptyCenterPoint Reference to emojiRendersEmptyCenterPoint function, needed due to minification.
+	 *
+	 * @return {SupportTests} Support tests.
+	 */
+	function testEmojiSupports( tests, browserSupportsEmoji, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint ) {
+		var canvas;
+		if (
+			typeof WorkerGlobalScope !== 'undefined' &&
+			self instanceof WorkerGlobalScope
+		) {
+			canvas = new OffscreenCanvas( 300, 150 ); // Dimensions are default for HTMLCanvasElement.
+		} else {
+			canvas = document.createElement( 'canvas' );
+		}
+
+		var context = canvas.getContext( '2d', { willReadFrequently: true } );
+
+		/*
+		 * Chrome on OS X added native emoji rendering in M41. Unfortunately,
+		 * it doesn't work when the font is bolder than 500 weight. So, we
+		 * check for bold rendering support to avoid invisible emoji in Chrome.
+		 */
+		context.textBaseline = 'top';
+		context.font = '600 32px Arial';
+
+		var supports = {};
+		tests.forEach( function ( test ) {
+			supports[ test ] = browserSupportsEmoji( context, test, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint );
+		} );
+		return supports;
+	}
+
+	/**
+	 * Adds a script to the head of the document.
+	 *
+	 * @ignore
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param {string} src The url where the script is located.
+	 *
+	 * @return {void}
+	 */
+	function addScript( src ) {
+		var script = document.createElement( 'script' );
+		script.src = src;
+		script.defer = true;
+		document.head.appendChild( script );
+	}
+
+	settings.supports = {
+		everything: true,
+		everythingExceptFlag: true
+	};
+
+	// Create a promise for DOMContentLoaded since the worker logic may finish after the event has fired.
+	var domReadyPromise = new Promise( function ( resolve ) {
+		document.addEventListener( 'DOMContentLoaded', resolve, {
+			once: true
+		} );
+	} );
+
+	// Obtain the emoji support from the browser, asynchronously when possible.
+	new Promise( function ( resolve ) {
+		var supportTests = getSessionSupportTests();
+		if ( supportTests ) {
+			resolve( supportTests );
+			return;
+		}
+
+		if ( supportsWorkerOffloading() ) {
+			try {
+				// Note that the functions are being passed as arguments due to minification.
+				var workerScript =
+					'postMessage(' +
+					testEmojiSupports.toString() +
+					'(' +
+					[
+						JSON.stringify( tests ),
+						browserSupportsEmoji.toString(),
+						emojiSetsRenderIdentically.toString(),
+						emojiRendersEmptyCenterPoint.toString()
+					].join( ',' ) +
+					'));';
+				var blob = new Blob( [ workerScript ], {
+					type: 'text/javascript'
+				} );
+				var worker = new Worker( URL.createObjectURL( blob ), { name: 'wpTestEmojiSupports' } );
+				worker.onmessage = function ( event ) {
+					supportTests = event.data;
+					setSessionSupportTests( supportTests );
+					worker.terminate();
+					resolve( supportTests );
+				};
+				return;
+			} catch ( e ) {}
+		}
+
+		supportTests = testEmojiSupports( tests, browserSupportsEmoji, emojiSetsRenderIdentically, emojiRendersEmptyCenterPoint );
+		setSessionSupportTests( supportTests );
+		resolve( supportTests );
+	} )
+		// Once the browser emoji support has been obtained from the session, finalize the settings.
+		.then( function ( supportTests ) {
+			/*
+			 * Tests the browser support for flag emojis and other emojis, and adjusts the
+			 * support settings accordingly.
+			 */
+			for ( var test in supportTests ) {
+				settings.supports[ test ] = supportTests[ test ];
+
+				settings.supports.everything =
+					settings.supports.everything && settings.supports[ test ];
+
+				if ( 'flag' !== test ) {
+					settings.supports.everythingExceptFlag =
+						settings.supports.everythingExceptFlag &&
+						settings.supports[ test ];
+				}
+			}
+
+			settings.supports.everythingExceptFlag =
+				settings.supports.everythingExceptFlag &&
+				! settings.supports.flag;
+
+			// Sets DOMReady to false and assigns a ready function to settings.
+			settings.DOMReady = false;
+			settings.readyCallback = function () {
+				settings.DOMReady = true;
+			};
+		} )
+		.then( function () {
+			return domReadyPromise;
+		} )
+		.then( function () {
+			// When the browser can not render everything we need to load a polyfill.
+			if ( ! settings.supports.everything ) {
+				settings.readyCallback();
+
+				var src = settings.source || {};
+
+				if ( src.concatemoji ) {
+					addScript( src.concatemoji );
+				} else if ( src.wpemoji && src.twemoji ) {
+					addScript( src.twemoji );
+					addScript( src.wpemoji );
+				}
+			}
+		} );
+} )( window, document, window._wpemojiSettings );
+
+/* ]]> */
+</script>
+<link rel="stylesheet" id="agency-pro-theme-css" href="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/style_002.css" type="text/css" media="all">
+<style id="wp-emoji-styles-inline-css" type="text/css">
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+</style>
+<link rel="stylesheet" id="wp-block-library-css" href="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/style.css" type="text/css" media="all">
+<style id="classic-theme-styles-inline-css" type="text/css">
+/**
+ * These rules are needed for backwards compatibility.
+ * They should match the button element rules in the base theme.json file.
+ */
+.wp-block-button__link {
+	color: #ffffff;
+	background-color: #32373c;
+	border-radius: 9999px; /* 100% causes an oval, but any explicit but really high value retains the pill shape. */
+
+	/* This needs a low specificity so it won't override the rules from the button element if defined in theme.json. */
+	box-shadow: none;
+	text-decoration: none;
+
+	/* The extra 2px are added to size solids the same as the outline versions.*/
+	padding: calc(0.667em + 2px) calc(1.333em + 2px);
+
+	font-size: 1.125em;
+}
+
+.wp-block-file__button {
+	background: #32373c;
+	color: #ffffff;
+	text-decoration: none;
+}
+
+</style>
+<style id="global-styles-inline-css" type="text/css">
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgba(255, 255, 255, 1), 6px 6px rgba(0, 0, 0, 1);--wp--preset--shadow--crisp: 6px 6px 0px rgba(0, 0, 0, 1);}:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}
+:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}
+:root :where(.wp-block-pullquote){font-size: 1.5em;line-height: 1.6;}
+</style>
+<link rel="stylesheet" id="seed-wnb-css-css" href="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/seed_wnb.css" type="text/css" media="all">
+<link rel="stylesheet" id="google-fonts-css" href="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/css.css" type="text/css" media="all">
+<script type="text/javascript" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/jquery.js" id="jquery-core-js"></script>
+<script type="text/javascript" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/jquery-migrate.js" id="jquery-migrate-js"></script>
+<script type="text/javascript" id="seed-wnb-js-js-extra">
+/* <![CDATA[ */
+var seed_wnb_js_localize = {"msg":"Important Updates!","button_link":"http:\/\/www.crewchiefpro.com\/updates\/index.html","button_label":"Click Here to Download Updates","button_target":"_self"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/seed_wnb.js" id="seed-wnb-js-js"></script>
+<script type="text/javascript" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/backstretch.js" id="agency-pro-backstretch-js"></script>
+<script type="text/javascript" id="agency-pro-backstretch-set-js-extra">
+/* <![CDATA[ */
+var BackStretchImg = {"src":"http:\/\/crewchiefpro.com\/wp-content\/uploads\/2013\/10\/1384006_10200906990986059_978572207_n1.jpg"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/backstretch-set.js" id="agency-pro-backstretch-set-js"></script>
+<link rel="https://api.w.org/" href="https://crewchiefpro.com/wp-json/"><link rel="alternate" title="JSON" type="application/json" href="https://crewchiefpro.com/wp-json/wp/v2/pages/17"><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://crewchiefpro.com/xmlrpc.php?rsd">
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://crewchiefpro.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fcrewchiefpro.com%2Fcrew-chief-pro%2F">
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://crewchiefpro.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fcrewchiefpro.com%2Fcrew-chief-pro%2F&amp;format=xml">
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-46585805-1', 'crewchiefpro.com');
+  ga('send', 'pageview');
+
+</script><style type="text/css">#bg_color {
+  color: black;
+}
+.wnb-bar-button {
+  color: white;
+  text-shadow: 0 -1px 0 rgba(0,0,0,0.25);
+  background-color: black;
+}
+#wnb-bar {
+  color: black;
+  position: fixed;
+  background-color: #04f91b;
+  background-image: -moz-linear-gradient(top,#04f91b,#03d617);
+  background-image: -ms-linear-gradient(top,#04f91b,#03d617);
+  background-image: -webkit-gradient(linear,0 0,0 100%,from(#04f91b),to(#03d617));
+  background-image: -webkit-linear-gradient(top,#04f91b,#03d617);
+  background-image: -o-linear-gradient(top,#04f91b,#03d617);
+  background-image: linear-gradient(top,#04f91b,#03d617);
+  background-repeat: repeat-x;
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#04f91b',endColorstr='#03d617',GradientType=0);
+}
+</style><link rel="icon" href="https://crewchiefpro.com/wp-content/themes/genesis/images/favicon.ico">
+<style type="text/css">.site-title a { background: url(https://crewchiefpro.com/wp-content/uploads/2013/10/crewchiefpro-logo.jpg) no-repeat !important; }</style>
+<style>body { background-color: #4169e1; }</style>
+<script src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/twemoji.js" defer="defer"></script><script src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/wp-emoji.js" defer="defer"></script></head>
+<body class="wp-singular page-template-default page page-id-17 custom-background wp-theme-genesis wp-child-theme-agency-pro custom-header header-image full-width-content genesis-breadcrumbs-hidden genesis-footer-widgets-visible agency-pro-blue" itemscope="" itemtype="https://schema.org/WebPage" style="padding-top: 33px;"><div id="wnb-bar"><span>Important Updates!</span> <a href="http://www.crewchiefpro.com/updates/index.html" target="_self"><span class="wnb-bar-button">Click Here to Download Updates</span></a></div><header class="site-header" itemscope="" itemtype="https://schema.org/WPHeader"><div class="wrap"><div class="title-area"><p class="site-title" itemprop="headline"><a href="https://crewchiefpro.com/">Crew Chief Pro Drag Racing Software and Professional Weather Stations</a></p></div><div class="widget-area header-widget-area"><section id="nav_menu-2" class="widget widget_nav_menu"><div class="widget-wrap"><nav class="nav-header" itemscope="" itemtype="https://schema.org/SiteNavigationElement"><ul id="menu-main" class="menu genesis-nav-menu"><li id="menu-item-27" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-home menu-item-27"><a href="http://crewchiefpro.com/" itemprop="url"><span itemprop="name">Home</span></a></li>
+<li id="menu-item-231" class="menu-item menu-item-type-custom menu-item-object-custom current-menu-item current-menu-ancestor current-menu-parent menu-item-has-children menu-item-231"><a href="http://crewchiefpro.com/crew-chief-pro" aria-current="page" itemprop="url"><span itemprop="name">Crew Chief Software</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-22" class="menu-item menu-item-type-post_type menu-item-object-page current-menu-item page_item page-item-17 current_page_item menu-item-22"><a href="https://crewchiefpro.com/crew-chief-pro/" aria-current="page" itemprop="url"><span itemprop="name">Crew Chief Pro 7.980 Drag Racing Software ( New version for 2024 )</span></a></li>
+	<li id="menu-item-21" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-21"><a href="https://crewchiefpro.com/crew-chief-pro-jr/" itemprop="url"><span itemprop="name">Crew Chief Pro Junior version 7.980 ( New Version in 2024 )</span></a></li>
+	<li id="menu-item-624" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-624"><a href="https://crewchiefpro.com/nitro-pro-top-fuel-and-funny-car-software/" itemprop="url"><span itemprop="name">“Nitro Pro” Top Fuel / Funny Car Software</span></a></li>
+	<li id="menu-item-699" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-699"><a href="https://crewchiefpro.com/new-features-enhancements-and-upgrades-to-crew-chief-pro-software/" itemprop="url"><span itemprop="name">What’s New?  Crew Chief Pro’s new features</span></a></li>
+	<li id="menu-item-787" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-787"><a href="https://crewchiefpro.com/resources/" itemprop="url"><span itemprop="name">Tools to Help You Learn to Win</span></a></li>
+	<li id="menu-item-1083" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1083"><a href="https://crewchiefpro.com/time-slip-simulator-coaching-tool-for-drivers/" itemprop="url"><span itemprop="name">Time Slip Simulator – Coaching Tool for Drivers</span></a></li>
+	<li id="menu-item-30" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-30"><a href="https://crewchiefpro.com/customer-reviews/" itemprop="url"><span itemprop="name">Testimonials</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-302" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-302"><a href="https://crewchiefpro.com/customers/" itemprop="url"><span itemprop="name">Customers</span></a></li>
+	</ul>
+</li>
+</ul>
+</li>
+<li id="menu-item-23" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-23"><a href="https://crewchiefpro.com/weather-stations/" itemprop="url"><span itemprop="name">Weather Stations</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-3404" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-3404"><a href="https://crewchiefpro.com/non-paging-weather-stations/" title="See List of NON Paging Trailer Weather Stations" itemprop="url"><span itemprop="name">NON Paging Weather Stations</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-3024" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3024"><a href="https://crewchiefpro.com/ultimeter-trailer-weather-center-new-for-2020/" itemprop="url"><span itemprop="name">Ultimeter Trailer Weather Center – New for 2020</span></a></li>
+		<li id="menu-item-3408" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3408"><a href="https://crewchiefpro.com/performaire-pro-weather-center-new-item/" itemprop="url"><span itemprop="name">Performaire PRO Weather Center – Professional Series.</span></a></li>
+		<li id="menu-item-3409" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3409"><a href="https://crewchiefpro.com/computech-cloud-trailer-weather-center/" itemprop="url"><span itemprop="name">Computech Cloud Trailer Weather Center – New item in 2023</span></a></li>
+		<li id="menu-item-481" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-481"><a href="https://crewchiefpro.com/davis-vantage-pro-2/" itemprop="url"><span itemprop="name">Davis Vantage Pro 2</span></a></li>
+		<li id="menu-item-472" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-472"><a href="https://crewchiefpro.com/portatree-weather-station/" itemprop="url"><span itemprop="name">PortaTree Weather Station</span></a></li>
+	</ul>
+</li>
+	<li id="menu-item-3403" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-3403"><a href="https://crewchiefpro.com/paging-trailer-weather-stations/" title="See list of Paging Trailer Weather Stations" itemprop="url"><span itemprop="name">Paging Trailer Weather Stations</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-2274" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2274"><a href="https://crewchiefpro.com/performaire-pro-weather-center-new-item/" itemprop="url"><span itemprop="name">Performaire PRO Weather Center – New Item</span></a></li>
+		<li id="menu-item-2068" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2068"><a href="https://crewchiefpro.com/computech-cloud-trailer-weather-center/" itemprop="url"><span itemprop="name">Computech Cloud Trailer Weather Center – New item in 2020</span></a></li>
+		<li id="menu-item-8276" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-8276"><a href="https://crewchiefpro.com/ultimeter-trailer-weather-center-new-for-2020/" itemprop="url"><span itemprop="name">Ultimeter Trailer Weather Center</span></a></li>
+	</ul>
+</li>
+	<li id="menu-item-3407" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-3407"><a href="https://crewchiefpro.com/hand-held-weather-stations/" itemprop="url"><span itemprop="name">Hand Held Weather Stations</span></a>
+	<ul class="sub-menu">
+		<li id="menu-item-110" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-110"><a href="https://crewchiefpro.com/performaire-eclipse-weather-station/" itemprop="url"><span itemprop="name">PerformAIRE ECLIPSE</span></a></li>
+		<li id="menu-item-116" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-116"><a href="https://crewchiefpro.com/computech-race-air-pro-and-race-air/" itemprop="url"><span itemprop="name">Computech Race Air Pro and Race Air</span></a>
+		<ul class="sub-menu">
+			<li id="menu-item-8604" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-8604"><a href="https://crewchiefpro.com/2024/11/04/slottica-moj-przeglad-jednego-z-najbardziej-ekscytujacych-kasyn-online/" itemprop="url"><span itemprop="name">.</span></a></li>
+		</ul>
+</li>
+	</ul>
+</li>
+</ul>
+</li>
+<li id="menu-item-25" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-25"><a href="https://crewchiefpro.com/contact/" itemprop="url"><span itemprop="name">Contact Us</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-26" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-26"><a href="https://crewchiefpro.com/meet-the-team/" itemprop="url"><span itemprop="name">Meet the Team</span></a></li>
+</ul>
+</li>
+<li id="menu-item-1072" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1072"><a href="https://crewchiefpro.com/buy-on-line/" itemprop="url"><span itemprop="name">Buy On-Line</span></a></li>
+<li id="menu-item-3307" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3307"><a href="https://crewchiefpro.com/racepak-data-systems/" itemprop="url"><span itemprop="name">Holley Products</span></a></li>
+</ul></nav></div></section>
+</div></div></header><div class="site-container"><div class="site-inner"><div class="content-sidebar-wrap"><main class="content"><article class="post-17 page type-page status-publish entry" aria-label="Crew Chief Pro 7.980 Drag Racing Software ( New version for 2024 )" itemscope="" itemtype="https://schema.org/CreativeWork"><header class="entry-header"><h1 class="entry-title" itemprop="headline">Crew Chief Pro 7.980 Drag Racing Software ( New version for 2024 )</h1>
+</header><div class="entry-content" itemprop="text"><div class="one-third" style="background: #B2B2FE; padding: 10px;">
+<h3 style="text-align: left; margin-top: 15px;">Quick Links</h3>
+<hr>
+<h4>Exclusive Features:</h4>
+<ul>
+<li><a href="#CreateFormulas"><em>ET</em>&nbsp; and&nbsp;Throttle Stop Predictor&nbsp;allows you to create and customize your own prediction formulas</a></li>
+<li><a href="#FinishLineManager"><em>Finish Line Manager</em>&nbsp;is a coaching tool to help drive the stripe</a></li>
+<li><a href="#RunCompletion">Run Completion With Momentum Analysis for accurate elapsed times</a></li>
+<li><a href="#Seven">Predicts your 60 foot time based on Seven different prediction formulas</a></li>
+<li><a href="#weather">Automatic weather gathering every 15 seconds on almost all performance weather stations</a></li>
+<li><a href="#Integration">Integration with Race Pak Data Acquisition</a></li>
+<li><a href="#Requirements">Computer Requirements</a></li>
+<li>Tech Support 7 days a week!</li>
+<li>Works Perfectly on Windows TEN ( 10 )&nbsp;all the way down to older XP systems ( provided screen is large enough )</li>
+</ul>
+</div>
+<div class="two-thirds">
+<h3>How can Crew Chief Pro Software help Me?&nbsp; Plus here is a link to our youtube channel videos!</h3>
+<p><a href="https://studio.youtube.com/channel/UCs5PIkxCHoLm0I3kkhTV2bw/videos/upload?filter=%5B%5D&amp;sort=%7B%22columnType%22%3A%22date%22%2C%22sortOrder%22%3A%22DESCENDING%22%7D">Channel content – YouTube Studio</a></p>
+<p>Crew Chief Pro is the most amazing software ever created for 
+sportsman drag racers. &nbsp;Crew Chief Pro is an electronic logbook 
+that also calculates ET or Throttle Stop predictions and does Run 
+analysis, Weather analysis, and Opponent analysis. &nbsp;It is both very
+ powerful and yet easy to use and setup.&nbsp; Crew Chief Pro is 
+constantly updated, and new ideas are included every single day.&nbsp; 
+We have even added support for Time Slip Simulator, an internet based 
+visual representation of your runs. If you are a sportsman racer who 
+wants to win, then Crew Chief Pro is what you need.</p>
+<div data-editor="3vsah" data-offset-key="emb43-0-0" data-block="true">
+<h3><b>Champions use Crew Chief Pro !</b></h3>
+<p><span style="font-weight: 400;">Here is the proof that </span><b>Crew Chief Pro</b><span style="font-weight: 400;"> will help you win, virtually all NHRA World Champions use Crew Chief Pro.&nbsp; 2023 Super Stock Champion </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/922208/1/7"><span style="font-weight: 400;">Wyatt Wagner</span></a><span style="font-weight: 400;"> uses Crew Chief Pro Software, as do the second place and third place finishers </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/388391/1/7"><span style="font-weight: 400;">Brad Burton</span></a><span style="font-weight: 400;"> and </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/338249/1/7"><span style="font-weight: 400;">Kyle Rizzoli</span></a><span style="font-weight: 400;">.&nbsp; Stock World Champion </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/338249/1/8"><span style="font-weight: 400;">Kyle Rizzoli</span></a><span style="font-weight: 400;"> as well as most of the top 20 racers use Crew Chief Pro.&nbsp; In Super Comp </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/159584/1/11"><span style="font-weight: 400;">John Labbous Jr</span></a><span style="font-weight: 400;"> is a Crew Chief Pro customer as are most of the top 100 finishers.&nbsp; In Super Gas </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/387776/1/10"><span style="font-weight: 400;">Trevor Larson</span></a><span style="font-weight: 400;">
+ is the World Champion and has been a customer for 20 years.&nbsp; 
+Virtually everyone in the top 200 are Crew Chief Pro customers. Top 
+Dragster Champion </span><a href="https://www.nhra.com/drupal-api/standings/points-detail/modal/2023/319484/1/34"><span style="font-weight: 400;">Vince Musolino</span></a><span style="font-weight: 400;">
+ has been a Crew Chief customer for over 10 years.&nbsp; Most of the top
+ 10 in Top Dragster are using Crew Chief Pro.&nbsp; In 2022 Competition 
+Eliminator Champion Ryan Priddy.&nbsp; 2022 Stock World Champion Jimmy 
+Hidalgo Jr.&nbsp; 2022 Super Gas World Champion, Bob Locke, and 2022 
+Super Comp World Champion James Glenn. &nbsp; Countless big buck bracket
+ races have been won by customers using Crew Chief Pro every year.</span></p>
+<p><strong>2020 World Champion </strong>in<strong> Super PRO</strong> is Devin Isenhower. World Champion in <strong>Super Gas</strong> is Brian Preszler.&nbsp; 2019 <strong>Super Comp</strong>&nbsp;is Ray Miller, 2nd place Brian Preszler, and 3rd place Jonathan Anderson use <strong>Crew Chief Pro</strong>.&nbsp;<strong> 2019 Champion</strong> in <strong>Super Gas</strong> is Jeremy Mason, also uses Crew Chief Pro.&nbsp; <strong>2019 Champion</strong> in <strong>Top Dragster</strong> is Danny Nelson, 2nd place Jeff Strickland, and 3rd place Ross Laris are all Crew Chief Pro customers.&nbsp; <strong>2019 Top Sportsman </strong>2nd
+ place Doug Crumlich, 3rd place Allen Firestone are Crew Chief Pro 
+customers.&nbsp;Matter of fact, most NHRA sportsman racers are Crew 
+Chief Pro customers.&nbsp; <strong>2018 Champions</strong> are Justin 
+Lamb in Super Stock, Devin Isenhower in Super Gas, Steve Williams in 
+Super Comp, Paul Nero Top Dragster, Frank Aragona in Comp 
+Eliminator.&nbsp;&nbsp;<strong> 2017 Crew Chief Pro customers are World Champions!</strong>&nbsp;
+ Congrats to Stock and Super Stock champion, and long time Crew Chief 
+Pro customer Justin Lamb.&nbsp; He uses Crew Chief Pro to help dial his 
+car and as a powerful log book. 2016&nbsp;Stock and Top Dragster 
+Champion, Jeff Strickland is a long time Crew Chief Pro customer so the 
+trend continues… Lynn Ellison (Top Dragster), is a Crew Chief Pro 
+customer as well. Previous champions such as Jimmy DeFrank is also a 
+Crew Chief Pro customer</p>
+</div>
+<div id="yiv8128614545">
+<p dir="ltr"><strong>Crew Chief Pro Software is the Winners Choice!</strong></p>
+</div>
+<p>“Hello Don, This is Nick Akoury with the Muscle Lubricants super gas 
+Camaro. You spent a couple of hours helping me at summit Motorsports 
+park Nationals installing the <strong>Crew Chief Pro</strong> at my 
+trailer.&nbsp; The next weekend at Pittsburg raceway i won. I ran (3) 
+9.90s that day and the final i was 9.900 with a .010 light. Thank you 
+very much sincerely Nick Akoury”</p>
+<p><span data-offset-key="ebs8s-0-0"><span data-text="true">Brent Long wrote: “This is one happy camper. I have tried other software companies, never won a race till I purchased <strong>Crew Chief Pro</strong> last year. Since then I have won $14,000.”</span></span></p>
+<div data-editor="3vsah" data-offset-key="emb43-0-0" data-block="true">Tom Patterson wrote: “I use Don Higgin’s <strong>Crew Chief Pro</strong>
+ ET Predictor to Win my Class Championship and it works really 
+well.&nbsp; I use the Competitor Information and Finish Line Manager to 
+prepare me ahead of time where to expect my opponent to be at every 
+interval.&nbsp; That way I know how to judge the finish line.&nbsp; It 
+has helped me win a couple of races and probably the reason I was the 
+Champion.”</div>
+<div data-editor="3vsah" data-offset-key="emb43-0-0" data-block="true">*</div>
+<div data-editor="3vsah" data-offset-key="emb43-0-0" data-block="true"></div>
+<h4><span style="font-size: 1em;">The Weather Calculations include:</span></h4>
+<div class="one-half first">
+<ul>
+<li>Temperature</li>
+<li>Humidity</li>
+<li>Wet Bulb</li>
+<li>Barometer</li>
+<li>Altimeter</li>
+<li>Dew point</li>
+<li>Grains</li>
+</ul>
+</div>
+<div class="one-half">
+<ul>
+<li>Track Elevation</li>
+<li>Correction factor</li>
+<li>Corrected altitude/adjusted altitude</li>
+<li>Dry Density altitude</li>
+<li>Pressure altitude</li>
+<li>Vapor Pressure</li>
+<li>Wind direction/wind speed</li>
+<li>Track temperature</li>
+</ul>
+</div>
+<h3 style="text-align: left;"></h3>
+<h3>Crew Chief Pro Exclusive Features</h3>
+<h4>Crew Chief Pro proprietary formulas</h4>
+<p>Crew Chief PRO has been in the business of calculating drag racing 
+prediction for all classes of drag racing for 25 years. &nbsp;We test 
+many different formulas. &nbsp;The prediction formulas that prove to be 
+most accurate are then added to the software. &nbsp;Some of our unique 
+formulas are Horse Power Correction, Late Night with Temperature, Late 
+Night with Humidity, and Adjusted Altitude with Barometric Pressure. <b>Create and Customize Your Own Prediction Formulas and Crew Chief Pro will run the calculations for you</b>.
+ We display 3 different calculations and ONE can be your own 
+formula.&nbsp; So if you want the ET to change .01 for 212 feet of 
+Density Altitude and you want <a href="http://crewchiefpro.com/wp-content/uploads/2016/02/buildyourETformula.jpg"><img decoding="async" class=" size-medium wp-image-1414 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/buildyourETformula-300x163.jpg" alt="buildyourETformula" width="300" height="163" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/buildyourETformula-300x163_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/buildyourETformula-1024x557.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/buildyourETformula.jpg 1600w" sizes="(max-width: 300px) 100vw, 300px"></a>19
+ points of Barometer and 13 points of Humidity to change the ET then you
+ will have a formula the way you want. Crew Chief PRO will then continue
+ to adjust the ET or Throttle stop predictions while you are in the 
+lanes just the way you would by hand.</p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/12/crewchief1_pickscreen.jpg"><img decoding="async" class=" size-medium wp-image-1013 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/crewchief1_pickscreen-300x163.jpg" alt="crewchief1_pickscreen" width="300" height="163" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/crewchief1_pickscreen-300x163_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/crewchief1_pickscreen-1024x556.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/crewchief1_pickscreen.jpg 1280w" sizes="(max-width: 300px) 100vw, 300px"></a></p>
+<h4></h4>
+<h4></h4>
+<h4></h4>
+<h4 style="text-align: left;">Crew Chief Pro integrates with “Time Slip Simulator”</h4>
+<p>If you are not familiar with “Time Slip Simulator” it is website that
+ gives you a visual look at your races. This company is out of Australia
+ and they were able to create a valuable tool. I decided to partner with
+ them so now “Time Slip Simulator” will now be an option in our new Crew
+ Chief Pro 7.980 version. Check out their site at www.timeslipsim.com 
+How it works is simple, after entering your run, and your Opponent’s 
+information you will just click on a button that says “Time Slip 
+Simulator”. Their website will pop up with a visual outcome of the race.
+ You can change camera angles, pause the run, and even put it into super
+ slow motion to analyze the race. You will even be able to look at the 
+race from your opponent’s view. It is a wonderful Coaching Tool that 
+every drag racer needs. I think Junior Dragster racers will really 
+benefit, especially when they are just starting out. This is a fun tool,
+ even for experience racers. I enjoyed reliving older races and seeing 
+where I went wrong, and what I did right. If you are a new racer this 
+tool will help you learn far quicker that you could just making laps 
+alone. The best part is you will be able to visually understand in two 
+ways. First, after you enter a run you will see how the race looked at 
+every interval. Second, using our “Finish Line Manager”, you will be 
+able to see what the race should look like BEFORE you run. You will even
+ be able to view what it looks like if your opponent is holding a few 
+hundredths, or if you want to hold a few as well. It will be very easy 
+to do “What If” scenarios.&nbsp; This will require a fee for the company
+ that created “Time Slip Simulator” and you have to have an Internet 
+connection. <strong>Here are two short videos of how it works in Crew Chief Pro and Crew Chief Pro Junior.</strong><strong>First, ET Racing:</strong><a href="https://www.youtube.com/watch?v=Tdp5K5fC8H8"> https://www.youtube.com/watch?v=Tdp5K5fC8H8</a><strong>Second, Throttle Stop Racing against a 218 mile per hour car:</strong><a href="https://www.youtube.com/watch?v=PeMwJNI7Ifk"> https://www.youtube.com/watch?v=PeMwJNI7Ifk</a></p>
+<h4>Powerful Search and Reporting Tools</h4>
+<p>Display or print information stored in the program in any order you 
+wish. For example, you need to see all runs at HOUSTON where the 
+corrected altitude is between 800-950 feet. &nbsp;No Problem. &nbsp; If 
+you&nbsp;want to recall all runs with #91 jetting. A few quick 
+keystrokes and the information appears on your screen or prints a 
+report.</p>
+<h4>How Can Crew Chief Pro Be Accurate to .005 of a second?</h4>
+<p>Crew Chief PRO analyzes 29 separate weather parameters and 132 unique
+ weather parameter combinations. &nbsp;We then account for your car, 
+racing class, fuel and weight. &nbsp;We know what weather&nbsp;factors 
+will pick your car up .001 or slow&nbsp;your car down .001 seconds. Crew
+ Chief PRO then analyzes performance to find which&nbsp;weather 
+parameters&nbsp;will provide you with the most accurate prediction. 
+&nbsp;This level of accuracy requires thousands of calculations. &nbsp; 
+Crew Chief PRO performs all of the required calculation in seconds. Our 
+customers report to us, and our own testing shows the result is an ET or
+ Throttle stop prediction that can be as accurate as .001 Sec. <strong>Crew Chief Pro Testimonial:</strong></p>
+<div dir="ltr">“I want to give a huge thanks to Don and the crew at Crew
+ Chief Pro for the amazing software and amazing cutsomer service. 
+Without the program there is no way i could have won the NHRA LODRS 
+event in Houston 2 weeks ago in S/G and the S/ST gamblers race at the 
+same event. I would not pull out of the driveway without my Crew Chief 
+Pro program.”&nbsp; Signed Travis Salter 06/27/2015</div>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/10/throttlestoppredictiondon_final.png"><img loading="lazy" decoding="async" class=" size-medium wp-image-315 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/throttlestoppredictiondon_final-300x153.png" alt="crew chief pro throttle stop prediction" width="300" height="153" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/throttlestoppredictiondon_final-300x153_002.png 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/throttlestoppredictiondon_final-1024x522.png 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/throttlestoppredictiondon_final.png 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<p><strong>T</strong><strong>hrottle Stop Prediction</strong><a href="http://crewchiefpro.com/wp-content/uploads/2013/10/etpredictiondon_final.png"><img loading="lazy" decoding="async" class=" size-medium wp-image-311 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/etpredictiondon_final-300x153.png" alt="Crew Chief Pro ET prediction screen shot" width="300" height="153" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/etpredictiondon_final-300x153_002.png 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/etpredictiondon_final-1024x522.png 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/etpredictiondon_final.png 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<h4>ET Prediction</h4>
+<h4 style="text-align: left;" align="center"><b>Improve your Top End Driving with 3 Amazing Tools!&nbsp;–&nbsp;“<em>Opponent Analysis</em>”&nbsp;–&nbsp;“<em>Margin of Victory Analysis”</em> and&nbsp;– </b><b><i>“Finish Line Manager”&nbsp;&nbsp;&nbsp; </i></b></h4>
+<p>AFTER the Run Crew Chief Pro will calculate how many feet and inches 
+apart you and your opponent were at every interval including Reaction 
+Time.&nbsp; Where “Finish Line Manager” tries to figure out what will 
+happen before a race, “Opponent Analysis” will tell you what really 
+happened after a run and is accurate to ¼ of one inch. Our 
+recommendation is to ask the driver how far apart they thought they were
+ during the race. Then you can show them exactly how the race looked in 
+ET and Feet and Inches. There is no emotion in physics, and the numbers 
+don’t lie. This will benefit their top end driving for their entire 
+racing career, ONLY Crew Chief PRO has these features. Complete Opponent
+ tracking with the date you raced them, opponent number, name, comments,
+ stage style, and ET info. &nbsp;Know exactly how far apart you were all
+ of the way down the track. &nbsp;Know what the margin of victory was in
+ feet and inches. &nbsp;If&nbsp;your opponent broke out, you will know 
+how much to the ¼ or an inch.&nbsp;&nbsp; Crew Chief Pro 
+reports&nbsp;EXACTLY where on the track&nbsp;that you passed the 
+opponent, and we can even tell if either of you hit the brakes.</p>
+<p style="text-align: left;">Opponent Analysis screen below <a href="http://crewchiefpro.com/wp-content/uploads/2013/10/oponentanalysistodon_final.png"><img loading="lazy" decoding="async" class=" size-medium wp-image-314 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/oponentanalysistodon_final-300x153.png" alt="Opponents Analysis" width="300" height="153" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/oponentanalysistodon_final-300x153_002.png 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/oponentanalysistodon_final-1024x522.png 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/oponentanalysistodon_final.png 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<h4></h4>
+<p style="text-align: left;" align="center"><b><i>“Finish Line Manager”&nbsp;&nbsp;</i></b><b><i>&nbsp;A coaching tool that any racer can learn from.</i></b></p>
+<p>Crew Chief Software’s “Finish Line Manager” <a href="http://crewchiefpro.com/wp-content/uploads/2013/10/finishlinemanager.jpg"><img loading="lazy" decoding="async" class="size-full wp-image-546 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/finishlinemanager.jpg" alt="finishlinemanager" width="300" height="223"></a>will
+ tell you how many Feet and Inches apart your car should be from your 
+opponent at every interval on the track before the race!&nbsp; Imagine 
+being able to tell your driver what the race will look like before it is
+ even run!&nbsp;&nbsp; Sophisticated physics formulas make “Finish Line 
+Manager” accurate to ¼ of one inch. Lets use an example, Crew Chief Pro 
+may calculate that your car should be 16 feet behind the opponent at the
+ 330 foot cone, 12 feet 3 inches behind at the 660 foot, 7 feet 5 inches
+ at the 1000 foot cone, &nbsp;and 1 foot 5 inches at the MPH cone.&nbsp;
+ You can instruct your driver that if they are farther behind they need 
+to drop, and if they are closer to wheel race. No more guessing. YOU 
+KNOW WHAT THE RUN WILL LOOK LIKE ON THE TRACK BEFORE YOU RUN.&nbsp; You 
+will know where your car position must be at the top end to win the 
+race.&nbsp;&nbsp;Imagine the&nbsp;confidence you will have knowing more 
+than your opponent. <a href="http://crewchiefpro.com/wp-content/uploads/2013/10/finishlinemanagertodon_final.png"><img loading="lazy" decoding="async" class=" size-medium wp-image-312 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/finishlinemanagertodon_final-300x153.png" alt="Crew Chief Pro drag racing software - Finish Line Manager reports detailed specs about your race" width="300" height="153" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/finishlinemanagertodon_final-300x153_002.png 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/finishlinemanagertodon_final-1024x522.png 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/finishlinemanagertodon_final.png 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a><strong>Finish Line Manager</strong></p>
+<h6 style="text-align: right;"><a href="#top">Back to Top</a></h6>
+<p><b><i>Run Completion&nbsp; </i></b>Crew Chief Pro calculates a “Run 
+Completion” with momentum analysis to report what the&nbsp;ET and MPH 
+would have been if you didn’t let off the gas or get on the 
+brakes.&nbsp; The electronic log book will tell you where deceleration 
+started. &nbsp;“Run Completion” will allow you to choose between 4 
+different formulas. The choices for 1/8th Mile are “Off the 330 foot 
+ET”, “Off 594 Foot, Off 330 Foot Momentum Analysis”.&nbsp; The choices 
+for 1/4 mile are “Off the 1000 foot ET”, “Off 1/8th Mile to 1000 Foot 
+Split Formula”,&nbsp; “Off 1/8<sup>th</sup>&nbsp;Mile ET”, and “Off 1000 Foot with Momentum Analysis”.&nbsp; Here is a screen image of this important tool.</p>
+<p style="text-align: center;"><a href="http://crewchiefpro.com/wp-content/uploads/2020/10/run_completeNEW_before.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-3355 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/run_completeNEW_before-300x169.jpg" alt="" width="300" height="169" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/run_completeNEW_before-300x169_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/run_completeNEW_before-768x432.jpg 768w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/run_completeNEW_before-1024x576.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/run_completeNEW_before.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<h4>Integrates with Trailer Weather Stations</h4>
+<p style="text-align: left;">Crew Chief Pro with the Pager Enabled 
+Option, will link directly with paging and non paging type trailer 
+weather stations. This allows you to get predictions and change in 
+weather conditions every 2 minutes in the lanes on your pager.&nbsp; No 
+more running back and forth to the trailer to check weather and 
+recalculate the predictions.&nbsp;<b>Available with Altalab Altacom II, 
+Computech CLOUD and Race Air paging weather stations, Altronics 
+PerformAIRE PRO Weather Center, Performaire PC Paging, Davis Vantage Pro
+ 2, Xlite Transmitters, Porta Tree, and the ULTIMETER 2100. Information 
+located in weather station tab)</b> Crew Chief Pro Pager Enabled option 
+allows you to link directly to any performance paging weather station. 
+&nbsp;Crew Chief Pro will take a reading every 15 seconds automatically 
+and store it every minute.&nbsp; We update all the predictions and 
+weather every 15 seconds. &nbsp;You will receive real time weather and 
+your ET or Throttle Stop Predictions on your existing pager.&nbsp; There
+ is even an option to have predictions&nbsp;Texted to your cell phone 
+every two minutes. For example: &nbsp;In 30 minutes the temperature can 
+increase 5 degrees. &nbsp;This can account for .022 ET. &nbsp;When this 
+is combined with a change in water grains, humidity, and Density 
+Altitude this can add up to be a .027 change in your ET or Throttle Stop
+ prediction. &nbsp;You will be paged or <a href="http://crewchiefpro.com/wp-content/uploads/2018/12/wristwatchpager-e1544910337425.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-2468 alignleft" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/wristwatchpager-e1544910337425-169x300.jpg" alt="" width="169" height="300" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/wristwatchpager-e1544910337425-169x300_002.jpg 169w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/wristwatchpager-e1544910337425-768x1365.jpg 768w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/wristwatchpager-e1544910337425-576x1024.jpg 576w" sizes="auto, (max-width: 169px) 100vw, 169px"></a>optionally texted your new ET or Throttle Stop prediction that is adjusted for the weather changes.</p>
+<h4>Complete Graphing Program (available with weather stations that download into your computer)</h4>
+<p>Crew Chief PRO LITE and Pager Enabled versions comes with&nbsp;a full
+ featured Graphing Program to graphically display, ET, Throttle Stop vs.
+ Weather Data, ET vs. Weather Data, and much more. It is very easy to 
+use, and most importantly it is POWERFUL!! When used with a weather 
+station that auto downloads into a computer, Crew Chief PRO also graphs 
+all weather parameters by the minute. You can watch weather trends on 
+the weather graphs and know the direction and know how the conditions 
+are trending. You can see the exact time the wind gusts, the direction 
+and the speed of the gust.&nbsp; You can change dates, print complete 
+weather reports, and see graphs full screen.</p>
+<h4><a href="http://crewchiefpro.com/wp-content/uploads/2013/11/weather_graphs.png"><img loading="lazy" decoding="async" class=" aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/weather_graphs-300x187.png" alt="" width="300" height="187"></a></h4>
+<h4>Texting Messaging Option</h4>
+<p>Texting to your Cell Phone version also available. Text your 
+prediction and weather to your Cell phone every 2 minutes.&nbsp; 
+Requires internet connection on the computer and cell phone.</p>
+<h4>Electronic Log Book</h4>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2013/10/sportsman_run_entry.jpg"><img loading="lazy" decoding="async" class=" size-medium wp-image-826 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/sportsman_run_entry-300x187.jpg" alt="sportsman_run_entry" width="300" height="187" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/sportsman_run_entry-300x187_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/sportsman_run_entry-1024x640.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/sportsman_run_entry.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a>Crew
+ Chief Pro &nbsp;Log book contains the run information, the weather 
+during the run and split time intervals for 60Ft-330Ft, 330Ft-1/8th 
+Mile, 1/8<sup>th</sup>– 1000 foot, 1000 foot to Quarter Mile, &nbsp;60Ft -1/4<sup>th</sup>, and 330 foot to ¼ mile.&nbsp; These give you an excellent tuning tool and comparison to other runs. &nbsp;<em><strong>This
+ log book prints out and slips into a 3 ring binder perfectly.&nbsp; It 
+is color coordinated so your eyes key in on certain areas quickly.&nbsp;
+ We even calculate the difference between split times!</strong></em><a href="http://crewchiefpro.com/wp-content/uploads/2014/03/LogbookScreen.jpg"><img loading="lazy" decoding="async" class=" size-medium wp-image-895 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/LogbookScreen-300x168.jpg" alt="LogbookScreen" width="300" height="168" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/LogbookScreen-300x168_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/LogbookScreen-1024x576.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/LogbookScreen.jpg 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a><a href="http://crewchiefpro.com/wp-content/uploads/2013/10/SplitsBetweentheSplitsReport.jpg"><img loading="lazy" decoding="async" class=" size-medium wp-image-937 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/SplitsBetweentheSplitsReport-300x284.jpg" alt="SplitsBetweentheSplitsReport" width="300" height="284" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/SplitsBetweentheSplitsReport-300x284_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/SplitsBetweentheSplitsReport.jpg 1002w" sizes="auto, (max-width: 300px) 100vw, 300px"></a><strong>Electronic Log Book</strong></p>
+<h4><b><i>Unlimited Databases</i></b></h4>
+<p>Crew Chief Pro can store virtually an unlimited number of databases. 
+&nbsp;The benefit of different databases is to store runs together where
+ the weather changed the ET and not some track anomaly.&nbsp; For 
+example, we have quite a few 1/8th mile tracks near us, each one has a 
+mind of its own.&nbsp; At one track our ET may be a 7.980.&nbsp; Next 
+week at a different track with similar altitudes we may run a 
+7.820.&nbsp; When this happens we create a database for the different 
+tracks so the quick runs won’t confuse the program.&nbsp; So when we are
+ at the track with the quicker ETs Crew Chief can predict just fine and 
+not be confused.&nbsp; When we go to the slower ET track it won’t see 
+the quick ETs and predicts just fine. Databases are also useful if a 
+racer has several different tune-ups for different track conditions or 
+different parts. We used to have a database which we called “Midstate 
+Dragway Shockwave clutch” and one called “Midstate Dragway Modified 
+Polar clutch”.&nbsp; These were 2 different databases used at the same 
+track yet had different components installed on the race car.&nbsp; You 
+can Name your databases for easy reference to your tune up or track. 
+Each Database has its own set of Prediction Factors, ET formulas, and 
+default information! Separate Databases prevent runs in one database 
+from contaminating runs from another database, especially important when
+ the ET is different from track to track.</p>
+<h4>Prints NHRA, IHRA, and YOUR Track’s Tech Cards</h4>
+<p>Now&nbsp;you no longer have to fill out your tech card at every race.
+ &nbsp;Crew Chief Pro will print and fill in all necessary information 
+on your tech card for you. &nbsp; It will fill in all the serial numbers
+ and certification numbers for you. You can store an unlimited number of
+ vehicles along with their associated information. Just enter your NHRA 
+or IHRA number and click print.&nbsp; We will print on the tech card 
+they give you at the gate, OR for NHRA National Events we can&nbsp;print
+ a image completely filled in for you, Front&nbsp;and Back sides. <a href="http://crewchiefpro.com/wp-content/uploads/2013/10/techcard.jpg"><img loading="lazy" decoding="async" class=" size-medium wp-image-825 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/techcard-223x300.jpg" alt="techcard" width="223" height="300" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/techcard-223x300_002.jpg 223w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/techcard.jpg 684w" sizes="auto, (max-width: 223px) 100vw, 223px"></a></p>
+<h6 style="text-align: right;"><a href="#top">Back to Top</a></h6>
+<h3>Nine Separate prediction formulas for your sixty foot</h3>
+<p>You can now estimate your sixty time based on the following conditions</p>
+<ul>
+<li>Weather adjusted</li>
+<li>Your estimated 60 Ft time</li>
+<li>Track temperature</li>
+<li>Vapor Pressure</li>
+<li>Humidity</li>
+<li>Barometer</li>
+<li>Horse Power correction</li>
+<li>Throttle Stop Adjusted 60 Foot.</li>
+<li>The Average for all runs in database</li>
+</ul>
+<h6 style="text-align: right;"><a href="#top">Back to Top</a></h6>
+<h3>“Search Runs” and a “See Similar Runs”</h3>
+<p>Crew Chief Pro provides you an option to search runs that are similar
+ to your current run. You can click one button to see for yourself what 
+your vehicle has done under similar conditions in a few Milliseconds. 
+Before Crew Chief Pro you might have spent 30 minutes looking through a 
+logbook for similar runs. Crew Chief PRO then shows you a “Search 
+Screen” which&nbsp;shows all the runs where the DA was within 400 feet 
+of the current conditions.&nbsp; This data is listed in a Spread Sheet 
+fashion and this allows you to spot TRENDS in performance. We know you 
+need important, real world data for proper E.T. Predictions. What good 
+is a prediction without some “muscle” to back it up? <strong>Now when 
+they call you up YOUR READY! You have studied the information You know 
+how your car will perform which&nbsp;will improve your top end driving 
+skills. <em>This is the Crew Chief PRO Edge</em>.</strong></p>
+<p><a href="http://crewchiefpro.com/wp-content/uploads/2020/10/search_all_weather.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-3357 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/search_all_weather-300x169.jpg" alt="" width="300" height="169" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/search_all_weather-300x169_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/search_all_weather-768x432.jpg 768w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/search_all_weather-1024x576.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/search_all_weather.jpg 1600w" sizes="auto, (max-width: 300px) 100vw, 300px"></a> <a href="http://crewchiefpro.com/wp-content/uploads/2020/10/Search_Current_Weather.jpg"><img loading="lazy" decoding="async" class="size-medium wp-image-3358 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/Search_Current_Weather-300x169.jpg" alt="" width="300" height="169" srcset="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/Search_Current_Weather-300x169_002.jpg 300w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/Search_Current_Weather-768x432.jpg 768w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/Search_Current_Weather-1024x576.jpg 1024w, Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/Search_Current_Weather.jpg 1920w" sizes="auto, (max-width: 300px) 100vw, 300px"></a></p>
+<h6 style="text-align: right;"><a href="#top">Back to Top</a></h6>
+<p><b>Integration with Race Pak Data Acquisition</b> Integration with 
+Race Pak Data Acquisition feature. &nbsp; Store all the graphs and run 
+files together with each run you enter in Crew Chief Pro. 
+&nbsp;Instantly see all relevant information from within Crew Chief Pro!
+ &nbsp; Crew Chief PRO is a certified Race Pak dealer. &nbsp;<strong>Please e-mail your Race Pak questions to&nbsp;<a href="mailto:crewchiefpro@live.com" target="_blank" rel="noopener noreferrer">crewchiefpro@live.com</a></strong></p>
+<h6 style="text-align: right;"><strong><a href="#top">Back to Top</a></strong></h6>
+<p><strong>Computer Requirements</strong> Crew Chief Pro 7.980 will work
+ on ANY Windows operating system from XP to Windows 11.&nbsp; We require
+ 5 GB of disk space, a screen resolution of 1024 x 768 or higher, and a 
+15-inch screen or larger.&nbsp; Memory depends on the Windows operating 
+system, but more is better in every case.&nbsp; 8 gig or higher is 
+recommended.&nbsp; Any new computer will work fine. We also recommend a 
+Lexmark, Kodak, or Canon Printer to print reports and tech cards.</p>
+<h4></h4>
+<h4><em><strong>Crew Chief Pro Software Price Lists&nbsp; –&nbsp; ( Cash Prices )</strong></em></h4>
+<h2 class="subtitle">10% military discount for active duty military &amp; veterans</h2>
+<p>Crew Chief Pro salutes our troops with an exclusive discount for their service and dedication to defending our freedom!</p>
+<p><b><i>Crew Chief Pro 7.980 </i></b><i>with All Prediction Modules included for ET and T-Stop Predictions</i>. &nbsp;Basic version is designed for hand held weather instruments with <span style="text-decoration: underline;"><strong>no</strong></span>
+ automatic weather, texting, or paging.&nbsp; The racer enters the 
+weather manually. Crew Chief Pro supports and sells Kestrel 4250, 
+Altronics Performaire Eclipse and Computech Race Air and Race Air Pro 
+hand held weather stations. Includes 1 year Crew Chief PRO updates: <strong>Price: $399.00</strong></p>
+<p><b><i>Crew Chief Pro LITE for <span style="text-decoration: underline;">NON</span> Paging Trailer Weather stations</i></b>
+ All Prediction Modules included for ET and Throttle Stop Predictions. 
+Includes user selectable screens and no charge reports and screens. 
+&nbsp; Integrates with continuous download weather station for real time
+ weather calculations. Current Weather Stations supported are: Ultimeter
+ 2100,&nbsp;<i>Altronics PerformAIRE PC, Performaire PRO ( non paging ),
+ Davis Vantage Pro 2 ( non paging ), Computech Cloud ( non paging ), and
+ Computech Race Air Remote ( non paging ), Computech Race Air Pro with 
+Download Kit, PortaTree ( non paging ), Kestrel 4250 Bluetooth or 
+Kestrel 4250 with Docking Station.</i> Includes 1 year Crew Chief PRO updates: <strong>Price: $459.99</strong></p>
+<h4><em>Crew Chief Pro</em>&nbsp;Pager Enabled Version ( For Paging Weather Stations ONLY ).</h4>
+<p>All Prediction Modules included for ET and Throttle Stop predictions.
+ Automatically downloads real time weather. Stores weather for three 
+years. Includes charge reports and screens. Integrates with paging 
+weather stations, and will send your current predictions and weather to 
+the staging lanes every 2 minutes. Current weather stations that Crew 
+Chief PRO will page with are, Performaire PRO Paging, Alta Lab Alta Com 
+II Paging, Altalab 4XR Paging, <i>Computech Cloud with Paging, </i>Computech
+ Race Air Remote paging, Altronics Weather Center trailer station with 
+pager, Performaire PC with Paging, Davis Vantage Pro 2 ( with paging 
+),&nbsp; Ultimeter 2100 with paging transmitter, and Porta Tree (with 
+paging ). Included 1 year of Crew Chief PRO updates:&nbsp; <strong>Price: $509.99</strong></p>
+<p><strong>Team License for use with multiple cars in the same class Teams.</strong>
+ All cars get a unique ET calculation. Receive the ET and weather for up
+ to 4 cars at one time. If you order the Pager Enabled Version then 
+multiple predictions can be sent to each pager. Each team person will 
+get one line of the pager for their predictions. Multiple User License 
+for up to 4 TEAM CARS-This Option is ONLY Available with Crew Chief PRO 
+Pager Enabled. <strong>Price $279.99 additional.</strong> &nbsp; NOTE: 
+One Computer and One Weather Station only.&nbsp; If using on multiple 
+weather stations then you must buy another program for each weather 
+station.</p>
+<p><strong>Text Messaging Option. </strong>If you have Internet Access 
+on the COMPUTER, this option will allow you to send Predictions and 
+Weather readings every 2 minutes ( or whatever you select ) right to up 
+to 3 phones!&nbsp; Simple to setup and very effective.&nbsp; Requires a 
+Gmail or Live email accounts to make this simple, other email accounts 
+will work if you know the SMTP settings.&nbsp; <strong>Price is $99.95 if you get the Paging Enabled version, the LITE version Text Messaging Option is $209.95</strong>.</p>
+<p>We can also ship the program on a USB thumb drive for an additional $29.95</p>
+<p><a title="New Features, Enhancements, and Upgrades to Crew Chief Pro Software" href="http://crewchiefpro.com/new-features-enhancements-and-upgrades-to-crew-chief-pro-software/"><img loading="lazy" decoding="async" class=" size-full wp-image-681 aligncenter" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/click_here_to_see_whats_new.jpg" alt="click_here_to_see_whats_new" width="275" height="232"><br>
+</a></p>
+</div>
+<p>NOTE: We have to charge a 2.5% processing fee unless you pay by check
+ or cash.&nbsp; Sorry but our fees per transaction plus the percentage 
+they take is costing us too much.</p>
+<div class="two-thirds">
+<h6 style="text-align: right;"><a href="#top">Back to Top</a></h6>
+</div>
+</div></article></main></div></div><div class="footer-widgets"><div class="wrap"><div class="widget-area footer-widgets-1 footer-widget-area"><section id="text-2" class="widget widget_text"><div class="widget-wrap"><h4 class="widget-title widgettitle">Common Sense Software</h4>
+			<div class="textwidget"><h5>4417 Enterprise Drive<br>
+Bartonville, Illinois<br>
+<a href="tel:3096882990">Phone (309) 688-2990</a><br>
+<a href="mailto:crewchiefpro@live.com"><img src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/green-email-icon.jpg" alt="Contact Don Higgins of Crew Chief Drag Racing Software" height="50" width="55" \=""></a><a href="mailto:crewchiefpro@live.com">Email Us</a></h5>
+</div>
+		</div></section>
+</div><div class="widget-area footer-widgets-2 footer-widget-area"><section id="text-4" class="widget widget_text"><div class="widget-wrap">			<div class="textwidget"><p><img src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/BIONDO_logo-e1383180208414.jpg" alt="Biondo Racing Products" \=""></p>
+<p><a href="http://jegs.com/" target="_blank"><img src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/jegsDotCom_Logo.jpg" alt="Jegs Performance Auto Parts" \=""></a></p>
+<p><img src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/racepak_logo.jpg" alt="Racepak Data Systems" \=""></p>
+<p><img src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/AIM_Sports.png" \=""></p>
+</div>
+		</div></section>
+</div><div class="widget-area footer-widgets-3 footer-widget-area"><section id="text-3" class="widget widget_text"><div class="widget-wrap"><h4 class="widget-title widgettitle">Connect with the Crew Chief Team</h4>
+			<div class="textwidget"></div>
+		</div></section>
+</div></div></div><footer class="site-footer" itemscope="" itemtype="https://schema.org/WPFooter"><div class="wrap"><div class="gototop"><p style="text-align:center">[footer_backtotop]</p></div><div><p style="text-align:center">Copyright
+ ©&nbsp;2025 Common Sense Software (dba Crew Chief Pro Software). All 
+Rights Reserved. Crew Chief Pro &amp; Crew Chief Pro Jr. are trademarks 
+of Common Sense Software. </p></div></div></footer></div><script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"\/*"},{"not":{"href_matches":["\/wp-*.php","\/wp-admin\/*","\/wp-content\/uploads\/*","\/wp-content\/*","\/wp-content\/plugins\/*","\/wp-content\/themes\/agency-pro\/*","\/wp-content\/themes\/genesis\/*","\/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+<style id="core-block-supports-inline-css" type="text/css">
+/**
+ * Core styles: block-supports
+ */
+
+</style>
+<script type="text/javascript" id="q2w3_fixed_widget-js-extra">
+/* <![CDATA[ */
+var q2w3_sidebar_options = [{"use_sticky_position":false,"margin_top":0,"margin_bottom":0,"stop_elements_selectors":"","screen_max_width":0,"screen_max_height":0,"widgets":[]}];
+/* ]]> */
+</script>
+<script type="text/javascript" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/frontend.min.js" id="q2w3_fixed_widget-js"></script>
+
+<div class="backstretch" style="left: 0px; top: 0px; overflow: hidden; margin: 0px; padding: 0px; height: 827px; width: 1485px; z-index: -999999; position: fixed;"><img style="position: absolute; margin: 0px; padding: 0px; border: medium; width: 1485px; height: 990px; max-height: none; max-width: none; z-index: -999999; left: 0px; top: -81.5px;" src="Crew%20Chief%20Pro%207.980%20Drag%20Racing%20Software%20(%20New%20version%20for%202024%20)_files/1384006_10200906990986059_978572207_n1.jpg"></div></body></html>

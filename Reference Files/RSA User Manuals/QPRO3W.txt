@@ -1,0 +1,1385 @@
+
+
+
+
+
+
+          RSA
+   Computer Software
+    for Drag Racers
+
+
+
+
+
+QUARTER Pro
+Version 3.2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+Racing Systems Analysis
+-----------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Racing Systems Analysis
+
+
+
+
+
+
+
+QUARTER Pro
+Version 3.2
+
+
+By:  Patrick Hale
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Copyright 2006 RSA
+             Phoenix, Arizona  USA
+             www.QUARTERjr.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+COPYRIGHT
+
+Copyright 2006 by RSA. All rights reserved. No part of this publication may be reproduced, transmitted, stored in a retrieval system, or translated into any language or computer language, in any form or by any means; electronic, mechanical, magnetic, optical, chemical, manual or otherwise; without the prior written consent of Racing Systems Analysis.
+
+
+
+
+
+
+
+
+DISCLAIMER
+
+RSA reserves the right to revise this publication and to make changes from time to time in the context hereof, without the obligation of RSA to notify any person of such revision or changes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ii
+
+
+
+
+TABLE OF CONTENTS
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+General . . . . . . . . . . . . . . . . 11
+Installing your program disk. . . . . . 14
+
+
+
+CHAPTER 2:  SAMPLE QUARTER Pro ANALYSIS
+
+Getting started . . . . . . . . . . . . 21
+Sample QUARTER Pro analysis . . . . . . 22
+
+
+
+CHAPTER 3:  THE COMMAND MENUS
+
+The command menus . . . . . . . . . . . 31
+File: Open. . . . . . . . . . . . . . . 32
+File: Save. . . . . . . . . . . . . . . 32
+File: Save As . . . . . . . . . . . . . 33
+File: Print . . . . . . . . . . . . . . 33
+File: Preferences . . . . . . . . . . . 34
+File: Exit. . . . . . . . . . . . . . . 34
+
+Timeslip: . . . . . . . . . . . . . . . 3-4
+
+Graph:. . . . . . . . . . . . . . . . . 3-5
+
+Window: . . . . . . . . . . . . . . . . 3-5
+Window: Cascade Graphs. . . . . . . . . 3-6
+Window: Tile Graphs . . . . . . . . . . 3-6
+
+
+
+
+
+
+                                        iii
+
+
+
+
+CHAPTER 4:  INPUT VARIABLES
+
+How to input. . . . . . . . . . . . . . 41
+
+General data. . . . . . . . . . . . . . 43
+Vehicle data. . . . . . . . . . . . . . 4-5
+Final drive data. . . . . . . . . . . . 46
+Aerodynamic data. . . . . . . . . . . . 4-8
+Engine dyno data. . . . . . . . . . . . 49
+Transmission data . . . . . . . . . . .411
+Polar moments of inertia. . . . . . . .4-15
+
+Motorcycle final drive worksheet. . . .4-17
+Tire width worksheet. . . . . . . . . .4-18
+Frontal area worksheet. . . . . . . . .4-19
+Polar moment of inertia worksheets. . .4-20
+
+
+
+
+CHAPTER 5:  CALCULATED OUTPUT
+
+Timeslip. . . . . . . . . . . . . . . . 5-1
+Detailed parameters . . . . . . . . . . 52
+Vehicle performance graphs. . . . . . . 5-5
+Engine RPM histogram. . . . . . . . . . 5-6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+iv
+
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+
+General
+
+
+Congratulations on your purchase of one of the most cost effective pieces of drag racing speed equipment that is presently available  QUARTER Pro.
+
+
+Today, in this 21st century, the sport of drag racing has attained a level of sophistication that makes the personal computer an important tool for every racer to use, Professional and Sportsman alike.
+
+
+Now, QUARTER Pro unlocks the power and convenience of the PC for every drag racer who wants to understand and improve the performance of their own vehicle.
+
+
+The winning racecar combination is the quest of all drag racers.  "What rear end gear should I run?  Which transmission ratios?  What  size  tires?  What stall speed converter?  When should I shift?  What should my next dialin be?"
+
+
+These are but a few of the many decisions a racer must make when setting up a new racecar, or when trying to make an existing vehicle quicker, faster and more consistent.
+
+
+
+                                        11
+
+
+
+
+
+In the past, the approach has usually been to copy what the next guy has, and then start changing things, one at a time.
+
+
+
+This is a costly, time consuming process which usually ends up with a worn out vehicle and a shop or garage full of worthless spare parts.
+
+
+
+You can't afford to try everything at the same time and varying track conditions can cloud the results of even the best backtoback testing.
+
+
+
+With competitive drag racing being a contest of hundredths, or even thousandths of a second, only a computer can provide the necessary consistency and accuracy to optimize your vehicle's dragstrip performance.
+
+
+
+RSA (Racing Systems Analysis) was started in 1978 by Patrick Hale, a local drag racer from Arizona.  After drag racing several vehicles while attending Mechanical Engineering school at Arizona State University; he developed a computer model for quartermile vehicle performance analysis.
+
+
+
+12
+
+
+
+
+
+Access to powerful computers was limited in those days, so only the services of the computer program could be marketed, and therefore its general use was limited.
+
+
+
+Today, the widespread availability of the PC has made this powerful computer program, QUARTER Pro, available to everyone.
+
+
+
+The services of RSA are also available to customize QUARTER Pro to your specific needs; or to write new, engineering analysis type software for other applications.  Give RSA a call or e-mail.  We will be happy to discuss these possibilities, and future RSA products with you.
+
+
+
+
+
+                   Patrick Hale
+                   President, MSME
+
+                   Racing Systems Analysis
+                   Phoenix, Arizona  USA
+
+                   Phone: 602.992.2586
+                   Web:   www.QUARTERjr.com
+
+
+
+
+
+
+                                        13
+
+
+
+Installing your program disk
+
+
+1. Start by inserting the QUARTER Pro program CD into the appropriate drive in your PC.
+
+
+2. Use the mouse to select Run from the Start menu.
+
+
+3. In the Command Line box, type d:setup.exe depending on which drive you are using to read the QUARTER Pro setup disk.
+
+
+4. Use the mouse to click the OK button.
+
+
+5. Follow the instructions displayed on your computer monitor.  When you are finished, remove the CD.
+
+
+6. The setup process creates a folder named QUARTER Pro in the Program Files group.  This folder contains the icon for the QUARTER Pro software and the sample data documents.  The QUARTER Pro program icon has the name QPro.exe.
+
+
+7.  You can now create a Shortcut for the QPro.exe file and Send it to the Windows desktop if you like.  You normally do this by right-clicking the mouse on the QPro.exe program icon and then choosing Create Shortcut from the drop-down list.
+
+
+14
+
+
+
+
+CHAPTER 2:  SAMPLE QUARTER Pro ANALYSIS
+
+
+Getting Started
+
+In this chapter, we will walk you through a sample, hands on, vehicle quartermile performance analysis.  So please sit at your computer while you read this chapter.  QUARTER Pro is designed to be very easy to use, even for the first time or novice computer user.
+
+
+You can begin using QUARTER Pro in one of two ways.  For now, use the mouse to double-click on the application icon in the QUARTER Pro folder or the Windows desktop Shortcut you created for QPro.exe.  This action starts loading QUARTER Pro from the hard disk to the random access memory (RAM) and starts the program running.
+
+
+The splash screen identifying the version of the QUARTER Pro program you have will now appear.  This will be followed by the QUARTER Pro Input Data screen including a menu of commands.  By choosing one of the menu items from the menus (File, Timeslip, Graph, Window and Help), you command QUARTER Pro to do whatever you choose.
+
+
+QUARTER Pro can also be started by double-clicking on any data document that you have created and saved.
+
+
+
+                                        2-1
+
+
+
+By double-clicking on a data document you can pick right up where you left off!  However, to use this optional method you must first "register" the QUARTER Pro application file with the "*.dat" data file type using the Windows "File Types" manager.
+
+
+The Windows "File Types" manager is selected by double-clicking on "My Computer" and selecting "Options" from the "View" command menu.  The tab for setting the application "File Types" can now be selected.
+
+
+Sample QUARTER Pro Analysis
+
+To begin with, select and then open the ProStock.dat QUARTER Pro data document.  Now, let's take a quick look at the QUARTER Pro Input Data screen.  The Input Data screen contains all the data necessary to perform the performance calculations. 
+
+
+General information about the weather conditions, and the weight, wheelbase and aerodynamics of the vehicle are included.  There are engine power inputs from the dyno and clutch data, transmission gear ratios, final drive ratio, tire size, and polar moments of inertia!
+
+
+Any of these input data values may easily be changed using the editing features of QUARTER Pro which are fully described in Chapters 3 and 4 of this manual.
+
+
+2-2
+
+
+
+Now slowly press the tab key a few times and watch how the cursor moves around the QUARTER Pro Input Data screen.  When you get to the Engine Dyno Data and Transmission Gear Ratios you must use the arrow keys to navigate instead.
+
+
+You can also use the mouse to select any input variable to modify.  Single-clicking on the variable value allows you to insert and delete.  Double-clicking allows direct replacement of the input variable value.
+
+
+Now press the Timeslip button (the command button with the dark green TS) to begin the detailed calculations for the vehicle performance based on the current data.
+
+
+After a second, the calculations are complete, and the Timeslip is displayed.  A detailed description of all the Calculated Output from QUARTER Pro is included in Chapter 5 of this manual.
+
+
+Press the Detailed Parameters button located at the bottom of the Timeslip.  This screen shows all the vehicle Detailed Parameters, including time, distance, acceleration and engine RPM.
+
+
+Press one of the Vehicle Performance Graph buttons located to the right of the Print button.  These graphs show the Detailed Parameters just like you get them from an expensive on-board data recorder!
+
+
+                                        2-3
+
+
+
+That's all there is to it!  You can now return to the QUARTER Pro Input Data screen by closing the Timeslip, Detailed Parameters and Vehicle Performance Graph screens - simply click the mouse on the close box in the upper right hand corner.
+
+
+
+Or you can use the mouse to click anywhere on the QUARTER Pro Input Data screen and the other open screens will be closed automatically.  You can also go the Window: drop-down command menu and select the Input Data screen.
+
+
+
+Now, try changing the weight to 2,000 pounds, and then press the Timeslip button to obtain the Timeslip for this lighter weight.
+
+
+
+How much quicker does the ProStock racecar go?  Is the engine RPM too high through the lights?  (Press the Detailed Parameters and RPM-MPH vs Time graph buttons to find out!)  Maybe the final drive gear ratio needs changing?  Perhaps taller tires will do the trick?
+
+
+
+These are the types of questions QUARTER Pro was designed to answer, quickly and economically, without ever having to go to the dragstrip to test!
+
+
+
+2-4
+
+
+
+
+
+QUARTER Pro also includes powerful calculation worksheets available by pressing any one of the seven Worksheet buttons at any time.  The Worksheet buttons are located next to their corresponding input variables and have a ... symbol on them.  Try pressing the Frontal Area Worksheet button located at the Frontal Area input variable location now.
+
+
+
+The Frontal Area Worksheet will be displayed for easily calculating the vehicle frontal area.  The Frontal Area Worksheet variables are described starting on page 4-19 of this manual.
+
+
+
+The frontal area is automatically calculated as you enter the worksheet data.  Press the close box in the upper right-hand corner to return to the QUARTER Pro Input Data screen when you are finished using the worksheet.
+
+
+
+Note that the calculated frontal area from the worksheet does not automatically transfer to the QUARTER Pro Input Data screen.  You must still input any new value for yourself.
+
+
+
+
+
+
+                                        2-5
+
+
+
+
+QUARTER Pro also includes help screens available by pressing one of the two Help buttons at any time.  The Help buttons are located next to their corresponding input variables and have a ? symbol on them.  Try pressing the Traction Index Help button located at the Traction Index input variable location now.
+
+
+
+The Traction Index help screen is included with QUARTER Pro to conveniently illustrate the choices available for the input Traction Index.
+
+
+
+Press the close box in the upper right-hand corner of the help screen to return to the QUARTER Pro Input Data screen.
+
+
+
+Selecting the Exit command from the File menu will return your computer to the Windows desktop.
+
+
+
+Good luck and have fun!  The remaining chapters of this manual provide you with the detailed knowledge and skills necessary to fully exploit the power and versatility of QUARTER Pro and your Windows PC.
+
+
+
+
+
+
+2-6
+
+
+
+
+CHAPTER 3:  THE COMMAND MENUS
+
+
+
+Five Windows command menus; File, Timeslip, Graph, Window and Help, containing a variety of menu items are used with QUARTER Pro to specify the command option desired.  These menu options may generally be selected anytime while running the program.
+
+
+
+Three of the File menu options - Open, Save and Print are also available by using command buttons.  These are conveniently located just below the command menu near the top left hand side of the QUARTER Pro Input Data screen.
+
+
+
+The Timeslip and Graph menu options are also available by using several more command buttons located to the right of the Print command button.
+
+
+
+This chapter of the QUARTER Pro manual contains a complete, detailed description for each of the command menu and button options.
+
+
+
+
+
+
+
+
+                                        3-1
+
+  
+
+
+File: Open
+
+The Open command is used to retrieve from the disk and display on the QUARTER Pro Input Data screen a previously saved QUARTER Pro data document.  Selecting Open from the File menu (or pressing the Open command button) will cause a standard Windows dialog box to appear, awaiting the selection of a QUARTER Pro data document.
+
+
+Once the input data document is selected, the data values are retrieved and displayed on the QUARTER Pro Input Data screen.  The cursor is always left at the "Note:" position following this option.
+
+
+The Open command can be used to open an existing data document so that it may be modified as desired.  The retrieved input data can also serve as a base for building another data document to be saved using the Save As option described below.
+
+
+
+
+File: Save
+
+The Save command is used to save the current vehicle data on your disk.  Selecting Save from the File menu will save the data using the current document name.  You may also press the Save command button to select this feature.
+
+
+
+
+3-2
+
+
+
+
+
+File: Save As
+
+The Save As command is used to save the current input data on your disk with a new document name.  You must always select Save As from the File menu for this command.
+
+
+
+
+
+File: Print
+
+The Print command is used to make a complete, printed copy of both the input vehicle data and the Detailed Parameters from QUARTER Pro.  The printout may also contain the data in the QUARTER Pro calculation Worksheets as well as the QUARTER Pro Vehicle Performance Graphs depending on your selections from the File: Preferences screen, described below.
+
+
+Selecting the Print command in the File menu (or the Print command button) at any time will cause the printer to start printing.
+
+
+
+
+
+
+
+
+
+
+
+
+                                        3-3
+
+
+
+
+File: Preferences
+
+The File: Preferences screen is used to select and save QUARTER Pro options regarding:
+
+1.  where the data documents are stored,
+
+2.  and how the Worksheets, Calculated Output and Vehicle Performance Graphs are to be displayed on your printer.
+
+
+
+File: Exit
+
+The Exit command in the File menu can be used at any time to exit the QUARTER Pro program and return to the Windows desktop.  You may also exit QUARTER Pro by pressing the close box in the upper right hand corner of the Input Data screen.
+
+
+
+Timeslip:
+
+The Timeslip command can be used at any time to start the calculations to determine the vehicle dragstrip performance.  The results of these calculations will be shown on the QUARTER Pro Timeslip screen.
+
+You may also press the Timeslip command button to select the Timeslip screen.  The Timeslip command button has a dark green TS and is located just to the right of the Print command button at the top of the QUARTER Pro Input Data screen.
+
+
+3-4
+
+
+
+Graphs:
+
+The Graph menu contains commands that allow the selection and display of any or all of five graphs that are available from QUARTER Pro:
+
+ - RPM & MPH vs Time
+ - Acceleration and Distance vs Time
+ - RPM and MPH vs Distance
+ - Acceleration and Time vs Distance
+ - Engine RPM Histogram
+
+The Graph menu items and corresponding Graph command buttons may only be selected after the calculated performance has been completed.  The Graph command options are only enabled after selecting the Timeslip command.
+
+
+
+Window:
+
+The Window menu provides commands for selecting how the Vehicle Performance Graphs are presented on the computer screen as described below.  The Window menu also provides another way of selecting among the open QUARTER Pro program screens - just like many other Windows applications.
+
+In other words, if after viewing the Timeslip screen and some of the Vehicle Performance Graphs you want to go back to change the Input Data, select the Window menu with the mouse and then choose the Input Data screen from the drop down list.  This action will automatically close all the Calculated Output screens.
+
+
+                                        3-5
+
+
+
+
+
+Window: Cascade Graphs
+
+Normally, the QUARTER Pro Vehicle Performance Graphs are displayed in a "cascade" fashion as you consecutively select them from the Graph command menu or by using the Graph command buttons.  That is, they overlay one another in a staggered line-up.
+
+
+
+Window: Tile Graphs
+
+The Tile Graphs command in the Window menu resizes the four Vehicle Performance Graphs and places them side by side on your computer screen.  This option allows you to view all the graphs simultaneously and is the same format used when printing the Vehicle Performance Graphs to your printer in the 4 per page format.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3-6
+
+
+
+
+CHAPTER 4:  INPUT VARIABLES
+
+
+
+How to Input
+
+
+The Input Data screen is where the editing required to build a vehicle data document takes place.  This chapter of the QUARTER Pro manual contains a complete, detailed description of all the input variables.
+
+
+Before getting into the definitions of the input variables, let's discuss how you provide input to QUARTER Pro via your computer keyboard and mouse.
+
+
+The mouse is used to select the input variable to be changed.  Most of the input variables are edited by selecting them with the mouse and simply typing in a new value.
+
+
+If you make a mistake when typing, use the Back Space key to backup and erase, and then reenter your data.
+
+
+Pressing the Tab key (or the Return or Enter keys) signifies the end of the variable entry.  The Tab key will also advance the cursor to the next input data variable.  Pressing the Return or Enter keys will hold the cursor in the current input variable location.
+
+
+
+                                        41
+
+
+
+
+A maximum of five digits may be input for the numeric variables.  If more than five digits are entered, the excess will be ignored.  Only numeric inputs are allowed.
+
+
+Also, if you enter a value outside the range of acceptable variable inputs, you will receive a warning message on the screen and QUARTER Pro will automatically change the value to be within the established QUARTER Pro limits.
+
+
+Some of the data values are determined by selecting from a drop-down menu.  An example of this type of input is the Fuel System:  Simply use the mouse to click the Fuel System: list box and a menu will appear showing the possible selections.  Click the mouse button on the Fuel System: that you are modeling.
+
+
+Some of the data values are determined by selecting option or check boxes.  An example of this type of input is the Torque Converter or Clutch option located in the Transmission Data.  Simply use the mouse to select either the torque converter or clutch option button.
+
+
+The remainder of this chapter of the QUARTER Pro manual contains a complete, detailed description for each of the input vehicle variables.  A complete description of the seven QUARTER Pro Worksheets is also included beginning on page 4-17.
+
+
+4-2
+
+
+
+General Data
+
+
+Note: = A descriptive string of up to 255 characters used to more completely identify the input vehicle data document.
+
+
+Elevation = The actual dragstrip elevation above sea level expressed in feet.  Normal input values for the dragstrip Elevation are between 0 and 6,000.
+
+
+Barometer = The local relative barometric pressure at the dragstrip expressed in inches of Mercury (in Hg).  The "standard atmosphere" Barometer is normally set at 29.92 in Hg.  Normal input values for the Barometer are between 29.2 and 30.6.
+
+
+* Notes on Elevation and Barometer Inputs *
+
+The Elevation and Barometer inputs are used to determine the local drag strip absolute ambient pressure (psia or in Hg) in QUARTER Pro.  "Standard Atmosphere" conditions are used for this calculation.
+
+You can use "altimeter" for the Elevation, but you must always input 29.92 for the Barometer when doing so.
+
+Never use "relative or density altitude" for the Elevation in QUARTER Pro!
+
+Always input the actual, measured Temperature and Relative Humidity to QUARTER Pro!
+
+
+                                        4-3
+
+
+
+
+Temperature = The dragstrip outside air temperature expressed in degrees Fahrenheit (deg F).  This value is also known as the "dry bulb" temperature.  Normal input values for the ambient Temperature are between 40 and 110.
+
+
+Relative Humidity = The local relative humidity at the dragstrip expressed in percent (%).  Normal input values for the Relative Humidity are between 15 and 90.
+
+
+
+Wind Velocity = The maximum wind velocity regardless of direction or orientation to the dragstrip, expressed in MPH.  Normal values for the Wind Velocity are between 0 and 30.
+
+
+Wind Angle = The angle of the prevailing wind relative to the dragstrip expressed in degrees.  A Wind Angle of 0 represents a direct head-wind and a Wind Angle of 180 represents a direct tail-wind.  Press the Wind Angle Help button to see other examples for the Wind Angle.  Values for the Wind Angle are always between 0 and 180.
+
+
+
+Track Temp = The measured temperature of the racing surface, expressed in degrees Fahrenheit (deg F).  Normal input values for the Track Temp are between the ambient Temperature and 150.
+
+
+4-4
+
+
+
+Traction Index = Specifies the dragstrip traction conditions.  The best traction is obtained for an input Traction Index of 1 and represents the best traction ever demonstrated at the best racetrack. 
+
+The Traction Index is a very strong function of how much race track surface preparation has been done.  National Events are always better than Divisional Events.  Average racetrack traction for local bracket events has a value of 5 or 6.  Street-like traction varies from about 8 to 12.  Press the Traction Index Help button to see some examples for Traction Index.
+
+
+Vehicle Data
+
+
+Weight = The total vehicle weight including driver expressed in pounds (lbs).  Normal input values for the vehicle Weight are between 1,200 and 4,000.
+
+
+Wheelbase = The measured vehicle wheelbase, expressed in inches.  Normal input values for the Wheelbase are between 90 and 300.
+
+
+Rollout = The distance the vehicle must move before the timing clock starts, expressed in inches.  This distance is a function of the front tire diameter, the height of the stage photocell above the dragstrip surface, and how deep the vehicle is staged.  A good rule of thumb is to use one-half of the staging tire's diameter.  Normal input values for the Rollout distance are between 6 and 14.
+
+                                        45
+
+
+
+
+Overhang = The distance that the front end of the vehicle overhangs the front axle centerline, measured in inches.  This dimension corresponds to the location on the vehicle that breaks the downtrack timing sensors - either the leading edge of the front tire or the front bumper.  The Overhang effectively shortens the length of the dragstrip.  Normal values for the Overhang are between 16 and 40.
+
+
+
+
+Final Drive Data
+
+
+Gear Ratio = The gear ratio of the final drive.  Normal input values for the final drive Gear Ratio are between 3.07 and 6.50.
+
+note: Use the Motorcycle Final Drive Ratio Worksheet described on page 4-17 to determine the overall final drive ratio for motorcycles.
+
+
+
+Efficiency = The power transmission efficiency of the final drive.  The final drive Efficiency is generally very difficult to obtain, however a well lubricated, hypoid or spiral bevel gear set typically has a power transmission loss of between 2 and 3 percent.  Normal input values for the final drive Efficiency are therefore between 0.97 and 0.98.
+
+
+
+
+4-6
+
+
+
+The Tire Diameter may be input into QUARTER Pro in one of the two ways described below:
+
+
+Tire Rollout = The driving tire circumference expressed in inches.  This dimension is obtained by measuring the circumference of a properly inflated tire without the weight of the vehicle being supported by the tire.  Normal input values for the Tire Rollout are between 75 and 118.
+
+
+Tire Diameter = The driving tire diameter expressed in inches.  This dimension is obtained by measuring the diameter of a properly inflated tire without the weight of the vehicle being supported by the tire. Normal input values for the Tire Diameter are between 24 and 37.
+
+
+
+Tire Width = The driving tire's "effective" width expressed in inches.  This dimension is obtained by measuring the width of a properly inflated tire.
+
+
+For treaded street tires, the "effective" Tire Width is determined by subtracting the total width of the tread grooves from the measured tire width.  Normal input values for the Tire Width are between 6 and 18.
+
+
+note: Use the Tire Width Worksheet described on page 4-18 to estimate the effective Tire Width for treaded tires.  
+
+
+                                        4-7
+
+
+
+Aerodynamic Data
+
+The vehicle aerodynamic drag and lift are calculated from the input drag and lift coefficients, and the frontal area.  This is the normal way of calculating these forces and is consistent with published automotive drag data.
+
+
+Frontal Area = The frontal (or reference)  area to be used with the Drag and Lift Coefficients to calculate the aerodynamic drag and lift (i.e. down-force) forces.  The Frontal Area is expressed in square feet and is normally the projected frontal area of the vehicle.  Normal input values for the Frontal Area are between 12 and 28.
+
+note: The Frontal Area can easily be calculated using the Frontal Area Worksheet described on page 4-19.
+
+
+Drag Coefficient = Used with the Frontal Area to calculate the vehicle aerodynamic drag.  Press the Drag Coefficient Help button to see examples for various vehicle body styles from the Bosch Automotive Handbook and from available racecar data.  The Drag Coefficient values are generally very difficult to obtain, however normal input values are between 0.25 and 0.80.
+
+
+Lift Coefficient = Used with the Frontal Area to calculate the aerodynamic downforce exerted on the vehicle.  The Lift Coefficient values are very difficult to obtain, however normal input values are between 0.10 and 0.80.
+
+4-8
+
+
+
+
+Engine Dyno Data
+
+
+The engine dyno data is input as a table of horsepower (or torque) as a function of engine speed.  The engine dyno input is for the "standard" ambient conditions of sea level elevation, 29.92 in Hg, 60 deg F and no humidity (i.e. dry air).  This is the same "standard" that most aftermarket, racing and high performance engines are rated at.
+
+
+A maximum of 11 RPM power points may be input to QUARTER Pro.  The button located next to the lower right hand corner of the Engine Dyno Data table may be pressed at any time to graphically display the input HP and torque curves vs RPM.  Pressing the close box in the upper right hand corner of this screen will return you to the QUARTER Pro Input Data screen.
+
+
+The engine dyno data is "referred" to the local dragstrip conditions specified by the General Data, based on the SAE (Society of Automotive Engineers) J1349 Standard method for the QUARTER Pro performance analysis.
+
+
+
+RPM = The engine speed expressed in revolutions per minute (RPM).  Normal input values for the engine dyno data RPM are between 2,000 and 12,000.  A blank or zero input indicates the end of the engine power table inputs.
+
+
+                                        4-9
+
+
+
+HP = The engine power expressed in horsepower.  Normal input values for the engine HP are between 200 and 6,000.  The corresponding Torque for the input HP is automatically calculated and displayed by QUARTER Pro.
+
+
+Torque = The engine torque expressed in ftlbs.  Normal input values for the engine Torque are between 150 and 5,000.  The corresponding HP for the input Torque is automatically calculated and displayed.
+
+
+
+Fuel System: = a drop-down menu to select which type of fuel and fuel system are to modeled by QUARTER Pro.
+
+
+
+HP/Torque Multiplier = A multiplier on the engine dyno data.  This multiplier can be used to easily modify the input engine dyno data to match a known vehicle performance level or to perform a sensitivity study.  Normal input values for the HP/Torque Multiplier are between 0.9 and 1.1.
+
+
+
+Recalc = Pressing the Recalc button will cause all the HP and Torque data values to be recalculated using the current HP/Torque Multiplier.  The new values will be displayed in the engine dyno data table, and the HP/Torque Multiplier will be reset to 1.0.
+
+
+
+410
+
+
+
+
+Transmission Data
+
+Either a torque converter or clutch type transmission may be modeled with QUARTER Pro.  The Transmission Data inputs described below are used for either of these vehicle powertrain configurations.  The Torque Converter and Clutch option buttons determine which inputs are used.
+
+
+
+Clutch & Manual Transmission
+
+Launch@ RPM = The engine RPM that the vehicle is launched from at the dragstrip starting line.  Normal input values for the Launch@ RPM are between 4,500 and 12,000.
+
+Slip RPM = The minimum engine RPM observed as the vehicle leaves the dragstrip starting line in low gear.  This is the engine RPM below which the clutch will normally slip.  This is not the engine RPM the car is staged at, but rather the engine RPM when the car starts to move.  Normal input values for the clutch Slip RPM are between 2,000 and 7,000.
+
+Clutch Slippage = A small amount of clutch slippage normally occurs even when the clutch is locked up and the engine speed is above the Slip RPM.  Normal input values for Clutch Slippage are between 1.00 and 1.01.
+
+Lock-up option? = An option check box to command QUARTER Pro to lock-up the clutch during the shifts.
+
+
+                                       4-11
+
+
+
+Torque Converter & Automatic Transmission
+
+
+Launch@ RPM = Normally the stall speed of the torque converter.  However, some vehicles may be staged with the engine at idle or on an RPM limit box, in which case the Launch@ RPM would be that engine speed.
+
+
+The torque converter Stall RPM may be input in one of the two ways described below:
+
+Stall RPM = The stall or "flash" speed of the torque converter.  The Stall RPM is the engine speed at which torque multiplication can occur in the torque converter.  Normal input values for the torque converter Stall RPM are between 2,000 and 7,500.
+
+
+Stall Index = An advanced feature of QUARTER Pro used to specify the stall capacity of a given torque converter design.  Normal input values for the Stall Index are between 30 and 160.
+
+Every torque converter has a unique Stall Index based primarily on it's geometric design: that is, diameter, stator and impeller, fin angles, clearances, etc.  Transmission fluid density, pressure and temperature can also affect the Stall Index, but these effects are usually small.
+
+You must use QUARTER Pro to "back into" the Stall Index for your torque converter.  These values are not currently available from the torque converter manufacturers.
+
+
+
+4-12
+
+
+
+Once the torque converter Stall Index is specified, QUARTER Pro will calculate the Stall RPM as a function of the engine dyno data and the ambient weather conditions.  The exact same torque converter will have different Stall RPM with different engines, and also as the weather changes!
+
+
+
+Converter Slippage = Normal torque converter slippage occurs when the engine RPM is above the Stall RPM.  The torque Converter Slippage may be available from the manufacturer.  Normal input values for the torque Converter Slippage are between 1.03 and 1.08.  High-stall torque converters generally have higher Converter Slippage than low-stall torque converters.
+
+
+
+Lock-up option? = An option check box to command QUARTER Pro to completely lock-up the torque converter after the first shift.
+
+
+
+Torque Multiplication = The static torque multiplication factor of the torque converter.  This value is achieved when the output speed of the torque converter is 0 RPM, while the input (engine) speed is the Stall RPM.  The Torque Multiplication factor may be available from the manufacturer.  Normal values for the Torque Multiplication are between 1.4 and 2.0.  High-stall torque converters generally have lower Torque Multiplication than low-stall torque converters.
+
+
+                                       4-13
+
+
+
+
+The transmission Gear Ratio data is input for each gear or speed of the transmission.  A maximum of six gears may be input.
+
+
+
+Gear Ratio = The cumulative transmission gear ratios for each gear of the transmission.  Usual input values for the transmission Gear Ratio are around 3.0 for low gear and 1.0 for high gear.  A blank or zero input value indicates the end of the transmission gear ratio inputs.
+
+
+
+Efficiency = The cumulative transmission efficiencies for each gear of the transmission.  The transmission Efficiency is generally very difficult to obtain, however a well lubricated, straight cut or planetary gear set typically has a power transmission loss of between 0.5 and 1.0 percent per gear set.  Normal input values for the transmission Efficiencies can vary from 0.96 in low gear to 0.99 in high gear depending on the specific transmission configuration being modeled.
+
+
+
+Shift@ = The engine speed when gear changes or shifting are to occur, expressed in revolutions per minute (RPM).  Normal input values for the engine Shift@ are between 4,500 and 12,500.
+
+
+
+
+
+4-14
+
+
+
+
+Polar Moments of Inertia
+
+
+The polar moment of inertia of the powertrain components are necessary to compute the power and torque required to accelerate these rotating masses.  The definition of, and methods used to accurately calculate polar moments of inertia are very complex, but can be found in many Engineering handbooks.  QUARTER Pro require units for the polar moments of inertia to be inlbs sec*sec.
+
+
+You may also use the three Polar Moment of Inertia Worksheets described on  pages 4-20 through 4-23 to estimate the polar moment of inertia for the following three groups of vehicle powertrain components:
+
+ - Engine + Flywheel + Clutch/Converter
+ - Transmission + Driveshaft + Pinion Gear
+ - Tires+ Wheels+ Brakes+ Axles + Ring Gear
+
+
+
+Engine + Flywheel + Clutch/Converter = The polar moment of inertia of the powertrain components that rotate relative to engine speed.  These components include the crankshaft, connecting rods, camshaft, blower, flywheel, and clutch or torque converter, etc.  Normal input values for the engine polar moment of inertia are between 2.0 and 5.0.
+
+
+
+
+
+                                       415
+
+
+
+
+
+Transmission + Driveshaft + Pinion Gear = The polar moment of inertia of those powertrain components that rotate relative to the transmission output shaft speed.  These components include the main and output transmission shafts, planetary gear sets, couplers, driveshafts and the final drive pinion gear, etc.  Normal input values for the transmission polar moment of inertia are between 0.1 and 0.8.
+
+
+
+
+Tires+ Wheels+ Brakes+ Axles + Ring Gear = The polar moment of inertia of those powertrain components that rotate at the wheel and tire speed.  These components include the ring gear and carrier, axles, brake rotors or drums, wheels, and tires, etc.  The final drive polar moment of inertia is usually dominated by the tire's effect.  Normal input values for the final drive polar moment of inertia are between 20 and 60.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+416
+
+
+
+Motorcycle Final Drive Ratio Worksheet
+
+
+The Motorcycle Final Drive Ratio Worksheet is selected by pressing the Motorcycle Final Drive Ratio Worksheet button located at the Gear Ratio input variable position, but only for vehicles weighing less than 800 lbs.  Control is returned to the QUARTER Pro Input Data screen by pressing the close box when you are finished using the worksheet.
+
+
+The Motorcycle Final Drive Ratio Worksheet is included with QUARTER Pro to help you quickly calculate the overall final drive Gear Ratio for your motorcycle.  Each of the Motorcycle Final Drive Ratio Worksheet variables are fully described in the following paragraphs.
+
+
+
+Primary Drive Speed Reduction = The speed reduction between the motorcycle engine crankshaft and transmission mainshaft.  Normal values for the Primary Drive Speed Reduction are around 1.8.
+
+
+Countershaft Sprocket Teeth = The number of teeth on the countershaft sprocket.  Normal values for the Countershaft Sprocket Teeth are between 12 and 18.
+
+
+Rear Wheel Sprocket Teeth = The number of teeth on the rear wheel sprocket.  Normal values for the Rear Wheel Sprocket Teeth are between 40 and 50.
+
+                                       417
+
+
+
+
+Tire Width Worksheet
+
+
+The Tire Width Worksheet is selected by pressing the Tire Width Worksheet button located at the Tire Width input variable position.  Control is returned to the QUARTER Pro Input Data screen by pressing the close box when you are finished using the worksheet.
+
+
+The Tire Width Worksheet is included with QUARTER Pro to help you quickly estimate the "effective" Tire Width for treaded street tires.  Each of the Tire Width Worksheet variables are fully described in the following paragraphs.
+
+
+
+Tread Width = The measured overall tread width, expressed in inches.  Normal values for the Tread Width are between 6 and 12.
+
+
+
+Number of Grooves = The number of grooves in the treaded street tire.  The Number of Grooves varies considerably but is usually less than 10.
+
+
+
+Each Groove Width = The measured width of each individual tread groove, expressed in inches.  Normal values for Each Groove Width are between .125 and .25.
+
+
+
+4-18
+
+
+
+Frontal Area Worksheet
+
+The Frontal Area Worksheet is selected by pressing the Frontal Area Worksheet button located at the Frontal Area input variable position.  Control is returned to the QUARTER Pro Input Data screen by pressing the close box when you are finished using the worksheet.
+
+The Frontal Area Worksheet is included with QUARTER Pro to help you quickly estimate the projected frontal area for your vehicle.  Each of the Frontal Area Worksheet variables are fully described in the following paragraphs.
+
+
+Maximum Width = The measured width of the vehicle at it's widest point, expressed in inches.  Normal values for the Maximum Width are between 48 and 72.
+
+
+Maximum Height = The measured distance from the ground to the highest point on the vehicle, expressed in inches.  Normal values for the Maximum Height are between 40 and 60.
+
+
+Shape Factor = A factor to help determine the actual vehicle frontal area expressed in percent (%).  The projected frontal area is never a pure rectangle defined simply by the Maximum Width and Maximum Height.  There are always corners, gaps and sloping side surfaces.  The Shape Factor specifies how much of the pure rectangular area is really blocking the air.
+
+
+                                       4-19
+
+
+
+Press the Shape Factor Help button to see some examples for the Shape Factor.  Normal values for the Shape Factor are between 65 and 90.
+
+
+
+Polar Moment of Inertia Worksheets
+
+
+The Polar Moment of Inertia Worksheets are selected by pressing the Polar Moment of Inertia Worksheet buttons located at one of the three Polar Moment of Inertia input variable positions:
+
+ - Engine + Flywheel + Clutch/Converter
+ - Transmission + Driveshaft + Pinion Gear
+ - Tires+ Wheels+ Brakes+ Axles + Ring Gear
+
+
+Control is returned to the QUARTER Pro Input Data screen by pressing the close box in the upper right hand corner when you are finished using the worksheets.
+
+
+The Polar Moment of Inertia Worksheets are included with QUARTER Pro to help you quickly estimate the three Polar Moments of Inertia for your vehicle that are required to accurately predict vehicle performance.  Each of the Polar Moment of Inertia Worksheets and their corresponding variables are fully described on the following pages.
+
+
+
+
+
+
+4-20
+
+
+
+
+Engine+Flywheel+ Clutch/Converter Worksheet
+
+
+Crankshaft Weight = The weight of the bare engine crankshaft measured in pounds (lbs).  Normal values for the Crankshaft Weight are between 40 and 65.
+
+
+Crankshaft Stroke = The stroke of the engine crankshaft measured in inches.  Normal values for the Crankshaft Stroke are between 3.0 and 4.5.
+
+
+
+The next two input variables in the Engine + Flywheel + Clutch/Converter Worksheet depend on the type of transmission being modeled by QUARTER Pro:
+
+
+Clutch & Manual Transmission
+
+Flywheel + Clutch Weight = The combined weight of the flywheel, pressure plate, clutch disks, floaters, springs, arms, bolts, etc. measured in pounds (lbs).  Normal values for the Flywheel + Clutch Weight are between 20 and 50.
+
+
+Flywheel Diameter = The outer diameter of the flywheel ring gear, measured in inches.  Normal values for the Flywheel Diameter are between 8 and 14.
+
+
+
+
+
+                                       4-21
+
+
+
+
+Torque Converter & Automatic Transmission
+
+
+Flexplate + Converter Weight = The combined weight of the flexplate and torque converter, measured in pounds (lbs).  Normal values for the Flexplate + Converter Weight are between 25 and 45.
+
+
+Converter Diameter = The diameter of the torque converter, measured in inches as stated by the torque converter manufacturer.  Normal values for the Converter Diameter are between 7 and 12.
+
+
+
+
+Transmission + Driveshaft + Pinion Gear Worksheet
+
+Transmission Type = a drop-down menu to select which type of transmission is being modeled by QUARTER Pro.
+
+
+Transmission Weight = The weight of the bare transmission expressed in pounds (lbs).  Normal values for the Transmission Weight are between 60 and 120.
+
+
+Case Diameter = The local diameter of the transmission case housing the transmission gears expressed in inches.  Normal values for the Case Diameter are between 4 and 10.
+
+
+
+
+4-22
+
+
+
+
+Tires + Wheels + Brakes + Axles + Ring Gear Worksheet
+
+
+Tire Weight = The individual weight of each driving tire expressed in pounds (lbs).  This value can be measured or obtained from the tire manufacturer.  Normal values for the Tire Weight are between 20 and 50.
+
+
+
+The Tire Diameter may be input in two ways:
+
+Tire Rollout = The driving tire circumference expressed in inches.  Normal input values for the Tire Rollout are between 75 and 118.
+
+Tire Diameter = The driving tire diameter expressed in inches.  Normal values for the Tire Diameter are between 24 and 37.
+
+
+
+Wheel Weight = The individual weight of each wheel expressed in pounds (lbs).  This value can be measured or obtained from the wheel manufacturer.  Normal values for the Wheel Weight are between 10 and 20.
+
+
+
+Wheel Diameter = The outer rim diameter of the wheel expressed in inches.  This value can be measured or obtained from the wheel manufacturer.  Normal values for the Wheel Diameter are between 13 and 17.
+
+
+
+                                       4-23
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+4-24
+
+
+
+
+CHAPTER 5:  CALCULATED OUTPUT
+
+
+The calculated output from QUARTER Pro is very comprehensive and is divided into four parts - the Timeslip, Detailed Parameters, Vehicle Performance Graphs, and the Engine RPM Histogram.  Please refer to the output of the sample case on you computer monitor to get a complete understanding of all the QUARTER Pro calculated output.
+
+
+
+
+Timeslip
+
+
+The QUARTER Pro Timeslip contains all the calculated quarter-mile performance data in the same format as that reported at the race track.  It includes the 60 ft, 330 ft, eighth-mile, 1000 ft and quarter-mile elapsed times (ET) as well as the eighth-mile and quarter-mile speeds (MPH).
+
+
+The two MPH outputs are determined from the time required to cover the distances between 594 and 660 feet for the eighth-mile; and 1254 and 1320 feet for the quarter-mile.  These are the exact same MPH calculations that are used at the racetrack with their computerized timing system and timing sensors set up 66 feet apart.
+
+
+
+
+
+
+                                        5-1
+
+
+
+
+Detailed Parameters
+
+
+The QUARTER Pro Detailed Parameters contain all the calculated vehicle performance data in a tabular format.  These data include the Time, Distance, MPH, Acceleration, Gear, and RPM for many, many  positions on the dragstrip.
+
+
+Each line of Detailed Parameters corresponds to a specific event or trigger that caused QUARTER Pro to print to the screen.  These events and triggers are thoroughly explained in this chapter of the QUARTER Pro manual.
+
+
+The first two lines of Detailed Parameters are for the time the vehicle is in the staging beams, i.e. the Rollout distance.  The first line is for the initial conditions; time, distance, and speed are zero.  The vehicle is in 1st gear with the engine speed equal to the Launch@ RPM.  The rate of acceleration in g's is displayed for this condition.
+
+**Note:  1g = 32.174 ft/sec/sec
+
+
+The second line corresponds to the instant that the timing clocks starts; that is, the front tire is just out of the stage beam.  The distance is labeled as "Rollout" and two times are displayed; the time required to move the Rollout distance, and the reset time of 0.0 as the timing clock starts.
+
+
+5-2
+
+
+
+
+The engine speed is now equal to the Slip RPM or Stall RPM depending on whether a clutch or torque converter is being modeled.
+
+
+Note the small (s) to the right of the Acceleration value for the first line of the sample ProStock Detailed Parameters.  This indicates that the tires are simply not capable of transmitting all the tire torque the engine and overall gear ratio are providing at this point.  Having three or more lines with an (s) is unacceptable for actual ontrack operation.
+
+
+However, this tire slipping condition (s) can frequently occur during the Rollout distance.  If you have two lines with an (s) . . beware, as you may be right on the ragged edge of tire shake and/or blowing the tires away.
+
+
+The third line of the sample ProStock Detailed Parameters is the result of a distance trigger at 30 feet.  Other distance triggers occur at 60, 330, 660 (eighth-mile), 1000, and 1320 feet.
+
+
+The fourth line is the result of a speed match trigger.  QUARTER Pro provides output for the popular 060 MPH and 0100 MPH timing intervals.
+
+
+
+
+
+                                        5-3
+
+
+
+
+The sixth and seventh lines of the sample ProStock Detailed Parameters are the result of a gear change event.  The engine speed is at the Shift@ RPM in 1st gear on the fifth line, and at a reduced engine speed in 2nd gear on the sixth line.  The remaining gear changes will also trigger two lines of vehicle performance data on the QUARTER Pro Detailed Parameters screen.
+
+
+QUARTER Pro will also sometimes select a time interval for Detailed Parameters of either 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, or 10.0 seconds.  Detailed vehicle performance data are also provided at regular multiples of the selected time interval.
+
+
+The last line of Detailed Parameters includes the conditions right at the quarter-mile or 1320 ft timing mark.
+
+
+In summary, several events or triggers are used to generate QUARTER Pro Detailed Parameters. These include Rollout, distance, gear changes, speed matches, and elapsed time intervals.  Thousands of intermediate calculations are performed between each of the lines displayed on the QUARTER Pro Detailed Parameters screen.
+
+
+The Detailed Parameters are included to give you a complete record of the vehicle performance data during a run, just like you get from an onboard data recorder.
+
+
+
+5-4
+
+
+
+
+Vehicle Performance Graphs
+
+
+The Vehicle Performance Graphs display the QUARTER Pro calculated Detailed Parameters in a graphical, sometimes more easy to understand format.  Any  combination of the following four graphs may be displayed after the calculated performance is completed:
+
+
+ - RPM & MPH vs Time
+ - Acceleration and Distance vs Time
+ - RPM and MPH vs Distance
+ - Acceleration and Time vs Distance
+
+
+The Vehicle Performance Graphs always show two sets of data plotted against either time (in seconds) or distance (in feet).
+
+
+For example, the RPM & MPH vs Time graph includes an RPM axis on the left side of the graph, and a MPH axis on the right.  The x-axis, located along the bottom is for time.  This graphical format is just like you get from an on-board data recorder.
+
+
+The graph legend highlights which color is used for each data set - blue for the left axis (RPM in this case) and red for the right axis (MPH in this case).  This same graphical format is used for all four of the QUARTER Pro Vehicle Performance Graphs.
+
+
+
+
+                                        55
+
+
+
+Engine RPM Histogram 
+
+
+The Engine RPM Histogram is included with QUARTER Pro to show you exactly which engine RPM ranges are being used as your racecar goes down the race track.
+
+
+The x-axis, located along the bottom of the Engine RPM Histogram, shows all the Engine Dyno Data RPM values.  The vertical blue bars are used with the axis on the left side to illustrate precisely how much time (in seconds) is spent at each of these engine RPM values.
+
+
+Generally, racecars with 2 speed automatic transmissions spend the majority of the time with the engine RPM at or slightly above the Stall RPM of the torque converter.  Hence, the engine HP and torque at this RPM are critical to the performance of these types of racecars.
+
+
+The red line on the Engine RPM Histogram is used with the axis on the right side to illustrate the cumulative time (in percent) spent at or below each of the Engine Dyno Data RPM values.
+
+
+You can quickly determine the "average" engine RPM by looking for the 50% point on this line.  You could also use the 80/20 rule to determine where to focus your engine development activity based on the 80% time engine RPM.
+
+
+5-6

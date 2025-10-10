@@ -1,0 +1,919 @@
+
+
+
+
+
+
+          RSA
+   Computer Software
+    for Motorsports
+
+
+
+
+
+DENSITY
+Version 4.1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+Racing Systems Analysis
+-----------------------
+
+
+
+
+
+
+
+Racing Systems Analysis
+
+
+
+
+
+
+
+DENSITY
+Version 4.1
+
+
+By:  Patrick Hale
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Copyright 2006 RSA
+             Phoenix, Arizona  USA
+             www.QUARTERjr.com
+
+
+
+
+
+
+COPYRIGHT
+
+Copyright 2006 by RSA. All rights reserved. No part of this publication may be reproduced, transmitted, stored in a retrieval system, or translated into any language or computer language, in any form or by any means; electronic, mechanical, magnetic, optical, chemical, manual or otherwise; without the prior written consent of Racing Systems Analysis.
+
+
+
+
+
+
+
+
+
+DISCLAIMER
+
+RSA reserves the right to revise this publication and to make changes from time to time in the context hereof, without the obligation of RSA to notify any person of such revision or changes.
+
+
+
+
+
+
+
+
+
+
+
+ii
+
+
+
+TABLE OF CONTENTS
+
+
+CHAPTER 1:  INTRODUCTION
+
+General . . . . . . . . . . . . . . . . 1-1
+Installing your program disk. . . . . . 1-4
+
+
+
+CHAPTER 2:  DENSITY SOFTWARE TOUR
+
+Getting started . . . . . . . . . . . . 2-1
+How to input. . . . . . . . . . . . . . 2-3
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+The command menu. . . . . . . . . . . . 3-1
+File: Preferences . . . . . . . . . . . 3-1
+File: Run data analysis . . . . . . . . 3-1
+File: Throttle stop ratio worksheet . . 3-2
+File: Save. . . . . . . . . . . . . . . 3-2
+File: Print . . . . . . . . . . . . . . 3-2
+File: Exit. . . . . . . . . . . . . . . 3-2
+
+
+
+CHAPTER 4:  PREFERENCES SCREEN
+
+Motorsport Option . . . . . . . . . . . 4-1
+Pressure measurement. . . . . . . . . . 4-1
+Temperature measurement . . . . . . . . 4-4
+Water content measurement . . . . . . . 4-4
+Carburetor settings . . . . . . . . . . 4-7
+Mechanical fuel injector settings . . . 4-8
+
+
+
+
+
+                                        iii
+
+
+
+
+CHAPTER 5:  MAIN DENSITY SCREEN
+
+Calculated weather parameters . . . . . 5-1
+Actual vehicle data . . . . . . . . . . 5-3
+Predicted vehicle data. . . . . . . . . 5-4
+Re-jet options. . . . . . . . . . . . . 5-5
+Throttle stop option. . . . . . . . . . 5-7
+
+
+
+CHAPTER 6:  RUN DATA ANALYSIS
+
+Run data analysis . . . . . . . . . . . 6-1
+
+
+
+CHAPTER 7:  THROTTLE STOP RATIO WORKSHEET
+Throttle stop ratio worksheet . . . . . 7-1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+iv
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+
+General
+
+The DENSITY program from RSA calculates a host of weather related parameters for you regardless of the type of weather instruments you have, or even if you don't have any instruments at all!
+
+
+Today, motorsport of all kinds has attained a level of sophistication that makes the PC an essential tool for all racers to use, Professional and Sportsman alike.
+
+
+The QUARTER jr and ENGINE jr programs for drag racecar and engine performance simulation started it all off, first becoming commercially available back in 1985.  Today, thousands of racers just like yourself, already have the QUARTER jr and ENGINE jr software in their "toolbox".
+
+
+Now, DENSITY unlocks the power and convenience of the PC for every racer who needs to know what the weather can do to the performance of their engine and racecar.
+
+
+The amount of power an engine makes is directly related to the volume of air it pumps and how much oxygen the air contains.
+
+
+
+
+
+                                        1-1
+
+
+
+
+Normal internal combustion engines have a fixed displacement and intake port and valve geometry, and hence, at a given engine speed, have a constant volume flow rate - assuming a constant volumetric efficiency.
+
+
+The more oxygen that is in the volume of air trapped in the cylinder, the more fuel that can be burned, and the more power the engine will make.  In order to accurately track these effects, the ratio of the mass of oxygen to the volume of air is required. This ratio is the Air Density Index.  This oxygen mass to volume ratio is essential when;
+
+a) trying to properly jet an engine for maximum performance under varying weather conditions,
+
+b) trying to determine the effect of some other performance change,
+
+c) "correcting" the observed torque and power in the dyno cell,
+
+d) and predicting how fast a racecar should run based on past performance.
+
+
+The DENSITY program from RSA is the most accurate means of determining these effects that is currently available and eliminates the excuse of inaccurate mathematics for these essential weather station and racecar performance calculations.
+
+
+
+1-2
+
+
+
+
+With competitive motorsports being a contest of hundredths, or even thousandths of a second, and small fractions of a MPH, only a computer can provide the necessary consistency and accuracy to predict and optimize your vehicle's performance.
+
+
+
+RSA (Racing Systems Analysis) was started in 1978 by Patrick Hale, a local drag racer from Arizona.  After drag racing several racecars while attending Mechanical Engineering school at Arizona State University; he developed the well known QUARTER jr and ENGINE jr computer programs.
+
+
+
+The services of RSA are also available to customize DENSITY to your specific needs; and to write new, engineering analysis type software for other applications.  Give RSA a call or e-mail.  We will be happy to discuss these possibilities, and future RSA products with you.
+
+
+
+
+
+                Patrick Hale
+                President, MSME, SAE Member
+
+                Racing Systems Analysis
+                Phoenix, Arizona  USA
+
+                phone: 602.992.2586
+                web:   www.QUARTERjr.com
+
+
+                                        1-3
+
+
+
+
+
+Installing your program disk
+
+
+1.  Start by inserting the DENSITY program CD into the appropriate drive in your PC.
+
+
+2.  Use the mouse to select Run from the Start menu.
+
+
+3.  In the Command Line box, type d:setup.exe (depending on which drive you are using) to read the DENSITY setup disk.
+
+
+4.  Use the mouse to click the OK button.
+
+
+5.  Follow the instructions displayed on your computer monitor.  When you are finished, remove the DENSITY program CD.
+
+
+6.  The setup process creates a folder named DENSITY in the Program Files group.  This folder contains the icon for the DENSITY software which has the name DENSITY.exe.
+
+
+7.  You can now create a Shortcut for the DENSITY.exe file and Send it to the Windows desktop if you like.  You normally do this by right-clicking the mouse on the DENSITY.exe program icon and then choosing Create Shortcut from the drop-down list.
+
+
+
+1-4
+
+
+
+CHAPTER 2:  DENSITY SOFTWARE TOUR
+
+Getting Started
+
+In this chapter, we will walk you through a sample, hands on, weather station and vehicle performance analysis.  So please sit at your computer while you read this chapter.  DENSITY is designed to be very easy to use, even for the first time or novice computer user.
+
+
+Use the mouse to double-click on the application icon in the DENSITY folder or on the Windows desktop Shortcut you created for DENSITY.exe.
+
+
+The splash screen identifying the version of the DENSITY program you have will now appear.  This will be followed by the main DENSITY program screen including a menu of commands.  By choosing one of the items from the menu, you command DENSITY to do whatever you choose.
+
+
+To begin with, let's take a quick look at the DENSITY program screen.  The main DENSITY program screen contains all the data necessary to perform the sophisticated weather station and vehicle performance calculations.
+
+
+Two types of Run data are included; the Base Run data (indicated by the Base Run option button) containing weather and performance data from the "best" run of your vehicle, and columns for up to seven other sets of Run Data.
+                                        2-1
+
+
+
+
+The other Run Data inputs are used to make weather calculations and performance predictions based on the Base Run data.
+
+
+The Base Run is selected by pressing the Base Run option button located in the middle of the main DENSITY screen.  Any Run Data column can be used for the Base Run.
+
+
+For each set of Run Data, there is weather station information including the altimeter, and dry and wet bulb temperatures.  The density altitude is provided as well as a place for your actual and predicted elapsed times and top speeds.
+
+
+Any of these input data values may easily be changed using the editing features of the DENSITY program which are fully described in the How to Input section on the next page.
+
+
+The Erase Run Data option button located at the top of each Run Data column can be used at any time to clear the column of data to make room for a new set of Run Data.
+
+
+Option buttons are also included along the top of each Run Data column that allow you to Move Run Data either to the left or right.  This option allows you to quickly order the Run Data in any way you like without having to re-type all the values.
+
+
+
+2-2
+
+
+
+
+That's all there is to it!  Try changing the Run 2 dry bulb temperature to 90 deg F. Remember to press the enter or tab key after typing 90.
+
+
+Whenever an input variable value is changed - thousands of calculations can occur.  After a second, all these calculations are complete, and the output parameters are updated on the screen.
+
+
+How much slower should the Super Gas racecar go? What change needs to be made to the throttle stop?  These are but two of the questions DENSITY was designed to answer, quickly and economically.
+
+
+
+How to Input
+
+
+The DENSITY program screens are where the editing required to define all the weather conditions and vehicle performance inputs take place.
+
+
+Before getting into the definitions of the variables starting in Chapter 4, let's discuss how you provide input to DENSITY via your computer keyboard and mouse.  The mouse is used to select the input variable to be changed.  Most of the input variables are edited by selecting them with the mouse and simply typing in a new value.
+
+
+
+                                        2-3
+
+
+
+
+If you make a mistake when typing, use the Back Space or Delete key to backup and erase, and then re-enter your data.  A maximum of five digits may be input for the numeric variables.  If more than five digits are entered they will be ignored.
+
+
+Also, if you enter a value outside the range of acceptable inputs, an error message box will appear and DENSITY will change the input to be within the program limits.
+
+
+Pressing the Tab  key (or the Return or Enter keys) signifies the end of the entry.  The Tab key will also advance the cursor to the next input variable location.  Pressing the Return or Enter keys will hold the cursor in the current position.
+
+
+Some of the data values are determined by selecting option boxes.  An example of this type is the Re-jet Option.  Simply use the mouse to select either the Re-jet Option or the No Re-jet option button.
+
+
+Selecting the Exit command from the File: menu will return your computer to the Windows desktop.
+
+
+Good luck and have fun!  The remaining chapters will provide you with the detailed knowledge and skills necessary to fully exploit the power and versatility of the DENSITY software and your Windows PC.
+
+2-4
+
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+
+
+The Command Menu
+
+
+Six command menu items are used with DENSITY to specify the command option desired.  These menu items may be selected at anytime while running the program.
+
+
+
+
+File: Preferences
+
+The Preferences screen is used to select a variety of DENSITY options and should be the first thing you do when setting up DENSITY for your specific application.  See Chapter 4 of this manual for a complete description of all the options on the Preferences screen.
+
+
+
+
+File: Run Data Analysis
+
+The Run Data Analysis screen includes a graphical display for your Run Data.  See Chapter 5 of this manual for a complete description of the Run Data Analysis screen.  This File: menu item is also directly available on the Command Menu.
+
+
+
+
+
+                                        3-1
+
+
+
+File: Throttle Stop Ratio Worksheet
+
+The Throttle Stop Ratio Worksheet allows you to accurately determine the Throttle Stop Ratio for your specific drag racing vehicle.  This menu item is only available if you selected the throttle stop option on the Preferences screen.  Chapter 6 of this manual includes a complete description of how to use the powerful Throttle Stop Ratio Worksheet.
+
+
+File: Save
+
+The Save command is used to save all the current DENSITY vehicle data in a file named DENSITY.RSA on your hard disk.  This File: menu item is also directly available on the Command Menu.
+
+
+File: Print
+
+The Print command is used to make a complete, printed copy of both the input data and the calculated output parameters from DENSITY.  Selecting Print at any time will cause the printer to start printing.
+
+
+File: Exit
+
+The Exit command  can be used at any time to exit the DENSITY program and return to the Windows desktop.  You may also exit DENSITY by clicking the close box in the upper right-hand corner of the main DENSITY program screen.
+
+
+
+3-2
+
+
+
+
+CHAPTER 4:  PREFERENCES SCREEN
+
+
+The Preferences screen is the starting point where you setup DENSITY for your specific requirements.  Preferences is selected from the File menu on the main DENSITY program screen and has three main sections or groups of options:
+
+- Motorsport Option
+- Weather Instruments
+- Fuel System Parameters
+
+
+
+Motorsport Option
+
+The Motorsport Option choices include Circle Track Lap Times, Bonneville style Top Speed racing, and Drag Racing.  Drag Racing has several more choices including the distance being raced and whether a throttle stop is being used or not.
+
+
+
+Weather Instruments
+
+
+Pressure Measurement
+
+Three Pressure Measurement options are included in DENSITY:
+
+- Standard Altimeter
+- Absolute Barometer
+- Track Elevation and Corrected Barometer
+
+
+
+                                        4-1
+
+
+
+
+The option you select will depend on the type of weather instrument you have.  Whether you have an expensive aircraft altimeter, or even no weather instruments at all, the DENSITY program can handle the job for you.
+
+
+You can also choose to use either feet or meters for elevation measurements, and select from one of four different sets of units for all the pressure measurements.
+
+
+
+Standard Altimeter Option:
+
+Set the altimeter to 29.92 in Hg and read the pressure altitude from the needle.  Use this value for the Altimeter.
+
+
+
+Absolute Barometer Option:
+
+Read the "absolute" barometric pressure from the gauge.  Use this value for the Barometer.
+
+
+
+Track Elevation and Corrected Barometer Option: You have a "corrected" barometer or you have no weather instrument at all for measuring the ambient pressure.
+
+a)  The first step is to find out the actual track elevation where you will be racing.  Use this value for the Track Elevation.
+
+4-2
+
+
+
+
+b)  Listen to the local weather report (or call the weather bureau) for the local "corrected" barometric pressure.  Use this value for the Barometer.  If you have a barometer, set this value on the barometer.
+
+c)  As the weather conditions change, periodically read your barometer (or call the weather bureau) and input the new value as the Barometer.
+
+
+
+
+Three possible input data variables are included in the DENSITY program for the ambient pressure measurement inputs; Altimeter (or Pressure Altitude), Barometer, and Track Elevation.
+
+
+
+Altimeter = the reading taken from an ("corrected" to 29.92 in Hg) altimeter.  This value is also known as the Pressure Altitude and is the "standard" altitude whose ambient pressure corresponds to the local ambient pressure at the race track.
+
+
+
+Barometer = the local barometric pressure at the race track.  The "standard" sea level Barometer is 29.92 in Hg.
+
+
+
+Track Elevation = the actual race track elevation above sea level.
+
+
+                                        4-3
+
+
+
+Temperature Measurement
+
+
+DENSITY includes two options for all of the Temperature Measurements either:
+
+- degrees Fahrenheit (deg F)
+- degrees Centigrade (deg C)
+
+
+
+Water Content Measurement
+
+
+Four options are included for Water Content Measurement in DENSITY:
+
+- Wet Bulb Temperature
+- Relative Humidity
+- Dew Point Temperature
+- Vapor Pressure
+
+
+The one you use will depend on the type of weather instruments you have.  Whether you have a digital humidity gauge, or even no weather instruments at all, the DENSITY software can handle the job.
+
+
+
+Wet Bulb Option:
+
+a) You have a sling psychrometer.
+
+b)  Following the sling psychrometer instructions, obtain the Dry Bulb and Wet Bulb temperatures.
+
+
+
+
+4-4
+
+
+
+Relative Humidity Option:
+
+a)  You have a temperature gauge and a relative humidity gauge.
+
+b)  Read the ambient temperature from the temperature gauge and use this reading as the Dry Bulb temperature.  Read the Relative Humidity from the relative humidity gauge.
+
+
+
+Dew Point Option: (You have no weather instruments)
+
+Listen to the local weather report (or call the weather bureau) for the local temperature and dew point.  Use these values for the Dry Bulb and Dew Point.
+
+
+
+Four variables are included in the DENSITY program for the ambient water vapor content measurement; Wet Bulb, Relative Humidity, Dew Point, and Vapor Pressure.
+
+
+However, only one of these values will be used for your input, depending on your choice for the Water Content Measurement system.  Whenever you input your choice, DENSITY will automatically calculate the other three.
+
+
+Dry Bulb = the ambient air temperature.  This is a required input in all cases for the calculation of the DENSITY weather and vehicle performance parameters.
+
+                                        4-5
+
+
+
+
+
+Wet Bulb = the wet bulb temperature, normally obtained from a sling psychrometer.
+
+
+
+
+Relative Humidity = the relative humidity at the race track expressed in percent (%).  Relative Humidity gauges are readily available with which to make this measurement, or you can get it from the weather report.
+
+
+
+
+Dew Point = the dew point temperature.  This is normally always a calculated value and is defined as the "saturation temperature" corresponding to the ambient air's water vapor content.  The Dew Point (and Vapor Pressure described below) are weather parameters that track the actual volume of water vapor in the air. 
+
+
+
+
+Vapor Pressure = the "partial barometric pressure" of the ambient water vapor.  When the Relative Humidity is zero, the Vapor Pressure is also zero.  The Vapor Pressure equals the "saturation pressure" when the Relative Humidity equals 100%.
+
+
+
+
+
+4-6
+
+
+
+
+Fuel System Parameters
+
+
+The Fuel System that DENSITY will use for all the calculations is determined from your choices from the groups of option buttons on the Preferences screen.  The choice of the Fuel System will also specify the use of the remaining Fuel System input variables.
+
+
+
+Carburetor Settings
+
+
+Main Jet Diameter = the diameter of the main jet expressed in inches or millimeters, or as a Holley Jet Number.
+
+
+Power Valve Diameter = the diameter of the power valve channel restriction expressed in inches or millimeters, or as a Holley Jet Number.
+
+
+Idle Jet Diameter = the diameter of the idle fuel passage expressed in inches or millimeters, or as a Holley Jet Number.
+
+
+Note: In addition to selecting the jet diameter options described above, you may also select the Flow Number option.  The Flow Number is simply the flow rating of the jet, and can have a value from 0.1 to 900.
+
+
+
+                                        4-7
+
+
+
+Note: The Base Run data should include the Main Jet Diameter and Power Valve and Idle Jet Diameters that represent the optimum fuel-air ratio and "best" vehicle performance.  The Base Run jetting and performance is used by DENSITY for the Run Data jetting and performance predictions.
+
+
+
+Mechanical Fuel Injector Settings
+
+
+Number of Returns = the total number of fuel returns used in the fuel system.
+
+
+Return Diameter = the diameter of the return pill, jet or orifice returning fuel to  the fuel tank, expressed in inches or millimeters.
+
+
+Number of Nozzles = the total number of fuel nozzles used to deliver fuel to the engine in the fuel system.
+
+
+Nozzle Diameter = the diameter of the fuel nozzles expressed in inches or millimeters.
+
+
+
+Note: The Base Run data should include the Return Diameter and Nozzle Diameter that represent the optimum fuel-air ratio and "best" vehicle performance. The Base Run jetting and performance is used by DENSITY for the Run Data jetting and performance predictions.
+
+
+4-8
+
+
+
+
+CHAPTER 5:  MAIN DENSITY SCREEN
+
+
+The main DENSITY program screen is where the editing required to define the weather conditions and vehicle performance inputs take place.  This chapter of the DENSITY manual contains a complete, detailed description of all the input and output variables and options.
+
+
+Run Data Description = a descriptive string of up to 8 characters used to better identify the Run Data for each column.
+
+
+Calculated Weather Parameters
+
+The calculated output from the DENSITY program is contained on the same screen as the input data.  Please refer to the output of the sample case on your computer monitor to get a complete understanding of all the DENSITY output.
+
+
+Density Altitude = the "standard" altitude with the same local air density as that described by the input variables. This quantity is also known as the "Relative"  or "Corrected" altitude.
+
+While the Density Altitude has become a standard term in motorsports, it really doesn't relate directly to either engine power or jetting.  Hence, Density Altitude doesn't tell you much about how to jet your engine or how fast your vehicle will run.
+
+
+                                        5-1
+
+
+
+ 
+The HP Correction Factor described below is the most accurate way to keep track of how much power your engine is producing and the Air Density Index is the only way to properly jet your engine for "best" power.
+
+
+
+Air Density Index = the ratio of the local density to that of the "standard day"; i.e. sea level elevation, 29.92 in Hg, 60 deg F, and dry air (0% relative humidity).
+
+The Air Density Index is much more useful than Density Altitude because it can be directly related to your main or return jet area.  For example, if the "air" goes up 4 percent (from 92.3% to 96.3%), generally you'll need to change the fuel flow area by 4% to maintain a constant fuel-air ratio.
+
+
+
+HP Correction Factor = the RSA developed engine power and torque correction factor based on the SAE J1349 Standard method. This factor tells you how the engine power is varying as a function of the race track or dyno cell ambient weather conditions.
+
+For example, if you measure or observe 765 ft-lbf of torque on the dyno with a HP Correction Factor of 1.046 in the dyno cell, the engine is really capable of putting out 800 ft-lbf of torque (765 X 1.046 = 800) on a "standard day".  This is the "standard" procedure used to "correct" observed engine dyno data.
+
+
+
+5-2
+
+
+
+Actual Vehicle Data
+
+Vehicle data is input into two sections on the lower part of the main DENSITY program screen.  One section is for the Actual data for each run, and the lower, second section for the run data used for the Predictions.  The variables you actually see on your screen are a function of the Motorsport Option on the Preferences screen.
+
+
+Fuel Temperature = the Actual fuel temperature for this run.  The Fuel Temperature is usually the same as the Dry Bulb temperature.  However, the effect of fuel temperature on the fuel density (i.e. thermal expansion) must be considered for accurate jet size prediction.
+
+
+Main Jet = the Actual main jet size used for this run.  If you are stagger jetting, please use an average jet size.
+
+
+Elapsed Time = the Actual elapsed time for this run, expressed in seconds.  For drag racing this value can either be the quarter-mile ET, or even the 60 ft, 330 ft, or eighth-mile times.  For circle track racing it is always the lap time.
+
+
+Top Speed = the Actual top speed for this run expressed in miles per hour (MPH).
+
+
+Vehicle Weight = the Actual vehicle weight for this run expressed in pounds or kilograms.
+
+                                        5-3
+
+
+
+Throttle Stop Setting = the Actual throttle stop setting for this run.
+
+
+
+Predicted Vehicle Data
+
+Fuel Temperature = the fuel temperature to be used to calculate the Predicted main jet size and vehicle performance for this run.
+
+
+Main Jet = the Recommended main jet size.
+
+
+Elapsed Time = the Predicted elapsed time expressed in seconds.
+
+
+Top Speed = the Predicted top speed expressed in miles per hour (MPH).
+
+
+Vehicle Weight = the weight to be used for this run Prediction, expressed in pounds or kilograms.
+
+
+Throttle Stop Setting = the Recommended throttle stop setting that will produce the input Predicted Elapsed Time.
+
+
+
+The lower right-hand corner of the main DENSITY program screen may contain option buttons for the Re-jet Option, and input for the Throttle Stop Ratio.  These options are displayed based on your Preferences screen selections.
+
+
+5-4
+
+
+
+
+Re-jet Options
+
+
+The DENSITY program provides two powerful options for jetting purposes.  Vehicle performance Predictions are a function of your choice for the Re-jet Option. The use of this option for typical drag racing situations is described below.
+
+
+Normally, Bracket and Super-class drag racers do not change jets between rounds, no matter how much the weather changes, because it's just too much trouble.  In this case you would use the No Re-jet option.  The DENSITY program will make racecar performance predictions using the Base Run Main Jet Diameter.
+
+
+However, if you want to determine the "best" jet when using the No Re-jet option, simply enter a zero for the Main Jet Diameter.  DENSITY will calculate the "best power" jet and use this jet for the racecar performance prediction for this run.
+
+
+No Re-jet:
+
+The predicted vehicle performance is based on the input Predicted Main Jet Diameter.  DENSITY does not calculate what the "best" jet would be under these conditions.  That is, the jetting may be rich or lean depending on the input Run Data ambient weather conditions.  Engine power corrections will be performed accordingly.
+
+
+                                        5-5
+
+
+
+
+Re-jet Option:
+
+DENSITY will calculate what the "best" jet would be for each set of Run Data ambient weather conditions.  That is, the Predicted Main Jet Diameter for each Run Data will provide the same fuel-air ratio as the Base Run Actual Main Jet Diameter did for the Base Run weather conditions.  This is the jet - based on the Base Run jet - that will provide the maximum engine power and best racecar performance for these weather conditions.
+
+
+
+In Pro Stock drag racing and other all-out forms of motorsports, maintaining the proper fuel-air ratio for the "best power" is critical.  In these cases, select the Re-jet Option button.  DENSITY will calculate the "best power" Main Jet Diameter and make performance predictions based on this calculated jet change, however small it may be.
+
+
+For Example, let's say that you're a Pro Stock drag racer who doesn't feel like making the DENSITY recommended jet change.  DENSITY can easily be used to determine the effect on performance for not making the change.  After the "best" jet performance is predicted, simply select the No Re-jet option and enter the Main Jet Diameter of your choice in the Predicted Run Data.  The racecar performance will be re-calculated using the jet you input.  The difference is what you may be giving up!
+
+
+5-6
+
+
+
+
+Throttle Stop Option
+
+
+If you selected the Throttle Stop option on the Preferences screen the Throttle Stop Ratio will appear in the lower right-hand corner of the main DENSITY program screen.
+
+
+The Throttle Stop Settings will also appear for the Actual and Predicted sections of the Run Data, replacing the lines that held the Top Speed.
+
+
+Throttle Stop Ratio = defines how a change in the Throttle Stop Setting affects the vehicle elapsed time.  Numerically, it is the change in Throttle Stop Setting divided by the change in elapsed time.
+
+
+
+The Throttle Stop Ratio Worksheet can be displayed by pressing the button located at the Throttle Stop Ratio input variable position.  Chapter 7 of this manual contains a complete description of how to use the Throttle Stop Ratio Worksheet to determine the most accurate Throttle Stop Ratio for your specific application.
+
+
+
+DENSITY calculates the Recommended Throttle Stop Setting required to achieve the Predicted Elapsed Time based on all the Run Data weather conditions, Base Run Actual Elapsed Time and Throttle Stop Setting and the input Throttle Stop Ratio.
+
+                                        5-7
+
+
+
+
+CHAPTER 6: RUN DATA ANALYSIS
+
+
+Run Data Analysis is selected from the File: menu on the main Density program screen.  Run Data Analysis is included in DENSITY to graphically display the variation in your vehicle's performance with changing weather conditions.
+
+
+The Run Data Analysis graphs in the upper part of the Run Data Analysis screen will allow you to quickly identify your "good" or "golden" runs.  That is, runs where everything went right!  And that really doesn't happen that often in racing.
+
+
+These "golden" runs will be the ones that "stand out" from the rest of the pack, having the lowest elapsed times and/or highest top speeds.  The "golden" runs are the ones that should be used as the Base Run on the main DENSITY program screen.
+
+
+The lower portion of the Run Data Analysis screen illustrates the calculated vehicle performance effects for distinct changes in the weather conditions and vehicle weight.
+
+
+You can use any run data you like for the baseline.  Then input some changes for each of the Performance Parameters and quickly determine the effect on both elapsed time and top speed for each of these parameters independently.
+
+
+6-1
+
+
+
+
+CHAPTER 7: THROTTLE STOP RATIO WORKSHEET
+
+
+
+The Throttle Stop Ratio Worksheet is included with DENSITY to help determine the actual Throttle Stop Ratio for your specific vehicle.  The screen format is very similar to the main DENSITY program screen and has room for up to eight runs.
+
+
+The Throttle Stop Ratio Worksheet runs should be "golden" runs, that is, runs where everything worked right.  In this way, DENSITY can calculate the most accurate Throttle Stop Ratio possible.  Statistically speaking, we don't want "bad" runs clouding the true effect of the Throttle Stop Setting.
+
+
+Two graph are included in the lower portion of the Throttle Stop Ratio Worksheet screen.  The one on the left is the "raw" data - that is, elapsed times that are not "corrected" for the Throttle Stop Setting.  Normally, you would not see many of the data points coinciding with the Predicted elapsed time line on this graph.
+
+
+The graph on the right includes the throttle stop "correction" determined from the input Throttle Stop Ratio and Run Data Throttle Stop Settings.  The Throttle Stop Ratio and Std Dev are defined on the next page.
+
+
+
+                                        7-1
+
+
+
+
+Throttle Stop Ratio = defines how a change in the Throttle Stop Setting affects the vehicle elapsed time.  Numerically, it is the change in Throttle Stop Setting divided by the change in elapsed time.
+
+
+Std Dev = the calculated, statistical standard deviation for the Actual vs. Predicted elapsed time errors, expressed in seconds.  In simpler terms, it is a measure of how far (on average) the Actual data points are off the Predicted line in the right-hand graph.  The smaller the Std Dev the better the "fit" for the Throttle Stop Ratio for this set of Run Data.
+
+
+You can have DENSITY determine the "best fit" Throttle Stop Ratio by pressing the button located just above the Throttle Stop Ratio input variable value.  This is the most powerful feature of the DENSITY Throttle Stop Ratio Worksheet, that is;
+
+- you choose the "golden" runs to use,
+- DENSITY performs all the complex,
+  statistical calculations for you, and
+- you can clearly see the results of this
+  process on the two graphs!
+
+
+DENSITY determines the Throttle Stop Ratio by seeking to minimize the Std Dev.  You can also try this yourself by manually varying the Throttle Stop Ratio and watching the Std Dev value.  The smaller the Std Dev value the better.  A Std Dev of 0.01 means that the "fit" is within about a hundredth of a second in most all cases.
+
+7-2

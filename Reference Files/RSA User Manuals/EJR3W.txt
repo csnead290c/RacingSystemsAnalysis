@@ -1,0 +1,1211 @@
+
+
+
+
+
+
+          RSA
+   Computer Software
+    for Motorsports
+
+
+
+
+
+ENGINE jr
+Version 3.1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+Racing Systems Analysis
+-----------------------
+
+
+
+
+
+
+
+Racing Systems Analysis
+
+
+
+
+
+
+
+ENGINE jr
+Version 3.1
+
+
+By: Patrick Hale
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Copyright 2005 RSA
+             Phoenix, Arizona  USA
+             www.QUARTERjr.com
+
+
+
+
+
+
+
+COPYRIGHT
+
+Copyright 2005 by RSA.  All rights reserved.  No part of this publication may be reproduced, transmitted, stored in a retrieval system, or translated into any language or computer language, in any form or by any means; electronic, mechanical, magnetic, optical, chemical, manual or otherwise; without the prior written consent of Racing Systems Analysis.
+
+
+
+
+
+
+
+
+
+
+
+DISCLAIMER
+
+RSA reserves the right to revise this publication and to make changes from time to time in the context hereof, without the obligation of RSA to notify any person of such revision or changes.
+
+
+
+
+
+
+
+
+
+ii
+
+
+
+TABLE OF CONTENTS
+
+
+CHAPTER 1:  INTRODUCTION
+
+General. . . . . . . . . . . . . . . . .11
+Installing your program disk . . . . . .14 
+
+
+CHAPTER 2:  SAMPLE ENGINE jr ANALYSIS
+
+Getting started. . . . . . . . . . . . .21
+Sample ENGINE jr analysis. . . . . . . .22
+
+
+CHAPTER 3:  THE COMMAND MENUS
+
+The command menus. . . . . . . . . . . .31
+File: Open . . . . . . . . . . . . . . .31
+File: Save . . . . . . . . . . . . . . .32
+File: Save As. . . . . . . . . . . . . .32
+File: Print. . . . . . . . . . . . . . .3-3
+File: Print Setup. . . . . . . . . . . .33
+File: Exit . . . . . . . . . . . . . . .33
+
+
+CHAPTER 4:  INPUT VARIABLES
+
+How to input . . . . . . . . . . . . . .41
+Engine design data . . . . . . . . . . .44
+Compression ratio worksheet. . . . . . .48
+Throttle CFM @ 1.5 in Hg worksheet . . 4-10
+Intake port flow worksheet . . . . . . 412 
+Minimum cross-section area worksheet . 4-16
+Cross-section area calculator. . . . . 4-18
+
+
+
+
+
+
+
+                                        iii
+
+
+
+
+CHAPTER 5:  CALCULATED PARAMETERS
+
+Estimated engine performance . . . . . .51 
+Engine dyno data . . . . . . . . . . . .5-3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+iv
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+
+General
+
+
+The ENGINE jr software from RSA quickly estimates the maximum performance potential for a wide range of naturally aspirated, gasoline and methanol burning, spark ignition, internal combustion engines.  It can be used with or without cylinder head flowbench data to provide accurate estimates of what an engine can develop in the way of horsepower and torque, and what the expected RPM range of the engine will be.
+
+
+Today, in this 21st century, the sport of automobile racing has attained a level of sophistication that makes the personal computer an important tool for all racers to use, Professional and Sportsman alike.
+
+
+The QUARTER Pro and QUARTER jr programs for drag racecar performance simulation started it all off, first becoming commercially available back in 1985.  Today, thousands of racers just like yourself, already have QUARTER jr in their "toolbox".
+
+
+Now, ENGINE jr unlocks the power and convenience of the personal computer for every racer who needs to know about their engine's performance, or how to modify it to make even more power and torque.
+
+
+
+                                        11
+
+
+
+The amount of power and torque a modern high performance engine makes is directly related to the volume and mass of air it pumps and traps.  The larger the mass of air trapped in the cylinder at a given RPM, the more fuel that can be burned, and the more power and torque the engine will make.
+
+
+
+Many factors - or design variables - have a strong influence on the trapped engine airflow rate including borestroke ratio, connecting rod length, intake manifold length and flow capacity, and camshaft timing, to name just a few.
+
+
+
+Fuel properties and compression ratio are key factors for determining the thermodynamic efficiency of the combustion and expansion processes of the four cycle internal combustion engine.
+
+
+
+The ENGINE jr software from RSA is one of the most accurate means of determining the effects of these engine design variables on overall engine performance.  It has been calibrated using dyno data from hundreds of high performance engines, ranging from record holding 4valve 77 cid Pro Stock motorcycle engines to championship 800+cid "Mountain Motor" Pro Stock engines, and everything else in between.
+
+
+
+
+
+12
+
+
+
+With competitive racing being a contest of hundredths, or even thousandths of a second, or just fractions of a MPH, only a computer can provide the necessary consistency and accuracy to help understand, predict and improve your engine's performance and durability.
+
+
+RSA (Racing Systems Analysis) was started in 1978 by Patrick Hale, a local drag racer from Arizona.  After drag racing several racecars while attending Mechanical Engineering school at Arizona State University; he developed the well known QUARTER and QUARTER jr computer programs. Now, he has made ENGINE jr available for overall engine performance simulation.
+
+
+The services of RSA are also available to customize ENGINE jr to your specific needs; and to write new, engineering analysis software for other applications.  Give RSA a call or e-mail.  We will be happy to discuss these possibilities, and future RSA products with you.
+
+
+
+
+                   Patrick Hale
+                   President, MSME
+
+                   Racing Systems Analysis
+                   Phoenix, Arizona  USA
+
+                   Phone: 602.992.2586
+	        Web:   www.QUARTERjr.com
+
+
+
+                                        13
+
+
+
+
+Installing your program disk
+
+
+1. Start by inserting the ENGINE jr program CD into the appropriate drive in your PC.
+
+
+2. Use the mouse to select Run from the Start menu.
+
+
+3. In the Command Line box, type d:setup.exe depending on which drive you are using to read the ENGINE jr setup CD.
+
+
+4. Use the mouse to click the OK button.
+
+
+5. Follow the instructions displayed on your computer monitor.  When you are finished, remove the CD.
+
+
+6. The setup process creates a folder named ENGINE jr in the Program Files group.  This folder contains the icon for the ENGINE jr software and the sample data document.  The ENGINE jr program icon has the name Engjr.exe.
+
+
+7.  You can now create a Shortcut for the Engjr.exe file and Send it to the Windows desktop if you like.  You normally do this by right-clicking the mouse on the Engjr.exe program icon and then choosing Create Shortcut from the drop-down list.
+
+
+
+14
+
+
+
+
+CHAPTER 2:  SAMPLE ENGINE jr ANALYSIS
+
+
+Getting Started
+
+
+In this chapter, we will walk you through a sample, hands on, engine performance analysis.  So please sit at your computer while you read this chapter.  ENGINE jr is designed to be very easy to use, even for the first time or novice computer user.
+
+
+You can begin using ENGINE jr in one of two ways.  For now, use the mouse to double-click on the application icon in the ENGINE jr for Windows folder or the Windows desktop Shortcut you created for ENGJR.exe.  This process starts loading ENGINE jr from the hard disk to the random access memory (RAM) and starts the program running.
+
+
+The splash screen identifying the version of the ENGINE jr program you have will now appear.  This will be followed by the ENGINE jr program screen including a menu of command options.  By choosing one of the menu items from the two command menus (File and Help), you command ENGINE jr to do whatever you choose.
+
+
+ENGINE jr can also be started by double-clicking on any ENGINE jr data document that you have created and saved.
+
+
+
+
+                                        2-1
+
+
+
+
+
+By double-clicking on an ENGINE jr data document you can pick right up where you left off!  However, you first need to "register" the ENGINE jr application file with the "*.eng" data documents using the Windows "File Types" manager.  
+
+
+
+The Windows "File Types" manager is selected by double-clicking on "My Computer" and selecting "Options" from the "View" command menu.  The tab for setting the application "File Types" can now be selected.
+
+
+
+
+Sample ENGINE jr Analysis
+
+
+To begin with, let's take a quick look at the ENGINE jr program screen before proceeding to the sample engine performance analysis that follows.
+
+
+
+The ENGINE jr program screen contains all the input design data necessary to accurately predict the performance potential of an engine.  It includes those engine design variables that research and experience have shown to have the largest effect on the power and torque capabilities of an internal combustion engine.
+
+
+
+2-2
+
+
+
+
+Obviously, these variables include the bore and stroke of the engine design, the compression ratio, cylinder head flow capacity, and camshaft information.  Other engine design variables include the number of intake valves per cylinder, fuel type and carburetor or throttle body size.
+
+
+
+Any of these data values may easily be changed using the editing features of the ENGINE jr program which are fully described in Chapters 3 and 4 of this manual.
+
+
+
+Now slowly press the Tab key a few times and watch how the cursor moves around the ENGINE jr program screen.
+
+
+
+You can also use the mouse to select any input variable to modify.  Single-clicking allows direct replacement of the input variable value.  Double-clicking on the variable value allows you to insert and delete.  You can quickly select any input variable to edit using your mouse in the normal Windows manner.
+
+
+
+You might also try holding down the Tab key and see how you can rapidly get to any position on the program screen using this alternative method.
+
+
+
+                                        2-3
+
+
+
+
+
+That's all there is to it!  Try changing the compression ratio to 14.5.  Remember to press the Tab key, (or the Return or Enter keys) after typing 14.5.
+
+
+Whenever an input variable value is changed, the cursor will momentarily disappear while ENGINE jr is calculating the new engine's design performance.  After this very brief period of time, the calculated output parameters are updated on the program screen.
+
+
+The calculated output from ENGINE jr includes the predicted horsepower and torque peaks for the input engine design.  Try pressing the Dyno Data command button located at the top of the program screen to see the complete engine dyno data chart.
+
+
+Press the close box in the upper right-hand corner to return to the main program screen.  Detailed descriptions of all the calculated output parameters are included in Chapter 5 of this manual.
+
+
+How much more power can this 355 Chevy make?  And at what RPM?  What about trying a 1050 Dominator?  A different cam?  These are the type of questions ENGINE jr was designed to answer, quickly and economically.
+
+
+
+
+2-4
+
+
+
+
+
+ENGINE jr also includes powerful calculation worksheets available by pressing any one of four Worksheet buttons at any time.    The Worksheet buttons are located next to their corresponding input variables.  Try pressing the Compression Ratio button located at the compression ratio input variable location now.
+
+
+
+The Compression Ratio Worksheet will now be displayed for easily calculating the engine compression ratio!  The Compression Ratio Worksheet variables are described starting on page 4-8 of this manual.
+
+
+
+The engine's Compression Ratio is automatically calculated as you enter the worksheet data.  Press the close box in the upper right-hand corner of the Compression Ratio Worksheet to return to the ENGINE jr program screen when you are finished using the worksheet.
+
+
+
+Note that the calculated compression ratio from the worksheet does not automatically transfer to the main ENGINE jr screen.  You must still input any new value for yourself.  However, if you double-click on the calculated value on the worksheet, the worksheet will close and the new value will be transfered to the main ENGINE jr screen.
+
+
+
+                                        2-5
+
+
+
+
+
+The engine HP and torque will be re-calculated any time you change any input variable on the main ENGINE jr program screen.
+
+
+
+Selecting the Exit command from the File menu (or pressing the close box in the upper right-hand corner) will return your computer to the Windows desktop.
+
+
+
+Good luck and have fun!  The remaining chapters of this manual provide you with the detailed knowledge and skills necessary to fully exploit the power and versatility of ENGINE jr and your Windows PC.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2-6
+
+
+
+CHAPTER 3:  THE COMMAND MENUS
+
+
+
+The Command Menus
+
+
+Two Windows command menus; File and Help, containing a variety of menu items are used with ENGINE jr to specify the command option desired.  These menu options may generally be selected anytime while running the program.
+
+
+Three of the File menu options - Open, Save and Print are also available by using command buttons, located just below the Help menu near the top of the ENGINE jr program screen.
+
+
+
+
+File: Open
+
+The Open command is used to retrieve from the disk and display on the ENGINE jr program screen a previously saved engine design data document.  Selecting Open from the File menu (or pressing the Open command button, the left button located near the top of the program screen) will cause a standard Windows dialog box to appear, awaiting the selection of an ENGINE jr data document.
+
+
+
+
+
+
+                                        3-1
+
+
+
+
+Once the input data document is selected, the data values are retrieved and displayed on the ENGINE jr program screen as well as the calculated engine performance parameters for this data.  The cursor is always left at the "Note:" position following this option.
+
+
+The Open option can be used to open an existing data document so that it may be modified as desired.  The retrieved input data can also serve as a base for building another data document to be saved using the Save As option described below.
+
+
+
+
+File: Save
+
+The Save command is used to save the current engine design data on your disk.  Selecting Save from the File menu will save the data using the current document name.  You may also press the Save command button to select this option.
+
+
+
+
+File: Save As
+
+The Save As command is used to save the current input data on your disk with a new document name.  Select Save As in the File menu for this option.
+
+
+
+
+3-2
+
+
+
+
+
+File: Print
+
+
+The Print option is used to make a complete, printed copy of both the input engine design data and the calculated output parameters from ENGINE jr.  The printout will also contain the data in the four ENGINE jr calculation Worksheets as well as the complete Engine Dyno Data.
+
+
+Selecting the Print command in the File menu (or the Print command button) at any time will cause the printer to start printing.  The printer should be turned on and the paper aligned at the top of the page before the Print command is selected.
+
+
+
+
+
+
+File: Exit
+
+
+The Exit command in the File menu can be used at any time to exit the ENGINE jr program and return to Windows.
+
+
+
+
+
+
+
+
+
+
+                                        3-3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3-4
+
+
+
+CHAPTER 4:  INPUT VARIABLES
+
+
+How to Input
+
+The ENGINE jr program screen is where the editing required to build an engine design data document takes place.  This chapter of the ENGINE jr manual contains a complete, detailed description of all the input design variables.
+
+
+Before getting into the definitions of the input variables, let's discuss how you provide input to ENGINE jr via your computer keyboard and mouse.  The mouse is used to select the input variable to be changed.  Most of the input variables are edited by selecting them with the mouse and simply typing a new value.
+
+
+If you make a mistake when typing, use the Back Space key to backup and erase, and then reenter your data.
+
+
+Pressing the Tab key (or the Return or Enter keys) signifies the end of the variable entry.  The Tab key will also advance the cursor to the next input data variable.  Pressing the Return or Enter keys will hold the cursor in the current input variable location.
+
+
+A maximum of five digits may be input for the numeric variables.  If more than five digits are entered they will be ignored.  Only numeric inputs are allowed.
+
+                                        41
+
+
+
+Also, if you enter a value outside the range of acceptable engine design variable inputs, you will receive a warning message on the screen and ENGINE jr will automatically change the value to be within the established program limits.
+
+
+It is important to remember that pressing either the Tab, Return or Enter keys signifies the end of the entry, and only then are the calculations for the engine performance completed and the results displayed on the ENGINE jr program screen.
+
+
+Some of the data values are determined by selecting from a drop-down menu.  An example of this type of input is the Camshaft Type.  Use the mouse to click the Camshaft Type list box and a menu will appear showing the possible selections.  Click the mouse button on the Camshaft Type that you are modeling.
+
+
+Some of the data values are determined by selecting option or check boxes.  An example of this type of input is the Manifold Runner Style.  Simply use the mouse to select either the Curved or Straight option button.
+
+
+The remainder of this chapter of the ENGINE jr manual contains a complete, detailed description for each of the input engine design variables.  A complete description of the four ENGINE jr worksheets is also included beginning on page 4-8.
+
+
+4-2
+
+
+
+
+
+Engine Design Data
+
+
+Note: = A descriptive string of up to 255 characters used to more completely identify the engine design data document.
+
+
+
+Number of Cylinders = the number of cylinders that the engine design contains.  Normal values for the Number of Cylinders are between 4 and 8.
+
+
+
+Inline, Vee or Flat option? = a set of option check boxes to select either an inline, vee or flat type engine configuration.  The flat option also includes all opposed engine configurations.
+
+
+
+Bore Diameter = the measured cylinder bore diameter of the engine design expressed in either inches or millimeters.  Normal values for the Bore Diameter are between 3.00 and 4.50 inches or 65 and 100 millimeters.
+
+
+
+Stroke Length = the measured crankshaft stroke length of the engine design expressed in either inches or millimeters.  Normal values for the Stroke Length are between 3.00 and 4.50 inches or 65 and 100 millimeters.
+
+                                        43
+
+
+
+
+Rod Length = the measured center tocenter length of the engine connecting rods expressed in either inches or millimeters.  Normal values for the Rod Length are between 5.0 and 6.5 inches or 100 and 150 millimeters.
+
+
+
+Compression Ratio = the measured mechanical compression ratio for the engine design. Normal values for the Compression Ratio are between 9 and 16.
+
+note: see page 4-8 for a description of the Compression Ratio Worksheet.
+
+
+
+Camshaft Type: = a drop-down menu to select which type of camshaft and lifter design are to be modeled by ENGINE jr.
+
+   - overhead cam
+    roller cam and lifter
+    mushroom tappet
+   - high rate-of-lift flat tappet
+    typical flat tappet or solid lifter
+    hydraulic roller cam and lifter
+    normal hydraulic cam and lifter
+
+
+
+Intake Duration @ .050 inch = the intake cam lobe duration measured at .050 inch valve lift expressed in degrees.  Normal values for the Intake Duration @ .050 inch are between 200 and 280 degrees.
+
+
+
+4-4
+
+
+
+Throttle CFM @ 1.5 inches Hg = the measured total flow capacity of the engine carburetor(s) or injector throttle body at 1.5 inches Hg pressure drop expressed in cubic feet per minute (CFM).  Normal values for one carburetor are between 390 and 1150 CFM. Normal input values for two carburetors may vary from 1300 to 2600 CFM.
+
+note: 1.5 inches Hg equals 20.4 inches H2O
+
+note: see page 4-10 for a description of the Throttle CFM @ 1.5 inches Hg Worksheet.
+
+
+
+Carb or EFI option? = an option check box to select either a carburetor, or a mechanical or electronic fuel injection type fuel delivery system.
+
+
+
+Fuel Type: = a drop down menu to select which type of fuel is to be modeled by ENGINE jr.
+
+   - gasoline
+   - racing gasoline
+   - methanol
+
+
+
+Intake Manifold Type: = a drop-down menu to select which type of intake manifold design is to be modeled by ENGINE jr.
+
+   - plenum style (most common)
+   - individual runner (IR)
+   - dual plane, 100% divided
+   - dual plane w/small slot
+
+                                        4-5
+
+
+
+Manifold Runner Style option? = an option check box to select either curved or straight intake manifold runners.  For example, single four barrel intake manifolds for V8 engines typically have curved intake runners between the carburetor and cylinder head.  However, most dual four barrel sheet metal intake manifolds for V8 engines have straight intake runners.
+
+
+Intake Manifold Flow Factor = is a measure of how the intake manifold affects the bare cylinder head flow.  The Intake Manifold Flow Factor is the ratio of the intake flow with the intake manifold attached and the bare head flow, expressed as a percentage.
+
+Both these flow values are measured on the flowbench at maximum net intake valve lift at the same Test Pressure and Reference Bore Diameter.  Normal values for the Intake Manifold Flow Factor are between 90 and 98 percent.
+
+Unported, cast intake manifolds can vary from 90 to 94 percent.  Ported aftermarket, cast single four barrel manifolds can achieve 97 percent.  Stateoftheart aluminum sheet metal manifolds for two four barrel applications can exceed 99 percent.
+
+
+Number of Intake Valves per Cylinder = the number of intake valves per cylinder for the engine design.  Normal values for the Number of Intake Valves per Cylinder are either 1 or 2, but some racing motorcycle and Formula 1 engine designs currently have 3 intake valves per cylinder!
+
+4-6
+
+
+
+
+Intake Valve Diameter = the measured diameter of the intake valve head expressed in either inches or millimeters.  Normal values for the Intake Valve Diameter are between 1.60 and 2.25 inches or 25 and 45 millimeters.
+
+
+
+Maximum Intake Port Flow  CFM @ Test Pressure  inches H2O @ Reference Bore Diameter = the intake flow at maximum net intake valve lift determined from the measured flowbench data expressed in CFM.  You must also input the corresponding Test Pressure expressed in inches of H2O and the flowbench Reference Bore Diameter expressed in either inches or millimeters.
+
+
+Normal values for the Maximum Intake Port Flow vary considerably based on the intake valve diameter and Test Pressure, but usually fall between 120 and 450 CFM.  Normal values for the Test Pressure are between 10 and 28 inches H2O.  Normal values for the Reference Bore Diameter should be within 2 percent of the engine cylinder bore diameter.
+
+
+Note:  Always input the total intake flow for engines having more than one intake valve per cylinder.
+
+note: see page 4-12 for a description of the Intake Port Flow Worksheet.
+
+
+
+
+                                        4-7
+
+
+
+
+Compression Ratio Worksheet
+
+
+The Compression Ratio Worksheet is displayed by pressing the Compression Ratio button located at the Compression Ratio input variable position.  Control is returned to the main ENGINE jr program screen by pressing the worksheet close box when you are finished using this worksheet.
+
+
+The Compression Ratio Worksheet is included with ENGINE jr to help you quickly determine what your current compression ratio is, or to determine what combination of engine variables will give you the compression ratio you desire.  Each of the Compression Ratio Worksheet variables is fully described in the following paragraphs.
+
+
+
+Combustion Chamber Volume = the measured volume of the cylinder head combustion chamber expressed in cubic centimeters (c.c.).  This value may be obtained from the cylinder head manufacturer or accurately determined by direct measurement of the finished cylinder head.  Normal values for the Combustion Chamber Volume vary greatly, but generally fall between 40 and 100 c.c.
+
+
+
+
+
+
+4-8
+
+
+
+
+
+Piston to Deck Height = the measured distance that the top of the piston is located below the block deck surface expressed in inches.  If the top of the piston rises above the block deck surface, the Piston to Deck Height would be input as a negative number.  Normal values for the Piston to Deck Height are between 0.0 and .025 inches.
+
+
+
+Head Gasket Thickness = the measured, compressed thickness of the cylinder head gasket expressed in inches.  Normal values for the Head Gasket Thickness are between .018 and .048 inches.
+
+
+
+Piston Dome Volume = the total measured volume of the piston dome expressed in cubic centimeters (c.c.).  This value may be obtained from the piston manufacturer or accurately determined by direct measurement in the engine.  Normal values for the Piston Dome Volume vary greatly, but generally fall between 10 and 25 c.c.
+
+
+
+
+
+
+
+
+
+
+
+
+                                        4-9
+
+ 
+
+Throttle CFM @ 1.5 inches Hg Worksheet
+
+
+The Throttle CFM @ 1.5 in Hg Worksheet is displayed by pressing the Throttle CFM @ 1.5 inches Hg button located at the Throttle CFM @ 1.5 inches Hg input variable position.  Control is returned to the main ENGINE jr program screen by pressing the worksheet close box when you are finished using this worksheet.
+
+
+The Throttle CFM @ 1.5 inches Hg Worksheet is included with ENGINE jr to help you quickly estimate what your carburetor or throttle body flow capacity is, or to determine what throttle and venturi diameters would be required to get the airflow you desire.
+
+
+Each of the Throttle CFM @ 1.5 inches Hg Worksheet variables is fully described in the following paragraphs.  The worksheet includes separate inputs for the Primary and Secondary parts of the throttle, since these may have different diameters for your specific application.
+
+
+
+Number of Throttle Bores = the total number of throttle bores being modeled.  Normal values for the Number of Throttle Bores is between 2 and 8.
+
+
+
+
+
+
+4-10
+
+
+
+
+
+Throttle Diameter = the diameter of the throttle bore measured in either inches or millimeters.  Normal values for the Throttle Diameter are between 1.0 and 2.0 inches or 25 and 48 millimeters.
+
+
+
+Venturi Diameter = the diameter of the throttle venturi measured in either inches or millimeters.  Normal values for the Venturi Diameter are between .875 and 1.75 inches or 20 and 40 millimeters.
+
+
+
+Throttle Type option? = an option check box to select which type of throttle design is to be modeled by ENGINE jr.
+
+   - butterfly valve = this is the most
+     common style, used in most carburetors
+     and throttle bodies.
+
+   - slide valve = slide valve carburetors
+     are typically found on motorcycles
+     and do not have throttle shafts or
+     butterfly valves in the throttle bore
+     of the carburetor or throttle body.
+
+
+
+Note:  To display the equivalent Throttle CFM @ 3.0 inches Hg (a common rating for two barrel carburetors), move the mouse over the calculated Throttle CFM @ 1.5 inches Hg value.
+
+
+
+                                       4-11
+
+
+
+
+Intake Port Flow Worksheet
+
+
+The Intake Port Flow Worksheet is displayed by pressing the Intake Port Flow button located at the Maximum Intake Port Flow input variable positions.  Control is returned to the main ENGINE jr program screen by pressing the worksheet close box when you are finished using this powerful worksheet.
+
+
+The Intake Port Flow Worksheet is included with ENGINE jr for two primary uses:
+
+
+a) to help the engine designer without
+   flowbench data estimate the intake flow
+   capacity of a specific cylinder head
+   design based on the intake valve
+   diameter, lift, and valve job details.
+
+
+b) to critique the flowbench data and
+   intake flow capacity results obtained
+   from a cylinder head porting shop.
+
+
+
+Each of the Intake Port Flow Worksheet variables is fully described on the following pages.  These definitions are then followed on page 4-14 by a description of how to use this powerful worksheet for the two situations listed above.
+
+
+
+
+
+4-12
+
+
+
+
+Minimum Crosssection Area = the minimum crosssection area of the intake port expressed in square inches.  You may calculate the Minimum Crosssection Area for either the valve throat or curtain areas by using the Minimum Cross-section Area Worksheet.  However, the intake port may be smaller at some other point.
+
+note: see page 4-16 for a description of the Minimum Cross-section Area Worksheet.
+
+
+For example, on many small block Chevy heads, the area next to the pushrod can be a pinch point.  Thus, if you have determined the location having the smallest crosssection area, always input this measured minimum area into ENGINE jr to get the most accurate results.  The Cross-section Area Calculator may be useful to help you with this important calculation.
+
+note: see page 4-18 for a description of the Cross-section Area Calculator.
+
+
+Intake Flow Velocity = the calculated average intake port flow velocity expressed in feet per second.  Normal values for the Intake Flow Velocity vary directly with the flowbench Test Pressure.  See the table below for typical values for the Intake Flow Velocity.
+
+@ 10" H2O - 130 to 185 ft/sec
+@ 20" H2O - 185 to 240 ft/sec
+@ 25" H2O - 210 to 270 ft/sec
+@ 28" H2O - 225 to 285 ft/sec
+@ 45" H2O - 290 to 375 ft/sec
+
+                                       4-13
+
+
+
+
+Intake Flow Flux = the calculated intake port flow flux expressed in cfm per square inch of Minimum Cross-section Area.  Normal values for the Intake Flow Flux vary directly with the flowbench Test Pressure.  See the table below for typical values for the Intake Flow Flux.
+
+@ 10" H2O -  55 to  70 cfm/sq in
+@ 20" H2O -  80 to 100 cfm/sq in
+@ 25" H2O -  90 to 115 cfm/sq in
+@ 28" H2O -  95 to 120 cfm/sq in
+@ 45" H2O - 120 to 155 cfm/sq in
+
+
+Flow Velocity Index = the Intake Flow Velocity expressed as a percentage of the maximum theoretical limit for the input flowbench Test Pressure.  Normal values for the Flow Velocity Index are between 70 and 90 percent.  State-of-the-art cylinder heads are currently able to achieve almost 100 percent of the theoretical limit.
+ 
+
+
+Now, let's get back to the two situations described earlier and how to use the Intake Port Flow worksheet.
+
+
+a)  For the case where you have absolutely no cylinder head flowbench data, start off by entering the actual Intake Valve Diameter on the main program screen.  Use the Minimum Cross-section Area Worksheet to estimate the Minimum Cross-section Area for your engine design.  Enter this value on the Intake Port Flow Worksheet.
+
+
+4-14
+
+
+
+
+If the cylinder heads are totally stock enter a value of 65 percent for the Flow Velocity Index.  If some work has been done to the valve seat, throat and bowl areas a value of 7075 percent might be appropriate.  If the heads have been fully ported by a professional head porting shop, 8085 percent Flow Velocity Index is not uncommon.
+
+
+ENGINE jr will now estimate the Maximum Intake Port Flow and display the result on the main program screen.
+
+
+
+b)  When critiquing cylinder head flowbench data, enter the Intake Valve Diameter and Maximum Intake Port Flow on the main program screen.   Use the Minimum Cross-section Area Worksheet or Cross-section Area Calculator to estimate the Minimum Cross-section Area for your engine design.  Enter this value on the Intake Port Flow Worksheet.
+
+
+ENGINE jr will now calculate the Flow Velocity Index.  Professional port work should achieve a Flow Velocity Index of at least 85 percent. Stateoftheart port work can achieve over 10 percent more flow, approaching 100 percent Flow Velocity Index.
+
+
+
+
+
+
+                                       415
+
+
+
+
+Minimum Cross-section Area Worksheet
+
+
+The Minimum Cross-section Area Worksheet is displayed by pressing the Minimum Cross-section Area button located in the Maximum Intake Port Flow Worksheet.  Control is returned to the Maximum Intake Port Flow Worksheet by pressing the worksheet close box when you are finished using this worksheet.
+
+
+The Minimum Cross-section Area Worksheet is included with ENGINE jr to help you quickly determine what the valve seat throat or curtain area is for your cylinder head design.  Each of the Minimum Cross-section Area Worksheet variables is fully described in the following paragraphs.
+
+
+
+
+Valve Seat Throat Diameter = the diameter of the valve seat throat measured in inches or millimeters.  The Valve Seat Throat Diameter is always less than the valve head diameter.
+
+
+
+Valve Seat Throat Percentage = the ratio of the Valve Seat Throat Diameter to the valve head diameter expressed as a percentage.  Normal values for the Valve Seat Throat Percentage are typically between 85 and 88 percent for stock heads and 88 and 92 percent for racing heads.
+
+
+4-16
+
+
+
+
+
+Valve Seat Angle = the measured angle of the valve seat face expressed in degrees.  The most common Valve Seat Angle is 45 degrees, however some cylinder heads may use a valve seat angle between 35 and 55.
+
+
+
+Valve Seat Width = the width of the valve seat face measured in inches.  Normal values for the Valve Seat Width are between .060 and .090.
+
+
+
+Valve Stem Diameter = the diameter of the valve stem measured in inches or millimeters.  Normal values for the Valve Stem Diameter are between .25 and .375 inches or 4 and 8 millimeters.
+
+
+
+Maximum Intake Valve Lift = the measured maximum net intake valve lift expressed in inches.  This value can be calculated from the camshaft specifications as the maximum stated lift minus the recommended valve lash.  Normal values for the Max Intake Valve Lift can vary greatly with intake valve diameter, but are usually between .450 and .750 inches.
+
+
+
+
+
+
+
+
+                                       4-17
+
+
+
+
+Cross-section Area Calculator
+
+
+The Cross-section Area Calculator is displayed by pressing the Area Calculator button located both in the Intake Port Flow Worksheet, and along the top of the main program screen.
+
+
+The Cross-section Area Calculator is included with ENGINE jr to help you quickly determine what the cross-section area is for four different flowpath shapes.  Each of the Cross-section Area Calculator variables is fully described in the following paragraphs.
+
+
+
+Circular Area Worksheet:
+
+Diameter = the diameter of the circular flowpath measured in inches or millimeters.
+
+Stem Diameter = the diameter of the valve stem measured in inches or millimeters, if a valve stem is present in the flowpath.
+
+
+
+Rectangular Area Worksheet:
+
+Height = the height of the rectangular flowpath measured in inches or millimeters.
+
+Width = the width of the rectangular flowpath measured in inches or millimeters.
+
+
+
+4-18
+
+
+
+
+Corner Diameter = the corner diameter of all four corners of the rectangular flowpath measured in inches or millimeters.
+
+Stem Diameter = the diameter of the valve stem measured in inches or millimeters, if a valve stem is present in the flowpath.
+
+
+
+Elliptical Area Worksheet:
+
+Major Diameter = the larger diameter of the elliptical flowpath measured in inches or millimeters.
+
+Minor Diameter = the smaller diameter of the elliptical flowpath measured in inches or millimeters.
+
+Stem Diameter = the diameter of the valve stem measured in inches or millimeters, if a valve stem is present in the flowpath.
+
+
+
+Annular Area Worksheet:
+
+Outer Diameter = the outer diameter of the annular flowpath measured in inches or millimeters.
+
+Inner Diameter = the inner diameter of the annular flowpath measured in inches or millimeters.
+
+Stem Diameter = the diameter of the valve stem measured in inches or millimeters, if a valve stem is present in the flowpath.
+
+
+                                       4-19
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+4-20
+
+
+
+CHAPTER 5:  CALCULATED PARAMETERS
+
+
+The calculated output from ENGINE jr is separated into two parts - Estimated engine performance and Engine Dyno Data.  Please refer to the output of the sample case on your computer monitor to get a complete understanding of all the ENGINE jr calculated output parameters.
+
+
+Estimated engine performance
+
+ENGINE jr estimates overall engine performance for the "standard" ambient conditions of sea level elevation, 29.92 inches Hg, 60 degrees F and no humidity. This is the same "standard" that most aftermarket, racing and high performance engine data is "corrected" to.  Engine power and torque predictions are consistent with the SAE (Society of Automotive Engineers) J1349 Standard Method.
+
+
+ENGINE jr calculates the displacement of the engine and the eight key engine performance parameters described on the next page.  These output parameters should be viewed as what's possible for the input engine design.
+
+
+A few engines may be able to surpass these values using special exotic fuels, synthetic lubricants and dry sump oil systems, and variable length intake and exhaust systems . . . but not by much, usually no more than 23%.
+
+
+                                        51
+
+
+
+
+Peak HP = the estimated maximum power (HP and kW) potential of the engine described by the input engine design data.
+
+
+RPM @ Peak HP = the predicted RPM at which the Peak HP will occur.
+
+
+Peak HP/CID = the calculated peak HP per cubic inch of engine displacement.
+
+
+Peak Torque = the estimated maximum torque (ftlbs and Nm) potential of the engine described by the input engine design data.
+
+
+RPM @ Peak Torque = the predicted RPM at which the Peak Torque will occur.
+
+
+Peak Torque/CID = the calculated peak torque per cubic inch of engine displacement.
+
+
+Shift RPM = the RPM that the engine should be shifted at for best performance.  The recommended ENGINE jr Shift RPM is simply 8 percent greater than the RPM @ Peak HP.
+
+
+Redline RPM = the maximum RPM for engine operation.  The ENGINE jr recommended Redline RPM is based on mechanical stress limits for the crank, rod and piston assembly - it has nothing to do with valve train dynamics!
+
+
+52
+
+
+
+
+Engine Dyno Data
+
+
+The Dyno Data button located at the top of the ENGINE jr program screen is used to display the calculated horsepower and torque curves for the input engine design.  This data is displayed over the entire RPM range of the engine, just like you get from an engine dyno.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        5-3

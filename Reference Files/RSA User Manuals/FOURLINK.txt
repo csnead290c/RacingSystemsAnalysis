@@ -1,0 +1,1208 @@
+
+
+
+
+
+
+          RSA
+   Computer Software
+    for Drag Racers
+
+
+
+
+
+FOURLINK
+Version 4.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+Racing Systems Analysis
+-----------------------
+
+
+
+
+
+
+
+Racing Systems Analysis
+
+
+
+
+
+
+
+FOURLINK
+Version 4.0
+
+
+By:  Patrick Hale
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Copyright 2006 RSA
+             Phoenix, Arizona  USA
+             www.QUARTERjr.com
+
+
+
+
+
+
+COPYRIGHT
+
+Copyright 2006 by RSA.  All rights reserved.  No part of this publication may be reproduced, transmitted, stored in a retrieval system, or translated into any language or computer language, in any form or by any means; electronic, mechanical, magnetic, optical, chemical, manual or otherwise; without the prior written consent of Racing Systems Analysis.
+
+
+
+
+
+
+
+
+
+DISCLAIMER
+
+RSA reserves the right to revise this publication and to make changes from time to time in the context hereof, without the obligation of RSA to notify any person of such revision or changes.
+
+
+
+
+
+
+
+
+
+
+
+
+ii
+
+
+
+
+TABLE OF CONTENTS
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+General . . . . . . . . . . . . . . . . 1-1
+Installing your program disk. . . . . . 1-3
+
+
+
+CHAPTER 2:  FOURLINK SOFTWARE TOUR
+
+Getting started . . . . . . . . . . . . 2-1
+Sample analysis . . . . . . . . . . . . 2-2
+How to input. . . . . . . . . . . . . . 2-4
+Optimizing your suspension. . . . . . . 2-6
+ - Adjust static weight distribution. . 2-7
+ - Check shock damping ratio. . . . . . 2-8
+ - Limit Shock Separation . . . . . . . 2-9
+ - Adjust four link bars. . . . . . . .2-10
+ - Select the highest average
+   rear tire force. . . . . . . . . . .2-11
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+File: Open. . . . . . . . . . . . . . . 3-1
+File: Save. . . . . . . . . . . . . . . 3-1
+File: Save As . . . . . . . . . . . . . 3-2
+File: Details . . . . . . . . . . . . . 3-2
+File: Print . . . . . . . . . . . . . . 3-2
+File: Exit  . . . . . . . . . . . . . . 3-2
+
+
+
+
+
+
+
+                                        iii
+
+
+
+
+
+CHAPTER 4:  MAIN FOURLINK SCREEN
+
+General data. . . . . . . . . . . . . . 4-1
+Rear suspension data. . . . . . . . . . 4-2
+Four link geometry parameters . . . . . 4-5
+Static weight data. . . . . . . . . . . 4-5
+Center of gravity data  . . . . . . . . 4-6
+Calculated output . . . . . . . . . . . 4-9
+Summary parameters. . . . . . . . . . .4-10
+Dynamic chassis analysis parameters . .4-12
+Rear tire force graph . . . . . . . . .4-16
+
+
+
+CHAPTER 5:  FOUR LINK BAR DETAILS SCREEN
+
+Four link bar geometry data . . . . . . 5-1
+Display limits. . . . . . . . . . . . . 5-5
+Recommend settings. . . . . . . . . . . 5-6
+Calculated details parameters . . . . . 5-7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+iv
+
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+
+General
+
+The FOURLINK software from RSA quickly calculates a wide range of parameters including all the Instant Center locations for your four link bar rear suspension.
+
+
+Today, the sport of drag racing has attained a level of sophistication that makes the personal computer an essential tool for all racers to use, Professional and Sportsman alike.
+
+
+The QUARTER Pro and QUARTER jr programs for drag racecar performance simulation started it all off, first becoming commercially available back in 1985.  Now, FOURLINK unlocks the power and convenience of the personal computer for every drag racer who utilizes a four link bar rear suspension.
+
+
+The winning racecar combination is the quest of all drag racers.  "What springs should I use?  Which shocks?  And where on earth should the four link bars be set?"
+
+
+FOURLINK provides all these answers and more!  It lets you use your personal computer to quickly determine how to get the quickest reaction times and best starting line launch, and quickest 60 foot times from your racecar.
+
+
+                                        1-1
+
+
+
+In the past, the approach has usually been to copy what the next guy was doing, and then start changing things, one at a time. This is a costly, time consuming process which will end up with a worn out racecar.
+
+
+You can't try everything at the same time and varying track conditions can cloud the results of the best back-to-back testing.
+
+
+With competitive drag racing being a contest of hundredths, or even thousandths of a second, only a computer can provide the necessary consistency and accuracy to optimize your racecar performance.
+
+
+RSA (Racing Systems Analysis) was started in 1978 by Patrick Hale, a local drag racer from Arizona.  After drag racing several racecars while attending Mechanical Engineering school at Arizona State University; he developed the well known QUARTER Pro and ENGINE Pro software.
+
+
+The services of RSA are also available to customize FOURLINK to your specific needs; or to write new, engineering analysis type software for other applications.  Give RSA a call or e-mail.  Check out our website!
+
+
+
+                   Patrick Hale
+                   President, MSME
+
+                   Racing Systems Analysis
+                   Phone: 602.992.2586
+			    Web:   www.QUARTERjr.com
+1-2
+
+
+
+
+
+Installing your program disk
+
+
+1.  Start by inserting the FOURLINK program CD into the appropriate drive in your PC.
+
+
+2.  Use the mouse to select Run from the Start menu.
+
+
+3.  In the Command Line box, type d:setup.exe depending on which drive you are using to read the FOURLINK setup CD.
+
+
+4.  Use the mouse to click the OK button.
+
+
+5.  Follow the instructions displayed on your computer monitor.  When you are finished, remove the program CD.
+
+
+6.  The setup process creates a folder named FOURLINK in the Program Files group.  This folder contains the icon for the FOURLINK software which has the name FOURLINK.exe.
+
+
+7.  You can now create a Shortcut for the FOURLINK.exe file and Send it to the Windows desktop if you like.  You normally do this by right-clicking the mouse on the FOURLINK.exe program icon and then choosing Create Shortcut from the drop-down list.
+
+
+
+                                        1-3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1-4
+
+
+
+
+CHAPTER 2:  FOURLINK SOFTWARE TOUR
+
+
+
+Getting Started
+
+
+In this chapter, we will walk you through a sample, hands on, drag racecar rear suspension system analysis.  So please sit at your computer while you read this chapter.  FOURLINK is designed to be very easy to use, even for the first time or novice computer user.
+
+
+
+Use the mouse to double-click on the application icon in the FOURLINK folder or on the Windows desktop Shortcut you just created for FOURLINK.exe.
+
+
+
+The banner identifying the version of the FOURLINK program you have will now appear.  This will be followed by the main FOURLINK program screen including a menu of commands.  By choosing one of the items from the menu, you command FOURLINK to do whatever you choose.
+
+
+
+Only two screens are used in the FOURLINK program.  The first is for input data and summary and dynamic output, the second for the detailed four link bar geometry data.
+
+
+
+                                        2-1
+
+
+
+
+The FOURLINK summary and detailed output are for steady-state conditions, that is, parameters whose variation with time are not that important.  On the other hand, the dynamic output section on the main screen is very time dependent . . . and is the result of highly sophisticated analysis, the kind of stuff computers were really made for!
+
+
+
+Sample Analysis
+
+
+To begin with, let's take a quick look at the main screen input and summary output before proceeding to the detailed FOURLINK rear suspension system analysis.  It contains all the data necessary to perform the sophisticated dynamic rear suspension calculations for any four link bar combination.
+
+
+
+The FOURLINK sample data document includes information describing the static weight distribution of a typical racecar, expressed both in lbs and percentages.
+
+
+
+General information about the tire diameter, maximum acceleration, and rear spring and shock rates are included.  There is four link bar geometry data, and the wheelbase and location of the racecar CG is also included.
+
+
+2-2
+
+
+
+
+Any of these input data values may easily be changed using the editing features of the FOURLINK program which are fully described in the How to Input section on the next page.
+
+
+
+The bottom left portion of the main screen contains some of the calculated FOURLINK output.  Summary parameters include the forces in each of the four link bars, the location of the Instant Center, and the dynamic weight transfer of the racecar under the forces of Maximum Acceleration.
+
+
+
+On the right hand side of the main FOURLINK screen are the dynamic, time-dependent calculations for the racecar rear suspension system.  Also included in the lower right corner is a graph showing how the critical rear tire force varies as the racecar is launched from the starting line.
+
+
+
+Descriptions of all the FOURLINK inputs and summary output and dynamic chassis parameters found on the main FOURLINK screen are included in Chapter 4.
+
+
+
+Try changing the Maximum Acceleration to 2.0 g's.  Remember to press the Enter or Tab key after typing in the number 2.
+
+
+
+                                        2-3
+
+
+
+
+How much different is the rear suspension response?  Is the average weight on the rear tires reduced?  Maybe the Horizontal CG should be moved back toward the rear axle?  How about lighter springs or heavier shocks? Perhaps a different four link bar setting (hole code) will do the trick?
+
+
+These are the types of questions FOURLINK was designed to answer, quickly and economically, before you go out, buy new parts and test . . test . . test.
+
+
+Selecting the Print command from the File: menu will generate a printed report from your printer.  Selecting the Save command will save all your data.  Selecting the Exit command will return your computer to the Windows desktop.
+
+
+How to Input
+
+The two FOURLINK program screens are where the editing required to define all the four link bar geometry and racecar dimensions and performance inputs take place.
+
+
+Before getting into the definitions of all the variables starting in Chapter 4, let's discuss how you provide input to FOURLINK via your computer keyboard and mouse.  The mouse is used to select the input variable to be changed.  Most of the input variables are edited by selecting them with the mouse and simply typing in a new value.
+
+
+2-4
+
+
+
+
+If you make a mistake when typing, use the Back Space or Delete key to backup and erase, and then re-enter your data.  A maximum of five digits may be input for the numeric variables.  If more than five digits are entered they will be ignored.
+
+
+Also, if you enter a value outside the range of acceptable inputs, an error message box will appear and FOURLINK will change the input to be within the program limits.
+
+
+Pressing the Tab  key (or the Return or Enter keys) signifies the end of the entry.  The Tab key will also advance the cursor to the next input variable location.  Pressing the Return or Enter keys will hold the cursor in the current position.
+
+
+Some of the data values are determined by selecting option boxes.  An example of this type is the Display Limits option on the Details screen.  You can get to the Details screen by selecting Details from the command menu or by double-clicking on the Hole Code edit box.  Simply use the mouse to select either the Limits On or the Limits Off option buttons.
+
+
+Good luck and have fun!  The next section of this chapter describes a simple, 5 step process . . . proven time and again to find the best four link bar rear suspension system setup for any racecar.
+
+
+                                        2-5
+
+
+
+Optimizing Your Suspension
+
+
+Okay, so now that you know how the FOURLINK software works and in general what inputs are required, how do you go about optimizing your rear suspension system response.
+
+
+This section of the FOURLINK manual is intended to give you the general guidelines, or steps required to get the most out of your four link bar or ladder bar rear suspension system.
+
+
+Clearly, the goal of any suspension system is to obtain maximum traction between the tires and the racetrack surface.  This is generally achieved by maximizing the force pushing the tires into the pavement.
+
+
+At first thought, you might think that this maximum tire force is limited to the total weight of the racecar.  Not so!  Proper rear suspension design can allow the rear tire force to exceed the total weight of the racecar by a fair amount!
+
+
+The following five steps are recommended to optimize a rear suspension system:
+
+ Step 1:  Adjust Static Weight Distribution
+ Step 2:  Check Shock Damping Ratio
+ Step 3:  Limit Shock Separation
+ Step 4:  Adjust Four Link Bars
+ Step 5:  Select the Highest Average
+	     Rear Tire Force
+
+2-6
+
+
+
+
+Step 1:  Adjust Static Weight Distribution. This is done for the maximum acceleration or minimum 60 ft time desired.  Start off by checking the input value for the location of the Vertical CG.  Is it close, somewhere between the height of the rear axle centerline and the top of the engine block?
+
+
+
+What about the Front Strut Lift and Front Tire Lift?  What is the "attitude" of the race car going to be when it is launched from the dragstrip starting line?  Front wheels way up in the air or just skimming the pavement?
+
+
+
+The next step is to determine the lowest percentage weight on the front end to drive the Dynamic Front Weight to just greater than zero.  If you go too far, the wheelie bars will start unloading the dynamic rear weight.  Try to get a dynamic front weight between zero and about 10 lbs.
+
+
+
+Compare the FOURLINK calculated front and rear weights to your racecar's, based on individual scale readings from under each tire.  If possible, relocate any movable weight from front to rear to achieve the desired weight distribution.  In any case, always use the actual measured weights you obtained after any parts relocation for the remainder of the four link bar rear suspension system analysis.
+
+                                        2-7
+
+
+
+
+
+Step 2:  Check Shock Damping Ratio.  Make sure that the Damping Ratio is greater than 1.50.  The Damping Ratio measures the tendency of the rear suspension system to respond in a harmonic, oscillatory motion, repeatedly going up and down, also know as tire shake.  Obviously, tire shake is bad news and should always be avoided!
+
+
+
+The shock damping forces are the key to proper suspension system design.  The Damping Ratio should never be less than 1.00!  The closer it is to a value of 1.00, the more the tendency for harmonic motion rather than smooth suspension travel.
+
+
+
+The way to increase the Damping Ratio is to select shocks or shock settings having larger Shock Rates for the compression and extension shock motions.  Shoot for a Damping Ratio of at least 1.50 or greater.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2-8
+
+
+
+
+
+Step 3:  Limit Shock Separation.  It's almost time to start adjusting the location of the four link bars.  The key parameter to watch is the Percent Anti-Squat.  As Percent Anti-Squat increases, the amount of lift or vertical force that the four link bars provide increases.  As Percent Anti-Squat decreases, the more the rear end will have a tendency to squat, that is, the chassis of the racecar will move closer to the rear axle centerline.
+
+
+
+This distance is known as Shock Separation and is included in the lower left portion of the summary FOURLINK output.  When the Shock Separation is less than zero, i.e. negative, the steady-state response of the rear suspension system will be squat.  When the Shock Separation is positive, the steady-state response will be chassis rise.
+
+
+
+The key idea here is to never, ever let the steady-state response be greater than the maximum limits set by maximum shock free travel.  For example: if your shocks have 6 inches of total free travel, and the ride height of your racecar allows for 3 inches of travel in each direction; always select a four link bar setting that results in Shock Separation of less than 3 inches, in both directions, either positive or negative.
+
+
+
+
+                                        2-9
+
+
+
+
+
+Step 4:  Adjust Four Link Bars.  The four link bars can usually be located in a huge number of positions, limited only by the number of holes in the chassis and rear axle housing.  Each combination of holes will result in different values of Shock Separation and Percent Anti-Squat.
+
+
+
+Use the Four Link Bar Geometry Details screen described in Chapter 5 to sort through the possible four link bar attachment hole combinations (Hole Codes) that maintain the Shock Separation within the shock travel limits identified in Step 3.  Use the shock travel limits to set the Shock Separation min/max Display Limits!
+
+
+
+Try the Recommend Settings option for the Display Limits.  Using this FOURLINK Recommend Settings option should get you down to only a handful of possible four link bar combinations to study and test further.
+
+
+
+Now, go back to the main FOURLINK screen, and start with the Hole Code that results in the lowest Percent Anti-Squat and Initial Rear Tire Hit.  This provides the smallest four link bar lift force and will usually result in steady-state chassis squat.
+
+
+
+2-10
+
+
+
+
+Look at the dynamic chassis and rear suspension system analysis.  Note how the chassis first separates or rises, and then falls.  Hopefully, the shock separation during chassis rise is not beyond the installed shock travel limit.
+
+
+Look at how the Rear Tire force varies with time.  Is it smooth?  Note the Average Rear Tire Force and Rear Tire Force Variation.  You can use the Print command at this point to get a printed record for this Hole Code.
+
+
+Start adjusting the four link bar setting or Hole Code to increase the Percent Anti-Squat until the dynamic shock separation exceeds the maximum free travel limit.  You can make printouts of each case along the way using the Print command from the File: menu if you like.
+
+
+
+
+Step 5:  Select the Highest Average Rear Tire Force.  The first four steps should have reduced the number of acceptable four link geometry settings to a manageable few. Simply select the four link bar setting that results in the highest Average Rear Tire Force.
+
+
+Watch some of the other detailed force parameters as well.  Select the smallest Rear Tire Force Variation in order to break any ties that may result.
+
+
+                                       2-11
+
+
+
+
+
+Congratulations!  At this point, you are really close to having the optimum design for your rear suspension system.  You should have less than a handful of Hole Codes that have passed through the 5 step screening process.
+
+
+
+The next steps are to complete the final optimization by repeating the above steps using different Spring and Shock Rates, or even different chassis ride heights and Static Weight distributions.  The sky is the limit on the number of possible combinations you can come up with!
+
+
+
+Good luck and have fun!  The remaining chapters of this manual provide you with the detailed knowledge and skills necessary to fully exploit the power and versatility of the FOURLINK software and your Windows PC.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2-12
+
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+
+Six Windows menu commands; Open, Save, Save As, Details, Print and Exit, are used to specify the command option desired.  This chapter of the FOURLINK manual contains a complete, detailed description for each of the command menu options.
+
+
+
+File: Open
+
+The Open command is used to retrieve from the hard disk and display on the FOURLINK program screens a previously saved data document.  Selecting Open from the File menu will cause a standard Windows dialog box to appear, awaiting the selection of a FOURLINK data document.  Once the input data document is selected, the data values are retrieved and displayed.
+
+The Open command can be used to open an existing FOURLINK data document so that it may be modified as desired.  The retrieved input data can also serve as a base for building another data document to be saved using the Save As option.
+
+
+File: Save
+
+The Save command is used to save all the four link data to a file with the file name extension .4LB on your hard disk.  If you do not supplied the file name, BaseCase.4LB will be used.  This item is also directly available on the Command Menu.
+
+                                        3-1
+
+
+
+File: Save As
+
+The Save As command is used to save the current input data with a new data document name.  You must always select Save As from the File menu for this command.
+
+
+File: Details
+
+The Details command is used to display the Four Link Bar Geometry Details screen.  This screen contains the input Four Link Bar Geometry Data, the Display Limits and the calculated Four Link Bar Details.  See Chapter 5 of this manual for a complete description of the Details screen.  This File: menu item is also directly available on the Command Menu.
+
+
+File: Print
+
+The Print commands are used to print either the main FOURLINK screen including both the input data and the calculated output parameters, or all the pages including the Details screen output.  Selecting the Print commands in the File: menu at any time will cause the printer to start printing.
+
+
+File: Exit
+
+The Exit command in the File: menu can be used at any time to exit the FOURLINK program and return to the Windows desktop.  You may also exit FOURLINK by pressing the close box in the upper right hand corner of the main program screen.
+
+
+3-2
+
+
+
+
+CHAPTER 4:  MAIN FOURLINK SCREEN
+
+
+
+The main FOURLINK program screen is where the editing required to build many of the input data set takes place.  This chapter of the FOURLINK manual contains a complete, detailed description of all the input variables and calculated output for the main program screen.
+
+
+
+General Data
+
+
+Note: = A descriptive string that can be used to more completely identify the FOURLINK data document file.
+
+
+Estimated 60 ft Time = The racecar 60 ft time that FOURLINK will use to estimate the Maximum Acceleration, expressed in seconds.  Normal input values for the Estimated 60 ft Time are between 1.0 and 2.0.
+
+
+Maximum Acceleration = The maximum acceleration to be used to evaluate the dynamic rear suspension system response, expressed in g's.  This value can be obtained by one of three methods:
+	1) from the Estimated 60 ft Time
+	2) measured on-track with a g-meter
+	3) calculated using the QUARTER Pro
+        racecar simulation program.
+Normal input values for the Maximum Acceleration are between 1.0 and 3.0.
+
+                                        4-1
+
+
+
+
+The rear tire size may be input to FOURLINK in one of the two ways described below.  Values greater than 60 are considered to be Tire Rollout and values less than 60 are considered to be Tire Diameter.
+
+
+Tire Rollout = The rear tire circumference, expressed in inches.  This dimension is obtained by measuring the circumference of a properly inflated tire.  Normal input values for the Tire Rollout are between 75 and 118.
+
+
+Tire Diameter = The measured rear tire diameter, expressed in inches.  This value may be obtained from the tire manufacturer but is better obtained by actually measuring the diameter of a properly inflated tire.  Normal input values for the Tire Diameter are between 24 and 36.
+
+
+
+Rear Suspension Data
+
+
+Shock Mounting Location = The horizontal location, relative to the rear axle centerline, that the bottom of the shocks are mounted at, expressed in inches.  Negative numbers indicate that the shocks are mounted behind the rear axle.  Positive numbers indicate the shocks are mounted forward of the rear axle.  Normal input values for the Shock Mounting Location are between -6.0 and 6.0.
+
+
+4-2
+
+
+
+
+Rear Spring Rate = The individual rear coil spring rate, expressed in lbs per inch.  Two rear springs are assumed by FOURLINK.  This value is usually obtained from the spring manufacturer.  Normal values for the Rear Spring Rate are between 75 and 200.
+
+
+
+The Shock Rates described below may be input into FOURLINK in one of three Shock Units: as selected from the drop down list:
+	- lbs per in/sec
+	- Newtons per 0.1 Knoten
+	- Kilos per 0.1 Knoten
+
+
+
+Shock Rates = The individual rear hydraulic shock rates.  Two rear shocks are assumed by FOURLINK.  These values are separately input for the Compression (Bump) and Extension (Rebound) portions of the shock movement.  Values for the Shock Rates are best obtained from the shock manufacturer.  Shock Rates can only be determined from shock force versus shock speed plots obtained from a shock dyno.
+
+
+FOURLINK assumes that shock force is linear with shock speed over the entire speed range.  In practice, some shocks have special valving which creates a non-linear force versus speed relationship.  However, the method of modeling shocks in FOURLINK has proven to be accurate for the types of suspension systems found in most drag race cars.
+
+
+                                        4-3
+
+
+
+
+Normal values for the Compression (Bump) shock rate are between 20 and 200 lbs per in/sec or 500 and 2000 Newtons per 0.1 Knoten.
+
+
+Normal values for the Extension (Rebound) shock rate are between 20 and 350 lbs per in/sec or 500 and 3500 Newtons per 0.1 Knoten.
+
+
+For example, the old standard double-adjustable Koni drag race shocks (#8211-1123 SPA-1) were rated from 20 - 100 kilos in Compression (Bump) (in 10 kg increments per click) and from 80 - 200 kilos in Extension (Rebound) (in 10 kg increments per click).
+
+
+These values correspond to Compression (Bump) shock rates between 22 and 110 lbs per in/sec (in 11 lbs per in/sec increments) and Extension (Rebound) shock rates between 88 and 220 lbs per in/sec (in 11 lbs per in/sec increments).
+
+
+
+Wheelie Bar Length = The distance the wheelie bars extend behind the rear axle centerline, expressed in inches.  When required to control front end lift, longer wheelie bars will unload the rear tires less than shorter wheelie bars.  Normal input values for the Wheelie Bar Length are between 36 and 72.
+
+
+
+4-4
+
+
+
+
+Four Link Geometry Parameters
+
+The Hole Code from the Four Link Bar Geometry Details screen (described in Chapter 6) is used for both the summary and dynamic FOURLINK calculations.  The hole locations are shown along with the calculated lengths and angles of the upper and lower link bars.  These values may be used as a check to see if the four link bar geometry data has been input properly on the Details screen.
+
+
+Static Weight Data
+
+Racecar static weight data may be input to FOURLINK in a variety of ways.  In all cases these values must include the total weight of the racecar, including the driver and fuel, ready to race, sitting on a level surface at the normal racecar ride height.
+
+
+If you input the front and rear weights, FOURLINK will automatically calculate the percentage weights for you.  On the other hand, if you input the front and rear weight percentages, FOURLINK will then calculate the front and rear weights.
+
+
+Front weight - lbs = The measured weight of the front portion of the racecar, expressed in lbs.
+
+
+Rear weight - lbs = The measured weight of the rear portion of the racecar, expressed in lbs.
+
+                                        4-5
+
+
+
+Total weight - lbs = The measured total weight of the racecar, expressed in lbs.
+
+
+Front weight - % = The calculated percentage weight on the front portion of the racecar.
+
+
+Rear weight - % = The calculated percentage weight on the rear portion of the racecar.
+
+
+
+Center of Gravity Data
+
+The center-of-gravity (CG) data is required so that FOURLINK may accurately predict the racecar's rear suspension system response to the applied Maximum Acceleration load.  The location of the Horizontal CG is much easier to obtain than the location of the Vertical CG.  However, an accurate estimate for the Vertical CG location is a key input to the FOURLINK program.
+
+
+
+Wheelbase = The measured racecar wheelbase, expressed in inches.  Normal input values for the Wheelbase are between 90 and 125.
+
+
+
+Horizontal CG = The calculated horizontal location of the racecar center-of-gravity, located forward from the rear axle centerline, expressed in inches.  Normally, this value is automatically calculated by FOURLINK, based on the input front to rear static weight distribution.
+
+4-6
+
+
+
+
+However, in certain specialized design studies you may also want to input this value directly.  In these cases, FOURLINK will calculate the required front to rear weight distribution in order to obtain the desired input Horizontal CG location.
+
+
+
+
+Vertical CG = The vertical height of the racecar center-of-gravity, sitting on a level surface, ready to race at the normal chassis ride height, expressed in inches.
+
+
+The Vertical CG is very, very difficult to accurately measure.  There is a method involving raising the front of the racecar 24 inches and noting the change in the measured rear weight.  You have to replace the shocks with solid bars and measure the rear weight difference very accurately.  It is very difficult to perform this procedure and it also involves a very complicated calculation to determine the Vertical CG.
+
+
+The Vertical CG height is usually controlled by the vertical location of the engine and transmission, as their combined weight is the most highly concentrated mass in the racecar.  It is normally higher than the rear axle centerline and usually lower than the top of the engine block.  Use these two dimensions as guides for the preliminary estimate for the Vertical CG location for your racecar.  Normal values for the Vertical CG are between 16 and 20.
+
+
+                                        4-7
+
+
+
+
+It is often easier and more accurate to let the FOURLINK software help you determine the Vertical CG value for you!  The next two inputs, Front Strut Lift and Front Tire Lift describe the attitude of the racecar during the launch.  These values can be limited by the wheelie bar height, that is, the lower the wheelie bar is to the ground, the lower the front end of the racecar will be allowed to lift.
+
+
+
+Front Strut Lift = The amount of travel provided by the front struts during your racecar launch, expressed in inches.  Normal values for the Front Strut Lift are between 1 and 3.
+
+
+Front Tire Lift = The amount of air under the front tires during your racecar launch, expressed in inches.  This value is usually controlled by wheelie bar height off the ground.  Normal values for the Front Tire Lift are between 0 and 8.
+
+
+
+Start off by using what you racecar is actually doing, or what you expect it to do.  Look at the Dynamic Weight Transfer output on the main FOURLINK screen.  Does it match what your racecar is doing?  If not, vary the input Vertical CG until it does.  In this way, FOURLINK helps you to determine the most accurate value possible for the Vertical CG.
+
+
+
+4-8
+
+
+
+
+Total Weight of Rear Axle Assembly = The measured weight of the total rear axle assembly, expressed in lbs.  This value includes those items not supported by the springs and shocks; normally including the rear axle housing, center section, axles, brakes, wheels, tires, wheelie bars, etc.
+
+
+This value should also include one-half the weight of the four link bars and one-half the weight of the rear springs, shocks and driveshaft.  Normal values for the Total Weight of Rear Axle Assembly are between 300 and 450.
+
+
+
+Calculated Output
+
+The calculated output for the main FOURLINK screen is separated into two sections:
+
+ - Summary parameters on the bottom of the
+   main FOURLINK program screen.  These
+   include the Four Link Geometry, Dynamic
+   Weight Transfer and Instant Center.
+
+ - Dynamic Chassis Analysis parameters
+   (time-dependent) on the right hand side
+   of the main screen including the Rear
+   Tire Force Graph
+
+
+Please refer to the output of the sample case on your computer monitor to get a complete understanding of all the FOURLINK calculated output parameters.
+
+
+
+                                        4-9
+
+
+
+
+
+Summary Parameters
+
+
+The FOURLINK summary output is contained in the lower portion of the main program screen.  It includes three sections; the Forces & Components in the four link bars, and calculations for the Dynamic Weight Transfer and Instant Center Parameters.
+
+
+
+The total forces transmitted by the four link bars are included on the right.  The calculated forces include the total for both the right and left side bars, that is, individual four link bar forces are actually one-half of the forces shown.
+
+
+Since the bars may not be horizontal, the four link bar forces are also separated into their horizontal and vertical components, and are also summed to provide the total forces both accelerating and lifting the racecar.  Normally, the lower bars are in compression (positive values) and the upper bars in tension (negative).
+
+
+
+The Instant Center Parameters include the location of the imaginary intersection point of the four link bars, known as the Instant Center.  The Percent Anti-Squat and Initial Rear Tire Hit are also included.
+
+
+
+
+4-10
+
+
+
+
+Percent Anti-Squat relates the location of the Instant Center to that which creates either chassis rise or chassis squat under acceleration.  When the Percent Anti-Squat is less than 100, steady-state chassis squat will result.  When the Percent Anti-Squat is greater the 100, chassis rise, or separation will occur.
+
+
+Initial Rear Tire Hit is the "initial hit" of the rear tires, expressed in lbs.  The four link bars leverage the torque reaction of the rear axle housing into the chassis.  This occurs even before the racecar moves and before front end weight transfer occurs.  Sufficient Initial Rear Tire Hit is necessary to plant the rear tires properly, so that the racecar can actually accelerate up to the input Maximum Acceleration rate.
+
+
+
+The Dynamic Weight Transfer parameters are located in the lower left portion of the main program screen.  They include the dynamic weight on the front and rear tires, and wheelie bar force, as the racecar is accelerated at Maximum Acceleration.  These values include only the effects of weight transfer.
+
+
+The dynamic Front Weight will never be less than zero.  If the input Maximum Acceleration results in the need for the wheelie bars to control front end rise a Wheelie Bar Force will be calculated based on the input Wheelie Bar Length.
+
+                                       4-11
+
+
+
+
+Shock Separation is the steady-state response of the rear suspension system, where only the springs and four link bars are supporting the dynamic rear weight transfer.  The input Shocks Rates do not play a role in this calculation.  Positive Shock Separation denotes steady-state chassis rise or separation, and negative Shock Separation denotes steady-state chassis squat.
+
+Make sure that the Shock Separation stays within your shock or suspension free travel limits.  You never want the suspension running into solid limits or binding during the normal movement of the rear axle.
+
+
+
+Shock Damping Ratio is the ratio of hydraulic shock damping to the critical damping ratio determined from the input spring and mass constants.  As noted earlier in the section Optimizing Your Suspension of Chapter 2, the Damping Ratio should always be greater than 1.50 in order to minimize the tendency for tire shake.
+
+
+
+Dynamic Chassis Analysis Parameters
+
+The dynamic FOURLINK output is displayed in the right hand side of the main program screen.  The detailed output parameters are a result of the solution of the time-dependent differential equations that govern the motion of the non-linear rear suspension system.
+
+
+4-12
+
+
+
+
+The critical time period for drag race rear suspension system analysis is during the initial launch of the racecar in low gear.  Typically, the rear chassis of the racecar will first rise, and then fall, all within about the first 1/2 to 3/4 of a second.
+
+
+FOURLINK provides detailed output parameters every 0.05 seconds, filling the screen with the first 0.80 seconds of rear suspension analysis.  However, some of this time the racecar is in the rollout beams at the track.  In practice, this amount of data from FOURLINK has proven adequate for optimizing rear suspension system response.
+
+
+Several parameters are included for each time step in the dynamic FOURLINK output.  Each of these parameters is described in detail in the paragraphs that follow.
+
+
+Separation includes both the distance and velocity of the rear portion of the chassis relative to the lower shock mounts.  The Separation distance is expressed in inches and the Separation velocity is expressed in inches per second.
+
+
+Positive values of Separation indicate the chassis is moving upward, or rising; and negative values of Separation indicate the chassis is falling toward the rear axle, or squatting.  Make sure that the Separation always stays within the limits of your shock or suspension system free travel.
+
+
+                                       4-13
+
+
+
+
+Spring is the total force (two springs) being provided by the rear coil springs to help push the rear tires into the pavement.  This force is a function of the spring length and is determined from the input rear Spring Rate and calculated Separation.
+
+
+Shock is the total force (two shocks) being provided by the rear shocks to help push the rear tires into the pavement.  Shock force only occurs when the chassis is moving relative to the rear axle.  Shock forces are determined from the input Shock Rates and calculated Separation velocity.
+
+
+When the shocks are extending, the Shock forces are actually trying to lift the rear tires off the ground.  Negative Shock force values indicate this condition.  When the shocks are compressing, the Shock forces help push the tires into the pavement, and the printed Shock forces are positive.
+
+
+Mass is the force provided due to the vertical acceleration of the racecar mass to help push the rear tires into the pavement.  Mass force only occurs when the chassis is accelerating vertically, either up or down, relative to the rear axle.
+
+
+Mass force is determined from the input Front and Rear weights of the racecar, the Maximum Acceleration, Total Weight of Rear Axle Assembly, and the internally calculated separation acceleration.
+
+
+4-14
+
+
+
+
+Rear Tire is the total force pushing the rear tires into the pavement.  The Rear Tire force is composed of all the elements described above and is the final measure of how well the four link bar suspension system is working to provide maximum traction.
+
+
+Front Tire is the total force supporting the front tires.  As the racecar is hooked up and accelerated at the input Maximum Acceleration, this force gets smaller due to the dynamic weight transfer.
+
+
+Wheelie Bars is the total force being supported by the wheelie bars.  These forces are only present if wheelie bars are required to control the front end chassis rise and weight transfer.
+
+
+
+The last two parameters appearing at the bottom of the FOURLINK dynamic output summarize the results of the dynamic chassis analysis and the rear suspension system response for the input four link bar Hole Code.
+
+
+Average Rear Tire Force is the average of the Rear Tire forces calculated between the times of 0.10 and 0.75 seconds.  This parameter will allow you to quickly see which four link bar setting is providing the highest Average Rear Tire Force during the launch of the racecar.
+
+
+                                       4-15
+
+
+
+Rear Tire Force Variation is the maximum percentage Rear Tire force variation between 0.1 & 0.75 seconds. It's calculated as the max - min Rear Tire forces divided by the Average Rear Tire Force.
+
+In practice, you should strive to minimize the Rear Tire Force Variation while maximizing the Average Rear Tire Force.  In this way, the tires are loaded smoothly and evenly to their maximum possible potential.
+
+
+Rear Tire Force Graph
+
+The Rear Tire Force Graph plots the calculated Rear Tire force versus time and is display in the lower right hand corner of the main FOURLINK screen.  This graph shows how the rear tires are being loaded into the ground during the first 0.80 seconds of the racecar launch.
+
+Several things can quickly be recognized using the Rear Tire Force Graph.  For example, many times the Rear Tire force rises so quickly in the beginning, that it overshoots the steady-state response dramatically.  The Rear Tire force then dips and finally rises back to the steady state level.  This condition results in a large Rear Tire Force Variation.
+
+This happens when the four link bars slam the tire into the pavement so hard that they bounces away and then spins.  The Initial Rear Tire Hit may be too high or more shock damping may be required!  The Rear Tire Force Graph allows you to quickly visualize what the suspension system is doing and how you might fix it!
+
+4-16
+
+
+
+
+CHAPTER 5:  FOUR LINK BAR DETAILS SCREEN
+
+
+The Four Link Bar Details screen is displayed by selecting Details from the command menu on the main FOURLINK program screen.  The upper left portion of this screen contains the Four Link Bar Geometry Data and the lower left portion contains the Display Limits and other options.  The right hand side of this screen contains all the Calculated Four Link Bar Details.
+
+
+Control is returned to the main FOURLINK program screen by pressing the close box in the upper right hand corner when you are finished using the Four Link Bar Details screen.
+
+
+The Four Link Bar Details are included with FOURLINK to help you quickly sort through the hundreds of possible four link bar combinations a typical modern chassis design permits.  You simply input all the hole locations (x-in and y-in) for each end (axle and chassis) of each bar (upper and lower) in the Four Link Bar Geometry Data.
+
+
+
+Four Link Bar Geometry Data
+
+
+Four link bar geometry data must be input for both the Upper and Lower four link bars.  Measurements are needed for the attachment points for both the Axle End and Chassis End.
+
+                                        5-1
+
+
+
+The four link bar geometry data is input according to the figure below.  All dimensions are expressed in inches, measured horizontally from the rear axle centerline and vertically from the ground.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+The x-in dimension is the horizontal distance from the rear axle centerline to the various attachment points.  The y-in dimension is the vertical distance from the ground to each link bar attachment point.
+
+
+
+The Four Link Bar Geometry Data has room for up to 5 holes at each of the 4 link bar attachment points, for a total of 625 different four link combinations!  Enter the highest (largest y-in) location as Hole 1 for each link bar attachment point and go down from there when entering the remaining x-in and y-in data for each hole location.
+
+
+5-2
+
+
+
+
+
+Entering a zero for both the x-in and y-in values indicates the end of the data input and those locations will not be used for the Calculated Four Link Bar Details.
+
+
+Note:  If you click on the Help button (a small button with 3 dots above the four link geometry data inputs), a Help screen will appear.  This screen contains the calculated hole spacing based on all your inputs.  Use this Help screen to check that all the values have been entered correctly. 
+
+
+
+Three other inputs may be used to quickly adjust the input Four Link Geometry Bar Data.  The FOURLINK program automatically uses any non-zero adjustments to add to all the other values for the calculations.
+
+
+Note:  See Adjust Geometry on the next page for another option for using these three adjustment values.
+
+
+
+Axle Height = An adjustment value for the rear axle centerline height, expressed in inches.  This variable is included for use when changing to tires having a different diameter or rollout, so you don't have to re-measure the axle end Four Link Bar Geometry Data.  Normal values for the Axle Height are between -1.0 and 1.0.
+
+
+
+                                        5-3
+
+
+
+
+Chassis Height = An adjustment value for the chassis or ride height, expressed in inches.  This variable is included for use when changing the chassis ride height, so you don't have to re-measure the chassis end Four Link Bar Geometry Data.  Normal values for the Chassis Height are between  -1.0 and 1.0.
+
+
+
+Pinion Angle = An adjustment value for rotating the pinion angle and hence changing the locations of all the four link bar x-in and y-in locations on the axle housing.  Normal values for the Pinion Angle are between -1.0 and 1.0 degrees.
+
+
+
+Adjust Geometry = A command button that will "adjust" all the values in the Four Link Bar Geometry Data to include the input Axle Height, Chassis Height and Pinion Angle values.  Be careful . . . pressing the Adjust Geometry button will permanently change all the numeric values in the Four Link Bar Geometry Data.
+
+
+
+Once the Four Link Bar Geometry Data has been input, you may calculate the Instant Centers for all the possible attachment point combinations by first turning the Limits Off, and then pressing the Calculate Now command button located in the upper right portion of the screen.
+
+
+
+5-4
+
+
+
+Hole Code is a four digit code used to identify which combination of four link bar attachment points are being modeled.  The digit position specifies the attachment location as follows:
+
+      digit             link bar
+      -----             --------
+      first         Upper axle end
+      second        Upper chassis end
+      third         Lower axle end
+      fourth        Lower chassis end
+
+The value of the digit corresponds to the hole number from the Four Link Bar Geometry Data input.
+
+For example, Hole Code 1323 corresponds to the upper four link bar having the axle-end in hole 1 (the highest location) and the chassis-end in hole 3 (counting down from the top).  The lower four link bar has the axle-end in hole 2 and the chassis-end in hole 3.
+
+
+
+Display Limits
+
+
+Display Limits are included in a separate window located below the Four Link Bar Geometry Data.  They are included in FOURLINK to help reduce the number of calculated attachment point combinations.  The Display Limits include minimum and maximum display values for:
+
+     - Axle Separation
+     - Instant Center Location
+     - Percent Anti-Squat
+     - Lower Link Bar Angle
+                                        5-5
+
+
+
+
+The Display Limits are toggled On and Off by selecting the desired option button with your mouse.  When these limits are turned On, only Hole Codes satisfying the limit criteria are calculated, displayed and printed.
+
+
+For example, if you only want to see Hole Codes with the lower link bar level, or having a downward slope of no more than 2 degrees, you would enter Lower Link Bar Angle min and max limits of -2.0 and 0.0.
+
+
+If you also want to limit the four link bar combinations to those with calculated Instant Center Locations above the ground and in front of the rear axle centerline, you would enter 0.0 for the y-min limit and 0.0 for the x-min limit.
+
+
+As you can see from these two examples, the Display Limits provide an easy way to reduce the number of possible four link bar combinations to those that might really work for your race car and chassis setup!
+
+
+
+Recommend Settings
+
+
+There is also a powerful Recommend Settings  command button for the Display Limits.  This is one of the most important and exciting features of the FOURLINK software!
+
+
+
+5-6
+
+
+
+
+In this case, the FOURLINK software will actually calculate the min/max Display Limit values for you and shows you the recommended four link bar settings!  This feature will allow you to refine the list of the  possible four link bar combinations even farther, to those that will really work for your specific race car!
+
+
+The Hole Codes that result from the  Recommend Settings option are a function of many of the input values on the main FOURLINK program screen.  So please make sure all your inputs are as accurate as possible before using this powerful option!
+
+
+Remember, the printed output from FOURLINK will observe your choice for the Display Limits - either Off, On or Recommend Settings.  The printed output might require several pages of output from your printer, as you may have up to 625 calculated four link bar combinations!
+
+
+
+
+Calculated Details Parameters
+
+
+The FOURLINK Details output is displayed after pressing the Calculate Now command button.  The Details output is the result of thousands of calculations for each combination of four link bar attachment points entered in the Four Link Bar Geometry Data that fall within the selected Display Limits.
+
+                                        5-7
+
+
+
+
+For each Hole Code the location of the Instant Center, steady-state Shock Separation, Percent Anti-Squat and Initial Rear Tire Hit are included.
+
+
+
+These data are sorted by Percent Anti-Squat, from highest to lowest, to allow you to quickly see all the possible four link bar combinations in an organized fashion, based on the steady-state rear suspension system response.
+
+
+
+If the Details screen is completely filled with possible Hole Code combinations, you can scroll through this data using the scroll bar located on the right hand side of the screen.  Grab it with the mouse and scroll up and down in the normal Windows fashion.
+
+
+
+You can also use your mouse to double-click on a calculated Hole Code.  The Details screen will close and the selected Hole Code will be displayed on the main FOURLINK program screen.  The Dynamic Chassis Analysis will also be calculated for this Hole Code setting.  This is a quick way to toggle back and forth between the two FOURLINK screens.
+
+
+
+
+
+
+5-8

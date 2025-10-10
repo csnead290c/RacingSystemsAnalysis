@@ -1,0 +1,848 @@
+
+
+
+
+
+
+          RSA
+   Computer Software
+    for Drag Racers
+
+
+
+
+
+CLUTCH jr
+Version 3.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+Racing Systems Analysis
+-----------------------
+
+
+
+
+
+
+
+Racing Systems Analysis
+
+
+
+
+
+
+
+CLUTCH jr
+Version 3.0
+
+
+By: Patrick Hale
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Copyright 2006 RSA
+             Phoenix, Arizona  USA
+             www.QUARTERjr.com
+
+
+
+
+
+
+COPYRIGHT
+
+Copyright 2006 by RSA.  All rights reserved.  No part of this publication may be reproduced, transmitted, stored in a retrieval system, or translated into any language or computer language, in any form or by any means; electronic, mechanical, magnetic, optical, chemical, manual or otherwise; without the prior written consent of Racing Systems Analysis.
+
+
+
+
+
+
+
+
+
+DISCLAIMER
+
+RSA reserves the right to revise this publication and to make changes from time to time in the context hereof, without the obligation of RSA to notify any person of such revision or change.
+
+
+
+
+
+
+
+
+
+
+
+
+ii
+
+
+
+
+TABLE OF CONTENTS
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+General . . . . . . . . . . . . . . . . 11
+Installing the program disk . . . . . . 14
+
+
+
+CHAPTER 2:  CLUTCH jr SOFTWARE TOUR
+
+Getting started . . . . . . . . . . . . 21
+Optimizing your clutch. . . . . . . . . 2-4
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+The command menus . . . . . . . . . . . 31
+File: Open. . . . . . . . . . . . . . . 31
+File: Save. . . . . . . . . . . . . . . 32
+File: Save As . . . . . . . . . . . . . 32
+File: Restore . . . . . . . . . . . . . 33
+File: Print . . . . . . . . . . . . . . 33
+File: Exit. . . . . . . . . . . . . . . 33
+
+
+
+CHAPTER 4:  INPUT DATA
+
+How to input. . . . . . . . . . . . . . 41
+
+Clutch arm data . . . . . . . . . . . . 42
+Clutch spring data. . . . . . . . . . . 44
+Change in plate force data. . . . . . . 4-7
+Auto-match option . . . . . . . . . . . 4-8
+
+
+
+                                        iii
+
+
+
+
+
+
+CHAPTER 5:  CALCULATED PARAMETERS
+
+
+Clutch plate force. . . . . . . . . . . 5-1
+Change in plate force . . . . . . . . . 5-2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+iv
+
+
+
+CHAPTER 1:  INTRODUCTION
+
+
+General
+
+The CLUTCH jr software from RSA quickly determines how changing variables in a modern drag race clutch setup affect the performance of the racecar.
+
+
+Today, in this 21st century, the sport of drag racing has attained a level of sophistication that makes the personal computer an essential tool for all racers to use, Professional and Sportsman alike.
+
+
+The QUARTER Pro and QUARTERjr programs for drag racecar performance simulation started it all off, first becoming commercially available back in 1985.  Today, thousands of racers just like yourself, already have the QUARTERjr and ENGINEjr software in their "toolbox".
+
+
+Now, CLUTCH jr unlocks the power and convenience of the PC for every drag racer who needs to know how to set up their clutch to optimize their racecar's performance.
+
+
+The winning combination is the quest of all drag racers.  "How much static should I run?  How much counter weight will keep the clutch from burning up but not pull down the motor?"
+
+
+
+                                        11
+
+
+
+
+These are but a few of the many decisions a racer must make when setting up a new racecar, or when trying to adapt to changing weather and track conditions and make an existing racecar quicker and faster.
+
+
+
+In the past, the approach has usually been to copy what the next guy has in his bell housing, and then start changing things, one at a time.
+
+
+
+This is a costly, time consuming process which usually ends up with several DNQ's, worn out clutch disks and floaters, and a cabinet full of worthless spare parts.
+
+
+
+You can't afford to try everything at the same time and varying track and weather conditions can cloud the results of even the best backtoback testing.
+
+
+
+With competitive drag racing being a contest of hundredths, or even thousandths of a second, or just fractions of a MPH, only a computer can provide the necessary consistency and accuracy to optimize your clutch setup for the best overall quarter- mile performance.
+
+
+
+
+12
+
+
+
+
+RSA (Racing Systems Analysis) was started in 1978 by Patrick Hale, a local drag racer from Arizona.  After drag racing several racecars while attending Mechanical Engineering school at Arizona State University; he developed the well-known QUARTER Pro and ENGINE Pro computer programs.  Now, he has made CLUTCH jr and CLUTCH Pro available for drag race clutch setup and performance prediction.
+
+
+
+The services of RSA are also available to customize CLUTCH jr to your specific needs; and to write new, engineering analysis type software for other applications.  Give RSA a call or e-mail.  We will be happy to discuss these possibilities, and future RSA products with you.
+
+
+
+
+
+
+
+	        Patrick Hale
+                   President, MSME
+
+	        Racing Systems Analysis
+	        Phoenix, Arizona  USA
+
+	        Phone: 602.992.2586
+                   Web:   www.QUARTERjr.com
+
+
+
+
+
+                                        13
+
+
+
+
+
+Installing the program disk
+
+
+1. Start by inserting the CLUTCH jr program CD into the CD drive in your PC.
+
+
+2. Use the mouse to select Run from the Start menu.
+
+
+3. In the Command Line box, type d:setup.exe depending on which drive you are using to read the program CD, or simply 
+Browse to find the setup.exe file.
+
+
+4. Use the mouse to click the OK button.
+
+
+5. Follow the instructions displayed on your computer monitor.  When you are finished, remove the CLUTCH jr program CD.
+
+
+6. The setup process creates a folder named CLUTCH jr in the Program Files group.  This folder contains the icon for the CLUTCH jr software which has the name CLUTCHjr.exe.
+
+
+7.  You can now create a Shortcut for the CLUTCHjr.exe file and Send it to the Windows desktop if you like.  You normally do this by right-clicking the mouse on the CLUTCHjr.exe program icon and then choosing Create Shortcut from the drop-down list.
+
+
+
+1-4
+
+
+
+
+CHAPTER 2:  CLUTCH jr SOFTWARE TOUR
+
+
+
+Getting Started
+
+In this chapter, we will walk you through a sample, hands on, racecar clutch setup analysis.  So please sit at your computer while you read this chapter.  CLUTCH jr is designed to be very easy to use, even for the first time or novice computer user.
+
+
+
+Use the mouse to double-click on the application icon in the CLUTCH jr folder or on the Windows desktop Shortcut you created for CLUTCH.exe.
+
+
+
+The splash screen identifying the version of the CLUTCH jr program you have will now appear.  This will be followed by the CLUTCH jr program screen including a menu of commands.  By choosing one of the items from the menus, you command CLUTCH jr to do whatever you choose.
+
+
+
+To begin, let's take a quick look at the CLUTCH jr program screen.  This screen contains all the data necessary to perform the clutch plate force analysis.  There are clutch arm and spring data.  Two different styles or types of arms may be modeled in the clutch setup.
+
+
+                                        2-1
+
+
+
+
+Any of these input data values may easily be changed using the editing features of CLUTCH jr which are fully described in Chapter 4 of this manual.
+
+
+Now slowly press the tab key a few times and watch how the cursor moves around the CLUTCH jr program screen.
+
+
+You can also use the mouse to select any input variable to modify.  Single-clicking on the variable value allows you to insert and delete.  Double-clicking allows direct replacement of the input variable value.
+
+
+That's all there is to it!  Try changing the counter weight of the first column Mfg.Style arm to 1 gram.  Remember to press the enter key after typing 1.
+
+
+Whenever an input variable value is changed, detailed clutch performance calculations are completed, and all the output parameters and graph are updated on the program screen.
+
+
+
+The calculated output from CLUTCH jr includes a table and graph of clutch plate forces vs. engine RPM.  Detailed descriptions of all the calculated output parameters are included in Chapter 5.
+
+
+
+
+2-2
+
+
+
+
+
+Now back to the counterweight change . . . is the calculated plate load too low?  Perhaps raising the static 100 lbs will do the trick?  Or maybe adding 2 grams to each clutch arm?  These are the types of questions CLUTCH jr was designed to answer, quickly and economically.
+
+
+
+CLUTCH jr also includes a help screen available by pressing the Help button located next to the corresponding input variable and have a ? symbol on them.  Try pressing the Manufacturer Style Help button located at the Manufacturer Style input variable location now.
+
+
+
+Press the close box in the upper right-hand corner of the help screen to return to the CLUTCH jr main program screen.
+
+
+
+Selecting the Exit command from the File menu, or clicking the program close box in the upper right-hand corner, will return your computer to the Windows desktop.
+
+
+
+
+
+
+
+
+
+
+                                        2-3
+
+
+
+
+
+Optimizing Your Clutch
+
+
+Okay, so now that you know a little more about how the CLUTCH jr software works and what inputs are required, how do you go about optimizing your clutch and racecar performance.  This section of the CLUTCH jr manual is intended to give you the tools and methods to get the most out of your clutch system.
+
+
+
+
+First off we need to define the function of a clutch:  a clutch is a device used to transmit torque between an input and output shaft that operate at different speeds.  A clutch can not multiply torque like a torque converter.  The torque output from a clutch will always equal the torque input.  When the clutch is slipping, the output torque will still equal the input torque but power will be lost (in the form of heat) because the output RPM is lower than the input RPM.
+
+
+
+
+For a drag racecar, the clutch must slip when leaving the starting line.  When staged, the clutch output RPM is zero whereas the engine RPM is way up there, usually on an rev-limiter of some kind.
+
+
+
+
+2-4
+
+
+
+
+
+The clutch must slip until the clutch disk RPM (basically the transmission input shaft RPM or simply vehicle speed) catches up with the engine RPM.  It takes a certain amount of time and distance downtrack to accelerate the powertrain and racecar to catch up with the engine RPM.
+
+
+
+Under ideal conditions where traction is not a limitation, the best racecar performance will be obtained when the maximum output torque is provided by the slipping clutch.  This means that the clutch setup must ensure that the engine RPM remains constant at the peak torque RPM (determined from the engine dyno data) until the downtrack catch up point.
+
+
+
+Thus, in the ideal perfect world, you would stage with the engine at peak torque RPM, let out the clutch, and the engine RPM would remain relatively constant or flat during the clutch slipping & catch up time.
+
+
+
+Real world dynamic (time dependent) effects of the rev-limiter, clutch disk air gap, clutch pedal release, and heating of the friction surfaces prevent this ideal, perfect clutch operation.
+
+
+
+
+
+                                        2-5
+
+
+
+In the real world, you're using a two-step rev-limiter set a few hundred RPM below the engine peak torque RPM when staging and let out the clutch.  The engine RPM changes very quickly and might remain relatively constant or flat while the clutch is slipping, finally taking off again when the racecar catches up with the engine in low gear.  The RPM where the engine and clutch RPM come together is called the Lockup RPM.
+
+
+Any time the Lockup RPM is not at the peak torque RPM while the clutch is slipping you are losing potential racecar performance!  However, having the Lockup RPM below the peak torque RPM is much, much worse than having it lockup above the peak torque RPM.
+
+
+The CLUTCH jr software is designed to help you determine the best settings for your clutch.  Start off by inputting all the data about the manufacturer and style of the clutch arms or levers and the clutch springs.
+
+
+Then start playing with all the variables and see how the clutch plate force is changed.  Keep track of how the Lockup RPM changes at the racetrack.
+
+
+Good luck and have fun!  The remaining chapters of this manual provide you with the detailed knowledge and skills necessary to fully exploit the power and versatility of CLUTCH jr and your Windows PC.
+
+
+
+2-6
+
+
+
+
+CHAPTER 3:  THE COMMAND MENU
+
+
+Six Windows menu commands; Open, Save, Save As, Restore, Print and Exit, are used with CLUTCH jr to specify the command option desired.  These menu options may generally be selected anytime while running the program.
+
+
+This chapter of the CLUTCH jr manual contains a complete, detailed description for each of the command menu options.
+
+
+
+File: Open
+
+The Open command is used to retrieve from the disk and display on the CLUTCH jr program screen a previously saved data document.  Selecting Open from the File menu will cause a standard Windows dialog box to appear, awaiting the selection of a CLUTCH jr data document.  Once the input data document is selected, the data values are retrieved and displayed on the CLUTCH jr program screen.
+
+
+The Open command can be used to open an existing data document so that it may be modified as desired.  The retrieved input data can also serve as a base for building another CLUTCH jr data document to be saved using the Save As option described on the next page.
+
+
+
+                                        3-1
+
+
+
+
+
+File: Save
+
+The Save command is used to save all the "current" clutch data to a file on the hard disk using the current data document name.  If the current data document is "Untitled", a file named CLUTCH.RSA will be created and saved on your hard disk.  This File: menu item is also directly available on the Command Menu.
+
+
+When you select the Save command, the "current" clutch setup is saved to the data file and the graph are updated to show only the "current" data - that is, the "old" data is completely removed.
+
+
+
+
+File: Save As
+
+The Save As command is used to save the current input data on your hard disk with a new data document name.  You must always select Save As from the File menu for this command.
+
+
+
+
+
+
+
+
+
+
+
+
+3-2
+
+
+
+
+
+File: Restore
+
+The Restore command is used to retrieve from the hard disk and display on the CLUTCH jr screen the last previously "saved" CLUTCH jr data document file.  This File: menu item is also directly available on the Command Menu.
+
+
+When you select the Restore command, the clutch setup will go back to the last "saved" clutch setup.  The graph is updated and will now only contain information on this (new) "current" setup until you start making changes to the input data values again.
+
+
+
+File: Print
+
+The Print command is used to make a complete, printed copy of both the input data and the calculated output parameters from CLUTCH jr.  Selecting the Print command in the File menu at any time will cause the printer to start printing.
+
+
+
+File: Exit
+
+The Exit command in the File menu can be used at any time to exit the CLUTCH jr program and return to the Windows desktop.  You may also exit CLUTCH jr by pressing the close box in the upper right hand corner of the program screen.
+
+                                        3-3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3-4
+
+
+
+CHAPTER 4:  INPUT SCREEN
+
+
+How to Input
+
+
+The CLUTCH jr program screen is where the editing required to define all the clutch variables takes place.  Before getting into the definitions of the input data, let's discuss how you provide input to CLUTCH jr via your computer keyboard and mouse.
+
+
+The mouse is used to select the input variable to be changed.  Most of the input variables are edited by selecting them with the mouse and simply typing in a new value.
+
+
+If you make a mistake when typing, use the Back Space key to backup and erase, and then reenter your data.  A maximum of five digits may be input for the numeric variables.  If more than five digits are entered, the excess will be ignored.
+
+
+Also, if you enter a value outside the range of acceptable variable data, you will receive a warning message on the screen and CLUTCH jr will automatically change the value to be within the program limits.
+
+
+Pressing the Tab key (or the Return or Enter keys) signifies the end of the entry.  The Tab key will also advance the cursor to the next input data variable.  Pressing the Return or Enter keys will hold the cursor in the current location.
+
+                                        4-1
+
+
+
+
+The remainder of this chapter of the CLUTCH jr manual contains a complete, detailed description for each of the input clutch variables.
+
+
+
+Clutch Arm Data
+
+Two different styles or types of clutch arms may be used in the CLUTCH jr analysis at the same time.  For example, each arm may be of a different style and have a different amount of counterweight.
+
+
+Mfg.Style Code = The code name for one of the clutch arm descriptions stored within CLUTCH jr.  Press the Mfg.Style Help button to see the descriptions of the available arms.
+
+You may select the clutch Mfg.Style by either typing in the desired code name or by using the mouse to double click on the description of the desired Mfg.Style on the Help screen.
+
+
+Number of Arms = The number of arms used in the clutch setup of this style.  Normal input values for the Number of Arms are between 3 and 6.
+
+
+Total Counter Wt = The total mass of counter weight attached to the arms of this style, measured in grams.  Normal input values for the Total Counter Wt are between 0 and 50.
+
+4-2
+
+
+
+
+
+Counter Wt/Arm = The mass of the attached counter weight on one arm measured in grams.  Normal input values for the Counter Wt/Arm are between 0 and 15.
+
+
+
+
+Ring Height = The installed ring height of the clutch pressure plate.  The Ring Height determines clutch arm angle and changes the overall characteristics of the clutch.  Follow your clutch manufacturer's recommendations for Ring Height.
+
+
+note:  CLUTCH jr does not automatically account for the change in Static Plate Force that may result from a change in Ring Height.  Use the Clutch Spring Data to determine the new Static Plate Force after changing the Ring Height.
+
+
+
+
+Arm Depth = The installed depth or distance that the clutch arms are below the ring/ or cover reference measurement location, expressed in inches.  Not all clutch designs have adjustments for the arm angle independent of the Ring Height.
+
+
+Note: Arm Depth will only appear on the CLUTCH jr screen for clutch arm Mfg.Style Codes that require this dimension.  Follow your clutch manufacturer's recommendations for measuring the Arm Depth.
+
+                                        4-3
+
+
+
+Return Spring = The manufacturer's rating for the return springs, expressed in lbs.   Normal values for the Return Spring are between 3 and 15.  Return springs are sometimes used in Motorcycle clutches to initially prevent the clutch arms from making contact with the back of the pressure plate.  Centrifugal forces acting on the clutch arm and counter weight are required to overcome the return springs.
+
+
+Once the return spring forces are overcome, (usually at a lower engine/clutch pressure plate RPM) the return springs simply act like a negative static force.  That is, they reduce the static force component provided by the clutch springs.
+
+
+
+
+Clutch Spring Data
+
+
+Static Plate Force = The total static plate force provided by the clutch springs, expressed in pounds (lbs).  Normal input values for the Static Plate Force are between 200 and 900.
+
+Note:  Crowerglide clutches have a negative value for the Static Plate Force.
+
+
+
+Number of Springs = the total number of springs in the clutch assembly.  Normal values for the Number of Springs are between 3 and 6.
+
+
+4-4
+
+
+
+
+The next two variables, Spring Rate and Spring Base Pressure, may be input either on a single spring basis, or on a total clutch basis.  The total clutch basis is entered under the column containing the Number of Springs entry.  CLUTCH jr will automatically calculate and display the other column's corresponding values.
+
+
+
+Spring Base Pressure = the force in pounds that the springs provide at the reference Ring Height when the adjusters (or Motorcycle shims) are in the base position, that is, zero turns (or no added shims).  This data is best obtained from the clutch manufacturer but can also be measured.  Normal values for the total clutch Spring Base Pressure are between 0 and 300.
+
+
+
+Spring Rate = the spring rate, expressed in pounds (lbs) per turn.  Note:  Motorcycle clutch springs are rated in pounds (lbs) per inch.  This data is best obtained from the clutch manufacturer, but can be measured for each spring and adjuster assembly.  Normal values for the single Spring Rate are between 20 and 40.
+
+ 
+
+Delta Ring Height = the change in ring height from the Base Pressure reference ring height expressed in inches.  Normal values for the Delta Ring Height are between -.050 and +.050.
+
+
+                                        4-5
+
+
+
+note:  CLUTCH jr does not automatically account for the change in Static Plate Force that may result from a change in Ring Height.  Use the Delta Ring Height variable to determine the new Static Plate Force after changing the Ring Height.
+
+
+
+For clutches with threaded adjusters:
+
+Adjuster Location = the number of turns the clutch spring adjusters are turned from the base position.  Normal values for the Adjuster Location are between 0 and 5.
+
+
+Adjuster threads per inch = the number of threads per inch on the spring adjuster screw.  Normal values for the Adjuster threads per inch are between 16 and 24.
+
+
+
+For clutches using shim adjusters:
+
+Shim Thickness = the thickness of the added shims used under the pressure plate springs from the base position, expressed in inches.  Normal values for the Shim Thickness are between 0.0 and .250.
+
+
+
+Note: CLUTCH jr automatically calculates how many turns (or shim thickness) are required to provide the input Static Place Force.  This is a handy feature to use once all the Clutch Spring Data values have been properly input.
+
+
+4-6
+
+
+
+
+
+
+Change in Plate Force Data
+
+
+Three different RPM values are input for the Change in Plate Force calculations.  We recommend that you input the Launch RPM, the desired Lockup RPM and Maximum RPM for these three values.
+
+
+
+A symbol appears on the clutch plate force graph at the Launch RPM value.
+
+
+
+The Lockup RPM value sets the initial location of the clutch comparison line on the clutch plate force graph.
+
+
+
+The Maximum RPM is used to determine the table of engine RPM values for the clutch plate forces and also the x-axis scale of the clutch plate force graph.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        4-7
+
+
+
+
+
+Auto-Match Option:
+
+
+Clutch jr contains a very powerful tool used to automatically determine the clutch setup required to match the "current" plate load to the "saved" plate load at any specific engine RPM you choose.  This tool is selected by using the mouse to right click on the engine RPM value to the right of the clutch plate force graph.
+
+
+
+A small tool window will pop-up containing two option buttons for commanding how CLUTCH jr is to obtain the same plate load at the displayed engine RPM.  These option buttons include Counter Weight and Static.
+
+
+
+Simply use the mouse to specify which input variable CLUTCH jr is to use to match the plate loads.  CLUTCH jr will calculate exactly how to set up your clutch to get the exact clutch plate load you desire!
+
+
+
+
+
+
+
+
+
+
+
+
+
+4-8
+
+
+
+
+CHAPTER 5:  CALCULATED PARAMETERS
+
+
+The calculated parameters from CLUTCH jr display the clutch plate load as a function of engine RPM for any drag racecar clutch setup.  All the CLUTCH jr calculated output is included on the same screen as the input, and is highlighted with a yellow background.  Please refer to the output of the sample clutch analysis on your computer monitor to get a complete understanding of the CLUTCH jr output.
+
+
+The CLUTCH jr calculated output is contained in two distinct sections:
+
+  - Clutch Plate Force
+  - Change in Plate Force
+
+
+
+Clutch Plate Force
+
+
+Clutch Plate Force includes a graph and table of the clutch plate forces vs. engine RPM -  calculated at a variety of engine RPM values.  This data contains the centrifugal force and also the total force applied by the pressure plate.  The total force is simply the sum of the static and centrifugal forces.  The white circles highlight the clutch plate forces where the "saved" and "current" clutch plate forces are the same, and also at the Lockup RPM.
+
+
+
+
+                                        5-1
+
+
+
+A very powerful option included in CLUTCH jr allows for direct comparison of the "saved" and "current" clutch plate forces.  You can use either the mouse or cursor keys (up, down, right and left arrow) to select an engine RPM for comparison purposes.  The values for each data set will be displayed as well as their calculated difference.
+
+
+
+
+Change in Plate Force
+
+
+Another powerful feature of CLUTCH jr is the Change in Plate Force detailed calculations.  The clutch plate load changes that result from small changes to the clutch settings at three different engine RPM values are calculated and displayed for your convenience.
+
+
+	- effect of adding 1 arm
+	- effect of adding 1 gram
+	- effect of changing ring height
+	- effect of changing arm depth
+	- effect of turning static adjuster
+	- effect of adding shims (motorcycle)
+	- calculate the effective counter
+	  weight of adding 1 arm
+
+
+Using the Change in Plate Force details will allow you to quickly determine how various adjustments to your clutch will affect the total clutch plate force.
+
+
+
+5-2
