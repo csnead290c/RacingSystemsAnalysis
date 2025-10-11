@@ -25,42 +25,59 @@ import { gc } from './constants';
  *   DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel(L)) + gc_DragCoef.Value * RefArea2 * q
  * 
  * Where:
- * - CMU = rolling resistance coefficient (TIMESLIP.FRM:552, typically 0.025 for QJr/QPro)
- * - CMUK = distance-dependent reduction (TIMESLIP.FRM:553, typically 0.01 for QJr/QPro)
- * - 0.0001 * weight * speed = speed-dependent rolling resistance
- * - DownForce = weight + lift effects
+ * - CMU = 0.025 (Quarter Jr/Pro), 0.03 (Bonneville)
+ * - CMUK = 0.01 (Quarter Jr/Pro), 0 (Bonneville)
+ * - DownForce = Weight + LiftCoef * RefArea * q (includes lift/downforce)
+ * - Z5 = 3600/5280 = 0.6818... (fps to mph conversion)
  * 
- * For simplicity, we use the constant CMU model without distance reduction.
- * 
- * @param weightLb - Vehicle weight (lb)
- * @param cmu - Rolling resistance coefficient (dimensionless, typically 0.025)
+ * @param downForce_lbf - Downforce on tires (weight + aero lift/downforce)
+ * @param v_fps - Vehicle velocity (ft/s)
+ * @param distance_ft - Distance traveled (ft) - affects cmu1
+ * @param cmu - Base rolling resistance coefficient (0.025 for Quarter)
+ * @param cmuk - Distance decay coefficient (0.01 for Quarter)
  * @returns Rolling resistance force (lb)
  */
 export function vb6RollingResistanceForce(
-  weightLb: number,
-  cmu: number
+  downForce_lbf: number,
+  v_fps: number,
+  distance_ft: number,
+  cmu: number = 0.025,
+  cmuk: number = 0.01
 ): number {
-  // VB6: TIMESLIP.FRM:1019 (initial)
-  // DragForce = CMU * gc_Weight.Value + ...
-  // Note: This is the constant component only
-  const F_rr = cmu * weightLb;
+  // VB6: cmu1 = CMU - (Dist0 / 1320) * CMUK
+  const cmu1 = cmu - (distance_ft / 1320) * cmuk;
+  
+  // VB6: Z5 = 3600 / 5280 (fps to mph conversion)
+  const Z5 = 3600 / 5280;
+  
+  // VB6: RollingForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel(L))
+  const F_rr_constant = cmu1 * downForce_lbf;
+  const F_rr_speed = 0.0001 * downForce_lbf * (Z5 * v_fps);
+  const F_rr = F_rr_constant + F_rr_speed;
+  
   return F_rr;
 }
 
 /**
  * Calculate VB6 rolling resistance torque.
  * 
- * @param weightLb - Vehicle weight (lb)
- * @param cmu - Rolling resistance coefficient (dimensionless, typically 0.025)
+ * @param downForce_lbf - Downforce on tires (weight + aero lift/downforce)
+ * @param v_fps - Vehicle velocity (ft/s)
+ * @param distance_ft - Distance traveled (ft) - affects cmu1
  * @param tireRadiusFt - Tire radius (ft)
+ * @param cmu - Base rolling resistance coefficient (0.025 for Quarter)
+ * @param cmuk - Distance decay coefficient (0.01 for Quarter)
  * @returns Rolling resistance torque (lb-ft)
  */
 export function vb6RollingResistanceTorque(
-  weightLb: number,
-  cmu: number,
-  tireRadiusFt: number
+  downForce_lbf: number,
+  v_fps: number,
+  distance_ft: number,
+  tireRadiusFt: number,
+  cmu: number = 0.025,
+  cmuk: number = 0.01
 ): number {
-  const F_rr = vb6RollingResistanceForce(weightLb, cmu);
+  const F_rr = vb6RollingResistanceForce(downForce_lbf, v_fps, distance_ft, cmu, cmuk);
   const T_rr = F_rr * tireRadiusFt;
   return T_rr;
 }

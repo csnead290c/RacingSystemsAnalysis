@@ -458,11 +458,10 @@ class RSACLASSICModel implements PhysicsModel {
         effectiveRPM = rpm;
       }
       
-      state.rpm = effectiveRPM;
+      // Note: drivelineTorqueLbFt calculated but not currently used (was for F_wheel)
+      void drivelineTorqueLbFt;
       
-      // Convert driveline torque to wheel force
-      // Note: drivelineTorqueLbFt already includes gear ratios and final drive
-      const F_wheel = drivelineTorqueLbFt / tireRadius_ft;
+      state.rpm = effectiveRPM;
       
       // VB6 air density calculation (exact formula from QTRPERF.BAS:1290-1335)
       // Uses exact VB6 Weather() subroutine with saturation vapor pressure polynomial
@@ -474,9 +473,11 @@ class RSACLASSICModel implements PhysicsModel {
       );
       
       // VB6 rolling resistance torque (TIMESLIP.FRM:1019, 1192-1193)
-      // Uses CMU coefficient (0.025 for Quarter Jr/Pro)
+      // Uses CMU coefficient (0.025 for Quarter Jr/Pro) with distance and speed dependence
       const cmu = vehicle.rrCoeff ?? CMU; // Allow override, default to VB6 CMU
-      const T_rr = vb6RollingResistanceTorque(vehicle.weightLb, cmu, tireRadius_ft);
+      const cmuk = 0.01; // VB6 CMUK constant for Quarter Jr/Pro
+      const downForce_lbf = vehicle.weightLb; // TODO: Add lift/downforce calculation
+      const T_rr = vb6RollingResistanceTorque(downForce_lbf, state.v_fps, state.s_ft, tireRadius_ft, cmu, cmuk);
       
       // VB6 aerodynamic drag torque (TIMESLIP.FRM:1017, 1019, 1193)
       // Uses dynamic pressure q = rho * v² / (2 * gc)
