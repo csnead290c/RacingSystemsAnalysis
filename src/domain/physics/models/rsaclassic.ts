@@ -272,23 +272,6 @@ class RSACLASSICModel implements PhysicsModel {
     while (true) {
       stepCount++;
       
-      // Check termination conditions in priority order
-      // 1. FIRST: Check if we reached the finish line
-      if (state.s_ft >= finishDistance_ft) {
-        terminationReason = 'DISTANCE';
-        break;
-      }
-      
-      // 2. Safety caps (only if we haven't reached finish)
-      if (stepCount >= MAX_STEPS) {
-        terminationReason = 'STEP_CAP';
-        break;
-      }
-      
-      if (state.t_s >= MAX_TIME_S) {
-        terminationReason = 'TIME_CAP';
-        break;
-      }
       // Calculate RPM from current speed
       let rpm = rpmFromSpeed(state.v_fps, state.gearIdx, drivetrain);
       
@@ -499,6 +482,24 @@ class RSACLASSICModel implements PhysicsModel {
       state.s_ft = s_new_ft;
       state.t_s = t_new_s;
       
+      // Check termination conditions AFTER updating kinematics
+      // 1. FIRST: Check if we reached the finish line
+      if (state.s_ft >= finishDistance_ft) {
+        terminationReason = 'DISTANCE';
+        break;
+      }
+      
+      // 2. Safety caps (only if we haven't reached finish)
+      if (state.t_s >= MAX_TIME_S) {
+        terminationReason = 'TIME_CAP';
+        break;
+      }
+      
+      if (stepCount >= MAX_STEPS) {
+        terminationReason = 'STEP_CAP';
+        break;
+      }
+      
       // Check for shift
       const newGearIdx = maybeShift(state.rpm, state.gearIdx, drivetrain);
       if (newGearIdx !== state.gearIdx) {
@@ -615,6 +616,16 @@ class RSACLASSICModel implements PhysicsModel {
         reason: terminationReason,
         t_s: state.t_s,
         steps: stepCount,
+        d_ft: state.s_ft,
+        target_ft: finishDistance_ft,
+      });
+    }
+    
+    // DEV: Warn if we didn't reach the finish line
+    if (typeof console !== 'undefined' && console.warn && terminationReason !== 'DISTANCE') {
+      console.warn('Terminated without crossing finish:', {
+        reason: terminationReason,
+        t_s: state.t_s,
         d_ft: state.s_ft,
         target_ft: finishDistance_ft,
       });
