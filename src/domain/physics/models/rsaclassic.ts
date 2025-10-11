@@ -24,6 +24,7 @@ import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } fr
 import { computeTireGrowth } from '../vb6/tire';
 import { shouldShift, updateShiftState, ShiftState } from '../vb6/shift';
 import { tireSlipFactor } from '../vb6/tireslip';
+import { vb6RearWeightDynamic } from '../vb6/weight_transfer';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -251,6 +252,9 @@ class RSACLASSICModel implements PhysicsModel {
     // Ags0 = previous acceleration (ft/s²), used for velocity integration
     // 
     // VB6 calculates initial Ags0 from TORQUE-based force (TIMESLIP.FRM:1020-1027)
+    
+    // Track AGS in g's for weight transfer calculation
+    let prevAGS_g_stored = 0;
     // This provides initial acceleration without relying on ClutchSlip
     let Ags0 = 0;
     
@@ -508,11 +512,34 @@ class RSACLASSICModel implements PhysicsModel {
       const tractionIndex = env.tractionIndex ?? 3;
       const CAXI = computeCAXI(tractionIndex, trackTempEffect);
       
-      // Calculate dynamic rear weight (for now, use static weight)
-      // TODO: Add weight transfer calculation
-      // VB6 uses StaticRWT for initial calculation (TIMESLIP.FRM:1038)
-      // Drag cars typically have 60-65% static rear weight
-      const dynamicRWT_lbf = vehicle.weightLb * 0.62; // Assume 62% on rear axle (typical for drag car)
+      // VB6 weight transfer (TIMESLIP.FRM:1037-1043, 1196-1211)
+      // Calculate dynamic rear weight based on acceleration
+      // Use previous step's AGS for weight transfer (VB6 iterates this way)
+      // Track AGS from previous step (stored outside the loop)
+      const prevAGS_g = stepCount === 1 ? 0 : prevAGS_g_stored;
+      
+      // VB6 vehicle parameters
+      const wheelbase_in = 108; // Default 108" (typical drag car) - TODO: add to vehicle config
+      const cg_height_in = 24; // Default 24" (typical drag car) - TODO: add to vehicle config
+      const static_front_weight_lbf = vehicle.weightLb * 0.38; // Default 38% front - TODO: add to vehicle config
+      const downforce_lbf = vehicle.weightLb; // TODO: Add aero downforce
+      const frct = 0.04; // VB6 driveline friction coefficient
+      
+      // Calculate dynamic rear weight with weight transfer
+      const weightTransfer = vb6RearWeightDynamic(
+        vehicle.weightLb,
+        static_front_weight_lbf,
+        prevAGS_g,
+        cg_height_in,
+        tireRadius_ft * 12, // Convert to inches
+        wheelbase_in,
+        F_drag + F_roll,
+        downforce_lbf,
+        frct,
+        getDrivelineEff()
+      );
+      
+      const dynamicRWT_lbf = weightTransfer.rear_weight_lbf;
       
       const AMax = computeAMaxVB6({
         weight_lbf: vehicle.weightLb,
@@ -577,6 +604,9 @@ class RSACLASSICModel implements PhysicsModel {
             tireDia_eff_in: tireDia_eff_in.toFixed(2),
             tireGrowth: tireGrowthResult.growth.toFixed(4),
             tireSlip: getTireSlip(state.s_ft).toFixed(4),
+            RWTdyn_lbf: dynamicRWT_lbf.toFixed(1),
+            RWTfront_lbf: weightTransfer.front_weight_lbf.toFixed(1),
+            wheelieBar_lbf: weightTransfer.wheelie_bar_weight_lbf.toFixed(1),
             AGS_g: AGS_g.toFixed(4),
             AGS_ftps2: AGS.toFixed(4),
             AMin_ftps2: AMin.toFixed(4),
@@ -659,6 +689,9 @@ class RSACLASSICModel implements PhysicsModel {
             tireDia_eff_in: tireDia_eff_in.toFixed(2),
             tireGrowth: tireGrowthResult.growth.toFixed(4),
             tireSlip: getTireSlip(state.s_ft).toFixed(4),
+            RWTdyn_lbf: dynamicRWT_lbf.toFixed(1),
+            RWTfront_lbf: weightTransfer.front_weight_lbf.toFixed(1),
+            wheelieBar_lbf: weightTransfer.wheelie_bar_weight_lbf.toFixed(1),
             ...(converter ? {
               converterWork: converterWork.toFixed(4),
               converterSlipRatio: converterSlipRatio.toFixed(4),
@@ -704,6 +737,9 @@ class RSACLASSICModel implements PhysicsModel {
       state.v_fps = v_new_fps;
       state.s_ft = s_new_ft;
       state.t_s = t_new_s;
+      
+      // Store AGS in g's for next step's weight transfer calculation
+      prevAGS_g_stored = AGS / gc;
       
       // Check termination conditions AFTER updating kinematics
       // 1. FIRST: Check if we reached the finish line
