@@ -503,31 +503,23 @@ class RSACLASSICModel implements PhysicsModel {
         AGS = clamped.AGS;
         
         // DEV: Bootstrap diagnostics
-        if (stepCount <= 8 && typeof console !== 'undefined' && console.debug) {
-          console.debug('[BOOT]', {
+        if (stepCount <= 10 && typeof console !== 'undefined' && console.debug) {
+          const AGS_g = bootstrapResult.Ags0_ftps2 / gc;
+          const overallRatio = gearRatio * (finalDrive ?? 3.73);
+          console.debug('[STEP]', {
             step: stepCount,
+            path: 'BOOTSTRAP',
             v_fps: state.v_fps.toFixed(6),
+            EngRPM: effectiveRPM.toFixed(0),
             LockRPM: LockRPM.toFixed(2),
-            Ags0_ftps2: bootstrapResult.Ags0_ftps2.toFixed(6),
-            AGS_clamped: AGS.toFixed(6),
-            usedBootstrap: true,
-          });
-          console.debug('[VB6-TRACTION]', {
-            step: stepCount,
-            AGS_candidate: bootstrapResult.Ags0_ftps2.toFixed(4),
-            AMin: AMin.toFixed(4),
-            AMax: AMax.toFixed(4),
-            AGS_applied: AGS.toFixed(4),
+            clutchSlip: clutchCoupling.toFixed(6),
+            gear: state.gearIdx + 1,
+            GR_x_FD: overallRatio.toFixed(3),
+            AGS_g: AGS_g.toFixed(4),
+            AGS_ftps2: AGS.toFixed(4),
+            AMin_ftps2: AMin.toFixed(4),
+            AMax_ftps2: AMax.toFixed(4),
             SLIP: clamped.SLIP,
-          });
-          console.debug('[LOSS-CHAIN]', {
-            step: stepCount,
-            transEff: currentGearEff.toFixed(4),
-            drivelineEff: getDrivelineEff().toFixed(4),
-            tireSlip: getTireSlip().toFixed(4),
-            tractionCap_AMax: AMax.toFixed(6),
-            drag_lbf: F_drag.toFixed(2),
-            rr_lbf: F_roll.toFixed(2),
           });
         }
       } else {
@@ -559,27 +551,24 @@ class RSACLASSICModel implements PhysicsModel {
         
         // DEV: HP-based diagnostics for first 10 steps
         if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
-          console.debug('[VB6-Launch]', {
+          const AGS_g = AGS / gc;
+          const overallRatio = gearRatio * (finalDrive ?? 3.73);
+          console.debug('[STEP]', {
             step: stepCount,
+            path: 'HP-SLICE',
             v_fps: state.v_fps.toFixed(6),
             EngRPM: effectiveRPM.toFixed(0),
             LockRPM: LockRPM.toFixed(2),
             clutchSlip: clutchCoupling.toFixed(6),
+            gear: state.gearIdx + 1,
+            GR_x_FD: overallRatio.toFixed(3),
             HP_engine: launchResult.diag.HP_engine.toFixed(1),
-            HP_afterSlip: launchResult.diag.HP_afterSlip.toFixed(1),
-            HP_afterEff: launchResult.diag.HP_afterEff.toFixed(1),
             HP_final: launchResult.diag.HP_final.toFixed(1),
-            P_eff: launchResult.diag.P_eff_ftlbps.toFixed(0),
-            AGS: AGS.toFixed(6),
-          });
-          console.debug('[LOSS-CHAIN]', {
-            step: stepCount,
-            transEff: currentGearEff.toFixed(4),
-            drivelineEff: getDrivelineEff().toFixed(4),
-            tireSlip: getTireSlip().toFixed(4),
-            tractionCap_AMax: AMax.toFixed(6),
-            drag_lbf: F_drag.toFixed(2),
-            rr_lbf: F_roll.toFixed(2),
+            AGS_g: AGS_g.toFixed(4),
+            AGS_ftps2: AGS.toFixed(4),
+            AMin_ftps2: AMin.toFixed(4),
+            AMax_ftps2: AMax.toFixed(4),
+            SLIP: launchResult.SLIP,
           });
         }
       }
