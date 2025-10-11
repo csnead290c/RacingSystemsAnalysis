@@ -659,21 +659,21 @@ class RSACLASSICModel implements PhysicsModel {
       Ags0 = AGS;
       
       // Energy accounting (DEV only)
-      // Energy = Force × Distance, where distance = velocity × time
+      // Engine energy = HP × time × 550 (convert HP to ft-lb/s)
+      const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
+      E_engine_total += hp_at_EngRPM * 550 * dt_s; // ft-lb
+      
+      // Losses = Force × Distance
       const distance_step = state.v_fps * dt_s; // ft
-      E_engine_total += F_wheel * distance_step;
       E_drag_total += F_drag * distance_step;
       E_rr_total += F_roll * distance_step;
       
-      // Driveline loss = difference between engine torque and wheel torque
-      // Loss = (engine_torque × gear × final × eff_loss) × angular_distance
-      const engineTorqueAtWheel = tq_lbft * gearRatio * (finalDrive ?? 3.73);
-      const drivelineLoss = engineTorqueAtWheel - drivelineTorqueLbFt;
-      if (drivelineLoss > 0) {
-        // Angular distance = linear distance / radius
-        const angular_distance = distance_step / tireRadius_ft; // radians
-        E_driveline_loss += drivelineLoss * angular_distance;
-      }
+      // Driveline loss = efficiency losses only (gear friction, etc.)
+      // Loss = engine_power × (1 - efficiency)
+      const gearEffLoss = 1 - currentGearEff; // Typically ~0.01 (1%)
+      const overallEffLoss = 1 - getDrivelineEff(); // Typically ~0.03 (3%)
+      const totalEffLoss = gearEffLoss + overallEffLoss; // Combined ~4%
+      E_driveline_loss += hp_at_EngRPM * 550 * dt_s * totalEffLoss;
       
       // VB6 integration (using clamped acceleration)
       // Semi-implicit Euler: v(t+dt) = v(t) + a * dt, s(t+dt) = s(t) + v(t+dt) * dt
@@ -888,7 +888,8 @@ class RSACLASSICModel implements PhysicsModel {
     
     // Energy summary logging (DEV only)
     // @ts-ignore - import.meta.env.DEV is available in Vite
-    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    const isDev = (typeof import.meta !== 'undefined' && import.meta.env?.DEV) || true; // Temporarily always on
+    if (isDev) {
       const E_total_in = E_engine_total;
       const E_total_out = E_drag_total + E_rr_total + E_driveline_loss + E_pmi_engine + E_pmi_chassis;
       const E_total_kinetic = E_kinetic_trans + E_kinetic_rot;
