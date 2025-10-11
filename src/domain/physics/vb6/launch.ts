@@ -103,6 +103,34 @@ export interface LaunchOutputs {
  * @param in_ - Launch inputs
  * @returns PQWT and AGS after clamps
  */
+/**
+ * VB6 HP CHAIN ORDER (TIMESLIP.FRM:1250-1252)
+ * ===============================================
+ * 
+ * Step 1: Subtract engine PMI, apply clutch/converter coupling
+ *   HP = (HPSave - HPEngPMI) * ClutchSlip
+ * 
+ * Step 2: Apply transmission efficiency, overall driveline efficiency, subtract chassis PMI, divide by tire slip
+ *   HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+ * 
+ * Step 3: Subtract drag HP (includes rolling resistance and aero drag)
+ *   (Already done in step 2 above)
+ * 
+ * Step 4: Convert to power-weighted thrust
+ *   PQWT = 550 * gc * HP / gc_Weight.Value
+ * 
+ * Step 5: Calculate acceleration in g's
+ *   AGS(L) = PQWT / (Vel(L) * gc)
+ * 
+ * EFFICIENCY APPLICATION AUDIT:
+ * - TGEff(iGear): Applied ONCE in step 2
+ * - gc_Efficiency: Applied ONCE in step 2
+ * - ClutchSlip: Applied ONCE in step 1 (includes converter Work factor)
+ * - TireSlip: Divided ONCE in step 2
+ * - HPEngPMI: Subtracted ONCE in step 1
+ * - HPChasPMI: Subtracted ONCE in step 2
+ * - DragHP: Subtracted ONCE in step 2 (includes RR + aero)
+ */
 export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   const {
     hpEngine,
