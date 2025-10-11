@@ -7,7 +7,6 @@ import type { PhysicsModel, PhysicsModelId, SimInputs, SimResult } from '../inde
 import { hpCorrection } from '../weather/air';
 import { wheelTorque_lbft, type EngineParams } from '../engine/engine';
 import { rpmFromSpeed, type Drivetrain } from '../drivetrain/drivetrain';
-import { maybeShift } from '../drivetrain/shift';
 // import { drag_lb } from '../aero/drag'; // Replaced with direct calculation
 // import { rolling_lb } from '../aero/rolling'; // Replaced with direct calculation
 // import { maxTractive_lb, type TireParams } from '../tire/traction'; // Replaced with VB6 traction
@@ -23,6 +22,7 @@ import { vb6Converter, vb6DirectDrive } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 import { computeTireGrowth } from '../vb6/tire';
+import { shouldShift, updateShiftState, ShiftState } from '../vb6/shift';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -294,6 +294,9 @@ class RSACLASSICModel implements PhysicsModel {
     // PMI state tracking (VB6: TIMESLIP.FRM:1092, 1104, 1231, 1240)
     let RPM0 = 0;      // Previous engine RPM
     let DSRPM0 = 0;    // Previous driveshaft RPM
+    
+    // Shift state tracking (VB6: TIMESLIP.FRM:1355, 1433)
+    let shiftState = ShiftState.NORMAL;
     
     // Shared loss calculation helpers (single source of truth for both bootstrap and HP paths)
     const getTransEff = (gearIdx: number): number => {
@@ -700,10 +703,40 @@ class RSACLASSICModel implements PhysicsModel {
         break;
       }
       
-      // Check for shift
-      const newGearIdx = maybeShift(state.rpm, state.gearIdx, drivetrain);
-      if (newGearIdx !== state.gearIdx) {
-        state.gearIdx = newGearIdx;
+      // VB6 shift logic (TIMESLIP.FRM:1355, 1433)
+      // Check if shift conditions are met
+      const numGears = gearRatios?.length ?? 1;
+      const shiftTriggered = shouldShift(
+        state.gearIdx,
+        numGears,
+        EngRPM,
+        shiftRPM ?? []
+      );
+      
+      // Update shift state machine
+      const shiftUpdate = updateShiftState(shiftState, shiftTriggered);
+      shiftState = shiftUpdate.newState;
+      
+      // Execute shift if state machine says to
+      if (shiftUpdate.executeShift) {
+        const oldGear = state.gearIdx;
+        const oldEngRPM = EngRPM;
+        
+        // Increment gear
+        state.gearIdx++;
+        
+        // Log shift event
+        if (typeof console !== 'undefined' && console.debug) {
+          console.debug('[SHIFT]', {
+            step: stepCount,
+            t_s: state.t_s.toFixed(4),
+            v_fps: state.v_fps.toFixed(2),
+            from_gear: oldGear + 1,
+            to_gear: state.gearIdx + 1,
+            EngRPM_before: oldEngRPM.toFixed(0),
+            LockRPM: LockRPM.toFixed(0),
+          });
+        }
       }
       
       // VB6 rollout completion (TIMESLIP.FRM:1380)
