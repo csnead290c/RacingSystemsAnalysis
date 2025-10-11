@@ -19,7 +19,7 @@ import { computeAgs0 } from '../vb6/bootstrap';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
-import { vb6Converter, vb6Clutch, vb6DirectDrive } from '../vb6/driveline';
+import { vb6Converter, vb6DirectDrive } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
@@ -346,40 +346,65 @@ class RSACLASSICModel implements PhysicsModel {
       const gearRatio = (gearRatios ?? [1.0])[state.gearIdx] ?? 1.0;
       const wheelRPM = (state.v_fps * 60) / (2 * Math.PI * tireRadius_ft);
       
-      if (clutch) {
-        // VB6 clutch model (TIMESLIP.FRM:1148-1152, 1176-1178)
-        // VB6 calculates EngRPM first, then gets HP at that RPM, then scales by ClutchSlip
-        const slipRPM = clutch.slipRPM ?? clutch.launchRPM ?? 0;
-        const slippage = clutch.slipRatio ?? 1.0025; // VB6 default: 1.0025 + slipRPM/1000000
-        const lockup = clutch.lockup ?? false;
-        
-        // Calculate EngRPM_out (slip-clamped RPM)
-        const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
-        let EngRPM_out = slippage * LockRPM;
-        if (EngRPM_out < slipRPM) {
-          if (state.gearIdx === 0 || !lockup) { // gear 1 (0-indexed) or no lockup
-            EngRPM_out = slipRPM;
-          }
+      // --- VB6 RPM hold logic (clutch/converter) ---
+      // VB6 holds EngRPM at slip/stall RPM until wheels catch up
+      const isClutch = !!clutch && !converter;
+      const isConverter = !!converter;
+      const slipRPM = isClutch
+        ? (clutch!.slipRPM ?? clutch!.launchRPM ?? 3000)
+        : (converter?.stallRPM ?? 3000);
+      
+      // DEBUG: Check what we're getting
+      if (stepCount === 1 && typeof console !== 'undefined' && console.debug) {
+        console.debug('[RPM-DEBUG]', {
+          isClutch,
+          isConverter,
+          clutch_slipRPM: clutch?.slipRPM,
+          clutch_launchRPM: clutch?.launchRPM,
+          converter_stallRPM: converter?.stallRPM,
+          calculated_slipRPM: slipRPM,
+          rpm_from_speed: rpm,
+        });
+      }
+      
+      // Lock RPM from wheels (what RPM the wheels are trying to drive the engine at)
+      const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
+      
+      // Small epsilon like VB6's convergence tolerance
+      const LOCK_EPS = 0.005; // 0.5%
+      
+      // If we haven't "locked" yet (wheels still catching up), pin engine RPM at slip/stall
+      // Once lockRPM >= slipRPM*(1-LOCK_EPS), release to normal
+      let EngRPM: number;
+      
+      if ((isClutch || isConverter) && LockRPM < slipRPM * (1 - LOCK_EPS)) {
+        EngRPM = slipRPM;
+        if (stepCount <= 3 && typeof console !== 'undefined' && console.debug) {
+          console.debug('[RPM-HOLD]', { step: stepCount, EngRPM, slipRPM, LockRPM, pinned: true });
         }
+      } else {
+        // Normal: EngRPM from vehicle speed
+        EngRPM = rpm;
+        if (stepCount <= 3 && typeof console !== 'undefined' && console.debug) {
+          console.debug('[RPM-HOLD]', { step: stepCount, EngRPM, slipRPM, LockRPM, isClutch, isConverter, condition: LockRPM < slipRPM * (1 - LOCK_EPS), pinned: false });
+        }
+      }
+      
+      // Update effectiveRPM to use the pinned/unpinned value
+      effectiveRPM = EngRPM;
+      
+      // Recalculate torque at the correct EngRPM
+      tq_lbft = wheelTorque_lbft(EngRPM, engineParams, currentGearEff);
+      tq_lbft = tq_lbft * M_fuel; // Reapply fuel factor
+      
+      if (clutch) {
+        // VB6 clutch model: ClutchSlip = LockRPM / EngRPM
+        // Guard divide-by-zero and clamp to [0, 1]
+        clutchCoupling = EngRPM > 1 ? Math.max(0, Math.min(1, LockRPM / EngRPM)) : 0;
         
-        // VB6: Get HP at EngRPM_out (TIMESLIP.FRM:1176)
-        // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
-        const hp_at_EngRPM = wheelTorque_lbft(EngRPM_out, engineParams, currentGearEff) * EngRPM_out / 5252;
+        // When rpmIsPinned=true and LockRPM is still low, clutchSlip may be ~0
+        // Bootstrap Ags0 already carries motion, HP slice will gradually pick up as LockRPM rises
         
-        const result = vb6Clutch(
-          hp_at_EngRPM,  // HP at EngRPM_out, not at wheel RPM
-          EngRPM_out, 
-          wheelRPM, 
-          gearRatio, 
-          finalDrive ?? 3.73, 
-          slipRPM,
-          slippage,
-          state.gearIdx + 1, // Convert to 1-based
-          lockup
-        );
-        drivelineTorqueLbFt = result.Twheel;
-        effectiveRPM = result.engineRPM_out;
-        clutchCoupling = result.coupling;
         minC = Math.min(minC, clutchCoupling);
         
       } else if (converter) {
@@ -470,10 +495,8 @@ class RSACLASSICModel implements PhysicsModel {
       
       const AMin = computeAMinVB6();
       
-      // Calculate LockRPM for bootstrap decision (reuse wheelRPM and gearRatio from above)
-      const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
-      
       // BOOTSTRAP PATH: Use torque-based Ags0 for first few steps when LockRPM is tiny
+      // (LockRPM already calculated above in RPM hold logic)
       // This avoids ClutchSlip = 0 problem at launch
       let AGS: number;
       
