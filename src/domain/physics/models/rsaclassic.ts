@@ -22,6 +22,7 @@ import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
 import { vb6Converter, vb6DirectDrive } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
+import { computeTireGrowth } from '../vb6/tire';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -102,8 +103,8 @@ class RSACLASSICModel implements PhysicsModel {
       tireDiaIn = 28; // Emergency fallback (inches)
     }
     
-    // Calculate radius for all downstream calculations
-    const tireRadius_ft = (tireDiaIn / 12) / 2;
+    // Static tire radius (will be replaced by effective radius with growth in loop)
+    // const tireRadius_ft = (tireDiaIn / 12) / 2;
     
     const rolloutIn = vehicle.rolloutIn;
     if (!rolloutIn) {
@@ -316,7 +317,19 @@ class RSACLASSICModel implements PhysicsModel {
     while (true) {
       stepCount++;
       
-      // Calculate RPM from current speed
+      // VB6 tire growth (TIMESLIP.FRM:1091, 1585-1607)
+      // Compute effective tire dimensions with growth and squat
+      const tireGrowthResult = computeTireGrowth(
+        tireDiaIn,
+        vehicle.tireWidthIn ?? 17.0,
+        state.v_fps,
+        Ags0 // Previous acceleration for squat calculation
+      );
+      const tireRadius_ft = tireGrowthResult.radius_eff_ft;
+      const tireCircumference_ft = tireGrowthResult.circumference_eff_ft;
+      const tireDia_eff_in = tireGrowthResult.dia_eff_in;
+      
+      // Calculate RPM from current speed (using effective tire radius)
       let rpm = rpmFromSpeed(state.v_fps, state.gearIdx, drivetrain);
       
       // VB6 driveline: converter, clutch, or direct drive
@@ -491,7 +504,7 @@ class RSACLASSICModel implements PhysicsModel {
         tireWidth_in: vehicle.tireWidthIn ?? 17.0,
         dynamicRWT_lbf,
         tractionIndexAdj: CAXI,
-        tireGrowth: 1.0, // No tire growth at launch
+        tireGrowth: tireGrowthResult.growth, // VB6 tire growth factor
         dragForce_lbf: F_drag + F_roll,
         bodyStyle: undefined, // Not a motorcycle
       });
@@ -545,6 +558,8 @@ class RSACLASSICModel implements PhysicsModel {
             clutchSlip: clutchCoupling.toFixed(6),
             gear: state.gearIdx + 1,
             GRxFD: overallRatio.toFixed(3),
+            tireDia_eff_in: tireDia_eff_in.toFixed(2),
+            tireGrowth: tireGrowthResult.growth.toFixed(4),
             AGS_g: AGS_g.toFixed(4),
             AGS_ftps2: AGS.toFixed(4),
             AMin_ftps2: AMin.toFixed(4),
@@ -559,8 +574,7 @@ class RSACLASSICModel implements PhysicsModel {
         const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
         
         // Calculate PMI losses (VB6: TIMESLIP.FRM:1231-1248)
-        // Compute driveshaft RPM
-        const tireCircumference_ft = Math.PI * (tireDiaIn / 12);
+        // Compute driveshaft RPM (using effective tire circumference with growth)
         const DSRPM = computeDSRPM(getTireSlip(), state.v_fps, tireCircumference_ft);
         
         // Compute chassis PMI
@@ -625,6 +639,8 @@ class RSACLASSICModel implements PhysicsModel {
             clutchSlip: clutchCoupling.toFixed(6),
             gear: state.gearIdx + 1,
             GRxFD: overallRatio.toFixed(3),
+            tireDia_eff_in: tireDia_eff_in.toFixed(2),
+            tireGrowth: tireGrowthResult.growth.toFixed(4),
             HP_engine: launchResult.diag.HP_engine.toFixed(1),
             HP_final: launchResult.diag.HP_final.toFixed(1),
             AGS_g: AGS_g.toFixed(4),
