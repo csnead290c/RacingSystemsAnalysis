@@ -20,7 +20,6 @@ import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
 import { vb6Converter, vb6Clutch, vb6DirectDrive } from '../vb6/driveline';
-import { vb6LoadedRadiusFt } from '../vb6/tires';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -80,16 +79,29 @@ class RSACLASSICModel implements PhysicsModel {
       warnings.push('Missing env.elevation - required for VB6 air density');
     }
     
-    // VB6 tire radius calculation (TIMESLIP.FRM:683-687, 1036, 1197)
+    // --- Tire geometry normalization (single source of truth) ---
     // VB6 uses either tire diameter or rollout (circumference)
-    let tireRadius_ft: number;
-    try {
-      tireRadius_ft = vb6LoadedRadiusFt(vehicle.tireDiaIn, vehicle.tireRolloutIn);
-    } catch {
-      warnings.push('Missing vehicle.tireDiaIn or vehicle.tireRolloutIn - required for VB6 parity');
-      tireRadius_ft = (28 / 12) / 2; // Emergency fallback
+    // TIMESLIP.FRM:683-687, 1036, 1197
+    const tireRolloutIn = vehicle.tireRolloutIn ?? null;
+    const tireDiaInRaw = vehicle.tireDiaIn ?? null;
+    
+    // If rollout is present, derive diameter from circumference.
+    // Diameter = Rollout / π
+    const PI = Math.PI;
+    const tireDiaFromRollout =
+      (typeof tireRolloutIn === 'number' && tireRolloutIn > 0)
+        ? (tireRolloutIn / PI)
+        : null;
+    
+    // Use rollout-derived diameter if available, otherwise use raw diameter
+    let tireDiaIn = (tireDiaFromRollout ?? tireDiaInRaw) ?? 0;
+    if (!tireDiaIn || tireDiaIn <= 0) {
+      warnings.push('Tire diameter is undefined/invalid. Provide tireRolloutIn or tireDiaIn.');
+      tireDiaIn = 28; // Emergency fallback (inches)
     }
-    const tireDiaIn = tireRadius_ft * 2 * 12;
+    
+    // Calculate radius for all downstream calculations
+    const tireRadius_ft = (tireDiaIn / 12) / 2;
     
     const rolloutIn = vehicle.rolloutIn;
     if (!rolloutIn) {
@@ -253,8 +265,7 @@ class RSACLASSICModel implements PhysicsModel {
       
       // VB6: force = TQ * gc_GearRatio.Value * gc_Efficiency.Value / (TireSlip * TireDia / 24) - DragForce
       const tireSlip = 1.02; // VB6 default
-      const tireDia = vehicle.tireDiaIn ?? 28;
-      const force = (TQ_geared * (finalDrive ?? 3.73) * (transEff ?? 0.9)) / (tireSlip * tireDia / 24);
+      const force = (TQ_geared * (finalDrive ?? 3.73) * (transEff ?? 0.9)) / (tireSlip * tireDiaIn / 24);
       
       // VB6: Ags0 = 0.88 * force / gc_Weight.Value (12% losses for clutch)
       // VB6: Ags0 = 0.96 * force / gc_Weight.Value (4% losses for converter)
