@@ -35,6 +35,12 @@ export interface LaunchInputs {
   /** Drag HP (DragHP) */
   dragHP: number;
   
+  /** Engine PMI HP loss (HPEngPMI) */
+  hpEngPMI: number;
+  
+  /** Chassis PMI HP loss (HPChasPMI) */
+  hpChasPMI: number;
+  
   /** Current vehicle speed (ft/s) */
   v_fps: number;
   
@@ -105,6 +111,8 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
     overallEff,
     tireSlip,
     dragHP,
+    hpEngPMI,
+    hpChasPMI,
     v_fps,
     weight_lbf,
     gc,
@@ -118,14 +126,12 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   
   // VB6: TIMESLIP.FRM:1250
   // HP = (HPSave - HPEngPMI) * ClutchSlip
-  // (We don't have inertia terms yet, so just use HP * ClutchSlip)
-  let HP = hpEngine * clutchSlip;
+  let HP = (hpEngine - hpEngPMI) * clutchSlip;
   const HP_afterSlip = HP;
   
   // VB6: TIMESLIP.FRM:1251
   // HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
-  // (We don't have chassis inertia yet, so skip HPChasPMI)
-  HP = (HP * gearEff * overallEff) / tireSlip;
+  HP = ((HP * gearEff * overallEff) - hpChasPMI) / tireSlip;
   const HP_afterEff = HP;
   HP = HP - dragHP;
   const HP_final = HP;

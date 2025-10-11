@@ -21,6 +21,7 @@ import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
 import { vb6Converter, vb6DirectDrive } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
+import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -239,6 +240,8 @@ class RSACLASSICModel implements PhysicsModel {
     let E_drag_total = 0;         // Total energy lost to aero drag (ft-lb)
     let E_rr_total = 0;           // Total energy lost to rolling resistance (ft-lb)
     let E_driveline_loss = 0;     // Total driveline losses (ft-lb)
+    let E_pmi_engine = 0;         // Total energy lost to engine PMI (ft-lb)
+    let E_pmi_chassis = 0;        // Total energy lost to chassis PMI (ft-lb)
     let E_kinetic_trans = 0;      // Final translational kinetic energy (ft-lb)
     let E_kinetic_rot = 0;        // Final rotational kinetic energy (ft-lb) - if VB6 used it
     
@@ -286,6 +289,10 @@ class RSACLASSICModel implements PhysicsModel {
     // Bootstrap thresholds (for torque-based launch before HP path)
     const BOOT_MAX_STEPS = 6;        // up to ~12ms with dt=0.002
     const LOCKRPM_MIN = 5;           // rpm threshold at which clutchSlip becomes meaningful
+    
+    // PMI state tracking (VB6: TIMESLIP.FRM:1092, 1104, 1231, 1240)
+    let RPM0 = 0;      // Previous engine RPM
+    let DSRPM0 = 0;    // Previous driveshaft RPM
     
     // Shared loss calculation helpers (single source of truth for both bootstrap and HP paths)
     const getTransEff = (gearIdx: number): number => {
@@ -551,6 +558,33 @@ class RSACLASSICModel implements PhysicsModel {
         const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
         const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
         
+        // Calculate PMI losses (VB6: TIMESLIP.FRM:1231-1248)
+        // Compute driveshaft RPM
+        const tireCircumference_ft = Math.PI * (tireDiaIn / 12);
+        const DSRPM = computeDSRPM(getTireSlip(), state.v_fps, tireCircumference_ft);
+        
+        // Compute chassis PMI
+        // VB6 default PMI values (TIMESLIP.FRM:788-805)
+        // For now, use simplified estimates based on vehicle weight
+        const engineCID = 500; // Estimate - should come from vehicle config
+        const enginePMI = engineCID / 120; // Naturally aspirated default
+        const numGears = gearRatios?.length ?? 5;
+        const transPMI = isClutch ? numGears * enginePMI / 50 : (numGears - 1) * enginePMI / 10;
+        const tiresPMI = 2 * (1.15 * 0.8 * (0.08 * tireDiaIn * (vehicle.tireWidthIn ?? 17.0)) * Math.pow(tireDiaIn / 2, 2) / 386);
+        const chassisPMI = computeChassisPMI(tiresPMI, transPMI, finalDrive ?? 3.73, gearRatio);
+        
+        // Compute PMI HP losses
+        const hpEngPMI = computeHPEngPMI(enginePMI, EngRPM, RPM0, dt_s, isClutch);
+        const hpChasPMI = computeHPChasPMI(chassisPMI, DSRPM, DSRPM0, dt_s);
+        
+        // Update previous RPM values for next step
+        RPM0 = EngRPM;
+        DSRPM0 = DSRPM;
+        
+        // Track PMI energy losses
+        E_pmi_engine += hpEngPMI * 550 * dt_s; // Convert HP to ft-lb
+        E_pmi_chassis += hpChasPMI * 550 * dt_s;
+        
         const launchResult = vb6LaunchSlice({
           hpEngine: hp_at_EngRPM,
           clutchSlip: clutchCoupling,
@@ -558,6 +592,8 @@ class RSACLASSICModel implements PhysicsModel {
           overallEff: getDrivelineEff(),
           tireSlip: getTireSlip(),
           dragHP,
+          hpEngPMI,
+          hpChasPMI,
           v_fps: state.v_fps,
           weight_lbf: vehicle.weightLb,
           gc,
@@ -805,7 +841,7 @@ class RSACLASSICModel implements PhysicsModel {
     // @ts-ignore - import.meta.env.DEV is available in Vite
     if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
       const E_total_in = E_engine_total;
-      const E_total_out = E_drag_total + E_rr_total + E_driveline_loss;
+      const E_total_out = E_drag_total + E_rr_total + E_driveline_loss + E_pmi_engine + E_pmi_chassis;
       const E_total_kinetic = E_kinetic_trans + E_kinetic_rot;
       const E_balance = E_total_in - E_total_out - E_total_kinetic;
       
@@ -817,12 +853,14 @@ class RSACLASSICModel implements PhysicsModel {
       console.log(`  Aero Drag:        ${(E_drag_total / 1000).toFixed(1)} k-ft-lb (${(100 * E_drag_total / E_total_in).toFixed(1)}%)`);
       console.log(`  Rolling Resist:   ${(E_rr_total / 1000).toFixed(1)} k-ft-lb (${(100 * E_rr_total / E_total_in).toFixed(1)}%)`);
       console.log(`  Driveline Loss:   ${(E_driveline_loss / 1000).toFixed(1)} k-ft-lb (${(100 * E_driveline_loss / E_total_in).toFixed(1)}%)`);
+      console.log(`  Engine PMI:       ${(E_pmi_engine / 1000).toFixed(1)} k-ft-lb (${(100 * E_pmi_engine / E_total_in).toFixed(1)}%)`);
+      console.log(`  Chassis PMI:      ${(E_pmi_chassis / 1000).toFixed(1)} k-ft-lb (${(100 * E_pmi_chassis / E_total_in).toFixed(1)}%)`);
       console.log(`  Total Losses:     ${(E_total_out / 1000).toFixed(1)} k-ft-lb (${(100 * E_total_out / E_total_in).toFixed(1)}%)`);
       console.log(`\nFinal Kinetic Energy:`);
       console.log(`  Translational:    ${(E_kinetic_trans / 1000).toFixed(1)} k-ft-lb (${(100 * E_kinetic_trans / E_total_in).toFixed(1)}%)`);
       console.log(`  Rotational:       ${(E_kinetic_rot / 1000).toFixed(1)} k-ft-lb (${(100 * E_kinetic_rot / E_total_in).toFixed(1)}%)`);
       console.log(`  Total Kinetic:    ${(E_total_kinetic / 1000).toFixed(1)} k-ft-lb (${(100 * E_total_kinetic / E_total_in).toFixed(1)}%)`);
-      console.log(`\nEnergy Balance:     ${(E_balance / 1000).toFixed(1)} k-ft-lb (${(100 * Math.abs(E_balance) / E_total_in).toFixed(1)}% error)`);
+      console.log(`\nEnergy Balance:     ${(E_balance / 1000).toFixed(1)} k-ft-lb (${(100 * E_balance / E_total_in).toFixed(1)}% error)`);
       console.log(`===\n`);
     }
     
