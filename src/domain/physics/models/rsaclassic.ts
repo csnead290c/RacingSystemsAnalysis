@@ -455,7 +455,7 @@ class RSACLASSICModel implements PhysicsModel {
           transEff: currentGearEff,
           drivelineEff: getDrivelineEff(),
           finalDrive: finalDrive ?? 3.73,
-          tireDia_in: vehicle.tireDiaIn,
+          tireDia_in: tireDiaIn, // Use calculated value, not vehicle.tireDiaIn
           tireSlip: getTireSlip(),
           dragForce_lbf: F_drag + F_roll,
           vehicleWeight_lbf: vehicle.weightLb,
