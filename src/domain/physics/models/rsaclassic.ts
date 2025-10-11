@@ -15,6 +15,7 @@ import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
 import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
 import { vb6LaunchSlice } from '../vb6/launch';
+import { computeAgs0 } from '../vb6/bootstrap';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
@@ -268,6 +269,10 @@ class RSACLASSICModel implements PhysicsModel {
       // Note: VB6 also calculates AMAX and clamps here, but we'll do that in the loop
     }
     
+    // Bootstrap thresholds (for torque-based launch before HP path)
+    const BOOT_MAX_STEPS = 6;        // up to ~12ms with dt=0.002
+    const LOCKRPM_MIN = 5;           // rpm threshold at which clutchSlip becomes meaningful
+    
     // Integration loop
     while (true) {
       stepCount++;
@@ -416,62 +421,99 @@ class RSACLASSICModel implements PhysicsModel {
       const F_max = maxTractive_lb(vehicle.weightLb, tireParams, env.tractionIndex);
       const AMax = F_max / vehicle.weightLb; // Convert to acceleration (ft/s²)
       
-      // VB6 launch slice (TIMESLIP.FRM:1218-1228, 1250-1266)
-      // Calculate HP and drag HP for VB6 formula
-      const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
-      const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
+      // Calculate LockRPM for bootstrap decision (reuse wheelRPM and gearRatio from above)
+      const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
       
-      // Tire slip factor (VB6: TIMESLIP.FRM:1100-1102)
-      // TireSlip = 1.02 + Work * (1 - (Dist0 / 1320)^2)
-      // For now, use constant 1.02
-      const tireSlip = 1.02;
+      // BOOTSTRAP PATH: Use torque-based Ags0 for first few steps when LockRPM is tiny
+      // This avoids ClutchSlip = 0 problem at launch
+      let AGS: number;
       
-      const launchResult = vb6LaunchSlice({
-        hpEngine: hp_at_EngRPM,
-        clutchSlip: clutchCoupling,
-        gearEff: currentGearEff,
-        overallEff: transEff ?? 0.9,
-        tireSlip,
-        dragHP,
-        v_fps: state.v_fps,
-        weight_lbf: vehicle.weightLb,
-        gc,
-        AMin,
-        AMax,
-        Ags0,
-        dt: dt_s,
-        JMin,
-        JMax,
-      });
-      
-      const AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
-      // Note: launchResult.PQWT available for future energy accounting
-      
-      // DEV: Diagnostics for first 10 steps
-      if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
-        const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
-        console.debug('[VB6-Launch]', {
-          step: stepCount,
-          v_fps: state.v_fps.toFixed(6),
-          EngRPM: effectiveRPM.toFixed(0),
-          LockRPM: LockRPM.toFixed(2),
-          clutchSlip: clutchCoupling.toFixed(6),
-          HP_engine: launchResult.diag.HP_engine.toFixed(1),
-          HP_afterSlip: launchResult.diag.HP_afterSlip.toFixed(1),
-          HP_afterEff: launchResult.diag.HP_afterEff.toFixed(1),
-          HP_final: launchResult.diag.HP_final.toFixed(1),
-          P_eff: launchResult.diag.P_eff_ftlbps.toFixed(0),
-          AGS: AGS.toFixed(6),
+      if (stepCount <= BOOT_MAX_STEPS && LockRPM < LOCKRPM_MIN) {
+        // Torque-based bootstrap (VB6 lines 1020-1027)
+        // Get engine torque at slipRPM (not at current RPM)
+        const slipRPM = clutch?.slipRPM ?? clutch?.launchRPM ?? converter?.stallRPM ?? 3000;
+        const tq_at_slip = wheelTorque_lbft(slipRPM, engineParams, currentGearEff);
+        
+        // Tire slip factor (VB6: TIMESLIP.FRM:1100-1102)
+        const tireSlip = 1.02;
+        
+        const bootstrapResult = computeAgs0({
+          engineTorque_lbft_atSlip: tq_at_slip,
+          gearRatio,
+          transEff: currentGearEff,
+          drivelineEff: transEff ?? 0.9,
+          finalDrive: finalDrive ?? 3.73,
+          tireDia_in: vehicle.tireDiaIn,
+          tireSlip,
+          dragForce_lbf: F_drag + F_roll,
+          vehicleWeight_lbf: vehicle.weightLb,
+          isAutoTrans: !!converter,
         });
+        
+        // Apply AMin/AMax clamps (same as VB6)
+        AGS = Math.max(AMin, Math.min(bootstrapResult.Ags0_ftps2, AMax));
+        
+        // DEV: Bootstrap diagnostics
+        if (stepCount <= 8 && typeof console !== 'undefined' && console.debug) {
+          console.debug('[BOOT]', {
+            step: stepCount,
+            v_fps: state.v_fps.toFixed(6),
+            LockRPM: LockRPM.toFixed(2),
+            Ags0_ftps2: bootstrapResult.Ags0_ftps2.toFixed(6),
+            AGS_clamped: AGS.toFixed(6),
+            usedBootstrap: true,
+          });
+        }
+      } else {
+        // HP-BASED PATH: Use VB6 launch slice (TIMESLIP.FRM:1218-1228, 1250-1266)
+        // Calculate HP and drag HP for VB6 formula
+        const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
+        const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
+        
+        // Tire slip factor (VB6: TIMESLIP.FRM:1100-1102)
+        const tireSlip = 1.02;
+        
+        const launchResult = vb6LaunchSlice({
+          hpEngine: hp_at_EngRPM,
+          clutchSlip: clutchCoupling,
+          gearEff: currentGearEff,
+          overallEff: transEff ?? 0.9,
+          tireSlip,
+          dragHP,
+          v_fps: state.v_fps,
+          weight_lbf: vehicle.weightLb,
+          gc,
+          AMin,
+          AMax,
+          Ags0,
+          dt: dt_s,
+          JMin,
+          JMax,
+        });
+        
+        AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
+        // Note: launchResult.PQWT available for future energy accounting
+        
+        // DEV: HP-based diagnostics for first 10 steps
+        if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
+          console.debug('[VB6-Launch]', {
+            step: stepCount,
+            v_fps: state.v_fps.toFixed(6),
+            EngRPM: effectiveRPM.toFixed(0),
+            LockRPM: LockRPM.toFixed(2),
+            clutchSlip: clutchCoupling.toFixed(6),
+            HP_engine: launchResult.diag.HP_engine.toFixed(1),
+            HP_afterSlip: launchResult.diag.HP_afterSlip.toFixed(1),
+            HP_afterEff: launchResult.diag.HP_afterEff.toFixed(1),
+            HP_final: launchResult.diag.HP_final.toFixed(1),
+            P_eff: launchResult.diag.P_eff_ftlbps.toFixed(0),
+            AGS: AGS.toFixed(6),
+          });
+        }
       }
       
       // Update Ags0 for next step (VB6: TIMESLIP.FRM:1090)
       Ags0 = AGS;
-      
-      // Check for wheel slip
-      if (launchResult.SLIP === 1 && !warnings.includes('wheel_slip')) {
-        warnings.push('wheel_slip');
-      }
       
       // Energy accounting (DEV only)
       // Energy = Force × Distance, where distance = velocity × time
