@@ -13,8 +13,8 @@ import { maybeShift } from '../drivetrain/shift';
 import { maxTractive_lb, type TireParams } from '../tire/traction';
 import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
-import { g, FPS_TO_MPH, CMU, gc, AMin } from '../vb6/constants';
-import { vb6AccelClamp } from '../vb6/accelClamp';
+import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
+import { vb6LaunchSlice } from '../vb6/launch';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
@@ -220,6 +220,10 @@ class RSACLASSICModel implements PhysicsModel {
     let E_kinetic_trans = 0;      // Final translational kinetic energy (ft-lb)
     let E_kinetic_rot = 0;        // Final rotational kinetic energy (ft-lb) - if VB6 used it
     
+    // VB6 integration state (TIMESLIP.FRM:1090)
+    // Ags0 = previous acceleration (ft/s²), used for velocity integration
+    let Ags0 = 0;
+    
     // Integration loop
     while (state.s_ft < finishDistance_ft && state.t_s < maxTime_s) {
       // Calculate RPM from current speed
@@ -360,32 +364,48 @@ class RSACLASSICModel implements PhysicsModel {
       const F_drag = T_drag / tireRadius_ft;
       const F_roll = T_rr / tireRadius_ft;
       
-      // VB6: PQWT = net wheel thrust (lb_f)
-      // PQWT = F_wheel - F_drag - F_roll
-      let PQWT = F_wheel - F_drag - F_roll;
-      
       // VB6 maximum traction (TIMESLIP.FRM:1054, 1216)
       // AMAX = (CRTF - DragForce) / Weight
       // For now, use our traction model to get F_max, then convert to AMax
       const F_max = maxTractive_lb(vehicle.weightLb, tireParams, env.tractionIndex);
       const AMax = F_max / vehicle.weightLb; // Convert to acceleration (ft/s²)
       
-      // VB6 acceleration clamping (TIMESLIP.FRM:1221-1228)
-      // AGS(L) = PQWT / (Vel(L) * gc)
-      // Apply AMin and AMax limits, rescale PQWT
-      const clampResult = vb6AccelClamp({
-        PQWT,
+      // VB6 launch slice (TIMESLIP.FRM:1218-1228, 1250-1266)
+      // Calculate HP and drag HP for VB6 formula
+      const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
+      const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
+      
+      // Tire slip factor (VB6: TIMESLIP.FRM:1100-1102)
+      // TireSlip = 1.02 + Work * (1 - (Dist0 / 1320)^2)
+      // For now, use constant 1.02
+      const tireSlip = 1.02;
+      
+      const launchResult = vb6LaunchSlice({
+        hpEngine: hp_at_EngRPM,
+        clutchSlip: clutchCoupling,
+        gearEff: currentGearEff,
+        overallEff: transEff ?? 0.9,
+        tireSlip,
+        dragHP,
         v_fps: state.v_fps,
+        weight_lbf: vehicle.weightLb,
         gc,
         AMin,
         AMax,
+        Ags0,
+        dt: dt_s,
+        JMin,
+        JMax,
       });
       
-      PQWT = clampResult.PQWT;
-      const AGS = clampResult.AGS; // Clamped acceleration (ft/s²)
+      const AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
+      // Note: launchResult.PQWT available for future energy accounting
+      
+      // Update Ags0 for next step (VB6: TIMESLIP.FRM:1090)
+      Ags0 = AGS;
       
       // Check for wheel slip
-      if (clampResult.SLIP === 1 && !warnings.includes('wheel_slip')) {
+      if (launchResult.SLIP === 1 && !warnings.includes('wheel_slip')) {
         warnings.push('wheel_slip');
       }
       

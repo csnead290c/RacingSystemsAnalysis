@@ -61,6 +61,12 @@ export const K7 = 9.5;
 // Note: was 0.004 for BVPro already
 export const AMin = 0.004;
 
+/** JMin: Minimum jerk (g/s) - TIMESLIP.FRM:543 */
+export const JMin = -4;
+
+/** JMax: Maximum jerk (g/s) - TIMESLIP.FRM:544 */
+export const JMax = 2;
+
 // ===== Derived Constants =====
 
 /** Horsepower to foot-pounds per second conversion */
