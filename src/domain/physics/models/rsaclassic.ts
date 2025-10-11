@@ -717,6 +717,8 @@ class RSACLASSICModel implements PhysicsModel {
             RWTdyn_lbf: dynamicRWT_lbf.toFixed(1),
             RWTfront_lbf: weightTransfer.front_weight_lbf.toFixed(1),
             wheelieBar_lbf: weightTransfer.wheelie_bar_weight_lbf.toFixed(1),
+            rho_slug_ft3: rho.toFixed(6),
+            dragHP: dragHP.toFixed(2),
             ...(converter ? {
               converterWork: converterWork.toFixed(4),
               converterSlipRatio: converterSlipRatio.toFixed(4),
