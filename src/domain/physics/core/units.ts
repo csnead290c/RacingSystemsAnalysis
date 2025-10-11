@@ -3,17 +3,27 @@
  */
 
 /**
+ * Conversion factor: mph per fps (VB6: Z5 = 3600 / 5280)
+ */
+export const MPH_PER_FPS = 3600 / 5280; // 0.681818...
+
+/**
+ * Conversion factor: fps per mph
+ */
+export const FPS_PER_MPH = 5280 / 3600; // 1.466667...
+
+/**
  * Convert feet per second to miles per hour.
  */
 export function fpsToMph(fps: number): number {
-  return fps * 0.681818; // 3600 / 5280
+  return fps * MPH_PER_FPS;
 }
 
 /**
  * Convert miles per hour to feet per second.
  */
 export function mphToFps(mph: number): number {
-  return mph * 1.466667; // 5280 / 3600
+  return mph * FPS_PER_MPH;
 }
 
 /**

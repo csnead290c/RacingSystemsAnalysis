@@ -571,12 +571,11 @@ class RSACLASSICModel implements PhysicsModel {
     // VB6 final ET and trap speed calculation (TIMESLIP.FRM:1621, 1626-1627)
     // TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)  [eighth mile trap]
     // TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime)  [quarter mile trap]
-    // Z5 = 3600 / 5280 (converts fps to mph)
+    // Z5 = FPS_TO_MPH = 3600 / 5280 (converts fps to mph)
     const measuredET = rolloutCompleted ? state.t_s - t_at_rollout : state.t_s;
     const finalMPH = state.v_fps * FPS_TO_MPH;
     
     // VB6 trap speeds: time-averaged over 66 ft windows
-    const Z5 = 3600 / 5280;
     let eighthMileTrapMPH: number | undefined;
     let quarterMileTrapMPH: number | undefined;
     
@@ -585,7 +584,7 @@ class RSACLASSICModel implements PhysicsModel {
       const t_at_660 = state.t_s; // Current time (should be at or past 660)
       const deltaT = t_at_660 - t_at_594;
       if (deltaT > 0) {
-        eighthMileTrapMPH = Z5 * 66 / deltaT;
+        eighthMileTrapMPH = FPS_TO_MPH * 66 / deltaT;
       }
     }
     
@@ -594,7 +593,7 @@ class RSACLASSICModel implements PhysicsModel {
       const t_at_1320 = state.t_s; // Current time (should be at or past 1320)
       const deltaT = t_at_1320 - t_at_1254;
       if (deltaT > 0) {
-        quarterMileTrapMPH = Z5 * 66 / deltaT;
+        quarterMileTrapMPH = FPS_TO_MPH * 66 / deltaT;
       }
     }
     

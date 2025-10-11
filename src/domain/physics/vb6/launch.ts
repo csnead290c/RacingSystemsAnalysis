@@ -133,12 +133,21 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   // when this formula is used. We use a small velocity floor to avoid division by zero.
   let AGS: number;
   const Z5 = 3600 / 5280; // VB6 constant (fps to mph conversion)
-  const v_use = Math.max(v_fps, Z5); // Use Z5 as velocity floor
+  const v_use = Math.max(v_fps, Z5); // Use Z5 as velocity floor (ft/s)
   
-  if (v_fps < Z5 && typeof console !== 'undefined' && console.debug) {
-    console.debug('[VB6 v-floor] using Z5=', Z5, 'instead of v=', v_fps);
+  // DEV: Verify v_use is in ft/s and not extremely small
+  if (typeof console !== 'undefined') {
+    if (v_fps < Z5 && console.debug) {
+      console.debug('[VB6 v-floor] using Z5=', Z5, 'fps instead of v=', v_fps, 'fps');
+    }
+    if (v_use > 0 && v_use < 1e-6 && console.warn) {
+      console.warn('v_use extremely small (fps):', v_use);
+    }
   }
   
+  // VB6 formula: AGS = PQWT / (Vel * gc)
+  // Vel is in ft/s, gc is dimensionless, PQWT is in ft/s²
+  // Result: AGS in ft/s²
   AGS = PQWT / (v_use * gc);
   
   // VB6: TIMESLIP.FRM:1255-1258
