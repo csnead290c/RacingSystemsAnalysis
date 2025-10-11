@@ -22,7 +22,7 @@ import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 import { computeTireGrowth } from '../vb6/tire';
-import { shouldShift, updateShiftState, ShiftState } from '../vb6/shift';
+import { shouldShift, updateShiftState, ShiftState, vb6ShiftDwell_s } from '../vb6/shift';
 import { tireSlipFactor } from '../vb6/tireslip';
 import { vb6RearWeightDynamic } from '../vb6/weight_transfer';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
@@ -300,8 +300,10 @@ class RSACLASSICModel implements PhysicsModel {
     let RPM0 = 0;      // Previous engine RPM
     let DSRPM0 = 0;    // Previous driveshaft RPM
     
-    // Shift state tracking (VB6: TIMESLIP.FRM:1355, 1433)
+    // Shift state tracking (VB6: TIMESLIP.FRM:1355, 1433, 1071-1072)
     let shiftState = ShiftState.NORMAL;
+    let shiftDwellRemaining_s = 0; // Time remaining in shift dwell (no power window)
+    let totalShiftDwell_s = 0; // Total dwell time accumulated
     
     // Shared loss calculation helpers (single source of truth for both bootstrap and HP paths)
     const getTransEff = (gearIdx: number): number => {
@@ -616,8 +618,31 @@ class RSACLASSICModel implements PhysicsModel {
         }
       } else {
         // HP-BASED PATH: Use VB6 launch slice (TIMESLIP.FRM:1218-1228, 1250-1266)
+        
+        // VB6 Shift Dwell: During shift, vehicle coasts with zero engine power
+        // VB6: TIMESLIP.FRM:1071-1072, 1283-1287
+        // During DTShift period, only drag and rolling resistance act on vehicle
+        let hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
+        
+        // Check if in shift dwell (no power window)
+        if (shiftDwellRemaining_s > 0) {
+          // Zero engine power during shift
+          hp_at_EngRPM = 0;
+          
+          // Decrement dwell timer
+          shiftDwellRemaining_s = Math.max(0, shiftDwellRemaining_s - dt_s);
+          
+          // Log dwell end
+          if (shiftDwellRemaining_s === 0 && typeof console !== 'undefined' && console.debug) {
+            console.debug('[SHIFT_DWELL_END]', {
+              step: stepCount,
+              t_s: state.t_s.toFixed(4),
+              v_fps: state.v_fps.toFixed(2),
+            });
+          }
+        }
+        
         // Calculate HP and drag HP for VB6 formula
-        const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
         const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
         
         // Calculate PMI losses (VB6: TIMESLIP.FRM:1231-1248)
@@ -785,6 +810,14 @@ class RSACLASSICModel implements PhysicsModel {
         // Increment gear
         state.gearIdx++;
         
+        // VB6: TIMESLIP.FRM:1071-1072
+        // Shift2PrintTime = time(L) + DTShift
+        // TimeStep = DTShift
+        // Start shift dwell (no power window)
+        const dwellTime = vb6ShiftDwell_s(isClutch);
+        shiftDwellRemaining_s = dwellTime;
+        totalShiftDwell_s += dwellTime;
+        
         // Log shift event
         if (typeof console !== 'undefined' && console.debug) {
           console.debug('[SHIFT]', {
@@ -795,6 +828,7 @@ class RSACLASSICModel implements PhysicsModel {
             to_gear: state.gearIdx + 1,
             EngRPM_before: oldEngRPM.toFixed(0),
             LockRPM: LockRPM.toFixed(0),
+            dwell_s: dwellTime.toFixed(3),
           });
         }
       }
@@ -910,6 +944,7 @@ class RSACLASSICModel implements PhysicsModel {
         steps: stepCount,
         d_ft: state.s_ft,
         target_ft: finishDistance_ft,
+        totalShiftDwell_s: totalShiftDwell_s.toFixed(3),
       });
     }
     

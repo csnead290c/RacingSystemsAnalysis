@@ -1,13 +1,18 @@
 /**
  * VB6 Gear Shift Logic
  * 
- * VB6 Source: TIMESLIP.FRM:1355, 1433
+ * VB6 Source: TIMESLIP.FRM:1355, 1433, 702-703, 722, 732, 1071-1072
  * 
  * VB6 uses a two-step shift process:
  * 1. ShiftFlag = 1: Shift is triggered when EngRPM is within tolerance of ShiftRPM
  * 2. ShiftFlag = 2: Shift is executed on next iteration, then cleared
  * 
- * This allows VB6 to complete the current timestep before shifting.
+ * During the shift, VB6 applies a "dwell" period (DTShift) where the vehicle coasts
+ * with zero power. This simulates the time it takes to change gears.
+ * 
+ * VB6 Shift Dwell Times (TIMESLIP.FRM:702-703, 722, 732):
+ * - Clutch: DTShift = 0.2 seconds (200 ms)
+ * - Converter: DTShift = 0.25 seconds (250 ms)
  */
 
 /**
@@ -103,4 +108,22 @@ export function updateShiftState(
     default:
       return { newState: ShiftState.NORMAL, executeShift: false };
   }
+}
+
+/**
+ * Get VB6 shift dwell time (no power window)
+ * 
+ * VB6: TIMESLIP.FRM:702-703, 722, 732
+ * DTShift = 0.2                                'Clutch shift time
+ * If gc_TransType.Value Then DTShift = 0.25    'Converter shift time
+ * 
+ * During this time, the vehicle coasts with zero engine power.
+ * Only drag and rolling resistance act on the vehicle.
+ * 
+ * @param isClutch True for clutch transmission, false for converter
+ * @returns Shift dwell time in seconds
+ */
+export function vb6ShiftDwell_s(isClutch: boolean): number {
+  // VB6: DTShift = 0.2 for clutch, 0.25 for converter
+  return isClutch ? 0.2 : 0.25;
 }
