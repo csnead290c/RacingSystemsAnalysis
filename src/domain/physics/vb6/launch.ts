@@ -132,19 +132,19 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   
   // VB6: TIMESLIP.FRM:1252
   // PQWT = 550 * gc * HP / gc_Weight.Value
+  // IMPORTANT: VB6 stores PQWT in ft²/s³ (power-weighted thrust)
   const P_eff_ftlbps = 550 * HP; // Power in ft·lbf/s
-  let PQWT = (P_eff_ftlbps * gc) / weight_lbf;
+  let PQWT = (P_eff_ftlbps * gc) / weight_lbf; // ft²/s³
   
   // VB6: TIMESLIP.FRM:1253
   // AGS(L) = PQWT / (Vel(L) * gc)
   // 
-  // CRITICAL: This is for convergence checking, NOT integration!
-  // VB6 integrates using Ags0 (previous acceleration).
+  // CRITICAL: VB6 stores AGS in g's, NOT ft/s²!
+  // The formula gives AGS in g's: (ft²/s³) / (ft/s * ft/s²) = dimensionless (g's)
   // 
-  // However, we still need to calculate AGS for the clamps.
-  // VB6 updates velocity BEFORE computing AGS, so Vel(L) is never exactly zero
-  // when this formula is used. We use a small velocity floor to avoid division by zero.
-  let AGS: number;
+  // VB6 integrates using: Vel(L) = Vel0 + Ags0 * gc * TimeStep
+  // So AGS must be in g's for the clamps to work correctly.
+  let AGS_g: number;
   const Z5 = 3600 / 5280; // VB6 constant (fps to mph conversion)
   const v_use = Math.max(v_fps, Z5); // Use Z5 as velocity floor (ft/s)
   
@@ -159,9 +159,11 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   }
   
   // VB6 formula: AGS = PQWT / (Vel * gc)
-  // Vel is in ft/s, gc is dimensionless, PQWT is in ft/s²
-  // Result: AGS in ft/s²
-  AGS = PQWT / (v_use * gc);
+  // This gives AGS in g's (dimensionless)
+  AGS_g = PQWT / (v_use * gc);
+  
+  // Convert to ft/s² for our integrator and clamps (which expect ft/s²)
+  let AGS = AGS_g * gc;
   
   // VB6: TIMESLIP.FRM:1255-1258
   // 'steady iteration progress by using jerk limits
