@@ -141,12 +141,18 @@ class RSACLASSICModel implements PhysicsModel {
       mu0: 1.6, // Drag radials/slicks
     };
     
+    // Termination tracking
+    type TerminationReason = 'DISTANCE' | 'TIME_CAP' | 'STEP_CAP' | 'SAFETY';
+    let terminationReason: TerminationReason | null = null;
+    let stepCount = 0;
+    
     // Integration parameters
     // VB6 uses adaptive timestep (TIMESLIP.FRM:1082): TimeStep = TSMax * (AgsMax / Ags0)^4
     // Min: 0.005s (TIMESLIP.FRM:1064), Max: 0.05s (TIMESLIP.FRM:1120)
     // For fixed-timestep implementation, use 0.002s matching VB6's TimeTol (TIMESLIP.FRM:554)
     const dt_s = 0.002; // VB6 TimeTol = 0.002s (TIMESLIP.FRM:554)
-    const maxTime_s = 15; // Safety cap
+    const MAX_TIME_S = 30; // Generous cap to avoid false stops while diagnosing
+    const MAX_STEPS = Math.ceil(MAX_TIME_S / dt_s);
     const traceInterval_s = 0.01; // Collect traces every 10ms
     
     // Initialize state
@@ -263,7 +269,26 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // Integration loop
-    while (state.s_ft < finishDistance_ft && state.t_s < maxTime_s) {
+    while (true) {
+      stepCount++;
+      
+      // Check termination conditions in priority order
+      // 1. FIRST: Check if we reached the finish line
+      if (state.s_ft >= finishDistance_ft) {
+        terminationReason = 'DISTANCE';
+        break;
+      }
+      
+      // 2. Safety caps (only if we haven't reached finish)
+      if (stepCount >= MAX_STEPS) {
+        terminationReason = 'STEP_CAP';
+        break;
+      }
+      
+      if (state.t_s >= MAX_TIME_S) {
+        terminationReason = 'TIME_CAP';
+        break;
+      }
       // Calculate RPM from current speed
       let rpm = rpmFromSpeed(state.v_fps, state.gearIdx, drivetrain);
       
@@ -538,7 +563,7 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // Safety check
-    if (state.t_s >= maxTime_s) {
+    if (state.t_s >= MAX_TIME_S) {
       warnings.push('max_time_exceeded');
     }
     
@@ -579,10 +604,21 @@ class RSACLASSICModel implements PhysicsModel {
     // Rotational: KE_rot = 0.5 × I × ω²
     // I = moment of inertia (slug-ft²), ω = angular velocity (rad/s)
     // For wheels: I ≈ m_wheel × r², ω = v / r
-    // Simplified: KE_rot ≈ 0.5 × m_wheel × v²
-    // TODO: Add proper rotational inertia if VB6 used it
-    const wheelMass_slugs = lbToSlug(vehicle.weightLb * 0.05); // Assume 5% of vehicle weight in wheels
-    E_kinetic_rot = 0.5 * wheelMass_slugs * state.v_fps * state.v_fps;
+    // If no explicit reason was set, mark as SAFETY
+    if (!terminationReason) {
+      terminationReason = 'SAFETY';
+    }
+    
+    // DEV: Log termination info
+    if (typeof console !== 'undefined' && console.debug) {
+      console.debug('[RSACLASSIC END]', {
+        reason: terminationReason,
+        t_s: state.t_s,
+        steps: stepCount,
+        d_ft: state.s_ft,
+        target_ft: finishDistance_ft,
+      });
+    }
     
     // Ensure we have a timeslip entry at finish
     if (timeslip.length === 0 || timeslip[timeslip.length - 1].d_ft !== finishDistance_ft) {
@@ -675,6 +711,12 @@ class RSACLASSICModel implements PhysicsModel {
           },
           timeslipPoints: [60, 330, 660, 1000, 1320],
           rolloutBehavior: 'ET clock starts after rollout distance (TIMESLIP.FRM:1380)',
+        },
+        termination: {
+          reason: terminationReason,
+          steps: stepCount,
+          t_s: state.t_s,
+          target_ft: finishDistance_ft,
         },
       },
     };

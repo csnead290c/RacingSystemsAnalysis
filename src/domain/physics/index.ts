@@ -138,6 +138,12 @@ export interface SimResult {
       timeslipPoints: number[];
       rolloutBehavior: string;
     };
+    termination?: {
+      reason: 'DISTANCE' | 'TIME_CAP' | 'STEP_CAP' | 'SAFETY';
+      steps: number;
+      t_s: number;
+      target_ft: number;
+    };
   };
 }
 
