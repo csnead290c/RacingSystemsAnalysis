@@ -375,19 +375,15 @@ class RSACLASSICModel implements PhysicsModel {
       
       // If we haven't "locked" yet (wheels still catching up), pin engine RPM at slip/stall
       // Once lockRPM >= slipRPM*(1-LOCK_EPS), release to normal
+      const lockThreshold = slipRPM * (1 - LOCK_EPS);
+      const rpmIsPinned = (isClutch || isConverter) && LockRPM < lockThreshold;
       let EngRPM: number;
       
-      if ((isClutch || isConverter) && LockRPM < slipRPM * (1 - LOCK_EPS)) {
+      if (rpmIsPinned) {
         EngRPM = slipRPM;
-        if (stepCount <= 3 && typeof console !== 'undefined' && console.debug) {
-          console.debug('[RPM-HOLD]', { step: stepCount, EngRPM, slipRPM, LockRPM, pinned: true });
-        }
       } else {
         // Normal: EngRPM from vehicle speed
         EngRPM = rpm;
-        if (stepCount <= 3 && typeof console !== 'undefined' && console.debug) {
-          console.debug('[RPM-HOLD]', { step: stepCount, EngRPM, slipRPM, LockRPM, isClutch, isConverter, condition: LockRPM < slipRPM * (1 - LOCK_EPS), pinned: false });
-        }
       }
       
       // Update effectiveRPM to use the pinned/unpinned value
@@ -529,15 +525,19 @@ class RSACLASSICModel implements PhysicsModel {
         if (stepCount <= 10 && typeof console !== 'undefined' && console.debug) {
           const AGS_g = bootstrapResult.Ags0_ftps2 / gc;
           const overallRatio = gearRatio * (finalDrive ?? 3.73);
+          const phase = rpmIsPinned ? 'PINNED' : 'BOOTSTRAP';
           console.debug('[STEP]', {
             step: stepCount,
-            path: 'BOOTSTRAP',
+            phase,
             v_fps: state.v_fps.toFixed(6),
             EngRPM: effectiveRPM.toFixed(0),
             LockRPM: LockRPM.toFixed(2),
+            slipRPM: slipRPM.toFixed(0),
+            lockThreshold: lockThreshold.toFixed(0),
+            rpmIsPinned,
             clutchSlip: clutchCoupling.toFixed(6),
             gear: state.gearIdx + 1,
-            GR_x_FD: overallRatio.toFixed(3),
+            GRxFD: overallRatio.toFixed(3),
             AGS_g: AGS_g.toFixed(4),
             AGS_ftps2: AGS.toFixed(4),
             AMin_ftps2: AMin.toFixed(4),
@@ -576,15 +576,19 @@ class RSACLASSICModel implements PhysicsModel {
         if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
           const AGS_g = AGS / gc;
           const overallRatio = gearRatio * (finalDrive ?? 3.73);
+          const phase = rpmIsPinned ? 'PINNED' : 'HP';
           console.debug('[STEP]', {
             step: stepCount,
-            path: 'HP-SLICE',
+            phase,
             v_fps: state.v_fps.toFixed(6),
             EngRPM: effectiveRPM.toFixed(0),
             LockRPM: LockRPM.toFixed(2),
+            slipRPM: slipRPM.toFixed(0),
+            lockThreshold: lockThreshold.toFixed(0),
+            rpmIsPinned,
             clutchSlip: clutchCoupling.toFixed(6),
             gear: state.gearIdx + 1,
-            GR_x_FD: overallRatio.toFixed(3),
+            GRxFD: overallRatio.toFixed(3),
             HP_engine: launchResult.diag.HP_engine.toFixed(1),
             HP_final: launchResult.diag.HP_final.toFixed(1),
             AGS_g: AGS_g.toFixed(4),
