@@ -20,7 +20,7 @@ import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
 import { vb6Converter, vb6Clutch, vb6DirectDrive } from '../vb6/driveline';
-import { computeAMaxVB6, computeAMinVB6, computeCAXI, getBaseTracionCoeff, clampAGSVB6 } from '../vb6/traction';
+import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -463,7 +463,6 @@ class RSACLASSICModel implements PhysicsModel {
         tireWidth_in: vehicle.tireWidthIn ?? 17.0,
         dynamicRWT_lbf,
         tractionIndexAdj: CAXI,
-        baseTracionCoeff: getBaseTracionCoeff(),
         tireGrowth: 1.0, // No tire growth at launch
         dragForce_lbf: F_drag + F_roll,
         bodyStyle: undefined, // Not a motorcycle

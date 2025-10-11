@@ -13,6 +13,21 @@
 
 import { AMin as AMin_CONSTANT } from './constants';
 
+/**
+ * VB6 Base Traction Coefficient
+ * 
+ * TIMESLIP.FRM lines 550-570:
+ * ```vb
+ * #If Not ISBVPRO Then        'QUARTER jr and QUARTER Pro
+ *     Const AX = 10.8         'reduced from 11.2 - 07/23/01
+ * #Else                       'Bonneville Pro
+ *     Const AX = 9.7          'reduced from 10.0 - 07/23/01
+ * #End If
+ * ```
+ */
+export const VB6_AX = 10.8; // Quarter Jr/Pro (default)
+export const VB6_AX_BONN = 9.7; // Bonneville Pro
+
 export interface TractionParams {
   /** Vehicle weight in lbf (gc_Weight.Value) */
   weight_lbf: number;
@@ -28,9 +43,6 @@ export interface TractionParams {
   
   /** Traction index adjustment (CAXI) */
   tractionIndexAdj: number;
-  
-  /** Base traction coefficient (AX) - typically 1.0 */
-  baseTracionCoeff: number;
   
   /** Tire growth factor (TireGrowth) - typically 1.0 at launch */
   tireGrowth: number;
@@ -51,6 +63,8 @@ export interface TractionParams {
  * If gc_BodyStyle.Value = 8 Then CRTF = 0.5 * CRTF
  * ```
  * 
+ * Where AX = 10.8 for Quarter Jr/Pro (TIMESLIP.FRM line 551)
+ * 
  * @param params - Traction parameters
  * @returns CRTF (tire traction force) in lbf
  */
@@ -60,13 +74,13 @@ export function computeCRTF(params: TractionParams): number {
     tireWidth_in,
     dynamicRWT_lbf,
     tractionIndexAdj,
-    baseTracionCoeff,
     bodyStyle,
   } = params;
   
   // VB6: CRTF = CAXI * AX * TireDia * (gc_TireWidth.Value + 1) * (0.92 + 0.08 * (DynamicRWT / 1900) ^ 2.15)
+  // Use VB6_AX = 10.8 (Quarter Jr/Pro constant)
   const weightFactor = 0.92 + 0.08 * Math.pow(dynamicRWT_lbf / 1900, 2.15);
-  let CRTF = tractionIndexAdj * baseTracionCoeff * tireDia_in * (tireWidth_in + 1) * weightFactor;
+  let CRTF = tractionIndexAdj * VB6_AX * tireDia_in * (tireWidth_in + 1) * weightFactor;
   
   // VB6: If gc_BodyStyle.Value = 8 Then CRTF = 0.5 * CRTF
   if (bodyStyle === 8) {
@@ -196,23 +210,3 @@ export function computeCAXI(tractionIndex: number, trackTempEffect: number): num
   return CAXI;
 }
 
-/**
- * VB6 Base Traction Coefficient (AX)
- * 
- * TIMESLIP.FRM lines 551, 561:
- * ```vb
- * #If Not ISBVPRO Then        'QUARTER jr and QUARTER Pro
- *     Const AX = 10.8         'reduced from 11.2 - 07/23/01
- * #Else                       'Bonneville Pro
- *     Const AX = 9.7          'reduced from 10.0 - 07/23/01
- * #End If
- * ```
- * 
- * This is a constant in VB6, NOT 1.0!
- * 
- * @param isBonn - true for Bonneville Pro, false for Quarter Jr/Pro
- * @returns AX (base traction coefficient)
- */
-export function getBaseTracionCoeff(isBonn: boolean = false): number {
-  return isBonn ? 9.7 : 10.8;
-}
