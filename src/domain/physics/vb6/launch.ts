@@ -129,16 +129,17 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   // VB6 integrates using Ags0 (previous acceleration).
   // 
   // However, we still need to calculate AGS for the clamps.
-  // At launch (v = 0), this would be division by zero.
-  // VB6 doesn't actually use this at launch - it uses the initial Ags0
-  // calculated from torque-based force.
+  // VB6 updates velocity BEFORE computing AGS, so Vel(L) is never exactly zero
+  // when this formula is used. We use a small velocity floor to avoid division by zero.
   let AGS: number;
-  if (v_fps > 0) {
-    AGS = PQWT / (v_fps * gc);
-  } else {
-    // At launch, use Ags0 (previous/initial acceleration)
-    AGS = Ags0;
+  const Z5 = 3600 / 5280; // VB6 constant (fps to mph conversion)
+  const v_use = Math.max(v_fps, Z5); // Use Z5 as velocity floor
+  
+  if (v_fps < Z5 && typeof console !== 'undefined' && console.debug) {
+    console.debug('[VB6 v-floor] using Z5=', Z5, 'instead of v=', v_fps);
   }
+  
+  AGS = PQWT / (v_use * gc);
   
   // VB6: TIMESLIP.FRM:1255-1258
   // 'steady iteration progress by using jerk limits
@@ -153,11 +154,11 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   if (Jerk < JMin) {
     Jerk = JMin;
     AGS = Ags0 + Jerk * dt;
-    PQWT = AGS * gc * v_fps;
+    PQWT = AGS * gc * v_use; // Use v_use (with floor) to avoid division issues
   } else if (Jerk > JMax) {
     Jerk = JMax;
     AGS = Ags0 + Jerk * dt;
-    PQWT = AGS * gc * v_fps;
+    PQWT = AGS * gc * v_use; // Use v_use (with floor) to avoid division issues
   }
   
   // VB6: TIMESLIP.FRM:1260-1266
