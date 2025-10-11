@@ -222,7 +222,45 @@ class RSACLASSICModel implements PhysicsModel {
     
     // VB6 integration state (TIMESLIP.FRM:1090)
     // Ags0 = previous acceleration (ft/s²), used for velocity integration
+    // 
+    // VB6 calculates initial Ags0 from TORQUE-based force (TIMESLIP.FRM:1020-1027)
+    // This provides initial acceleration without relying on ClutchSlip
     let Ags0 = 0;
+    
+    // Calculate initial Ags0 at t=0 (VB6: TIMESLIP.FRM:1010-1027)
+    if (clutch || converter) {
+      const launchRPM = clutch?.launchRPM ?? converter?.launchRPM ?? 
+                        clutch?.slipRPM ?? converter?.stallRPM ?? 0;
+      
+      // Get HP at launch RPM
+      const launchTorque = wheelTorque_lbft(launchRPM, engineParams, transEff ?? 0.9);
+      const launchHP = launchRPM > 0 ? (launchTorque * launchRPM) / 5252 : 0;
+      
+      // VB6: TQ = Z6 * HP / EngRPM
+      // Z6 = 5252 (HP to torque conversion)
+      const TQ = launchHP > 0 && launchRPM > 0 ? (5252 * launchHP) / launchRPM : 0;
+      
+      // VB6: TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
+      const gearRatio = (gearRatios ?? [1.0])[0] ?? 1.0; // First gear
+      const TQ_geared = TQ * gearRatio * (transEff ?? 0.9);
+      
+      // VB6: force = TQ * gc_GearRatio.Value * gc_Efficiency.Value / (TireSlip * TireDia / 24) - DragForce
+      const tireSlip = 1.02; // VB6 default
+      const tireDia = vehicle.tireDiaIn ?? 28;
+      const force = (TQ_geared * (finalDrive ?? 3.73) * (transEff ?? 0.9)) / (tireSlip * tireDia / 24);
+      
+      // VB6: Ags0 = 0.88 * force / gc_Weight.Value (12% losses for clutch)
+      // VB6: Ags0 = 0.96 * force / gc_Weight.Value (4% losses for converter)
+      const lossMultiplier = converter ? 0.96 : 0.88;
+      Ags0 = lossMultiplier * force / vehicle.weightLb;
+      
+      // VB6: If Ags0 < AMin Then Ags0 = AMin
+      if (Ags0 < AMin) {
+        Ags0 = AMin;
+      }
+      
+      // Note: VB6 also calculates AMAX and clamps here, but we'll do that in the loop
+    }
     
     // Integration loop
     while (state.s_ft < finishDistance_ft && state.t_s < maxTime_s) {
