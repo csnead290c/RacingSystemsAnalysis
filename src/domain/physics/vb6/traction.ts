@@ -11,7 +11,7 @@
  * - VB6-LAUNCH-BLOCK-NOTES.md
  */
 
-import { AMin as AMin_CONSTANT } from './constants';
+import { AMin as AMin_CONSTANT, gc } from './constants';
 
 /**
  * VB6 Base Traction Coefficient
@@ -104,6 +104,10 @@ export function computeCRTF(params: TractionParams): number {
  * ```
  * (No tire growth at initial calculation)
  * 
+ * IMPORTANT: VB6 stores AMAX in g's, NOT ft/s²!
+ * VB6 multiplies by gc when integrating velocity.
+ * We convert to ft/s² for consistency with our integrator.
+ * 
  * @param params - Traction parameters
  * @returns AMax in ft/s²
  */
@@ -113,9 +117,13 @@ export function computeAMaxVB6(params: TractionParams): number {
   const CRTF = computeCRTF(params);
   
   // VB6: AMAX = ((CRTF / TireGrowth) - DragForce) / gc_Weight.Value
-  const AMax = ((CRTF / tireGrowth) - dragForce_lbf) / weight_lbf;
+  // This gives AMax in g's
+  const AMax_g = ((CRTF / tireGrowth) - dragForce_lbf) / weight_lbf;
   
-  return AMax;
+  // Convert to ft/s² for our integrator
+  const AMax_ftps2 = AMax_g * gc;
+  
+  return AMax_ftps2;
 }
 
 /**
@@ -126,12 +134,18 @@ export function computeAMaxVB6(params: TractionParams): number {
  * Const AMin = 0.004  'reduced from .05 to .004 for Qjr and QPro
  * ```
  * 
- * This is a constant, not calculated.
+ * IMPORTANT: VB6 stores AMin in g's, NOT ft/s²!
+ * The constant 0.004 is in g's (0.004g = 0.129 ft/s²).
+ * We convert to ft/s² for consistency with our integrator.
  * 
- * @returns AMin in ft/s² (0.004 ft/s² = 0.000124g)
+ * @returns AMin in ft/s²
  */
 export function computeAMinVB6(): number {
-  return AMin_CONSTANT;
+  // VB6 AMin = 0.004 g's
+  const AMin_g = AMin_CONSTANT;
+  // Convert to ft/s²
+  const AMin_ftps2 = AMin_g * gc;
+  return AMin_ftps2;
 }
 
 /**

@@ -111,10 +111,12 @@ export function computeAgs0(input: BootstrapInput): BootstrapOutput {
   const netThrust_lbf = thrust_lbf - dragForce_lbf;
   
   // VB6: Ags0 = 0.96 * force / gc_Weight.Value (auto) or 0.88 * force / gc_Weight.Value (manual)
-  // Note: VB6 divides by weight to get acceleration in g's, then multiplies by gc to get ft/s²
-  // But since force/weight already gives acceleration in g's, we just multiply by the fudge factor
+  // IMPORTANT: VB6 stores Ags0 in g's, NOT ft/s²!
+  // VB6 multiplies by gc when integrating: Vel(L) = Vel0 + Ags0 * gc * TimeStep (TIMESLIP.FRM:1107)
+  // So we return acceleration in g's here
   const launchFudge = isAutoTrans ? 0.96 : 0.88;
-  const Ags0_ftps2 = launchFudge * (netThrust_lbf / vehicleWeight_lbf) * gc;
+  const Ags0_g = launchFudge * (netThrust_lbf / vehicleWeight_lbf);
+  const Ags0_ftps2 = Ags0_g * gc; // Convert to ft/s² for our integrator
   
   return {
     Ags0_ftps2,
