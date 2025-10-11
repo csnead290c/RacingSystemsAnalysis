@@ -171,6 +171,58 @@ export function vb6Clutch(
 }
 
 /**
+ * VB6 converter coupling calculation (for HP-based path).
+ * 
+ * VB6 Source: TIMESLIP.FRM:1156-1168
+ * 
+ * Returns Work factor and ClutchSlip (coupling) for use in HP chain.
+ * 
+ * @param lockRPM - Lock RPM (wheelRPM * gearRatio * finalDrive)
+ * @param stallRPM - Converter stall RPM
+ * @param torqueMult - Static torque multiplication factor
+ * @param slippage - Converter slippage factor
+ * @param stepCount - Current step count (for dynamic stall after step 2)
+ * @returns Work factor, coupling, slip ratio, and effective stall RPM
+ */
+export function vb6ConverterCoupling(
+  lockRPM: number,
+  stallRPM: number,
+  torqueMult: number,
+  slippage: number,
+  stepCount: number = 1
+): { work: number; coupling: number; slipRatio: number; zStall: number } {
+  // VB6: TIMESLIP.FRM:1155-1156
+  let zStall = stallRPM;
+  let SlipRatio = slippage * lockRPM / zStall;
+  
+  // VB6: TIMESLIP.FRM:1158-1161
+  // Dynamic stall adjustment after step 2 when slip ratio > 0.6
+  if (stepCount > 2 && SlipRatio > 0.6) {
+    zStall = zStall * (1 + (slippage - 1) * (SlipRatio - 0.6) / ((1 / slippage) - 0.6));
+    SlipRatio = slippage * lockRPM / zStall;
+  }
+  
+  // VB6: TIMESLIP.FRM:1162
+  let ClutchSlip = 1 / slippage;
+  
+  // VB6: TIMESLIP.FRM:1166-1167
+  // Work = gc_TorqueMult.Value - (gc_TorqueMult.Value - 1) * SlipRatio
+  // ClutchSlip = Work * LockRPM / zStall
+  const Work = torqueMult - (torqueMult - 1) * SlipRatio;
+  ClutchSlip = Work * lockRPM / zStall;
+  
+  // VB6: TIMESLIP.FRM:1174
+  if (ClutchSlip > 1) ClutchSlip = 1;
+  
+  return {
+    work: Work,
+    coupling: ClutchSlip,
+    slipRatio: SlipRatio,
+    zStall: zStall
+  };
+}
+
+/**
  * VB6 direct drive (no converter or clutch).
  * 
  * @param engineTorque - Engine torque (lb-ft)

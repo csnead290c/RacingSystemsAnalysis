@@ -18,7 +18,7 @@ import { computeAgs0 } from '../vb6/bootstrap';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
-import { vb6Converter, vb6DirectDrive } from '../vb6/driveline';
+import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 import { computeTireGrowth } from '../vb6/tire';
@@ -342,6 +342,9 @@ class RSACLASSICModel implements PhysicsModel {
       let drivelineTorqueLbFt = 0;
       let effectiveRPM = rpm;
       let clutchCoupling = 1.0;
+      let converterWork = 0;
+      let converterSlipRatio = 0;
+      let converterZStall = 0;
       
       // Calculate engine torque first (needed for driveline)
       const currentGearEff = getTransEff(state.gearIdx);
@@ -434,27 +437,28 @@ class RSACLASSICModel implements PhysicsModel {
         const stallRPM = converter.stallRPM ?? 3000;
         const torqueMult = converter.torqueMult ?? 2.0;
         const slippage = converter.slipRatio ?? 1.05; // VB6 typical slippage
-        const lockup = converter.lockup ?? false;
-        const result = vb6Converter(
-          tq_lbft, 
-          rpm, 
-          wheelRPM, 
-          gearRatio, 
-          finalDrive ?? 3.73, 
-          stallRPM, 
+        
+        // Use VB6 converter coupling for HP path
+        const converterResult = vb6ConverterCoupling(
+          LockRPM,
+          stallRPM,
           torqueMult,
           slippage,
-          state.gearIdx + 1, // Convert to 1-based
-          lockup
+          stepCount
         );
-        drivelineTorqueLbFt = result.Twheel;
-        effectiveRPM = result.engineRPM_out;
         
-        // Track converter usage
-        sumTR += torqueMult; // Placeholder until VB6 formula returns actual TR
-        sumETA += 0.85; // Placeholder until VB6 formula returns actual ETA
-        sumSR += 0.5; // Placeholder until VB6 formula returns actual SR
+        clutchCoupling = converterResult.coupling;
+        converterWork = converterResult.work;
+        converterSlipRatio = converterResult.slipRatio;
+        converterZStall = converterResult.zStall;
+        
+        // Track converter usage for diagnostics
+        sumTR += converterResult.work;
+        sumETA += converterResult.coupling;
+        sumSR += converterResult.slipRatio;
         converterSteps++;
+        
+        minC = Math.min(minC, clutchCoupling);
       } else {
         // Direct drive (no converter/clutch, or converter in higher gears)
         drivelineTorqueLbFt = vb6DirectDrive(tq_lbft, gearRatio, finalDrive ?? 3.73);
@@ -650,6 +654,11 @@ class RSACLASSICModel implements PhysicsModel {
             tireDia_eff_in: tireDia_eff_in.toFixed(2),
             tireGrowth: tireGrowthResult.growth.toFixed(4),
             tireSlip: getTireSlip(state.s_ft).toFixed(4),
+            ...(converter ? {
+              converterWork: converterWork.toFixed(4),
+              converterSlipRatio: converterSlipRatio.toFixed(4),
+              converterZStall: converterZStall.toFixed(0),
+            } : {}),
             HP_engine: launchResult.diag.HP_engine.toFixed(1),
             HP_final: launchResult.diag.HP_final.toFixed(1),
             AGS_g: AGS_g.toFixed(4),
