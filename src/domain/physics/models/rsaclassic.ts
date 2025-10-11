@@ -273,6 +273,24 @@ class RSACLASSICModel implements PhysicsModel {
     const BOOT_MAX_STEPS = 6;        // up to ~12ms with dt=0.002
     const LOCKRPM_MIN = 5;           // rpm threshold at which clutchSlip becomes meaningful
     
+    // Shared loss calculation helpers (single source of truth for both bootstrap and HP paths)
+    const getTransEff = (gearIdx: number): number => {
+      return gearEff && gearEff[gearIdx] !== undefined
+        ? Math.max(0.9, Math.min(1.0, gearEff[gearIdx]))
+        : (transEff ?? 0.9);
+    };
+    
+    const getDrivelineEff = (): number => {
+      return transEff ?? 0.9; // gc_Efficiency.Value in VB6
+    };
+    
+    const getTireSlip = (): number => {
+      // VB6: TIMESLIP.FRM:1100-1102
+      // TireSlip = 1.02 + Work * (1 - (Dist0 / 1320)^2)
+      // For now, use constant 1.02
+      return 1.02;
+    };
+    
     // Integration loop
     while (true) {
       stepCount++;
@@ -286,10 +304,7 @@ class RSACLASSICModel implements PhysicsModel {
       let clutchCoupling = 1.0;
       
       // Calculate engine torque first (needed for driveline)
-      let currentGearEff = gearEff && gearEff[state.gearIdx] !== undefined
-        ? gearEff[state.gearIdx]
-        : (transEff ?? 0.9);
-      currentGearEff = Math.max(0.9, Math.min(1.0, currentGearEff));
+      const currentGearEff = getTransEff(state.gearIdx);
       let tq_lbft = wheelTorque_lbft(rpm, engineParams, currentGearEff);
       
       // Apply fuel delivery factor
@@ -434,17 +449,14 @@ class RSACLASSICModel implements PhysicsModel {
         const slipRPM = clutch?.slipRPM ?? clutch?.launchRPM ?? converter?.stallRPM ?? 3000;
         const tq_at_slip = wheelTorque_lbft(slipRPM, engineParams, currentGearEff);
         
-        // Tire slip factor (VB6: TIMESLIP.FRM:1100-1102)
-        const tireSlip = 1.02;
-        
         const bootstrapResult = computeAgs0({
           engineTorque_lbft_atSlip: tq_at_slip,
           gearRatio,
           transEff: currentGearEff,
-          drivelineEff: transEff ?? 0.9,
+          drivelineEff: getDrivelineEff(),
           finalDrive: finalDrive ?? 3.73,
           tireDia_in: vehicle.tireDiaIn,
-          tireSlip,
+          tireSlip: getTireSlip(),
           dragForce_lbf: F_drag + F_roll,
           vehicleWeight_lbf: vehicle.weightLb,
           isAutoTrans: !!converter,
@@ -463,6 +475,15 @@ class RSACLASSICModel implements PhysicsModel {
             AGS_clamped: AGS.toFixed(6),
             usedBootstrap: true,
           });
+          console.debug('[LOSS-CHAIN]', {
+            step: stepCount,
+            transEff: currentGearEff.toFixed(4),
+            drivelineEff: getDrivelineEff().toFixed(4),
+            tireSlip: getTireSlip().toFixed(4),
+            tractionCap_AMax: AMax.toFixed(6),
+            drag_lbf: F_drag.toFixed(2),
+            rr_lbf: F_roll.toFixed(2),
+          });
         }
       } else {
         // HP-BASED PATH: Use VB6 launch slice (TIMESLIP.FRM:1218-1228, 1250-1266)
@@ -470,15 +491,12 @@ class RSACLASSICModel implements PhysicsModel {
         const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
         const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
         
-        // Tire slip factor (VB6: TIMESLIP.FRM:1100-1102)
-        const tireSlip = 1.02;
-        
         const launchResult = vb6LaunchSlice({
           hpEngine: hp_at_EngRPM,
           clutchSlip: clutchCoupling,
           gearEff: currentGearEff,
-          overallEff: transEff ?? 0.9,
-          tireSlip,
+          overallEff: getDrivelineEff(),
+          tireSlip: getTireSlip(),
           dragHP,
           v_fps: state.v_fps,
           weight_lbf: vehicle.weightLb,
@@ -508,6 +526,15 @@ class RSACLASSICModel implements PhysicsModel {
             HP_final: launchResult.diag.HP_final.toFixed(1),
             P_eff: launchResult.diag.P_eff_ftlbps.toFixed(0),
             AGS: AGS.toFixed(6),
+          });
+          console.debug('[LOSS-CHAIN]', {
+            step: stepCount,
+            transEff: currentGearEff.toFixed(4),
+            drivelineEff: getDrivelineEff().toFixed(4),
+            tireSlip: getTireSlip().toFixed(4),
+            tractionCap_AMax: AMax.toFixed(6),
+            drag_lbf: F_drag.toFixed(2),
+            rr_lbf: F_roll.toFixed(2),
           });
         }
       }
