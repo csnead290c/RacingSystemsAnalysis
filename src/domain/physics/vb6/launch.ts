@@ -70,6 +70,15 @@ export interface LaunchOutputs {
   
   /** Tire slip flag (1 = slip, 0 = no slip) */
   SLIP: number;
+  
+  /** Diagnostics for DEV logging */
+  diag?: {
+    HP_engine: number;
+    HP_afterSlip: number;
+    HP_afterEff: number;
+    HP_final: number;
+    P_eff_ftlbps: number;
+  };
 }
 
 /**
@@ -111,16 +120,20 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
   // HP = (HPSave - HPEngPMI) * ClutchSlip
   // (We don't have inertia terms yet, so just use HP * ClutchSlip)
   let HP = hpEngine * clutchSlip;
+  const HP_afterSlip = HP;
   
   // VB6: TIMESLIP.FRM:1251
   // HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
   // (We don't have chassis inertia yet, so skip HPChasPMI)
   HP = (HP * gearEff * overallEff) / tireSlip;
+  const HP_afterEff = HP;
   HP = HP - dragHP;
+  const HP_final = HP;
   
   // VB6: TIMESLIP.FRM:1252
   // PQWT = 550 * gc * HP / gc_Weight.Value
-  let PQWT = (550 * gc * HP) / weight_lbf;
+  const P_eff_ftlbps = 550 * HP; // Power in ft·lbf/s
+  let PQWT = (P_eff_ftlbps * gc) / weight_lbf;
   
   // VB6: TIMESLIP.FRM:1253
   // AGS(L) = PQWT / (Vel(L) * gc)
@@ -197,5 +210,16 @@ export function vb6LaunchSlice(in_: LaunchInputs): LaunchOutputs {
     AGS = AMin;
   }
   
-  return { PQWT, AGS, SLIP };
+  return {
+    PQWT,
+    AGS,
+    SLIP,
+    diag: {
+      HP_engine: hpEngine,
+      HP_afterSlip,
+      HP_afterEff,
+      HP_final,
+      P_eff_ftlbps,
+    },
+  };
 }

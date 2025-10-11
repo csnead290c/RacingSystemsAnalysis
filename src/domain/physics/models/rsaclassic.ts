@@ -447,6 +447,24 @@ class RSACLASSICModel implements PhysicsModel {
       const AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
       // Note: launchResult.PQWT available for future energy accounting
       
+      // DEV: Diagnostics for first 10 steps
+      if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
+        const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
+        console.debug('[VB6-Launch]', {
+          step: stepCount,
+          v_fps: state.v_fps.toFixed(6),
+          EngRPM: effectiveRPM.toFixed(0),
+          LockRPM: LockRPM.toFixed(2),
+          clutchSlip: clutchCoupling.toFixed(6),
+          HP_engine: launchResult.diag.HP_engine.toFixed(1),
+          HP_afterSlip: launchResult.diag.HP_afterSlip.toFixed(1),
+          HP_afterEff: launchResult.diag.HP_afterEff.toFixed(1),
+          HP_final: launchResult.diag.HP_final.toFixed(1),
+          P_eff: launchResult.diag.P_eff_ftlbps.toFixed(0),
+          AGS: AGS.toFixed(6),
+        });
+      }
+      
       // Update Ags0 for next step (VB6: TIMESLIP.FRM:1090)
       Ags0 = AGS;
       
