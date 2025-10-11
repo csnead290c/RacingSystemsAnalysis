@@ -10,7 +10,7 @@ import { rpmFromSpeed, type Drivetrain } from '../drivetrain/drivetrain';
 import { maybeShift } from '../drivetrain/shift';
 // import { drag_lb } from '../aero/drag'; // Replaced with direct calculation
 // import { rolling_lb } from '../aero/rolling'; // Replaced with direct calculation
-import { maxTractive_lb, type TireParams } from '../tire/traction';
+// import { maxTractive_lb, type TireParams } from '../tire/traction'; // Replaced with VB6 traction
 import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
 import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
@@ -20,6 +20,7 @@ import { hpToTorqueLbFt } from '../vb6/convert';
 import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
 import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
 import { vb6Converter, vb6Clutch, vb6DirectDrive } from '../vb6/driveline';
+import { computeAMaxVB6, computeAMinVB6, computeCAXI, getBaseTracionCoeff, clampAGSVB6 } from '../vb6/traction';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -149,10 +150,12 @@ class RSACLASSICModel implements PhysicsModel {
       corr: corr,
     };
     
-    // Tire parameters
-    const tireParams: TireParams = {
-      mu0: 1.6, // Drag radials/slicks
-    };
+    // Tire parameters (replaced with VB6 traction)
+    // const tireParams: TireParams = {
+    //   weightLb: vehicle.weightLb,
+    //   tireWidthIn: vehicle.tireWidthIn,
+    //   tractionIndex: env.tractionIndex,
+    // };
     
     // Termination tracking
     type TerminationReason = 'DISTANCE' | 'TIME_CAP' | 'STEP_CAP' | 'SAFETY';
@@ -442,10 +445,31 @@ class RSACLASSICModel implements PhysicsModel {
       const F_roll = T_rr / tireRadius_ft;
       
       // VB6 maximum traction (TIMESLIP.FRM:1054, 1216)
-      // AMAX = (CRTF - DragForce) / Weight
-      // For now, use our traction model to get F_max, then convert to AMax
-      const F_max = maxTractive_lb(vehicle.weightLb, tireParams, env.tractionIndex);
-      const AMax = F_max / vehicle.weightLb; // Convert to acceleration (ft/s²)
+      // AMAX = ((CRTF / TireGrowth) - DragForce) / Weight
+      // Calculate CAXI (traction index adjustment)
+      const trackTempEffect = 1.0; // TODO: Calculate from track temp
+      const tractionIndex = env.tractionIndex ?? 3;
+      const CAXI = computeCAXI(tractionIndex, trackTempEffect);
+      
+      // Calculate dynamic rear weight (for now, use static weight)
+      // TODO: Add weight transfer calculation
+      // VB6 uses StaticRWT for initial calculation (TIMESLIP.FRM:1038)
+      // Drag cars typically have 60-65% static rear weight
+      const dynamicRWT_lbf = vehicle.weightLb * 0.62; // Assume 62% on rear axle (typical for drag car)
+      
+      const AMax = computeAMaxVB6({
+        weight_lbf: vehicle.weightLb,
+        tireDia_in: tireDiaIn,
+        tireWidth_in: vehicle.tireWidthIn ?? 17.0,
+        dynamicRWT_lbf,
+        tractionIndexAdj: CAXI,
+        baseTracionCoeff: getBaseTracionCoeff(),
+        tireGrowth: 1.0, // No tire growth at launch
+        dragForce_lbf: F_drag + F_roll,
+        bodyStyle: undefined, // Not a motorcycle
+      });
+      
+      const AMin = computeAMinVB6();
       
       // Calculate LockRPM for bootstrap decision (reuse wheelRPM and gearRatio from above)
       const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
@@ -473,8 +497,11 @@ class RSACLASSICModel implements PhysicsModel {
           isAutoTrans: !!converter,
         });
         
-        // Apply AMin/AMax clamps (same as VB6)
-        AGS = Math.max(AMin, Math.min(bootstrapResult.Ags0_ftps2, AMax));
+        // Apply VB6 AMin/AMax clamps with PQWT rescaling
+        // For bootstrap, PQWT = thrust / weight * gc (approximation)
+        const PQWT_bootstrap = bootstrapResult.netThrust_lbf / vehicle.weightLb * gc;
+        const clamped = clampAGSVB6(bootstrapResult.Ags0_ftps2, PQWT_bootstrap, AMin, AMax);
+        AGS = clamped.AGS;
         
         // DEV: Bootstrap diagnostics
         if (stepCount <= 8 && typeof console !== 'undefined' && console.debug) {
@@ -485,6 +512,14 @@ class RSACLASSICModel implements PhysicsModel {
             Ags0_ftps2: bootstrapResult.Ags0_ftps2.toFixed(6),
             AGS_clamped: AGS.toFixed(6),
             usedBootstrap: true,
+          });
+          console.debug('[VB6-TRACTION]', {
+            step: stepCount,
+            AGS_candidate: bootstrapResult.Ags0_ftps2.toFixed(4),
+            AMin: AMin.toFixed(4),
+            AMax: AMax.toFixed(4),
+            AGS_applied: AGS.toFixed(4),
+            SLIP: clamped.SLIP,
           });
           console.debug('[LOSS-CHAIN]', {
             step: stepCount,
