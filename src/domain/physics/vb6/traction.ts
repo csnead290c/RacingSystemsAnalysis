@@ -199,15 +199,20 @@ export function computeCAXI(tractionIndex: number, trackTempEffect: number): num
 /**
  * VB6 Base Traction Coefficient (AX)
  * 
- * TIMESLIP.FRM line 1036:
+ * TIMESLIP.FRM lines 551, 561:
  * ```vb
- * AX = 1
+ * #If Not ISBVPRO Then        'QUARTER jr and QUARTER Pro
+ *     Const AX = 10.8         'reduced from 11.2 - 07/23/01
+ * #Else                       'Bonneville Pro
+ *     Const AX = 9.7          'reduced from 10.0 - 07/23/01
+ * #End If
  * ```
  * 
- * This is a constant in VB6.
+ * This is a constant in VB6, NOT 1.0!
  * 
+ * @param isBonn - true for Bonneville Pro, false for Quarter Jr/Pro
  * @returns AX (base traction coefficient)
  */
-export function getBaseTracionCoeff(): number {
-  return 1.0;
+export function getBaseTracionCoeff(isBonn: boolean = false): number {
+  return isBonn ? 9.7 : 10.8;
 }
