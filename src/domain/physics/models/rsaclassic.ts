@@ -396,26 +396,31 @@ class RSACLASSICModel implements PhysicsModel {
         });
       }
       
-      // Lock RPM from wheels (what RPM the wheels are trying to drive the engine at)
+      // VB6: TIMESLIP.FRM:1145-1146
+      // LockRPM = DSRPM * gc_GearRatio.Value * TGR(iGear)
+      // EngRPM(L) = gc_Slippage.Value * LockRPM
       const LockRPM = wheelRPM * gearRatio * (finalDrive ?? 3.73);
       
-      // Small epsilon like VB6's convergence tolerance
-      const LOCK_EPS = 0.005; // 0.5%
+      // VB6: TIMESLIP.FRM:1149-1151 (clutch) or 1164-1165 (converter)
+      // If EngRPM(L) < Stall Then
+      //     If iGear = 1 Or gc_LockUp.Value = 0 Then EngRPM(L) = Stall
+      // End If
+      let EngRPM = (isClutch ? 1.0025 : 1.05) * LockRPM; // gc_Slippage.Value * LockRPM
       
-      // If we haven't "locked" yet (wheels still catching up), pin engine RPM at slip/stall
-      // Once lockRPM >= slipRPM*(1-LOCK_EPS), release to normal
-      const lockThreshold = slipRPM * (1 - LOCK_EPS);
-      const rpmIsPinned = (isClutch || isConverter) && LockRPM < lockThreshold;
-      let EngRPM: number;
-      
-      if (rpmIsPinned) {
-        EngRPM = slipRPM;
-      } else {
-        // Normal: EngRPM from vehicle speed
-        EngRPM = rpm;
+      // Hold engine RPM at slip/stall in 1st gear or no lockup
+      const inFirstGear = state.gearIdx === 0;
+      const noLockup = true; // Most configs don't have lockup
+      if ((isClutch || isConverter) && (inFirstGear || noLockup)) {
+        if (EngRPM < slipRPM) {
+          EngRPM = slipRPM;
+        }
       }
       
-      // Update effectiveRPM to use the pinned/unpinned value
+      // Track if engine is pinned at slip/stall RPM
+      const rpmIsPinned = EngRPM === slipRPM && LockRPM < slipRPM;
+      const lockThreshold = slipRPM; // For diagnostics
+      
+      // Update effectiveRPM to use the calculated value
       effectiveRPM = EngRPM;
       
       // Recalculate torque at the correct EngRPM
