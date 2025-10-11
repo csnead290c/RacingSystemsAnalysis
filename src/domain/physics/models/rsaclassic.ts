@@ -23,6 +23,7 @@ import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6
 import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 import { computeTireGrowth } from '../vb6/tire';
 import { shouldShift, updateShiftState, ShiftState } from '../vb6/shift';
+import { tireSlipFactor } from '../vb6/tireslip';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -309,11 +310,13 @@ class RSACLASSICModel implements PhysicsModel {
       return transEff ?? 0.9; // gc_Efficiency.Value in VB6
     };
     
-    const getTireSlip = (): number => {
+    const getTireSlip = (distance_ft: number): number => {
       // VB6: TIMESLIP.FRM:1100-1102
+      // Work = 0.005 * (gc_TractionIndex.Value - 1) + 3 * (TrackTempEffect - 1)
       // TireSlip = 1.02 + Work * (1 - (Dist0 / 1320)^2)
-      // For now, use constant 1.02
-      return 1.02;
+      const tractionIndex = env.tractionIndex ?? 3;
+      const trackTempEffect = 1.0; // TODO: Calculate from track temp
+      return tireSlipFactor(distance_ft, tractionIndex, trackTempEffect);
     };
     
     // Integration loop
@@ -533,7 +536,7 @@ class RSACLASSICModel implements PhysicsModel {
           drivelineEff: getDrivelineEff(),
           finalDrive: finalDrive ?? 3.73,
           tireDia_in: tireDiaIn, // Use calculated value, not vehicle.tireDiaIn
-          tireSlip: getTireSlip(),
+          tireSlip: getTireSlip(state.s_ft),
           dragForce_lbf: F_drag + F_roll,
           vehicleWeight_lbf: vehicle.weightLb,
           isAutoTrans: !!converter,
@@ -564,6 +567,7 @@ class RSACLASSICModel implements PhysicsModel {
             GRxFD: overallRatio.toFixed(3),
             tireDia_eff_in: tireDia_eff_in.toFixed(2),
             tireGrowth: tireGrowthResult.growth.toFixed(4),
+            tireSlip: getTireSlip(state.s_ft).toFixed(4),
             AGS_g: AGS_g.toFixed(4),
             AGS_ftps2: AGS.toFixed(4),
             AMin_ftps2: AMin.toFixed(4),
@@ -579,7 +583,7 @@ class RSACLASSICModel implements PhysicsModel {
         
         // Calculate PMI losses (VB6: TIMESLIP.FRM:1231-1248)
         // Compute driveshaft RPM (using effective tire circumference with growth)
-        const DSRPM = computeDSRPM(getTireSlip(), state.v_fps, tireCircumference_ft);
+        const DSRPM = computeDSRPM(getTireSlip(state.s_ft), state.v_fps, tireCircumference_ft);
         
         // Compute chassis PMI
         // VB6 default PMI values (TIMESLIP.FRM:788-805)
@@ -608,7 +612,7 @@ class RSACLASSICModel implements PhysicsModel {
           clutchSlip: clutchCoupling,
           gearEff: currentGearEff,
           overallEff: getDrivelineEff(),
-          tireSlip: getTireSlip(),
+          tireSlip: getTireSlip(state.s_ft),
           dragHP,
           hpEngPMI,
           hpChasPMI,
@@ -645,6 +649,7 @@ class RSACLASSICModel implements PhysicsModel {
             GRxFD: overallRatio.toFixed(3),
             tireDia_eff_in: tireDia_eff_in.toFixed(2),
             tireGrowth: tireGrowthResult.growth.toFixed(4),
+            tireSlip: getTireSlip(state.s_ft).toFixed(4),
             HP_engine: launchResult.diag.HP_engine.toFixed(1),
             HP_final: launchResult.diag.HP_final.toFixed(1),
             AGS_g: AGS_g.toFixed(4),
