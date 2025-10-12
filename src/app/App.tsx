@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { lazy } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import Home from '../pages/Home';
@@ -8,6 +9,11 @@ import History from '../pages/History';
 import Vehicles from '../pages/Vehicles';
 import About from '../pages/About';
 import ThemeToggle from '../shared/components/ThemeToggle';
+
+// DEV-only imports (lazy loaded)
+const DevPortal = import.meta.env.DEV
+  ? lazy(() => import('../pages/DevPortal'))
+  : null;
 
 function Navigation() {
   const location = useLocation();
@@ -43,6 +49,12 @@ function Navigation() {
       <Link to="/about" style={navLinkStyle(isActive('/about'))}>
         About
       </Link>
+      {/* DEV-only link */}
+      {import.meta.env.DEV && (
+        <Link to="/dev" style={navLinkStyle(isActive('/dev'))}>
+          Dev
+        </Link>
+      )}
     </nav>
   );
 }
@@ -89,6 +101,10 @@ function App() {
             <Route path="/log" element={<Log />} />
             <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />
+            {/* DEV-only route */}
+            {import.meta.env.DEV && DevPortal && (
+              <Route path="/dev" element={<DevPortal />} />
+            )}
           </Routes>
         </main>
 
