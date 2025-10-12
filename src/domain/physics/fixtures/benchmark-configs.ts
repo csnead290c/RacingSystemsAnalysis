@@ -6,6 +6,8 @@
  * Use validateBenchmarkConfig() to ensure completeness.
  */
 
+import { VB6_PROSTOCK_PRO } from './vb6-prostock-pro';
+
 export type FuelType = 'GAS' | 'METHANOL' | 'NITRO';
 
 export interface ExtendedVehicleConfig {
@@ -683,3 +685,53 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
     },
   },
 };
+
+// Apply VB6 overrides for ProStock_Pro from exact printout values
+(() => {
+  const bm = BENCHMARK_CONFIGS['ProStock_Pro'];
+  if (!bm) return;
+  
+  const vb = VB6_PROSTOCK_PRO;
+  const v = bm.vehicle;
+
+  // Mass & geometry
+  v.weightLb = vb.vehicle.weight_lb;
+  v.wheelbaseIn = vb.vehicle.wheelbase_in;
+  v.overhangIn = vb.vehicle.overhang_in ?? v.overhangIn;
+  v.rolloutIn = vb.vehicle.rollout_in ?? v.rolloutIn;
+
+  // Tires (normalize: rollout -> diameter)
+  v.tireRolloutIn = vb.vehicle.tire.rollout_in;
+  v.tireWidthIn = vb.vehicle.tire.width_in;
+
+  // Aero
+  v.frontalArea_ft2 = vb.aero.frontalArea_ft2;
+  v.cd = vb.aero.Cd;
+  v.liftCoeff = vb.aero.Cl ?? v.liftCoeff;
+
+  // Drivetrain
+  v.finalDrive = vb.drivetrain.finalDrive;
+  v.transEff = vb.drivetrain.overallEfficiency;
+  v.gearRatios = [ ...vb.drivetrain.gearRatios ];
+  v.gearEff = [ ...vb.drivetrain.perGearEff ];
+  v.shiftRPM = [ ...vb.drivetrain.shiftsRPM ];
+  v.clutch = {
+    launchRPM: vb.drivetrain.clutch.launchRPM,
+    slipRPM: vb.drivetrain.clutch.slipRPM,
+    slipRatio: vb.drivetrain.clutch.slippageFactor,
+    lockup: vb.drivetrain.clutch.lockup,
+  };
+
+  // Engine dyno (HP curve)
+  v.torqueCurve = vb.engineHP.map(([rpm, hp]) => ({ rpm, hp }));
+
+  // Test-time environment overrides
+  bm.env.elevation = vb.env.elevation_ft;
+  bm.env.barometerInHg = vb.env.barometer_inHg;
+  bm.env.temperatureF = vb.env.temperature_F;
+  bm.env.humidityPct = vb.env.relHumidity_pct;
+  bm.env.windMph = vb.env.wind_mph;
+  bm.env.windAngleDeg = vb.env.wind_angle_deg;
+  bm.env.trackTempF = vb.env.trackTemp_F;
+  bm.env.tractionIndex = vb.env.tractionIndex;
+})();
