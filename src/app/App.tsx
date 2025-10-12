@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '../shared/ui/theme';
+import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import Log from '../pages/Log';
@@ -49,7 +50,8 @@ function Navigation() {
 function App() {
   return (
     <ThemeProvider>
-      <BrowserRouter>
+      <Vb6FixtureProvider>
+        <BrowserRouter>
         <div
           style={{
             minHeight: '100vh',
@@ -104,6 +106,7 @@ function App() {
         </footer>
       </div>
       </BrowserRouter>
+      </Vb6FixtureProvider>
     </ThemeProvider>
   );
 }

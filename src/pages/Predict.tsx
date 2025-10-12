@@ -8,6 +8,9 @@ import type { Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import { type PhysicsModelId, type SimResult } from '../domain/physics';
+import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
+import { assertComplete, Vb6FixtureValidationError } from '../domain/physics/vb6/fixtures';
+import VB6Inputs from './VB6Inputs';
 
 // Lazy load charts
 const TimeslipChart = lazy(() => import('../shared/components/charts/TimeslipChart'));
@@ -28,6 +31,8 @@ function Predict() {
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showVb6Panel, setShowVb6Panel] = useState(false);
+  const { fixture, strictMode, setStrictMode } = useVb6Fixture();
 
   // Initialize from location state
   useEffect(() => {
@@ -51,6 +56,26 @@ function Predict() {
     setLoading(true);
     setError(null);
 
+    // VB6 Strict Mode: Validate fixture before running
+    if (strictMode) {
+      try {
+        assertComplete(fixture);
+        // TODO: Convert fixture to vehicle/env format for simulation
+        // For now, show error that strict mode requires implementation
+        setError('VB6 Strict Mode is enabled but fixture-to-simulation conversion is not yet implemented. Please disable strict mode to run simulations.');
+        setLoading(false);
+        return;
+      } catch (err) {
+        if (err instanceof Vb6FixtureValidationError) {
+          setError(`VB6 Strict Mode validation failed:\n\n${err.message}\n\nPlease configure all required VB6 inputs or disable strict mode.`);
+        } else {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+        setLoading(false);
+        return;
+      }
+    }
+
     // Use worker for all models
     simulate(selectedModel, {
       vehicle: vehicle,
@@ -65,7 +90,7 @@ function Predict() {
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
       });
-  }, [vehicle, env, raceLength, selectedModel]);
+  }, [vehicle, env, raceLength, selectedModel, strictMode, fixture]);
 
   if (loading) {
     return (
@@ -158,7 +183,98 @@ function Predict() {
             ⚠️ Blend model requires a saved vehicle. Please select a vehicle from the Vehicles page.
           </div>
         )}
+        
+        {/* VB6 Strict Mode Toggle */}
+        <div style={{ marginTop: 'var(--space-4)', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={strictMode}
+              onChange={(e) => setStrictMode(e.target.checked)}
+            />
+            <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+              VB6 Strict Mode
+            </span>
+          </label>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: 'var(--space-1)', marginLeft: 'var(--space-5)' }}>
+            {strictMode ? 
+              '✓ Simulation will use ONLY VB6 fixture inputs (no defaults, no heuristics)' :
+              'Use standard vehicle inputs with automatic conversions'
+            }
+          </div>
+          {strictMode && (
+            <button
+              onClick={() => setShowVb6Panel(true)}
+              style={{
+                marginTop: 'var(--space-2)',
+                marginLeft: 'var(--space-5)',
+                padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+              }}
+            >
+              Configure VB6 Inputs →
+            </button>
+          )}
+        </div>
       </div>
+      
+      {/* VB6 Inputs Side Panel */}
+      {showVb6Panel && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: '600px',
+          backgroundColor: 'white',
+          boxShadow: '-2px 0 8px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{ padding: '1rem', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>VB6 Inputs</h2>
+            <button
+              onClick={() => setShowVb6Panel(false)}
+              style={{
+                padding: '0.5rem 1rem',
+                fontSize: '1rem',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <VB6Inputs />
+          </div>
+        </div>
+      )}
+      
+      {/* Backdrop for side panel */}
+      {showVb6Panel && (
+        <div
+          onClick={() => setShowVb6Panel(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            zIndex: 999,
+          }}
+        />
+      )}
 
       {/* Environment Panel */}
       <div className="card mb-6">
