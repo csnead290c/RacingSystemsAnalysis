@@ -16,8 +16,8 @@ import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
 import { vb6LaunchSlice } from '../vb6/launch';
 import { computeAgs0 } from '../vb6/bootstrap';
 import { hpToTorqueLbFt } from '../vb6/convert';
-import { vb6AirDensitySlugFt3 } from '../vb6/atmosphere';
-import { vb6RollingResistanceTorque, vb6AeroTorque } from '../vb6/forces';
+import { airDensity, q_dyn_lbf_per_ft2 } from '../vb6/air';
+import { vb6RollingResistanceTorque } from '../vb6/forces';
 import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
 import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
@@ -141,7 +141,14 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // Precompute atmospheric conditions
-    // rho_slug_ft3 now computed inline with elevation scaling
+    // VB6-style air density (constant for entire run)
+    const rho_kg_m3 = airDensity({
+      barometer_inHg: env.barometerInHg ?? 29.92,
+      temperature_F: env.temperatureF ?? 59,
+      relHumidity_pct: env.humidityPct ?? 50,
+      elevation_ft: env.elevation ?? 0,
+    });
+    
     const corr = hpCorrection(env);
     
     // Precompute mass
@@ -493,30 +500,27 @@ class RSACLASSICModel implements PhysicsModel {
       
       state.rpm = effectiveRPM;
       
-      // VB6 air density calculation (exact formula from QTRPERF.BAS:1290-1335)
-      // Uses exact VB6 Weather() subroutine with saturation vapor pressure polynomial
-      const rho = vb6AirDensitySlugFt3(
-        env.barometerInHg ?? 29.92, // Emergency fallback (warning added above)
-        env.temperatureF ?? 59,      // Emergency fallback (warning added above)
-        env.humidityPct ?? 50,       // Emergency fallback (warning added above)
-        env.elevation ?? 0           // Emergency fallback (warning added above)
-      );
+      // VB6-style dynamic pressure and aerodynamic forces
+      // q = 0.5 * rho * v^2 [lbf/ft^2]
+      const q = q_dyn_lbf_per_ft2(state.v_fps, rho_kg_m3);
+      
+      // Drag force [lbf]: F_drag = q * Cd * A
+      const F_drag = q * (cd ?? 0) * (frontalArea_ft2 ?? 0);
+      
+      // Lift force [lbf]: F_lift_up = q * Cl * A
+      // VB6 "Lift Coefficient" is positive upward (reduces normal force)
+      const F_lift_up = q * (vehicle.liftCoeff ?? 0) * (frontalArea_ft2 ?? 0);
+      
+      // Normal force (weight minus lift)
+      const normalForce_lbf = vehicle.weightLb - F_lift_up;
       
       // VB6 rolling resistance torque (TIMESLIP.FRM:1019, 1192-1193)
       // Uses CMU coefficient (0.025 for Quarter Jr/Pro) with distance and speed dependence
       const cmu = vehicle.rrCoeff ?? CMU; // Allow override, default to VB6 CMU
       const cmuk = 0.01; // VB6 CMUK constant for Quarter Jr/Pro
-      const downForce_lbf = vehicle.weightLb; // TODO: Add lift/downforce calculation
-      const T_rr = vb6RollingResistanceTorque(downForce_lbf, state.v_fps, state.s_ft, tireRadius_ft, cmu, cmuk);
+      const T_rr = vb6RollingResistanceTorque(normalForce_lbf, state.v_fps, state.s_ft, tireRadius_ft, cmu, cmuk);
       
-      // VB6 aerodynamic drag torque (TIMESLIP.FRM:1017, 1019, 1193)
-      // Uses dynamic pressure q = rho * v² / (2 * gc)
-      // Note: cd and frontalArea_ft2 are required - validation should catch if missing
-      const T_drag = vb6AeroTorque(rho, cd!, frontalArea_ft2!, state.v_fps, tireRadius_ft);
-      
-      // VB6 force calculations (TIMESLIP.FRM:1221)
-      // Convert torques to forces at contact patch
-      const F_drag = T_drag / tireRadius_ft;
+      // Convert rolling resistance torque to force at contact patch
       const F_roll = T_rr / tireRadius_ft;
       
       // VB6 maximum traction (TIMESLIP.FRM:1054, 1216)
@@ -742,7 +746,7 @@ class RSACLASSICModel implements PhysicsModel {
             RWTdyn_lbf: dynamicRWT_lbf.toFixed(1),
             RWTfront_lbf: weightTransfer.front_weight_lbf.toFixed(1),
             wheelieBar_lbf: weightTransfer.wheelie_bar_weight_lbf.toFixed(1),
-            rho_slug_ft3: rho.toFixed(6),
+            rho_kg_m3: rho_kg_m3.toFixed(6),
             dragHP: dragHP.toFixed(2),
             ...(converter ? {
               converterWork: converterWork.toFixed(4),
