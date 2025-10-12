@@ -12,7 +12,7 @@ import type { Env } from '../../schemas/env.schema';
 export interface SimulationInput {
   vehicle: Vehicle;
   env: Env;
-  raceLength: 'EIGHTH' | 'QUARTER' | 'THOUSAND';
+  raceLength: 'EIGHTH' | 'QUARTER';
 }
 
 /**

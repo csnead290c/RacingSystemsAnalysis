@@ -8,6 +8,7 @@
 import type { FC } from 'react';
 import FlagsPanel from './panels/FlagsPanel';
 import InputInspector from './panels/InputInspector';
+import RunInspector from './panels/RunInspector';
 
 export interface DevPanel {
   id: string;
@@ -40,6 +41,11 @@ export const DEV_PANELS: DevPanel[] = [
     id: 'input-inspector',
     title: 'Input Inspector (VB6)',
     component: InputInspector,
+  },
+  {
+    id: 'run-inspector',
+    title: 'Run Inspector & Steps',
+    component: RunInspector,
   },
   {
     id: 'welcome',
