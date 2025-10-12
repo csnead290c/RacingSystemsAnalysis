@@ -239,6 +239,97 @@ describe('VB6 HP Chain Calculations', () => {
     });
   });
   
+  describe('VB6 HP Chain - ProStock_Pro DEV Log Values', () => {
+    it('should reproduce Step 2 HP chain exactly (massive HPEngPMI)', () => {
+      // From ProStock_Pro DEV logs - Step 2
+      // [PRE_HP_CHAIN] step: 2
+      const HPSave = 1150.1;
+      const ClutchSlip = 0.0077;
+      const TGEff = 0.970; // Gear 1 (corrected)
+      const gc_Efficiency = 0.97;
+      const TireSlip = 1.03;
+      const DragHP = 0.06;
+      
+      // [PMI_CALC] step: 2
+      const HPEngPMI = 164110.6;
+      const HPChasPMI = 1.7;
+      
+      // VB6: TIMESLIP.FRM:1250
+      // HP = (HPSave - HPEngPMI) * ClutchSlip
+      const HP_afterLine1 = (HPSave - HPEngPMI) * ClutchSlip;
+      expect(HP_afterLine1).toBeCloseTo(-1254.8, 0);
+      
+      // VB6: TIMESLIP.FRM:1251
+      // HP = ((HP * TGEff * gc_Efficiency - HPChasPMI) / TireSlip) - DragHP
+      const HP_afterLine2 = ((HP_afterLine1 * TGEff * gc_Efficiency - HPChasPMI) / TireSlip) - DragHP;
+      expect(HP_afterLine2).toBeCloseTo(-1148.0, 0);
+      
+      // VB6: TIMESLIP.FRM:1252
+      // PQWT = 550 * gc * HP / Weight
+      const Weight_lbf = 2355;
+      const PQWT_ftps2 = 550 * gc * HP_afterLine2 / Weight_lbf;
+      expect(PQWT_ftps2).toBeCloseTo(-8626, 0);
+    });
+    
+    it('should reproduce Step 3 HP chain exactly (HPEngPMI = 0)', () => {
+      // From ProStock_Pro DEV logs - Step 3
+      // [PRE_HP_CHAIN] step: 3
+      const HPSave = 1150.1;
+      const ClutchSlip = 0.0071;
+      const TGEff = 0.970; // Gear 1
+      const gc_Efficiency = 0.97;
+      const TireSlip = 1.03;
+      const DragHP = 0.07;
+      
+      // [PMI_CALC] step: 3
+      const HPEngPMI = 0; // EngRPM pinned at 7600
+      const HPChasPMI = 0; // DSRPM decreasing (clamped to 0)
+      
+      // VB6: TIMESLIP.FRM:1250
+      // HP = (HPSave - HPEngPMI) * ClutchSlip
+      const HP_afterLine1 = (HPSave - HPEngPMI) * ClutchSlip;
+      expect(HP_afterLine1).toBeCloseTo(8.17, 2);
+      
+      // VB6: TIMESLIP.FRM:1251
+      // HP = ((HP * TGEff * gc_Efficiency - HPChasPMI) / TireSlip) - DragHP
+      const HP_afterLine2 = ((HP_afterLine1 * TGEff * gc_Efficiency - HPChasPMI) / TireSlip) - DragHP;
+      expect(HP_afterLine2).toBeCloseTo(7.39, 2);
+      
+      // VB6: TIMESLIP.FRM:1252
+      // PQWT = 550 * gc * HP / Weight
+      const Weight_lbf = 2355;
+      const PQWT_ftps2 = 550 * gc * HP_afterLine2 / Weight_lbf;
+      expect(PQWT_ftps2).toBeCloseTo(55.5, 1);
+    });
+    
+    it('should reproduce Step 4 HP chain exactly', () => {
+      // From ProStock_Pro DEV logs - Step 4
+      // [PRE_HP_CHAIN] step: 4
+      const HPSave = 1150.1;
+      const ClutchSlip = 0.0091;
+      const TGEff = 0.970;
+      const gc_Efficiency = 0.97;
+      const TireSlip = 1.03;
+      const DragHP = 0.08;
+      
+      // [PMI_CALC] step: 4
+      const HPEngPMI = 0;
+      const HPChasPMI = 0.5;
+      
+      // VB6: Two-line HP chain
+      let HP = (HPSave - HPEngPMI) * ClutchSlip;
+      expect(HP).toBeCloseTo(10.47, 2);
+      
+      HP = ((HP * TGEff * gc_Efficiency - HPChasPMI) / TireSlip) - DragHP;
+      expect(HP).toBeCloseTo(9.0, 0);
+      
+      // PQWT
+      const Weight_lbf = 2355;
+      const PQWT_ftps2 = 550 * gc * HP / Weight_lbf;
+      expect(PQWT_ftps2).toBeCloseTo(67.6, 1);
+    });
+  });
+  
   describe('VB6 HP Chain Edge Cases', () => {
     it('should handle zero HP (shift dwell)', () => {
       // During shift dwell, HPSave = 0
