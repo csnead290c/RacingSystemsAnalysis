@@ -67,6 +67,21 @@ export const JMin = -4;
 /** JMax: Maximum jerk (g/s) - TIMESLIP.FRM:544 */
 export const JMax = 2;
 
+/** K6: HP ratio lower bound for time interpolation - TIMESLIP.FRM:545 */
+export const K6 = 0.92;
+
+/** K61: HP ratio upper bound for time interpolation - TIMESLIP.FRM:546 */
+export const K61 = 1.08;
+
+/** KP21: Engine PMI deceleration factor for manual transmission - TIMESLIP.FRM:557 */
+export const KP21 = 0.15;
+
+/** KP22: Engine PMI deceleration factor for automatic transmission - TIMESLIP.FRM:558 */
+export const KP22 = 0.25;
+
+/** FRCT: Driveline friction coefficient - TIMESLIP.FRM:559 */
+export const FRCT = 1.03;
+
 // ===== Derived Constants =====
 
 /** Horsepower to foot-pounds per second conversion */

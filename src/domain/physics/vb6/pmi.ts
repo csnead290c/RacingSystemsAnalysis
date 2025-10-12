@@ -1,21 +1,23 @@
 /**
- * VB6 Parasitic Mechanical Inertia (PMI) Calculations
+ * VB6 PMI (Polar Moment of Inertia) HP Calculations
  * 
- * VB6 Source: TIMESLIP.FRM lines 1231-1248
+ * EXACT port from TIMESLIP.FRM lines 1231-1248
  * 
- * PMI represents the power required to accelerate rotating masses:
+ * VB6 calculates the horsepower required to accelerate rotating masses:
  * - Engine PMI: Crankshaft, flywheel, clutch/converter
  * - Chassis PMI: Transmission gears, driveshaft, wheels/tires
  * 
- * These are subtracted from available HP before computing vehicle acceleration.
+ * These HP losses are subtracted from available engine HP before computing vehicle acceleration.
+ * 
+ * Key VB6 formulas:
+ * - EngAccHP = gc_EnginePMI.Value * EngRPM(L) * (EngRPM(L) - RPM0)
+ * - ChasAccHP = ChassisPMI * DSRPM * (DSRPM - DSRPM0)
+ * - Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+ * - HPEngPMI = EngAccHP * Work
+ * - HPChasPMI = ChasAccHP * Work
  */
 
-/**
- * VB6 Constants for PMI calculations
- * TIMESLIP.FRM:557-558 (Quarter Jr/Pro)
- */
-const KP21 = 0.15; // Clutch deceleration factor
-const KP22 = 0.25; // Converter deceleration factor
+import { PI, KP21, KP22 } from './constants';
 
 /**
  * Compute engine PMI horsepower loss
@@ -63,7 +65,6 @@ export function computeHPEngPMI(
   
   // VB6: Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
   // This converts from (slug-ft² * rpm²) to horsepower
-  const PI = Math.PI;
   const work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dt);
   
   // VB6: HPEngPMI = EngAccHP * Work
@@ -112,7 +113,6 @@ export function computeHPChasPMI(
   }
   
   // VB6: Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
-  const PI = Math.PI;
   const work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dt);
   
   // VB6: HPChasPMI = ChasAccHP * Work
@@ -163,4 +163,100 @@ export function computeDSRPM(
   // VB6: DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
   const dsRPM = tireSlip * v_fps * 60 / tireCircumference_ft;
   return dsRPM;
+}
+
+/**
+ * EXACT VB6 port: Calculate engine PMI HP loss
+ * 
+ * VB6: TIMESLIP.FRM:1231-1238, 1247-1248
+ * 
+ * Formula:
+ * 1. EngAccHP = gc_EnginePMI.Value * EngRPM(L) * (EngRPM(L) - RPM0)
+ * 2. If EngAccHP < 0 Then EngAccHP = KP2x * EngAccHP  (deceleration factor)
+ * 3. Work = (2 * PI / 60) ^ 2 / (12 * 550 * dt)
+ * 4. HPEngPMI = EngAccHP * Work
+ * 
+ * @param prevRPM Previous engine RPM (RPM0)
+ * @param rpm Current engine RPM (EngRPM(L))
+ * @param dt_s Time step in seconds (dtk1)
+ * @param PMI_engine_slugft2 Engine PMI in slug-ft² (gc_EnginePMI.Value)
+ * @param isClutch True for clutch (KP21), false for converter (KP22)
+ * @returns HPEngPMI - HP loss due to engine acceleration
+ */
+export function hpEngPMI(
+  prevRPM: number,
+  rpm: number,
+  dt_s: number,
+  PMI_engine_slugft2: number,
+  isClutch: boolean = true
+): number {
+  // VB6: TIMESLIP.FRM:1231
+  // EngAccHP = gc_EnginePMI.Value * EngRPM(L) * (EngRPM(L) - RPM0)
+  let engAccHP = PMI_engine_slugft2 * rpm * (rpm - prevRPM);
+  
+  // VB6: TIMESLIP.FRM:1232-1238
+  // If EngAccHP < 0 Then
+  //     If Not gc_TransType.Value Then
+  //         EngAccHP = KP21 * EngAccHP
+  //     Else
+  //         EngAccHP = KP22 * EngAccHP
+  //     End If
+  // End If
+  if (engAccHP < 0) {
+    engAccHP = isClutch ? KP21 * engAccHP : KP22 * engAccHP;
+  }
+  
+  // VB6: TIMESLIP.FRM:1247
+  // Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+  const work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dt_s);
+  
+  // VB6: TIMESLIP.FRM:1248
+  // HPEngPMI = EngAccHP * Work
+  const HPEngPMI = engAccHP * work;
+  
+  return HPEngPMI;
+}
+
+/**
+ * EXACT VB6 port: Calculate chassis PMI HP loss
+ * 
+ * VB6: TIMESLIP.FRM:1240, 1247-1248
+ * 
+ * Formula:
+ * 1. ChasAccHP = ChassisPMI * DSRPM * (DSRPM - DSRPM0)
+ * 2. If ChasAccHP < 0 Then ChasAccHP = 0
+ * 3. Work = (2 * PI / 60) ^ 2 / (12 * 550 * dt)
+ * 4. HPChasPMI = ChasAccHP * Work
+ * 
+ * @param prevWheelRPM Previous driveshaft RPM (DSRPM0)
+ * @param wheelRPM Current driveshaft RPM (DSRPM)
+ * @param dt_s Time step in seconds (dtk1)
+ * @param PMI_chassis_slugft2 Chassis PMI in slug-ft² (ChassisPMI)
+ * @returns HPChasPMI - HP loss due to chassis acceleration
+ */
+export function hpChasPMI(
+  prevWheelRPM: number,
+  wheelRPM: number,
+  dt_s: number,
+  PMI_chassis_slugft2: number
+): number {
+  // VB6: TIMESLIP.FRM:1240
+  // ChasAccHP = ChassisPMI * DSRPM * (DSRPM - DSRPM0)
+  let chasAccHP = PMI_chassis_slugft2 * wheelRPM * (wheelRPM - prevWheelRPM);
+  
+  // VB6: TIMESLIP.FRM:1240
+  // If ChasAccHP < 0 Then ChasAccHP = 0
+  if (chasAccHP < 0) {
+    chasAccHP = 0;
+  }
+  
+  // VB6: TIMESLIP.FRM:1247
+  // Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+  const work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dt_s);
+  
+  // VB6: TIMESLIP.FRM:1248
+  // HPChasPMI = ChasAccHP * Work
+  const HPChasPMI = chasAccHP * work;
+  
+  return HPChasPMI;
 }
