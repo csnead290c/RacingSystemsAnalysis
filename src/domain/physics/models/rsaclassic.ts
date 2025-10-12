@@ -12,8 +12,7 @@ import { rpmFromSpeed, type Drivetrain } from '../drivetrain/drivetrain';
 // import { maxTractive_lb, type TireParams } from '../tire/traction'; // Replaced with VB6 traction
 import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
-import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
-import { vb6LaunchSlice } from '../vb6/launch';
+import { g, FPS_TO_MPH, CMU, gc, AMin } from '../vb6/constants';
 import { computeAgs0 } from '../vb6/bootstrap';
 import { hpToTorqueLbFt } from '../vb6/convert';
 import { airDensityVB6 } from '../vb6/air';
@@ -25,6 +24,7 @@ import { computeTireGrowth } from '../vb6/tire';
 import { shouldShift, updateShiftState, ShiftState, vb6ShiftDwell_s } from '../vb6/shift';
 import { tireSlipFactor } from '../vb6/tireslip';
 import { vb6RearWeightDynamic } from '../vb6/weight_transfer';
+import { vb6StepDistance, vb6ApplyAccelClamp, vb6AGSFromPQWT } from '../vb6/integrator';
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
@@ -576,6 +576,7 @@ class RSACLASSICModel implements PhysicsModel {
       // (LockRPM already calculated above in RPM hold logic)
       // This avoids ClutchSlip = 0 problem at launch
       let AGS: number;
+      let PQWT_ftps2: number; // VB6: Power-to-weight-time parameter for integration
       
       if (stepCount <= BOOT_MAX_STEPS && LockRPM < LOCKRPM_MIN) {
         // Torque-based bootstrap (VB6 lines 1020-1027)
@@ -598,9 +599,10 @@ class RSACLASSICModel implements PhysicsModel {
         
         // Apply VB6 AMin/AMax clamps with PQWT rescaling
         // For bootstrap, PQWT = thrust / weight * gc (approximation)
-        const PQWT_bootstrap = bootstrapResult.netThrust_lbf / vehicle.weightLb * gc;
-        const clamped = clampAGSVB6(bootstrapResult.Ags0_ftps2, PQWT_bootstrap, AMin, AMax);
+        PQWT_ftps2 = bootstrapResult.netThrust_lbf / vehicle.weightLb * gc;
+        const clamped = clampAGSVB6(bootstrapResult.Ags0_ftps2, PQWT_ftps2, AMin, AMax);
         AGS = clamped.AGS;
+        PQWT_ftps2 = clamped.PQWT; // Use rescaled PQWT
         
         // DEV: Bootstrap diagnostics
         if (stepCount <= 10 && typeof console !== 'undefined' && console.debug) {
@@ -724,35 +726,18 @@ class RSACLASSICModel implements PhysicsModel {
         
         // VB6: TIMESLIP.FRM:1252-1253
         // PQWT = 550 * gc * HP / Weight
-        const PQWT_ftps2 = 550 * gc * HP / vehicle.weightLb;
+        PQWT_ftps2 = 550 * gc * HP / vehicle.weightLb;
+        
+        // VB6: TIMESLIP.FRM:1253
         // AGS(L) = PQWT / (Vel(L) * gc)
-        // (Computed by vb6LaunchSlice below)
+        let AGS_candidate_ftps2 = vb6AGSFromPQWT(PQWT_ftps2, state.v_fps);
         
         // VB6: TIMESLIP.FRM:1255-1266
-        // Apply jerk limits and AMin/AMax clamps
-        // (Handled by vb6LaunchSlice for now - will be replaced with direct VB6 clamp)
-        const launchResult = vb6LaunchSlice({
-          hpEngine: HPSave,
-          clutchSlip: clutchCoupling,
-          gearEff: currentGearEff,
-          overallEff: getDrivelineEff(),
-          tireSlip: getTireSlip(state.s_ft),
-          dragHP,
-          hpEngPMI: HPEngPMI,
-          hpChasPMI: HPChasPMI,
-          v_fps: state.v_fps,
-          weight_lbf: vehicle.weightLb,
-          gc,
-          AMin,
-          AMax,
-          Ags0,
-          dt: dt_s,
-          JMin,
-          JMax,
-        });
-        
-        AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
-        // Note: launchResult.PQWT available for future energy accounting
+        // Apply jerk limits and AMin/AMax clamps with PQWT rescaling
+        const clampResult = vb6ApplyAccelClamp(AGS_candidate_ftps2, AMin, AMax);
+        AGS = clampResult.AGS_ftps2;
+        PQWT_ftps2 = PQWT_ftps2 * clampResult.PQWT_scale; // Rescale PQWT per VB6
+        const slip = clampResult.slip;
         
         // DEV: HP Chain trace for first 12 steps
         if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
@@ -791,7 +776,7 @@ class RSACLASSICModel implements PhysicsModel {
         }
         
         // DEV: HP-based diagnostics for first 10 steps
-        if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
+        if (stepCount <= 10 && typeof console !== 'undefined' && console.debug) {
           const AGS_g = AGS / gc;
           const overallRatio = gearRatio * (finalDrive ?? 3.73);
           const phase = rpmIsPinned ? 'PINNED' : 'HP';
@@ -820,17 +805,16 @@ class RSACLASSICModel implements PhysicsModel {
               converterSlipRatio: converterSlipRatio.toFixed(4),
               converterZStall: converterZStall.toFixed(0),
             } : {}),
-            HP_engine: launchResult.diag.HP_engine.toFixed(1),
+            HP_engine: HPSave.toFixed(1),
             HPEngPMI: HPEngPMI.toFixed(1),
             HPChasPMI: HPChasPMI.toFixed(1),
-            HP_afterSlip: launchResult.diag.HP_afterSlip.toFixed(1),
-            HP_afterEff: launchResult.diag.HP_afterEff.toFixed(1),
-            HP_final: launchResult.diag.HP_final.toFixed(1),
+            HP_afterLine1: HP_afterLine1.toFixed(1),
+            HP_afterLine2: HP_afterLine2.toFixed(1),
             AGS_g: AGS_g.toFixed(4),
             AGS_ftps2: AGS.toFixed(4),
             AMin_ftps2: AMin.toFixed(4),
             AMax_ftps2: AMax.toFixed(4),
-            SLIP: launchResult.SLIP,
+            SLIP: slip,
           });
         }
       }
@@ -855,15 +839,14 @@ class RSACLASSICModel implements PhysicsModel {
       const totalEffLoss = gearEffLoss + overallEffLoss; // Combined ~4%
       E_driveline_loss += hp_at_EngRPM * 550 * dt_s * totalEffLoss;
       
-      // VB6 integration (using clamped acceleration)
-      // Semi-implicit Euler: v(t+dt) = v(t) + a * dt, s(t+dt) = s(t) + v(t+dt) * dt
-      const v_new_fps = state.v_fps + AGS * dt_s;
-      const s_new_ft = state.s_ft + v_new_fps * dt_s;
-      const t_new_s = state.t_s + dt_s;
+      // VB6 EXACT integration (TIMESLIP.FRM:1280)
+      // Dist(L) = ((2*PQWT*dt + v0²)^1.5 - v0³) / (3*PQWT) + Dist0
+      // Vel(L) = sqrt(v0² + 2*PQWT*dt)
+      const stepResult = vb6StepDistance(state.v_fps, state.s_ft, dt_s, PQWT_ftps2);
       
-      state.v_fps = v_new_fps;
-      state.s_ft = s_new_ft;
-      state.t_s = t_new_s;
+      state.v_fps = stepResult.Vel_ftps;
+      state.s_ft = stepResult.Dist_ft;
+      state.t_s = state.t_s + dt_s;
       
       // Store AGS in g's for next step's weight transfer calculation
       prevAGS_g_stored = AGS / gc;
