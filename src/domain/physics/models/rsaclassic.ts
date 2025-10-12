@@ -540,10 +540,10 @@ class RSACLASSICModel implements PhysicsModel {
       const wheelbase_in = 108; // Default 108" (typical drag car) - TODO: add to vehicle config
       const cg_height_in = 24; // Default 24" (typical drag car) - TODO: add to vehicle config
       const static_front_weight_lbf = vehicle.weightLb * 0.38; // Default 38% front - TODO: add to vehicle config
-      const downforce_lbf = vehicle.weightLb; // TODO: Add aero downforce
       const frct = 0.04; // VB6 driveline friction coefficient
       
       // Calculate dynamic rear weight with weight transfer
+      // VB6 uses normal force (weight - lift) for downforce calculation
       const weightTransfer = vb6RearWeightDynamic(
         vehicle.weightLb,
         static_front_weight_lbf,
@@ -552,7 +552,7 @@ class RSACLASSICModel implements PhysicsModel {
         tireRadius_ft * 12, // Convert to inches
         wheelbase_in,
         F_drag + F_roll,
-        downforce_lbf,
+        normal_lbf,  // VB6: downforce = weight - lift
         frct,
         getDrivelineEff()
       );
