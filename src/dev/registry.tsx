@@ -6,6 +6,7 @@
  */
 
 import type { FC } from 'react';
+import FlagsPanel from './panels/FlagsPanel';
 
 export interface DevPanel {
   id: string;
@@ -29,7 +30,11 @@ const WelcomePanel: FC = () => {
  * Add new panels here as they are created.
  */
 export const DEV_PANELS: DevPanel[] = [
-  // Example panel (will be replaced with real panels)
+  {
+    id: 'flags',
+    title: 'Feature Flags & Modes',
+    component: FlagsPanel,
+  },
   {
     id: 'welcome',
     title: 'Welcome',

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import { lazy } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
+import { FlagsProvider } from '../domain/flags/store.tsx';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import Log from '../pages/Log';
@@ -62,8 +63,9 @@ function Navigation() {
 function App() {
   return (
     <ThemeProvider>
-      <Vb6FixtureProvider>
-        <BrowserRouter>
+      <FlagsProvider>
+        <Vb6FixtureProvider>
+          <BrowserRouter>
         <div
           style={{
             minHeight: '100vh',
@@ -123,6 +125,7 @@ function App() {
       </div>
       </BrowserRouter>
       </Vb6FixtureProvider>
+      </FlagsProvider>
     </ThemeProvider>
   );
 }

@@ -10,6 +10,7 @@ import type { Env } from '../domain/schemas/env.schema';
 import { type PhysicsModelId, type SimResult } from '../domain/physics';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
 import { assertComplete, Vb6FixtureValidationError } from '../domain/physics/vb6/fixtures';
+import { useFlag, useFlagsStore } from '../domain/flags/store.tsx';
 import VB6Inputs from './VB6Inputs';
 
 // Lazy load charts
@@ -32,7 +33,9 @@ function Predict() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showVb6Panel, setShowVb6Panel] = useState(false);
-  const { fixture, strictMode, setStrictMode } = useVb6Fixture();
+  const { fixture } = useVb6Fixture();
+  const strictMode = useFlag('vb6StrictMode');
+  const { setFlag } = useFlagsStore();
 
   // Initialize from location state
   useEffect(() => {
@@ -190,7 +193,7 @@ function Predict() {
             <input
               type="checkbox"
               checked={strictMode}
-              onChange={(e) => setStrictMode(e.target.checked)}
+              onChange={(e) => setFlag('vb6StrictMode', e.target.checked)}
             />
             <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>
               VB6 Strict Mode
