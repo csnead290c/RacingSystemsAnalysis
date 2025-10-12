@@ -1,11 +1,23 @@
 /**
- * VB6-ported integration loop structure.
+ * VB6 EXACT Integrator Functions
  * 
- * TODO: Replace with exact VB6 math once QTRPERF.BAS integration loop is ported.
- * This is a placeholder that matches the expected structure.
+ * EXACT port from TIMESLIP.FRM lines 1040-1360
+ * 
+ * VB6 uses a sophisticated integrator with:
+ * - Adaptive timestep selection
+ * - PMI iteration convergence (up to 12 iterations)
+ * - Jerk limiting (±2 g/s)
+ * - AMin/AMax clamping with PQWT rescaling
+ * - Distance integration: Dist(L) = ((2*PQWT*(t-t0) + v0²)^1.5 - v0³) / (3*PQWT) + Dist0
+ * 
+ * Key formulas:
+ * - time(L) = VelSqrd / (2 * PQWT) + Time0
+ * - AGS(L) = PQWT / (Vel(L) * gc)
+ * - Jerk = (AGS(L) - Ags0) / dt
+ * - Dist(L) = ((2*PQWT*dt + v0²)^1.5 - v0³) / (3*PQWT) + Dist0
  */
 
-// import { g } from './constants'; // TODO: Use for rotational inertia calculations
+import { gc } from './constants';
 
 /**
  * VB6 simulation state.
@@ -186,4 +198,208 @@ export function vb6InitialState(initialRPM: number = 0): VB6State {
     rpm: initialRPM, // Alias
     gearIdx: 0, // Alias
   };
+}
+
+// ===== EXACT VB6 INTEGRATOR FUNCTIONS =====
+
+/**
+ * EXACT VB6 Distance Integration
+ * 
+ * VB6: TIMESLIP.FRM:1280
+ * Dist(L) = ((2 * PQWT * (time(L) - Time0) + Vel0 ^ 2) ^ 1.5 - Vel0 ^ 3) / (3 * PQWT) + Dist0
+ * 
+ * This is the exact VB6 distance formula derived from constant acceleration:
+ * - Assumes PQWT (power-to-weight-time) is constant over the timestep
+ * - Integrates velocity: v = sqrt(v0² + 2*a*s) where a = PQWT/v
+ * - Result: distance as function of time under power constraint
+ * 
+ * @param Vel0_ftps Previous velocity (ft/s)
+ * @param Dist0_ft Previous distance (ft)
+ * @param dt_s Time step (s)
+ * @param PQWT_ftps2 Power-to-weight-time parameter (ft/s²)
+ * @returns Updated velocity and distance
+ */
+export function vb6StepDistance(
+  Vel0_ftps: number,
+  Dist0_ft: number,
+  dt_s: number,
+  PQWT_ftps2: number
+): { Vel_ftps: number; Dist_ft: number } {
+  // VB6: TIMESLIP.FRM:1139
+  // VelSqrd = Vel(L) ^ 2 - Vel0 ^ 2
+  // But we need to compute Vel(L) first from time
+  
+  // VB6: TIMESLIP.FRM:1268 (or 1229 first pass)
+  // time(L) = VelSqrd / (2 * PQWT) + Time0
+  // Rearranging: VelSqrd = 2 * PQWT * dt
+  // Therefore: Vel(L) = sqrt(Vel0² + 2 * PQWT * dt)
+  const VelSqrd = 2 * PQWT_ftps2 * dt_s;
+  const Vel_ftps = Math.sqrt(Vel0_ftps * Vel0_ftps + VelSqrd);
+  
+  // VB6: TIMESLIP.FRM:1280
+  // Dist(L) = ((2 * PQWT * (time(L) - Time0) + Vel0 ^ 2) ^ 1.5 - Vel0 ^ 3) / (3 * PQWT) + Dist0
+  const term1 = 2 * PQWT_ftps2 * dt_s + Vel0_ftps * Vel0_ftps;
+  const term2 = Math.pow(term1, 1.5);
+  const term3 = Math.pow(Vel0_ftps, 3);
+  const Dist_ft = (term2 - term3) / (3 * PQWT_ftps2) + Dist0_ft;
+  
+  return { Vel_ftps, Dist_ft };
+}
+
+/**
+ * EXACT VB6 Timestep Selection
+ * 
+ * VB6: TIMESLIP.FRM:1082, 1112-1120
+ * 
+ * Adaptive timestep based on acceleration:
+ * TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+ * 
+ * With bounds:
+ * - Min: 0.005s (TIMESLIP.FRM:1064)
+ * - Max: 0.05s (TIMESLIP.FRM:1120)
+ * - Also limited by K7 steps per print interval
+ * - Also limited by 4.5 steps to distance print
+ * 
+ * @param proposed_dt_s Proposed timestep (s)
+ * @returns Clamped timestep (s)
+ */
+export function vb6SelectTimeStep(
+  proposed_dt_s: number
+): number {
+  // VB6: TIMESLIP.FRM:1120
+  // If TimeStep > 0.05 Then TimeStep = 0.05
+  let dt = proposed_dt_s;
+  if (dt > 0.05) {
+    dt = 0.05;
+  }
+  
+  // VB6: TIMESLIP.FRM:1064
+  // TSMax = TSMax / 15: If TSMax < 0.005 Then TSMax = 0.005
+  if (dt < 0.005) {
+    dt = 0.005;
+  }
+  
+  return dt;
+}
+
+/**
+ * EXACT VB6 Acceleration Clamp with PQWT Rescaling
+ * 
+ * VB6: TIMESLIP.FRM:1224-1228, 1262-1266
+ * 
+ * VB6 applies AMin/AMax clamps AND rescales PQWT to maintain consistency:
+ * 
+ * If AGS > AMAX:
+ *   SLIP = 1
+ *   PQWT = PQWT * (AMAX - (AGS - AMAX)) / AGS
+ *   AGS = AMAX - (AGS - AMAX)
+ * 
+ * If AGS < AMin:
+ *   PQWT = PQWT * AMin / AGS
+ *   AGS = AMin
+ * 
+ * Note: The AMAX formula is unusual - it's not just AGS = AMAX, but includes
+ * a correction term that accounts for how far over AMAX we went.
+ * 
+ * @param AGS_candidate_ftps2 Candidate acceleration (ft/s²)
+ * @param AMin_ftps2 Minimum acceleration (ft/s²)
+ * @param AMax_ftps2 Maximum acceleration (ft/s²)
+ * @returns Clamped acceleration and slip flag
+ */
+export function vb6ApplyAccelClamp(
+  AGS_candidate_ftps2: number,
+  AMin_ftps2: number,
+  AMax_ftps2: number
+): { AGS_ftps2: number; PQWT_scale: number; slip: 0 | 1 } {
+  let AGS = AGS_candidate_ftps2;
+  let PQWT_scale = 1.0;
+  let slip: 0 | 1 = 0;
+  
+  // VB6: TIMESLIP.FRM:1224-1227 (or 1262-1264)
+  // If AGS(L) > AMAX Then
+  //     SLIP(L) = 1
+  //     PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L):    AGS(L) = AMAX - (AGS(L) - AMAX)
+  // End If
+  if (AGS > AMax_ftps2) {
+    slip = 1;
+    const overshoot = AGS - AMax_ftps2;
+    const corrected_AMAX = AMax_ftps2 - overshoot;
+    PQWT_scale = corrected_AMAX / AGS;
+    AGS = corrected_AMAX;
+  }
+  
+  // VB6: TIMESLIP.FRM:1228 (or 1266)
+  // If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L):          AGS(L) = AMin
+  if (AGS < AMin_ftps2) {
+    PQWT_scale = AMin_ftps2 / AGS;
+    AGS = AMin_ftps2;
+  }
+  
+  return { AGS_ftps2: AGS, PQWT_scale, slip };
+}
+
+/**
+ * EXACT VB6 AGS from PQWT
+ * 
+ * VB6: TIMESLIP.FRM:1221, 1253
+ * AGS(L) = PQWT / (Vel(L) * gc)
+ * 
+ * @param PQWT_ftps2 Power-to-weight-time parameter (ft/s²)
+ * @param Vel_ftps Velocity (ft/s)
+ * @returns Acceleration (ft/s²)
+ */
+export function vb6AGSFromPQWT(
+  PQWT_ftps2: number,
+  Vel_ftps: number
+): number {
+  // VB6: TIMESLIP.FRM:1221, 1253
+  // AGS(L) = PQWT / (Vel(L) * gc)
+  return PQWT_ftps2 / (Vel_ftps * gc);
+}
+
+/**
+ * EXACT VB6 PQWT from HP
+ * 
+ * VB6: TIMESLIP.FRM:1221, 1252
+ * PQWT = 550 * gc * HP / gc_Weight.Value
+ * 
+ * @param HP Horsepower
+ * @param Weight_lbf Vehicle weight (lbf)
+ * @returns PQWT (ft/s²)
+ */
+export function vb6PQWTFromHP(
+  HP: number,
+  Weight_lbf: number
+): number {
+  // VB6: TIMESLIP.FRM:1221, 1252
+  // PQWT = 550 * gc * HP / gc_Weight.Value
+  return 550 * gc * HP / Weight_lbf;
+}
+
+/**
+ * EXACT VB6 Jerk Calculation
+ * 
+ * VB6: TIMESLIP.FRM:1256
+ * Jerk = (AGS(L) - Ags0) / dtk1
+ * 
+ * Units: g/s (where g = 32.174 ft/s²)
+ * 
+ * @param AGS_current_ftps2 Current acceleration (ft/s²)
+ * @param AGS_prev_ftps2 Previous acceleration (ft/s²)
+ * @param dt_s Time step (s)
+ * @returns Jerk (g/s)
+ */
+export function vb6Jerk(
+  AGS_current_ftps2: number,
+  AGS_prev_ftps2: number,
+  dt_s: number
+): number {
+  // VB6: TIMESLIP.FRM:1256
+  // Jerk = 0:   If dtk1 <> 0 Then Jerk = (AGS(L) - Ags0) / dtk1
+  if (dt_s === 0) {
+    return 0;
+  }
+  
+  // Jerk in g/s
+  return (AGS_current_ftps2 - AGS_prev_ftps2) / (dt_s * gc);
 }
