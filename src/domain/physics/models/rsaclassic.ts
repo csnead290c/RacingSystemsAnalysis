@@ -815,22 +815,24 @@ class RSACLASSICModel implements PhysicsModel {
         PQWT_ftps2 = PQWT_ftps2 * clampResult.PQWT_scale; // Rescale PQWT per VB6
         const slip = clampResult.slip;
         
-        // DEV: HP Chain trace for first 12 steps
+        // DEV: Consolidated table for first 12 steps (before integration)
         if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
-          console.log('[HP_CHAIN]', {
+          console.log('[CONSOLIDATED_ROW]', {
             step: stepCount,
+            v_ftps: +state.v_fps.toFixed(3),
             EngRPM: +EngRPM.toFixed(0),
             wheelRPM: +wheelRPM.toFixed(2),
             ClutchSlip: +clutchCoupling.toFixed(4),
             HPSave: +HPSave.toFixed(1),
             HPEngPMI: +HPEngPMI.toFixed(1),
             HPChasPMI: +HPChasPMI.toFixed(1),
-            HP_afterLine1: +HP_afterLine1.toFixed(1),
-            HP_afterLine2: +HP_afterLine2.toFixed(1),
-            PQWT_ftps2: +PQWT_ftps2.toFixed(1),
-            AMin_ftps2: +AMin.toFixed(3),
-            AMax_ftps2: +AMax.toFixed(3),
-            AGS_afterClamp_ftps2: +AGS.toFixed(3),
+            DragHP: +dragHP.toFixed(2),
+            HP_afterL1: +HP_afterLine1.toFixed(1),
+            HP_afterL2: +HP_afterLine2.toFixed(1),
+            PQWT: +PQWT_ftps2.toFixed(1),
+            AMin: +AMin.toFixed(3),
+            AMax: +AMax.toFixed(3),
+            AGS_applied: +AGS.toFixed(3),
           });
         }
         
@@ -919,6 +921,15 @@ class RSACLASSICModel implements PhysicsModel {
       // Dist(L) = ((2*PQWT*dt + v0²)^1.5 - v0³) / (3*PQWT) + Dist0
       // Vel(L) = sqrt(v0² + 2*PQWT*dt)
       const stepResult = vb6StepDistance(state.v_fps, state.s_ft, dt_s, PQWT_ftps2);
+      
+      // DEV: Log integrated values for first 12 steps
+      if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
+        console.log('[INTEGRATED]', {
+          step: stepCount,
+          Vel_next: +stepResult.Vel_ftps.toFixed(3),
+          Dist_next: +stepResult.Dist_ft.toFixed(6),
+        });
+      }
       
       state.v_fps = stepResult.Vel_ftps;
       state.s_ft = stepResult.Dist_ft;
