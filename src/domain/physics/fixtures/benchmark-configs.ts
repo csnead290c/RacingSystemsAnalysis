@@ -67,6 +67,20 @@ export interface ExtendedVehicleConfig {
       lockup?: boolean;
     };
 
+    // OPTIONAL: Polar moments of inertia (VB6 printout values)
+    pmi?: {
+      engine_flywheel_clutch?: number; // slug-ft²
+      transmission_driveshaft?: number; // slug-ft²
+      tires_wheels_ringgear?: number; // slug-ft²
+    };
+
+    // OPTIONAL: Engine configuration
+    engine?: {
+      hpCurve?: { rpm: number; hp: number }[]; // HP-based curve (preferred)
+      fuelType?: string;
+      hpTorqueMultiplier?: number; // Applied to HP/torque calculations
+    };
+
     powerHP?: number; // Deprecated - use torqueCurve instead
   };
 }
@@ -722,8 +736,19 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
     lockup: vb.drivetrain.clutch.lockup,
   };
 
-  // Engine dyno (HP curve)
-  v.torqueCurve = vb.engineHP.map(([rpm, hp]) => ({ rpm, hp }));
+  // PMIs (VB6 printout values)
+  v.pmi = {
+    engine_flywheel_clutch: vb.pmi.engine_flywheel_clutch,
+    transmission_driveshaft: vb.pmi.transmission_driveshaft,
+    tires_wheels_ringgear: vb.pmi.tires_wheels_ringgear,
+  };
+
+  // Engine dyno (HP curve - preferred over torqueCurve)
+  v.engine = {
+    hpCurve: vb.engineHP.map(([rpm, hp]) => ({ rpm, hp })),
+    fuelType: vb.fuel.type,
+    hpTorqueMultiplier: vb.fuel.hpTorqueMultiplier,
+  };
 
   // Test-time environment overrides
   bm.env.elevation = vb.env.elevation_ft;

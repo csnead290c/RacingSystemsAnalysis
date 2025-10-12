@@ -113,16 +113,28 @@ class RSACLASSICModel implements PhysicsModel {
       warnings.push('Missing vehicle.rolloutIn - required for VB6 parity');
     }
     
-    // Convert torque curve HP to TQ if needed
+    // Build torque curve: prefer vehicle.engine.hpCurve, fallback to vehicle.torqueCurve
     let torqueCurve = vehicle.torqueCurve;
-    if (torqueCurve) {
+    
+    // If hpCurve is present, use it (preferred for VB6 parity)
+    if (vehicle.engine?.hpCurve && vehicle.engine.hpCurve.length > 0) {
+      const hpMultiplier = vehicle.engine.hpTorqueMultiplier ?? 1.0;
+      torqueCurve = vehicle.engine.hpCurve.map((pt) => {
+        const hp = pt.hp * hpMultiplier;
+        const tq_lbft = pt.rpm > 0 ? hpToTorqueLbFt(hp, pt.rpm) : 0;
+        return { rpm: pt.rpm, hp, tq_lbft };
+      });
+    } else if (torqueCurve) {
+      // Convert torque curve HP to TQ if needed
+      const hpMultiplier = vehicle.engine?.hpTorqueMultiplier ?? 1.0;
       torqueCurve = torqueCurve.map((row) => {
         if (row.tq_lbft !== undefined) {
           return row;
         } else if (row.hp !== undefined && row.rpm > 0) {
-          // Convert HP to TQ using VB6 formula
-          const tq_lbft = hpToTorqueLbFt(row.hp, row.rpm);
-          return { ...row, tq_lbft };
+          // Convert HP to TQ using VB6 formula, apply multiplier
+          const hp = row.hp * hpMultiplier;
+          const tq_lbft = hpToTorqueLbFt(hp, row.rpm);
+          return { ...row, hp, tq_lbft };
         }
         return row;
       });
@@ -650,13 +662,26 @@ class RSACLASSICModel implements PhysicsModel {
         const DSRPM = computeDSRPM(getTireSlip(state.s_ft), state.v_fps, tireCircumference_ft);
         
         // Compute chassis PMI
-        // VB6 default PMI values (TIMESLIP.FRM:788-805)
-        // For now, use simplified estimates based on vehicle weight
-        const engineCID = 500; // Estimate - should come from vehicle config
-        const enginePMI = engineCID / 120; // Naturally aspirated default
-        const numGears = gearRatios?.length ?? 5;
-        const transPMI = isClutch ? numGears * enginePMI / 50 : (numGears - 1) * enginePMI / 10;
-        const tiresPMI = 2 * (1.15 * 0.8 * (0.08 * tireDiaIn * (vehicle.tireWidthIn ?? 17.0)) * Math.pow(tireDiaIn / 2, 2) / 386);
+        // VB6 PMI values (TIMESLIP.FRM:788-805)
+        // Use exact values from vehicle.pmi if present, otherwise estimate
+        let enginePMI: number;
+        let transPMI: number;
+        let tiresPMI: number;
+        
+        if (vehicle.pmi?.engine_flywheel_clutch !== undefined) {
+          // Use exact VB6 printout values
+          enginePMI = vehicle.pmi.engine_flywheel_clutch;
+          transPMI = vehicle.pmi.transmission_driveshaft ?? 0;
+          tiresPMI = vehicle.pmi.tires_wheels_ringgear ?? 0;
+        } else {
+          // Estimate from vehicle parameters (VB6 defaults)
+          const engineCID = 500; // Estimate - should come from vehicle config
+          enginePMI = engineCID / 120; // Naturally aspirated default
+          const numGears = gearRatios?.length ?? 5;
+          transPMI = isClutch ? numGears * enginePMI / 50 : (numGears - 1) * enginePMI / 10;
+          tiresPMI = 2 * (1.15 * 0.8 * (0.08 * tireDiaIn * (vehicle.tireWidthIn ?? 17.0)) * Math.pow(tireDiaIn / 2, 2) / 386);
+        }
+        
         const chassisPMI = computeChassisPMI(tiresPMI, transPMI, finalDrive ?? 3.73, gearRatio);
         
         // Compute PMI HP losses

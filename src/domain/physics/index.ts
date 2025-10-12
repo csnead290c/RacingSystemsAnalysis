@@ -62,6 +62,20 @@ export interface ExtendedVehicle extends Vehicle {
     lockup?: boolean;
   };
   
+  // Polar moments of inertia (VB6 printout values)
+  pmi?: {
+    engine_flywheel_clutch?: number; // slug-ft²
+    transmission_driveshaft?: number; // slug-ft²
+    tires_wheels_ringgear?: number; // slug-ft²
+  };
+  
+  // Engine configuration
+  engine?: {
+    hpCurve?: { rpm: number; hp: number }[]; // HP-based curve (preferred)
+    fuelType?: string;
+    hpTorqueMultiplier?: number; // Applied to HP/torque calculations
+  };
+  
   // Power (powerHP is required in base Vehicle, torqueCurve is optional extension)
   torqueCurve?: { rpm: number; hp?: number; tq_lbft?: number }[]; // Allow hp-only rows
 }
