@@ -501,17 +501,18 @@ class RSACLASSICModel implements PhysicsModel {
       state.rpm = effectiveRPM;
       
       // VB6 dynamic pressure and aerodynamic forces
-      // q = rho * v^2 / (2 * gc) [lbf/ft^2]
-      const q = rho_slug_ft3 * state.v_fps * state.v_fps / (2 * gc);
+      // Units: rho_slug_ft3 ∈ slug/ft³, v_fps ∈ ft/s
+      // q_psf = 0.5 * rho * v² ∈ lbf/ft² (NO gc factor - already in slug units)
+      const q_psf = 0.5 * rho_slug_ft3 * state.v_fps * state.v_fps;
       
-      // Drag force [lbf]: F_drag = q * Cd * A
-      const F_drag = q * (cd ?? 0) * (frontalArea_ft2 ?? 0);
+      // Drag force: F_drag_lbf = q_psf * Cd * Area_ft² ∈ lbf
+      const F_drag = q_psf * (cd ?? 0) * (frontalArea_ft2 ?? 0);
       
-      // Lift force [lbf]: F_lift_up = q * Cl * A
+      // Lift force: F_lift_up_lbf = q_psf * Cl * Area_ft² ∈ lbf
       // VB6 "Lift Coefficient" is positive upward (reduces normal force)
-      const F_lift_up = q * (vehicle.liftCoeff ?? 0) * (frontalArea_ft2 ?? 0);
+      const F_lift_up = q_psf * (vehicle.liftCoeff ?? 0) * (frontalArea_ft2 ?? 0);
       
-      // Normal force (weight minus lift)
+      // Normal force (weight minus lift) ∈ lbf
       const normalForce_lbf = vehicle.weightLb - F_lift_up;
       
       // VB6 rolling resistance torque (TIMESLIP.FRM:1019, 1192-1193)
