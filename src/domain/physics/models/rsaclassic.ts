@@ -723,6 +723,23 @@ class RSACLASSICModel implements PhysicsModel {
         AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
         // Note: launchResult.PQWT available for future energy accounting
         
+        // DEV: Aero/traction trace for first 20 steps
+        if (stepCount <= 20 && typeof console !== 'undefined' && console.log) {
+          console.log('[AERO_TRACE]', {
+            step: stepCount,
+            v_fps: +v_fps.toFixed(6),
+            rho_slug_per_ft3: +rho_slug_ft3.toFixed(6),
+            q_psf: +q_psf.toFixed(3),
+            F_drag_lbf: +F_drag_lbf.toFixed(2),
+            F_lift_up_lbf: +F_lift_up_lbf.toFixed(2),
+            normal_lbf: +normal_lbf.toFixed(2),
+            F_roll_lbf: +F_roll.toFixed(2),
+            AMin_ftps2: +AMin.toFixed(3),
+            AMax_ftps2: +AMax.toFixed(3),
+            AGS_ftps2: +AGS.toFixed(3),
+          });
+        }
+        
         // DEV: HP-based diagnostics for first 10 steps
         if (stepCount <= 10 && typeof console !== 'undefined' && console.debug && launchResult.diag) {
           const AGS_g = AGS / gc;
