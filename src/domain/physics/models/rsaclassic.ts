@@ -20,7 +20,7 @@ import { airDensityVB6 } from '../vb6/air';
 import { vb6RollingResistanceTorque } from '../vb6/forces';
 import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
-import { computeHPEngPMI, computeHPChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
+import { hpEngPMI, hpChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 import { computeTireGrowth } from '../vb6/tire';
 import { shouldShift, updateShiftState, ShiftState, vb6ShiftDwell_s } from '../vb6/shift';
 import { tireSlipFactor } from '../vb6/tireslip';
@@ -658,16 +658,24 @@ class RSACLASSICModel implements PhysicsModel {
           }
         }
         
-        // Calculate HP and drag HP for VB6 formula
-        const dragHP = (F_drag + F_roll) * state.v_fps / 550; // HP = Force * Velocity / 550
+        // === VB6 EXACT HP CHAIN (TIMESLIP.FRM:1176-1178, 1231-1253) ===
         
-        // Calculate PMI losses (VB6: TIMESLIP.FRM:1231-1248)
+        // VB6: TIMESLIP.FRM:1176-1178
+        // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+        // HP = gc_HPTQMult.Value * HP / hpc
+        // HPSave = HP:    HP = HP * ClutchSlip
+        const HPSave = hp_at_EngRPM; // Engine HP before PMI losses
+        
+        // VB6: TIMESLIP.FRM:1180-1194
+        // DragHP = DragForce * Vel(L) / 550
+        const dragHP = (F_drag + F_roll) * state.v_fps / 550;
+        
+        // VB6: TIMESLIP.FRM:1231-1248
         // Compute driveshaft RPM (using effective tire circumference with growth)
         const DSRPM = computeDSRPM(getTireSlip(state.s_ft), state.v_fps, tireCircumference_ft);
         
         // Compute chassis PMI
         // VB6 PMI values (TIMESLIP.FRM:788-805)
-        // Use exact values from vehicle.pmi if present, otherwise estimate
         let enginePMI: number;
         let transPMI: number;
         let tiresPMI: number;
@@ -688,27 +696,47 @@ class RSACLASSICModel implements PhysicsModel {
         
         const chassisPMI = computeChassisPMI(tiresPMI, transPMI, finalDrive ?? 3.73, gearRatio);
         
-        // Compute PMI HP losses
-        const hpEngPMI = computeHPEngPMI(enginePMI, EngRPM, RPM0, dt_s, isClutch);
-        const hpChasPMI = computeHPChasPMI(chassisPMI, DSRPM, DSRPM0, dt_s);
+        // VB6: TIMESLIP.FRM:1231-1240, 1247-1248
+        // EngAccHP = gc_EnginePMI.Value * EngRPM(L) * (EngRPM(L) - RPM0)
+        // ChasAccHP = ChassisPMI * DSRPM * (DSRPM - DSRPM0)
+        // Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+        // HPEngPMI = EngAccHP * Work
+        // HPChasPMI = ChasAccHP * Work
+        const HPEngPMI = hpEngPMI(RPM0, EngRPM, dt_s, enginePMI, isClutch);
+        const HPChasPMI = hpChasPMI(DSRPM0, DSRPM, dt_s, chassisPMI);
         
         // Update previous RPM values for next step
         RPM0 = EngRPM;
         DSRPM0 = DSRPM;
         
         // Track PMI energy losses
-        E_pmi_engine += hpEngPMI * 550 * dt_s; // Convert HP to ft-lb
-        E_pmi_chassis += hpChasPMI * 550 * dt_s;
+        E_pmi_engine += HPEngPMI * 550 * dt_s; // Convert HP to ft-lb
+        E_pmi_chassis += HPChasPMI * 550 * dt_s;
         
+        // VB6: TIMESLIP.FRM:1250-1252
+        // HP = (HPSave - HPEngPMI) * ClutchSlip
+        // HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+        // PQWT = 550 * gc * HP / gc_Weight.Value
+        let HP = (HPSave - HPEngPMI) * clutchCoupling;
+        HP = ((HP * currentGearEff * getDrivelineEff() - HPChasPMI) / getTireSlip(state.s_ft)) - dragHP;
+        
+        // VB6: TIMESLIP.FRM:1252-1253
+        // PQWT = 550 * gc * HP / Weight
+        // AGS(L) = PQWT / (Vel(L) * gc)
+        // (Computed by vb6LaunchSlice below)
+        
+        // VB6: TIMESLIP.FRM:1255-1266
+        // Apply jerk limits and AMin/AMax clamps
+        // (Handled by vb6LaunchSlice for now - will be replaced with direct VB6 clamp)
         const launchResult = vb6LaunchSlice({
-          hpEngine: hp_at_EngRPM,
+          hpEngine: HPSave,
           clutchSlip: clutchCoupling,
           gearEff: currentGearEff,
           overallEff: getDrivelineEff(),
           tireSlip: getTireSlip(state.s_ft),
           dragHP,
-          hpEngPMI,
-          hpChasPMI,
+          hpEngPMI: HPEngPMI,
+          hpChasPMI: HPChasPMI,
           v_fps: state.v_fps,
           weight_lbf: vehicle.weightLb,
           gc,
@@ -771,8 +799,8 @@ class RSACLASSICModel implements PhysicsModel {
               converterZStall: converterZStall.toFixed(0),
             } : {}),
             HP_engine: launchResult.diag.HP_engine.toFixed(1),
-            HPEngPMI: hpEngPMI.toFixed(1),
-            HPChasPMI: hpChasPMI.toFixed(1),
+            HPEngPMI: HPEngPMI.toFixed(1),
+            HPChasPMI: HPChasPMI.toFixed(1),
             HP_afterSlip: launchResult.diag.HP_afterSlip.toFixed(1),
             HP_afterEff: launchResult.diag.HP_afterEff.toFixed(1),
             HP_final: launchResult.diag.HP_final.toFixed(1),
