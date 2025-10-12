@@ -672,6 +672,30 @@ class RSACLASSICModel implements PhysicsModel {
         // DragHP = DragForce * Vel(L) / 550
         const dragHP = (F_drag + F_roll) * state.v_fps / 550;
         
+        // DEV: Pre-HP-chain diagnostics for first 12 steps
+        if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
+          console.log('[PRE_HP_CHAIN]', {
+            step: stepCount,
+            EngRPM_out: +EngRPM.toFixed(0),
+            wheelRPM: +wheelRPM.toFixed(2),
+            ClutchSlip: +clutchCoupling.toFixed(4),
+            ...(converter ? {
+              converterWork: +converterWork.toFixed(4),
+            } : {}),
+            HPSave: +HPSave.toFixed(1),
+            DragHP: +dragHP.toFixed(2),
+            F_drag_lbf: +F_drag_lbf.toFixed(2),
+            F_roll_lbf: +F_roll.toFixed(2),
+            v_fps: +state.v_fps.toFixed(2),
+            tireSlip: +getTireSlip(state.s_ft).toFixed(4),
+            currentGearEff: +currentGearEff.toFixed(4),
+            drivelineEff: +getDrivelineEff().toFixed(4),
+            dt_s: +dt_s.toFixed(4),
+            RPM0: +RPM0.toFixed(0),
+            DSRPM0: +DSRPM0.toFixed(2),
+          });
+        }
+        
         // VB6: TIMESLIP.FRM:1231-1248
         // Compute driveshaft RPM (using effective tire circumference with growth)
         const DSRPM = computeDSRPM(getTireSlip(state.s_ft), state.v_fps, tireCircumference_ft);
@@ -706,6 +730,23 @@ class RSACLASSICModel implements PhysicsModel {
         // HPChasPMI = ChasAccHP * Work
         const HPEngPMI = hpEngPMI(RPM0, EngRPM, dt_s, enginePMI, isClutch);
         const HPChasPMI = hpChasPMI(DSRPM0, DSRPM, dt_s, chassisPMI);
+        
+        // DEV: PMI diagnostics for first 12 steps
+        if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
+          console.log('[PMI_CALC]', {
+            step: stepCount,
+            EngRPM: +EngRPM.toFixed(0),
+            RPM0: +RPM0.toFixed(0),
+            RPM_delta: +(EngRPM - RPM0).toFixed(0),
+            DSRPM: +DSRPM.toFixed(2),
+            DSRPM0: +DSRPM0.toFixed(2),
+            DSRPM_delta: +(DSRPM - DSRPM0).toFixed(2),
+            enginePMI: +enginePMI.toFixed(3),
+            chassisPMI: +chassisPMI.toFixed(3),
+            HPEngPMI: +HPEngPMI.toFixed(1),
+            HPChasPMI: +HPChasPMI.toFixed(1),
+          });
+        }
         
         // Update previous RPM values for next step
         RPM0 = EngRPM;
