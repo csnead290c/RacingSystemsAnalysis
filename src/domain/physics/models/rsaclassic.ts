@@ -18,7 +18,7 @@ import { hpToTorqueLbFt } from '../vb6/convert';
 import { airDensityVB6 } from '../vb6/air';
 import { vb6RollingResistanceTorque } from '../vb6/forces';
 import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
-import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
+import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6, computeCRTF } from '../vb6/traction';
 import { hpEngPMI, hpChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
 import { computeTireGrowth } from '../vb6/tire';
 import { shouldShift, updateShiftState, ShiftState, vb6ShiftDwell_s } from '../vb6/shift';
@@ -559,6 +559,9 @@ class RSACLASSICModel implements PhysicsModel {
       
       const dynamicRWT_lbf = weightTransfer.rear_weight_lbf;
       
+      // VB6: TIMESLIP.FRM:1213-1216
+      // CRTF = CAXI * AX * TireDia * (TireWidth + 1) * (0.92 + 0.08 * (DynamicRWT / 1900) ^ 2.15)
+      // AMAX = ((CRTF / TireGrowth) - DragForce) / Weight
       const AMax = computeAMaxVB6({
         weight_lbf: vehicle.weightLb,
         tireDia_in: tireDiaIn,
@@ -571,6 +574,38 @@ class RSACLASSICModel implements PhysicsModel {
       });
       
       const AMin = computeAMinVB6();
+      
+      // DEV: Traction diagnostics for first 12 steps
+      if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
+        // Compute CRTF for logging
+        const CRTF = computeCRTF({
+          weight_lbf: vehicle.weightLb,
+          tireDia_in: tireDiaIn,
+          tireWidth_in: vehicle.tireWidthIn ?? 17.0,
+          dynamicRWT_lbf,
+          tractionIndexAdj: CAXI,
+          tireGrowth: tireGrowthResult.growth,
+          dragForce_lbf: F_drag + F_roll,
+          bodyStyle: undefined,
+        });
+        
+        console.log('[TRACTION]', {
+          step: stepCount,
+          CAXI: +CAXI.toFixed(4),
+          AX: 10.8,
+          tireDia_in: +tireDiaIn.toFixed(2),
+          tireWidth_in: +(vehicle.tireWidthIn ?? 17.0).toFixed(1),
+          dynamicRWT_lbf: +dynamicRWT_lbf.toFixed(1),
+          weightFactor: +(0.92 + 0.08 * Math.pow(dynamicRWT_lbf / 1900, 2.15)).toFixed(4),
+          CRTF: +CRTF.toFixed(1),
+          tireGrowth: +tireGrowthResult.growth.toFixed(4),
+          dragForce_lbf: +(F_drag + F_roll).toFixed(2),
+          AMin_ftps2: +AMin.toFixed(3),
+          AMax_ftps2: +AMax.toFixed(3),
+          AMin_g: +(AMin / gc).toFixed(4),
+          AMax_g: +(AMax / gc).toFixed(4),
+        });
+      }
       
       // BOOTSTRAP PATH: Use torque-based Ags0 for first few steps when LockRPM is tiny
       // (LockRPM already calculated above in RPM hold logic)
