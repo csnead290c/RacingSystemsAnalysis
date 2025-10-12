@@ -87,9 +87,10 @@ export function airDensityVB6(air: Vb6AirInputs): Vb6AirResult {
   // Step 7: Air density using ideal gas law (QTRPERF.BAS:1335)
   // VB6: rho = 144 * pamb / (RGAS * (gc_Temperature.Value + 459.67))
   // Note: 144 converts psi to psf (lb/ft²), since pamb is in psi
-  // Result is in slugs/ft³ (mass density)
+  // This gives lbm/ft³, which must be divided by gc to get slugs/ft³
   const temp_R = air.temperature_F + RANKINE_OFFSET;
-  const rho = 144 * pamb / (RGAS * temp_R);
+  const rho_lbm_ft3 = 144 * pamb / (RGAS * temp_R);
+  const rho = rho_lbm_ft3 / 32.174; // Convert lbm/ft³ to slugs/ft³
 
   return {
     rho_slug_per_ft3: rho,
