@@ -9,6 +9,7 @@ import type { FC } from 'react';
 import FlagsPanel from './panels/FlagsPanel';
 import InputInspector from './panels/InputInspector';
 import RunInspector from './panels/RunInspector';
+import EnergyPanel from './panels/EnergyPanel';
 
 export interface DevPanel {
   id: string;
@@ -46,6 +47,11 @@ export const DEV_PANELS: DevPanel[] = [
     id: 'run-inspector',
     title: 'Run Inspector & Steps',
     component: RunInspector,
+  },
+  {
+    id: 'energy',
+    title: 'Energy Accounting',
+    component: EnergyPanel,
   },
   {
     id: 'welcome',
