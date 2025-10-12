@@ -16,7 +16,7 @@ import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
 import { vb6LaunchSlice } from '../vb6/launch';
 import { computeAgs0 } from '../vb6/bootstrap';
 import { hpToTorqueLbFt } from '../vb6/convert';
-import { airDensity, q_dyn_lbf_per_ft2 } from '../vb6/air';
+import { airDensityVB6 } from '../vb6/air';
 import { vb6RollingResistanceTorque } from '../vb6/forces';
 import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6 } from '../vb6/traction';
@@ -141,13 +141,13 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // Precompute atmospheric conditions
-    // VB6-style air density (constant for entire run)
-    const rho_kg_m3 = airDensity({
+    // VB6 exact air density (constant for entire run)
+    const airResult = airDensityVB6({
       barometer_inHg: env.barometerInHg ?? 29.92,
       temperature_F: env.temperatureF ?? 59,
       relHumidity_pct: env.humidityPct ?? 50,
-      elevation_ft: env.elevation ?? 0,
     });
+    const rho_slug_ft3 = airResult.rho_slug_per_ft3;
     
     const corr = hpCorrection(env);
     
@@ -500,9 +500,9 @@ class RSACLASSICModel implements PhysicsModel {
       
       state.rpm = effectiveRPM;
       
-      // VB6-style dynamic pressure and aerodynamic forces
-      // q = 0.5 * rho * v^2 [lbf/ft^2]
-      const q = q_dyn_lbf_per_ft2(state.v_fps, rho_kg_m3);
+      // VB6 dynamic pressure and aerodynamic forces
+      // q = rho * v^2 / (2 * gc) [lbf/ft^2]
+      const q = rho_slug_ft3 * state.v_fps * state.v_fps / (2 * gc);
       
       // Drag force [lbf]: F_drag = q * Cd * A
       const F_drag = q * (cd ?? 0) * (frontalArea_ft2 ?? 0);
@@ -746,7 +746,7 @@ class RSACLASSICModel implements PhysicsModel {
             RWTdyn_lbf: dynamicRWT_lbf.toFixed(1),
             RWTfront_lbf: weightTransfer.front_weight_lbf.toFixed(1),
             wheelieBar_lbf: weightTransfer.wheelie_bar_weight_lbf.toFixed(1),
-            rho_kg_m3: rho_kg_m3.toFixed(6),
+            rho_slug_ft3: rho_slug_ft3.toFixed(6),
             dragHP: dragHP.toFixed(2),
             ...(converter ? {
               converterWork: converterWork.toFixed(4),
