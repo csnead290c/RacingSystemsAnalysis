@@ -717,11 +717,14 @@ class RSACLASSICModel implements PhysicsModel {
         // HP = (HPSave - HPEngPMI) * ClutchSlip
         // HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
         // PQWT = 550 * gc * HP / gc_Weight.Value
-        let HP = (HPSave - HPEngPMI) * clutchCoupling;
+        let HP_afterLine1 = (HPSave - HPEngPMI) * clutchCoupling;
+        let HP = HP_afterLine1;
         HP = ((HP * currentGearEff * getDrivelineEff() - HPChasPMI) / getTireSlip(state.s_ft)) - dragHP;
+        const HP_afterLine2 = HP;
         
         // VB6: TIMESLIP.FRM:1252-1253
         // PQWT = 550 * gc * HP / Weight
+        const PQWT_ftps2 = 550 * gc * HP / vehicle.weightLb;
         // AGS(L) = PQWT / (Vel(L) * gc)
         // (Computed by vb6LaunchSlice below)
         
@@ -750,6 +753,25 @@ class RSACLASSICModel implements PhysicsModel {
         
         AGS = launchResult.AGS; // Clamped acceleration (ft/s²)
         // Note: launchResult.PQWT available for future energy accounting
+        
+        // DEV: HP Chain trace for first 12 steps
+        if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
+          console.log('[HP_CHAIN]', {
+            step: stepCount,
+            EngRPM: +EngRPM.toFixed(0),
+            wheelRPM: +wheelRPM.toFixed(2),
+            ClutchSlip: +clutchCoupling.toFixed(4),
+            HPSave: +HPSave.toFixed(1),
+            HPEngPMI: +HPEngPMI.toFixed(1),
+            HPChasPMI: +HPChasPMI.toFixed(1),
+            HP_afterLine1: +HP_afterLine1.toFixed(1),
+            HP_afterLine2: +HP_afterLine2.toFixed(1),
+            PQWT_ftps2: +PQWT_ftps2.toFixed(1),
+            AMin_ftps2: +AMin.toFixed(3),
+            AMax_ftps2: +AMax.toFixed(3),
+            AGS_afterClamp_ftps2: +AGS.toFixed(3),
+          });
+        }
         
         // DEV: Aero/traction trace for first 20 steps
         if (stepCount <= 20 && typeof console !== 'undefined' && console.log) {
