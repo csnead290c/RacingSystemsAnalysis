@@ -316,6 +316,62 @@ export default function RunInspector() {
             </button>
           </div>
         </div>
+
+        {/* Validation Checklist */}
+        <div
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            backgroundColor: validation.ok ? '#f0fdf4' : '#fef2f2',
+            border: `1px solid ${validation.ok ? '#86efac' : '#fca5a5'}`,
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: '600', marginBottom: '0.5rem', color: validation.ok ? '#166534' : '#991b1b' }}>
+            Fixture Requirements
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.25rem', fontSize: '0.75rem' }}>
+            {/* Check gearRatios */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span>{(fixture as any).drivetrain?.gearRatios?.length ? '✅' : '❌'}</span>
+              <span style={{ color: 'var(--color-text)' }}>drivetrain.gearRatios</span>
+            </div>
+            
+            {/* Check perGearEff */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span>{(fixture as any).drivetrain?.perGearEff?.length ? '✅' : '❌'}</span>
+              <span style={{ color: 'var(--color-text)' }}>drivetrain.perGearEff</span>
+            </div>
+            
+            {/* Check clutch or converter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span>{((fixture as any).drivetrain?.clutch || (fixture as any).drivetrain?.converter) ? '✅' : '❌'}</span>
+              <span style={{ color: 'var(--color-text)' }}>clutch or converter</span>
+            </div>
+            
+            {/* Check engineHP */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span>{(fixture as any).engineHP?.length ? '✅' : '❌'}</span>
+              <span style={{ color: 'var(--color-text)' }}>engineHP</span>
+            </div>
+            
+            {/* Check fuel.type */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span>{(fixture as any).fuel?.type ? '✅' : '❌'}</span>
+              <span style={{ color: 'var(--color-text)' }}>fuel.type</span>
+            </div>
+            
+            {/* Check PMI */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span>{
+                ((fixture as any).pmi?.engineFlywheelClutch != null &&
+                 (fixture as any).pmi?.transDriveshaft != null &&
+                 (fixture as any).pmi?.tiresWheelsRing != null) ? '✅' : '❌'
+              }</span>
+              <span style={{ color: 'var(--color-text)' }}>pmi.*</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Results */}
