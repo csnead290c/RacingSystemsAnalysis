@@ -6,9 +6,10 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
 import { useFlag } from '../../domain/flags/store.tsx';
-import { assertComplete, Vb6FixtureValidationError } from '../../domain/physics/vb6/fixtures';
+import { validateVB6Fixture } from '../validation/vb6Fixture';
 import { buildInputFromUiFixture } from '../../domain/physics/vb6/uiMapper';
 import { simulate } from '../../workerBridge';
 import type { PhysicsModelId, SimResult } from '../../domain/physics';
@@ -35,6 +36,7 @@ interface StepData {
 }
 
 export default function RunInspector() {
+  const navigate = useNavigate();
   const { fixture } = useVb6Fixture();
   const enableStepTrace = useFlag('enableStepTrace');
   
@@ -45,6 +47,9 @@ export default function RunInspector() {
   const [result, setResult] = useState<SimResult | null>(null);
   const [stepData, setStepData] = useState<StepData[]>([]);
 
+  // Validate fixture
+  const validation = validateVB6Fixture(fixture as any);
+
   const handleRun = async () => {
     setRunning(true);
     setError(null);
@@ -52,11 +57,8 @@ export default function RunInspector() {
     setStepData([]);
 
     try {
-      // Validate fixture
-      assertComplete(fixture);
-      
       // Build simulation input
-      const input = buildInputFromUiFixture(fixture);
+      const input = buildInputFromUiFixture(fixture as any);
       input.raceLength = raceLength;
       
       // TODO: Capture step data from console logs
@@ -71,11 +73,7 @@ export default function RunInspector() {
       setStepData([]);
       
     } catch (err) {
-      if (err instanceof Vb6FixtureValidationError) {
-        setError(`Fixture validation failed:\n\n${err.message}\n\nPlease complete all required fields in VB6 Inputs panel.`);
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRunning(false);
     }
@@ -136,6 +134,47 @@ export default function RunInspector() {
           Run simulations with VB6 fixtures and inspect detailed step-by-step physics data.
         </p>
       </div>
+
+      {/* VB6 Fixture Validation Error */}
+      {!validation.ok && (
+        <div
+          style={{
+            padding: '1rem',
+            backgroundColor: '#fee2e2',
+            border: '1px solid #ef4444',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={{ marginBottom: '0.75rem' }}>
+            <strong style={{ color: '#991b1b', fontSize: '0.875rem' }}>
+              ⚠️ VB6 Fixture Incomplete
+            </strong>
+          </div>
+          <div style={{ fontSize: '0.875rem', color: '#991b1b', marginBottom: '0.75rem' }}>
+            Missing required fields:
+          </div>
+          <ul style={{ margin: '0 0 0.75rem 1.5rem', padding: 0, fontSize: '0.875rem', color: '#991b1b' }}>
+            {validation.missing.map((field, idx) => (
+              <li key={idx}><code>{field}</code></li>
+            ))}
+          </ul>
+          <button
+            onClick={() => navigate('/vb6')}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+          >
+            Open VB6 Inputs
+          </button>
+        </div>
+      )}
 
       {/* Step Trace Flag Warning */}
       {!enableStepTrace && (
@@ -238,17 +277,17 @@ export default function RunInspector() {
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button
               onClick={handleRun}
-              disabled={running}
+              disabled={running || !validation.ok}
               style={{
                 width: '100%',
                 padding: '0.5rem 1rem',
                 fontSize: '0.875rem',
                 fontWeight: '500',
-                backgroundColor: running ? '#9ca3af' : '#10b981',
+                backgroundColor: (running || !validation.ok) ? '#9ca3af' : '#10b981',
                 color: 'white',
                 border: 'none',
                 borderRadius: 'var(--radius-md)',
-                cursor: running ? 'not-allowed' : 'pointer',
+                cursor: (running || !validation.ok) ? 'not-allowed' : 'pointer',
               }}
             >
               {running ? 'Running...' : 'Run with current VB6 UI Fixture'}
