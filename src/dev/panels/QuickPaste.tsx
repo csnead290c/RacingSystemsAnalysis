@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
 import { assertComplete, Vb6FixtureValidationError } from '../../domain/physics/vb6/fixtures';
 import { validateVB6Fixture } from '../validation/vb6Fixture';
@@ -21,6 +21,7 @@ const PROFILES_STORAGE_KEY = 'rsa.quickpaste.profiles.v1';
 
 export default function QuickPaste() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { fixture, setFixture } = useVb6Fixture();
   
   const [dynoText, setDynoText] = useState('');
@@ -293,6 +294,15 @@ export default function QuickPaste() {
       setLoading(false);
     }
   };
+
+  // Auto-load example if specified in URL
+  useEffect(() => {
+    const example = searchParams.get('example');
+    if (example === 'prostock') {
+      handleLoadProStockExample();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   return (
     <div style={{ padding: '2rem', height: '100%', overflow: 'auto' }}>

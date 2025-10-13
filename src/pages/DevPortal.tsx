@@ -5,14 +5,36 @@
  * Only available in DEV builds.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DEV_PANELS } from '../dev/registry.tsx';
 import Page from '../shared/components/Page';
 
 export default function DevPortal() {
-  const [activePanelId, setActivePanelId] = useState<string>(
-    DEV_PANELS.length > 0 ? DEV_PANELS[0].id : ''
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const panelParam = searchParams.get('panel');
+  
+  const [activePanelId, setActivePanelId] = useState<string>(() => {
+    // Initialize from URL param if present, otherwise use first panel
+    if (panelParam && DEV_PANELS.some(p => p.id === panelParam)) {
+      return panelParam;
+    }
+    return DEV_PANELS.length > 0 ? DEV_PANELS[0].id : '';
+  });
+
+  // Update URL when panel changes
+  useEffect(() => {
+    if (activePanelId) {
+      setSearchParams({ panel: activePanelId }, { replace: true });
+    }
+  }, [activePanelId, setSearchParams]);
+
+  // Update active panel when URL changes
+  useEffect(() => {
+    if (panelParam && DEV_PANELS.some(p => p.id === panelParam)) {
+      setActivePanelId(panelParam);
+    }
+  }, [panelParam]);
 
   const activePanel = DEV_PANELS.find((p) => p.id === activePanelId);
   const ActiveComponent = activePanel?.component;

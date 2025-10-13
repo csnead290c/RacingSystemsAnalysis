@@ -146,33 +146,55 @@ export default function RunInspector() {
             marginBottom: '1rem',
           }}
         >
-          <div style={{ marginBottom: '0.75rem' }}>
-            <strong style={{ color: '#991b1b', fontSize: '0.875rem' }}>
-              ⚠️ VB6 Fixture Incomplete
-            </strong>
-          </div>
-          <div style={{ fontSize: '0.875rem', color: '#991b1b', marginBottom: '0.75rem' }}>
-            Missing required fields:
-          </div>
-          <ul style={{ margin: '0 0 0.75rem 1.5rem', padding: 0, fontSize: '0.875rem', color: '#991b1b' }}>
-            {validation.missing.map((field, idx) => (
-              <li key={idx}><code>{field}</code></li>
-            ))}
-          </ul>
-          <button
-            onClick={() => navigate('/vb6')}
+          <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.875rem', color: '#991b1b', fontWeight: '600' }}>
+            Fixture validation failed.
+          </p>
+          <pre
             style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
+              margin: '0 0 0.75rem 0',
+              padding: '0.5rem',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fca5a5',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.75rem',
+              color: '#991b1b',
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
             }}
           >
-            Open VB6 Inputs
-          </button>
+            {validation.missing.join(', ')}
+          </pre>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => navigate('/dev?panel=input-inspector')}
+              style={{
+                padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+              }}
+            >
+              Open VB6 Inputs
+            </button>
+            <button
+              onClick={() => navigate('/dev?panel=quick-paste&example=prostock')}
+              style={{
+                padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                backgroundColor: '#6b7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+              }}
+            >
+              Load ProStock_Pro Example
+            </button>
+          </div>
         </div>
       )}
 
