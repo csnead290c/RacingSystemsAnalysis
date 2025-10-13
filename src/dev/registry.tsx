@@ -11,6 +11,7 @@ import InputInspector from './panels/InputInspector';
 import RunInspector from './panels/RunInspector';
 import EnergyPanel from './panels/EnergyPanel';
 import ParityRunner from './panels/ParityRunner';
+import QuickPaste from './panels/QuickPaste';
 
 export interface DevPanel {
   id: string;
@@ -58,6 +59,11 @@ export const DEV_PANELS: DevPanel[] = [
     id: 'parity',
     title: 'Legacy Parity Runner',
     component: ParityRunner,
+  },
+  {
+    id: 'quick-paste',
+    title: 'Quick Paste (Dyno & PMI)',
+    component: QuickPaste,
   },
   {
     id: 'welcome',
