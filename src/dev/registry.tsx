@@ -13,6 +13,7 @@ import EnergyPanel from './panels/EnergyPanel';
 import ParityRunner from './panels/ParityRunner';
 import QuickPaste from './panels/QuickPaste';
 import AirInspector from './panels/AirInspector';
+import LoggingPanel from './panels/LoggingPanel';
 
 export interface DevPanel {
   id: string;
@@ -70,6 +71,11 @@ export const DEV_PANELS: DevPanel[] = [
     id: 'air',
     title: 'Environment & Air Model',
     component: AirInspector,
+  },
+  {
+    id: 'logging',
+    title: 'Logging & Downloads',
+    component: LoggingPanel,
   },
   {
     id: 'welcome',
