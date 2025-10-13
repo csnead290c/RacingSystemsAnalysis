@@ -10,6 +10,7 @@ import FlagsPanel from './panels/FlagsPanel';
 import InputInspector from './panels/InputInspector';
 import RunInspector from './panels/RunInspector';
 import EnergyPanel from './panels/EnergyPanel';
+import ParityRunner from './panels/ParityRunner';
 
 export interface DevPanel {
   id: string;
@@ -52,6 +53,11 @@ export const DEV_PANELS: DevPanel[] = [
     id: 'energy',
     title: 'Energy Accounting',
     component: EnergyPanel,
+  },
+  {
+    id: 'parity',
+    title: 'Legacy Parity Runner',
+    component: ParityRunner,
   },
   {
     id: 'welcome',
