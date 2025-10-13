@@ -6,8 +6,10 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
 import { assertComplete, Vb6FixtureValidationError } from '../../domain/physics/vb6/fixtures';
+import { validateVB6Fixture } from '../validation/vb6Fixture';
 
 interface SavedProfile {
   name: string;
@@ -18,6 +20,7 @@ interface SavedProfile {
 const PROFILES_STORAGE_KEY = 'rsa.quickpaste.profiles.v1';
 
 export default function QuickPaste() {
+  const navigate = useNavigate();
   const { fixture, setFixture } = useVb6Fixture();
   
   const [dynoText, setDynoText] = useState('');
@@ -33,6 +36,7 @@ export default function QuickPaste() {
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [newProfileName, setNewProfileName] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Load profiles from localStorage
   useEffect(() => {
@@ -248,6 +252,45 @@ export default function QuickPaste() {
       } else {
         setValidationError(err instanceof Error ? err.message : String(err));
       }
+    }
+  };
+
+  const handleLoadProStockExample = async () => {
+    setLoading(true);
+    setValidationError(null);
+    
+    try {
+      // Fetch the ProStock_Pro fixture
+      const response = await fetch('/src/dev/fixtures/ProStock_Pro.vb6.json');
+      if (!response.ok) {
+        throw new Error(`Failed to load fixture: ${response.statusText}`);
+      }
+      
+      const fixtureData = await response.json();
+      
+      // Set the fixture
+      setFixture(fixtureData);
+      
+      // Validate the fixture
+      const validation = validateVB6Fixture(fixtureData);
+      
+      if (validation.ok) {
+        alert('✓ ProStock_Pro fixture loaded and validated successfully!');
+      } else {
+        const missingFields = validation.missing.join(', ');
+        alert(`⚠ Fixture loaded but incomplete.\n\nMissing fields: ${missingFields}`);
+        setValidationError(`Missing fields: ${missingFields}`);
+      }
+      
+      // Navigate to Input Inspector
+      navigate('/dev?panel=input-inspector');
+      
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setValidationError(`Failed to load ProStock_Pro fixture: ${errorMsg}`);
+      alert(`❌ Error loading fixture: ${errorMsg}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -617,6 +660,40 @@ export default function QuickPaste() {
             No saved profiles yet
           </p>
         )}
+      </div>
+
+      {/* Load Example */}
+      <div
+        style={{
+          padding: '1rem',
+          backgroundColor: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '1rem',
+        }}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', fontWeight: '600' }}>
+          4. Load Example Fixture
+        </h3>
+        <button
+          onClick={handleLoadProStockExample}
+          disabled={loading}
+          style={{
+            padding: '0.75rem 1.5rem',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            backgroundColor: loading ? '#9ca3af' : '#f59e0b',
+            color: 'white',
+            border: 'none',
+            borderRadius: 'var(--radius-md)',
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {loading ? 'Loading...' : 'Load Example: ProStock_Pro'}
+        </button>
+        <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+          Loads complete ProStock_Pro fixture from VB6 printout, validates it, and opens Input Inspector
+        </p>
       </div>
 
       {/* Validation Button */}
