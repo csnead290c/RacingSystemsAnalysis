@@ -51,9 +51,9 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
 
     // Check PMI
     expect(fixture.pmi).toBeDefined();
-    expect(fixture.pmi.engineFlywheelClutch).toBeDefined();
-    expect(fixture.pmi.transDriveshaft).toBeDefined();
-    expect(fixture.pmi.tiresWheelsRing).toBeDefined();
+    expect(fixture.pmi.engine_flywheel_clutch).toBeDefined();
+    expect(fixture.pmi.transmission_driveshaft).toBeDefined();
+    expect(fixture.pmi.tires_wheels_ringgear).toBeDefined();
   });
 
   it('should have exact values from VB6 printout', () => {
@@ -71,11 +71,11 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
 
     // Verify first engineHP point
     expect(fixture.engineHP[0]).toBeDefined();
-    expect(fixture.engineHP[0].rpm).toBe(7000);
-    expect(fixture.engineHP[0].hp).toBe(1098);
+    expect(fixture.engineHP[0][0]).toBe(7000);
+    expect(fixture.engineHP[0][1]).toBe(1098);
 
-    // Verify PMI tiresWheelsRing
-    expect(fixture.pmi.tiresWheelsRing).toBe(50.8);
+    // Verify PMI tires_wheels_ringgear
+    expect(fixture.pmi.tires_wheels_ringgear).toBe(50.8);
   });
 
   it('should pass validation checklist requirements', () => {
@@ -99,9 +99,9 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     expect(fixture.fuel?.type).toBeTruthy();
 
     // 6. pmi.*
-    expect(fixture.pmi?.engineFlywheelClutch).toBeDefined();
-    expect(fixture.pmi?.transDriveshaft).toBeDefined();
-    expect(fixture.pmi?.tiresWheelsRing).toBeDefined();
+    expect(fixture.pmi?.engine_flywheel_clutch).toBeDefined();
+    expect(fixture.pmi?.transmission_driveshaft).toBeDefined();
+    expect(fixture.pmi?.tires_wheels_ringgear).toBeDefined();
   });
 
   it('should have matching gear ratios and efficiencies lengths', () => {
@@ -158,7 +158,7 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     const fixture = ProStockProFixture;
 
     // Check fuel fields from printout
-    expect(fixture.fuel.type).toBe('Gasoline Carburetor');
+    expect(fixture.fuel.type).toBe('GAS');
     expect(fixture.fuel.hpTorqueMultiplier).toBe(1.000);
   });
 
@@ -166,9 +166,9 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     const fixture = ProStockProFixture;
 
     // Check PMI fields from printout
-    expect(fixture.pmi.engineFlywheelClutch).toBe(3.42);
-    expect(fixture.pmi.transDriveshaft).toBe(0.247);
-    expect(fixture.pmi.tiresWheelsRing).toBe(50.8);
+    expect(fixture.pmi.engine_flywheel_clutch).toBe(3.42);
+    expect(fixture.pmi.transmission_driveshaft).toBe(0.247);
+    expect(fixture.pmi.tires_wheels_ringgear).toBe(50.8);
   });
 
   it('should have complete engine HP curve', () => {
@@ -178,17 +178,17 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     expect(fixture.engineHP.length).toBe(11);
 
     // Check first point
-    expect(fixture.engineHP[0].rpm).toBe(7000);
-    expect(fixture.engineHP[0].hp).toBe(1098);
+    expect(fixture.engineHP[0][0]).toBe(7000);
+    expect(fixture.engineHP[0][1]).toBe(1098);
 
     // Check peak HP point
-    const peakPoint = fixture.engineHP.find(p => p.hp === 1300);
+    const peakPoint = fixture.engineHP.find(p => p[1] === 1300);
     expect(peakPoint).toBeDefined();
-    expect(peakPoint!.rpm).toBe(8750);
+    expect(peakPoint![0]).toBe(8750);
 
     // Check last point
-    expect(fixture.engineHP[10].rpm).toBe(9500);
-    expect(fixture.engineHP[10].hp).toBe(1222);
+    expect(fixture.engineHP[10][0]).toBe(9500);
+    expect(fixture.engineHP[10][1]).toBe(1222);
   });
 
   it('should be ready for Run Inspector QUARTER simulation', () => {
@@ -241,8 +241,8 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     const originalGearRatios = [...fixture.drivetrain.gearRatios];
     const originalPerGearEff = [...fixture.drivetrain.perGearEff];
     const originalSlipRPM = fixture.drivetrain.clutch.slipRPM;
-    const originalFirstRPM = fixture.engineHP[0].rpm;
-    const originalTiresWheelsRing = fixture.pmi.tiresWheelsRing;
+    const originalFirstRPM = fixture.engineHP[0][0];
+    const originalTiresWheelsRing = fixture.pmi.tires_wheels_ringgear;
 
     // Validate (should not mutate)
     validateVB6Fixture(fixture);
@@ -251,8 +251,8 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     expect(fixture.drivetrain.gearRatios).toEqual(originalGearRatios);
     expect(fixture.drivetrain.perGearEff).toEqual(originalPerGearEff);
     expect(fixture.drivetrain.clutch.slipRPM).toBe(originalSlipRPM);
-    expect(fixture.engineHP[0].rpm).toBe(originalFirstRPM);
-    expect(fixture.pmi.tiresWheelsRing).toBe(originalTiresWheelsRing);
+    expect(fixture.engineHP[0][0]).toBe(originalFirstRPM);
+    expect(fixture.pmi.tires_wheels_ringgear).toBe(originalTiresWheelsRing);
   });
 });
 

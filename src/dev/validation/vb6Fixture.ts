@@ -19,7 +19,7 @@ export type VB6Fixture = {
   };
   fuel?: { type: string; hpTorqueMultiplier?: number };
   engineHP?: Array<{ rpm: number; hp: number }>;
-  pmi?: { engineFlywheelClutch: number; transDriveshaft: number; tiresWheelsRing: number };
+  pmi?: { engine_flywheel_clutch: number; transmission_driveshaft: number; tires_wheels_ringgear: number };
 };
 
 export type ValidationResult = { ok: true } | { ok: false; missing: string[] };
@@ -71,16 +71,16 @@ export function validateVB6Fixture(fx: Partial<VB6Fixture>): ValidationResult {
   }
   
   // Check PMI values (use == null to allow 0.0 as valid)
-  if (fx.pmi?.engineFlywheelClutch == null) {
-    missing.push('pmi.engineFlywheelClutch');
+  if (fx.pmi?.engine_flywheel_clutch == null) {
+    missing.push('pmi.engine_flywheel_clutch');
   }
   
-  if (fx.pmi?.transDriveshaft == null) {
-    missing.push('pmi.transDriveshaft');
+  if (fx.pmi?.transmission_driveshaft == null) {
+    missing.push('pmi.transmission_driveshaft');
   }
   
-  if (fx.pmi?.tiresWheelsRing == null) {
-    missing.push('pmi.tiresWheelsRing');
+  if (fx.pmi?.tires_wheels_ringgear == null) {
+    missing.push('pmi.tires_wheels_ringgear');
   }
 
   return missing.length ? { ok: false, missing } : { ok: true };

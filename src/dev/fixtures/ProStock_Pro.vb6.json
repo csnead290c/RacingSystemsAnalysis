@@ -27,23 +27,23 @@
     "shiftRPM": [9400, 9400, 9400, 9400, 0],
     "clutch": { "launchRPM": 7200, "slipRPM": 7600, "slippage": 1.004, "lockup": false }
   },
-  "fuel": { "type": "Gasoline Carburetor", "hpTorqueMultiplier": 1.000 },
+  "fuel": { "type": "GAS", "hpTorqueMultiplier": 1.000 },
   "pmi": {
-    "engineFlywheelClutch": 3.42,
-    "transDriveshaft": 0.247,
-    "tiresWheelsRing": 50.8
+    "engine_flywheel_clutch": 3.42,
+    "transmission_driveshaft": 0.247,
+    "tires_wheels_ringgear": 50.8
   },
   "engineHP": [
-    { "rpm": 7000, "hp": 1098 },
-    { "rpm": 7250, "hp": 1131 },
-    { "rpm": 7500, "hp": 1177 },
-    { "rpm": 7750, "hp": 1226 },
-    { "rpm": 8000, "hp": 1251 },
-    { "rpm": 8250, "hp": 1274 },
-    { "rpm": 8500, "hp": 1288 },
-    { "rpm": 8750, "hp": 1300 },
-    { "rpm": 9000, "hp": 1297 },
-    { "rpm": 9250, "hp": 1269 },
-    { "rpm": 9500, "hp": 1222 }
+    [7000, 1098],
+    [7250, 1131],
+    [7500, 1177],
+    [7750, 1226],
+    [8000, 1251],
+    [8250, 1274],
+    [8500, 1288],
+    [8750, 1300],
+    [9000, 1297],
+    [9250, 1269],
+    [9500, 1222]
   ]
 }

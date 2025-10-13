@@ -365,22 +365,22 @@ export default function RunInspector() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <span
                 title={
-                  ((fixture as any).pmi?.engineFlywheelClutch != null &&
-                   (fixture as any).pmi?.transDriveshaft != null &&
-                   (fixture as any).pmi?.tiresWheelsRing != null)
+                  ((fixture as any).pmi?.engine_flywheel_clutch != null &&
+                   (fixture as any).pmi?.transmission_driveshaft != null &&
+                   (fixture as any).pmi?.tires_wheels_ringgear != null)
                     ? 'All PMI fields present'
                     : (() => {
                         const missing: string[] = [];
-                        if ((fixture as any).pmi?.engineFlywheelClutch == null) missing.push('engineFlywheelClutch');
-                        if ((fixture as any).pmi?.transDriveshaft == null) missing.push('transDriveshaft');
-                        if ((fixture as any).pmi?.tiresWheelsRing == null) missing.push('tiresWheelsRing');
+                        if ((fixture as any).pmi?.engine_flywheel_clutch == null) missing.push('engine_flywheel_clutch');
+                        if ((fixture as any).pmi?.transmission_driveshaft == null) missing.push('transmission_driveshaft');
+                        if ((fixture as any).pmi?.tires_wheels_ringgear == null) missing.push('tires_wheels_ringgear');
                         return `Missing: ${missing.join(', ')}`;
                       })()
                 }
               >
-                {((fixture as any).pmi?.engineFlywheelClutch != null &&
-                  (fixture as any).pmi?.transDriveshaft != null &&
-                  (fixture as any).pmi?.tiresWheelsRing != null) ? '✅' : '❌'}
+                {((fixture as any).pmi?.engine_flywheel_clutch != null &&
+                  (fixture as any).pmi?.transmission_driveshaft != null &&
+                  (fixture as any).pmi?.tires_wheels_ringgear != null) ? '✅' : '❌'}
               </span>
               <span style={{ color: 'var(--color-text)' }}>pmi.*</span>
             </div>

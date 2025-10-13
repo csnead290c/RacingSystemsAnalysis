@@ -272,9 +272,9 @@ export default function QuickPaste() {
       // Ensure PMI data exists with default VB6 values if missing
       if (!fixtureData.pmi) {
         fixtureData.pmi = {
-          engineFlywheelClutch: 3.42,
-          transDriveshaft: 0.247,
-          tiresWheelsRing: 50.8,
+          engine_flywheel_clutch: 3.42,
+          transmission_driveshaft: 0.247,
+          tires_wheels_ringgear: 50.8,
         };
       }
       
