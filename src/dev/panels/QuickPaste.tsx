@@ -292,8 +292,10 @@ export default function QuickPaste() {
         setValidationError(`Missing fields: ${missingFields}`);
       }
       
-      // Navigate to Input Inspector
-      navigate('/dev?panel=input-inspector');
+      // Navigate to Input Inspector (use setTimeout to avoid sync navigation issues)
+      setTimeout(() => {
+        navigate('/dev?panel=input-inspector');
+      }, 100);
       
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -308,7 +310,10 @@ export default function QuickPaste() {
   useEffect(() => {
     const example = searchParams.get('example');
     if (example === 'prostock') {
-      handleLoadProStockExample();
+      // Use setTimeout to avoid synchronous state updates during render
+      setTimeout(() => {
+        handleLoadProStockExample();
+      }, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
