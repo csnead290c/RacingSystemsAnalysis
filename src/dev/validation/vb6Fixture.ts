@@ -70,8 +70,8 @@ export function validateVB6Fixture(fx: Partial<VB6Fixture>): ValidationResult {
     missing.push('fuel.type');
   }
   
-  // Check PMI values
-  if (!fx.pmi?.engineFlywheelClutch) {
+  // Check PMI values (use == null to allow 0.0 as valid)
+  if (fx.pmi?.engineFlywheelClutch == null) {
     missing.push('pmi.engineFlywheelClutch');
   }
   

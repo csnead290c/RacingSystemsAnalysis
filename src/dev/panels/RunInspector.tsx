@@ -363,11 +363,25 @@ export default function RunInspector() {
             
             {/* Check PMI */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <span>{
-                ((fixture as any).pmi?.engineFlywheelClutch != null &&
-                 (fixture as any).pmi?.transDriveshaft != null &&
-                 (fixture as any).pmi?.tiresWheelsRing != null) ? '✅' : '❌'
-              }</span>
+              <span
+                title={
+                  ((fixture as any).pmi?.engineFlywheelClutch != null &&
+                   (fixture as any).pmi?.transDriveshaft != null &&
+                   (fixture as any).pmi?.tiresWheelsRing != null)
+                    ? 'All PMI fields present'
+                    : (() => {
+                        const missing: string[] = [];
+                        if ((fixture as any).pmi?.engineFlywheelClutch == null) missing.push('engineFlywheelClutch');
+                        if ((fixture as any).pmi?.transDriveshaft == null) missing.push('transDriveshaft');
+                        if ((fixture as any).pmi?.tiresWheelsRing == null) missing.push('tiresWheelsRing');
+                        return `Missing: ${missing.join(', ')}`;
+                      })()
+                }
+              >
+                {((fixture as any).pmi?.engineFlywheelClutch != null &&
+                  (fixture as any).pmi?.transDriveshaft != null &&
+                  (fixture as any).pmi?.tiresWheelsRing != null) ? '✅' : '❌'}
+              </span>
               <span style={{ color: 'var(--color-text)' }}>pmi.*</span>
             </div>
           </div>

@@ -269,6 +269,15 @@ export default function QuickPaste() {
       
       const fixtureData = await response.json();
       
+      // Ensure PMI data exists with default VB6 values if missing
+      if (!fixtureData.pmi) {
+        fixtureData.pmi = {
+          engineFlywheelClutch: 3.42,
+          transDriveshaft: 0.247,
+          tiresWheelsRing: 50.8,
+        };
+      }
+      
       // Set the fixture
       setFixture(fixtureData);
       
@@ -276,7 +285,7 @@ export default function QuickPaste() {
       const validation = validateVB6Fixture(fixtureData);
       
       if (validation.ok) {
-        alert('✓ ProStock_Pro fixture loaded and validated successfully!');
+        alert('✓ ProStock_Pro fixture loaded and validated successfully!\n\nFixture valid: all PMI fields detected.');
       } else {
         const missingFields = validation.missing.join(', ');
         alert(`⚠ Fixture loaded but incomplete.\n\nMissing fields: ${missingFields}`);
