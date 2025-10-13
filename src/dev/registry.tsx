@@ -12,6 +12,7 @@ import RunInspector from './panels/RunInspector';
 import EnergyPanel from './panels/EnergyPanel';
 import ParityRunner from './panels/ParityRunner';
 import QuickPaste from './panels/QuickPaste';
+import AirInspector from './panels/AirInspector';
 
 export interface DevPanel {
   id: string;
@@ -64,6 +65,11 @@ export const DEV_PANELS: DevPanel[] = [
     id: 'quick-paste',
     title: 'Quick Paste (Dyno & PMI)',
     component: QuickPaste,
+  },
+  {
+    id: 'air',
+    title: 'Environment & Air Model',
+    component: AirInspector,
   },
   {
     id: 'welcome',
