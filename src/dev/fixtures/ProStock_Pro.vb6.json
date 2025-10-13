@@ -1,0 +1,49 @@
+{
+  "environment": {
+    "elevation_ft": 32,
+    "barometer_inHg": 29.92,
+    "temp_F": 75,
+    "rel_humidity_pct": 55,
+    "wind_mph": 5.0,
+    "wind_angle_deg": 135,
+    "trackTemp_F": 105,
+    "tractionIndex": 3
+  },
+  "vehicle": {
+    "weight_lb": 2355,
+    "wheelbase_in": 107,
+    "overhang_in": 40,
+    "tire_rollout_in": 102.5,
+    "tire_width_in": 17.0,
+    "frontalArea_ft2": 18.2,
+    "Cd": 0.240,
+    "Cl": 0.100
+  },
+  "drivetrain": {
+    "finalDrive": 4.86,
+    "efficiency": 0.975,
+    "gearRatios": [2.60, 1.90, 1.50, 1.20, 1.00],
+    "perGearEff": [0.990, 0.991, 0.992, 0.993, 0.994],
+    "shiftRPM": [9400, 9400, 9400, 9400, 0],
+    "clutch": { "launchRPM": 7200, "slipRPM": 7600, "slippage": 1.004, "lockup": false }
+  },
+  "fuel": { "type": "Gasoline Carburetor", "hpTorqueMultiplier": 1.000 },
+  "pmi": {
+    "engineFlywheelClutch": 3.42,
+    "transDriveshaft": 0.247,
+    "tiresWheelsRing": 50.8
+  },
+  "engineHP": [
+    { "rpm": 7000, "hp": 1098 },
+    { "rpm": 7250, "hp": 1131 },
+    { "rpm": 7500, "hp": 1177 },
+    { "rpm": 7750, "hp": 1226 },
+    { "rpm": 8000, "hp": 1251 },
+    { "rpm": 8250, "hp": 1274 },
+    { "rpm": 8500, "hp": 1288 },
+    { "rpm": 8750, "hp": 1300 },
+    { "rpm": 9000, "hp": 1297 },
+    { "rpm": 9250, "hp": 1269 },
+    { "rpm": 9500, "hp": 1222 }
+  ]
+}
