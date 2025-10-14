@@ -171,5 +171,28 @@ export function toSimInputFromVB6(fx: VB6Fixture, distanceFt: number) {
     }
   }
 
+  // --- Ensure race length numeric for model ---
+  const raceLenFt =
+    Number.isFinite(distanceFt) ? Number(distanceFt) :
+    Number((fx as any)?.raceLengthFt) ||
+    ((fx as any)?.raceLength === 'EIGHTH' ? 660 : 1320);
+
+  out.raceLengthFt = raceLenFt;        // model primary field
+  out.raceLength = raceLenFt === 660 ? 'EIGHTH' : 'QUARTER'; // alias for logs
+
+  // --- Ensure engineParams.powerHP from VB6 engineHP (tuples/objects) ---
+  if (!out.engineParams?.powerHP && Array.isArray((fx as any)?.engineHP)) {
+    const hpMult = (fx as any)?.fuel?.hpTorqueMultiplier ?? 1;
+    const powerHP = (fx as any).engineHP
+      .map((pt: any) => Array.isArray(pt)
+        ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
+        : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
+      .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: any, b: any) => a.rpm - b.rpm);
+    if (powerHP.length >= 2) {
+      out.engineParams = { ...(out.engineParams ?? {}), powerHP };
+    }
+  }
+
   return out;
 }
