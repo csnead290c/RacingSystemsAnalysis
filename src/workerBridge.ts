@@ -135,8 +135,8 @@ export async function simulate(
       { type: 'module' }
     );
 
-    // 30 second timeout
-    const timeoutMs = 30000;
+    // dev: give worker more time (physics is heavy)
+    const TIMEOUT_MS = import.meta.env.DEV ? 120000 : 30000;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let settled = false;
 
@@ -151,12 +151,9 @@ export async function simulate(
 
     // Set up timeout
     timeoutId = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        cleanup();
-        reject(new Error('Worker simulation timed out after 30s'));
-      }
-    }, timeoutMs);
+      cleanup();
+      reject(new Error(`Worker simulation timed out after ${TIMEOUT_MS/1000}s`));
+    }, TIMEOUT_MS);
 
     // Handle worker messages
     const handleMessage = (event: MessageEvent<WorkerResponse>) => {
@@ -203,6 +200,7 @@ export async function simulate(
       model,
       hasEngineParams: !!(input as any)?.engineParams,
       hasPowerHP: !!(input as any)?.engineParams?.powerHP,
+      raceLengthFt: (input as any)?.raceLengthFt,
       powerHP_2: (input as any)?.engineParams?.powerHP?.slice?.(0, 2),
     });
 
