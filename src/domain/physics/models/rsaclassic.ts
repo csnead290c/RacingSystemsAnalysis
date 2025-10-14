@@ -37,30 +37,27 @@ class RSACLASSICModel implements PhysicsModel {
 
   simulate(input: SimInputs): SimResult {
     // --- watchdogs & helpers (DEV safety) ---
-    const START_MS = Date.now();
-    const WALL_MS = 90_000;          // 90s wall limit inside the worker
-    const MAX_STEPS = 2_000_000;     // absolute step cap
-    const PROGRESS_EVERY = 50_000;   // log heartbeat
-    let lastDist = 0;
-    let lastMs = START_MS;
+    const WATCH_START_MS = Date.now();
+    const WATCH_WALL_MS  = 90_000;         // 90s wall limit
+    const WATCH_STEP_CAP = 2_000_000;      // absolute step cap
+    const WATCH_HEARTBEAT = 50_000;        // log heartbeat
+    let watchLastDist = 0;
 
     function watchdog(step: number, dist_ft: number) {
       const now = Date.now();
-      if ((now - START_MS) > WALL_MS) {
-        throw new Error(`simulation wall-time exceeded ${WALL_MS/1000}s @ step=${step} dist=${dist_ft.toFixed(2)}ft`);
+      if ((now - WATCH_START_MS) > WATCH_WALL_MS) {
+        throw new Error(`simulation wall-time exceeded ${WATCH_WALL_MS/1000}s @ step=${step} dist=${dist_ft.toFixed(2)}ft`);
       }
-      if (step >= MAX_STEPS) {
-        throw new Error(`simulation step cap hit (${MAX_STEPS}) dist=${dist_ft.toFixed(2)}ft`);
+      if (step >= WATCH_STEP_CAP) {
+        throw new Error(`simulation step cap hit (${WATCH_STEP_CAP}) dist=${dist_ft.toFixed(2)}ft`);
       }
-      if (step % PROGRESS_EVERY === 0) {
-        // detect stall: < 1e-3 ft gained over the last 50k steps
-        const gained = dist_ft - lastDist;
-        console.log('[RSACLASSIC] heartbeat', { step, dist_ft: +dist_ft.toFixed(3), gained_ft: +gained.toExponential(2), ms: now - START_MS });
+      if (step % WATCH_HEARTBEAT === 0) {
+        const gained = dist_ft - watchLastDist;
+        console.log('[RSACLASSIC] heartbeat', { step, dist_ft: +dist_ft.toFixed(3), gained_ft: +gained.toExponential(2), ms: Date.now() - WATCH_START_MS });
         if (step > 0 && gained < 1e-3) {
-          throw new Error(`simulation stalled (Δdist<1e-3 ft over ${PROGRESS_EVERY} steps) @ step=${step}, dist=${dist_ft.toFixed(6)}ft`);
+          throw new Error(`simulation stalled (Δdist<1e-3 ft over ${WATCH_HEARTBEAT} steps) @ step=${step}, dist=${dist_ft.toFixed(6)}ft`);
         }
-        lastDist = dist_ft;
-        lastMs = now;
+        watchLastDist = dist_ft;
       }
     }
 
@@ -230,7 +227,6 @@ class RSACLASSICModel implements PhysicsModel {
     // For fixed-timestep implementation, use 0.002s matching VB6's TimeTol (TIMESLIP.FRM:554)
     const dt_s = 0.002; // VB6 TimeTol = 0.002s (TIMESLIP.FRM:554)
     const MAX_TIME_S = 30; // Generous cap to avoid false stops while diagnosing
-    const MAX_STEPS = Math.ceil(MAX_TIME_S / dt_s);
     const traceInterval_s = 0.01; // Collect traces every 10ms
     
     // Initialize state
@@ -1279,7 +1275,7 @@ class RSACLASSICModel implements PhysicsModel {
       et_s: +(result?.et_s?.toFixed?.(4) ?? result?.et_s),
       mph: +(result?.mph?.toFixed?.(1) ?? result?.mph),
       steps: result?.meta?.termination?.steps ?? stepCount,
-      wallMs: Date.now() - START_MS,
+      wallMs: Date.now() - WATCH_START_MS,
     });
     
     return result;
