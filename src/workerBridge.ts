@@ -198,7 +198,15 @@ export async function simulate(
     worker.addEventListener('message', handleMessage);
     worker.addEventListener('error', handleError);
 
-    // Send request to worker
+    // Debug: verify input before sending
+    console.debug('[BRIDGE → WORKER]', {
+      model,
+      hasEngineParams: !!(input as any)?.engineParams,
+      hasPowerHP: !!(input as any)?.engineParams?.powerHP,
+      powerHP_2: (input as any)?.engineParams?.powerHP?.slice?.(0, 2),
+    });
+
+    // Send request to worker with flat input envelope
     worker.postMessage({
       id: messageId,
       kind: 'physics',
