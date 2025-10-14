@@ -140,7 +140,7 @@ self.onmessage = async (event: MessageEvent) => {
     const result = await Promise.resolve(model.simulate(input));
     (self as any).postMessage({ ok: true, result });
   } catch (err: any) {
-    (self as any).postMessage({ ok: false, error: String(err?.message ?? err) });
+    (self as any).postMessage({ ok: false, error: 'MODEL_ERROR: ' + String(err?.message ?? err) });
   }
 };
 
