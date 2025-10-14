@@ -50,37 +50,6 @@ export default function RunInspector() {
   // Validate fixture
   const validation = validateVB6Fixture(fixture as any);
 
-  /**
-   * Adapt VB6 fixture for simulation.
-   * Ensures engineParams.powerHP exists and handles field name variations.
-   */
-  const adaptVB6ForSim = (input: any) => {
-    // Name shims
-    if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
-      input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
-    }
-    if (input?.drivetrain?.overallEfficiency && !input.drivetrain.overallEff) {
-      input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
-    }
-
-    // Ensure powerHP exists
-    if (!input?.engineParams?.powerHP && Array.isArray(input?.engineHP)) {
-      const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
-      input.engineParams = {
-        ...(input.engineParams ?? {}),
-        powerHP: input.engineHP
-          .map((pt: any) =>
-            Array.isArray(pt)
-              ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
-              : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult }
-          )
-          .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
-          .sort((a: any, b: any) => a.rpm - b.rpm),
-      };
-    }
-    return input;
-  };
-
   const handleRun = async () => {
     if (!fixture) {
       setError('No fixture loaded.');
@@ -96,9 +65,20 @@ export default function RunInspector() {
       // Convert race length to distance in feet
       const distanceFt = raceLength === 'EIGHTH' ? 660 : 1320;
       
-      // Use adapter to convert VB6 fixture to simulation input
-      let simInput = toSimInputFromVB6(fixture as any, distanceFt);
-      simInput = adaptVB6ForSim(simInput);
+      // Build flat normalized input (no wrapper)
+      const simInput = toSimInputFromVB6(fixture as any, distanceFt);
+      
+      // Apply UI alias tolerance
+      if (simInput?.drivetrain?.shiftsRPM && !simInput.drivetrain.shiftRPM) {
+        simInput.drivetrain.shiftRPM = simInput.drivetrain.shiftsRPM;
+      }
+      if (simInput?.drivetrain?.overallEfficiency && !simInput.drivetrain.overallEff) {
+        simInput.drivetrain.overallEff = simInput.drivetrain.overallEfficiency;
+      }
+      
+      // Debug: verify powerHP exists
+      console.debug('[RUN] powerHP?', !!(simInput as any)?.engineParams?.powerHP,
+                    (simInput as any)?.engineParams?.powerHP?.slice?.(0, 2));
       
       // TODO: Capture step data from console logs
       // For now, we'll just run the simulation and get the result
