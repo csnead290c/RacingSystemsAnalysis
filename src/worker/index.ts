@@ -13,45 +13,37 @@ import { getModel, type PhysicsModelId, type SimInputs, type SimResult } from '.
 type PowerPt = { rpm: number; hp: number };
 
 /**
- * Ensure engineParams.powerHP exists.
- * Converts VB6-style engineHP array to modern format with fuel multiplier.
+ * Add field name aliases for compatibility.
  */
-function ensurePowerHP(input: any): any {
-  if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) return input;
-
-  const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
-  const vb6HP = input?.engineHP;
-
-  if (Array.isArray(vb6HP) && vb6HP.length >= 2) {
-    const powerHP: PowerPt[] = vb6HP
-      .map((pt: any) =>
-        Array.isArray(pt)
-          ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
-          : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult }
-      )
-      .filter(p => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
-      .sort((a, b) => a.rpm - b.rpm);
-
-    input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+function aliasFields(input: any) {
+  if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
+    input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+  }
+  if (input?.drivetrain?.overallEfficiency && !input.drivetrain?.overallEff) {
+    input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
   }
   return input;
 }
 
 /**
- * Normalize field name variations.
- * Handles different naming conventions from Dev Portal.
+ * Ensure engineParams.powerHP exists.
+ * Converts VB6-style engineHP array to modern format with fuel multiplier.
  */
-function normalizeFieldNames(input: any): any {
-  // Handle shiftsRPM → shiftRPM
-  if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
-    input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+function ensurePowerHP(input: any) {
+  if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) return input;
+  const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+  if (Array.isArray(input?.engineHP)) {
+    const powerHP: PowerPt[] = input.engineHP
+      .map((pt: any) =>
+        Array.isArray(pt)
+          ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
+          : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
+      .filter(p => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a, b) => a.rpm - b.rpm);
+    if (powerHP.length >= 2) {
+      input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+    }
   }
-
-  // Handle overallEfficiency → overallEff
-  if (input?.drivetrain?.overallEfficiency && !input.drivetrain.overallEff) {
-    input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
-  }
-
   return input;
 }
 
@@ -121,34 +113,26 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
 
       self.postMessage(response);
     } else if (kind === 'physics') {
-      // Accept both {input,...} and flat payloads
-      let incoming = message.payload || {};
-      const modelId = message.model || (incoming as any).model || 'RSACLASSIC';
+      // Accept flat input or { input } or { fixture, raceLengthFt }
+      const raw = message.payload || {};
+      let payload: any = (raw as any)?.fixture ? { ...((raw as any).fixture || {}) } : { ...raw };
 
-      // Normalize
-      incoming = normalizeFieldNames(incoming);
-      incoming = ensurePowerHP(incoming);
+      payload = aliasFields(payload);
+      payload = ensurePowerHP(payload);
 
-      // DIAGNOSTIC: one-time snapshot of what we actually run with
       console.log('[WORKER:normalized.input]', {
-        hasEngineParams: !!incoming.engineParams,
-        hasPowerHP: !!(incoming as any)?.engineParams?.powerHP,
-        sampleHP: (incoming as any)?.engineParams?.powerHP?.slice?.(0, 3),
-        engineHP_len: Array.isArray((incoming as any)?.engineHP) ? (incoming as any).engineHP.length : undefined,
-        fieldNames: Object.keys(incoming || {}),
+        hasEngineParams: !!payload.engineParams,
+        hasPowerHP: !!payload?.engineParams?.powerHP,
+        sampleHP: payload?.engineParams?.powerHP?.slice?.(0, 3),
       });
 
-      if (!(incoming as any)?.engineParams?.powerHP && !(incoming as any)?.engineParams?.torqueCurve) {
-        throw new Error(
-          `Normalized input lacks engineParams.powerHP/torqueCurve. ` +
-          `engineHP present: ${Array.isArray((incoming as any)?.engineHP)} ` +
-          `length: ${Array.isArray((incoming as any)?.engineHP) ? (incoming as any).engineHP.length : 0}`
-        );
+      if (!payload?.engineParams?.powerHP && !payload?.engineParams?.torqueCurve) {
+        throw new Error('EngineParams must provide either torqueCurve or powerHP');
       }
 
-      // Execute physics model simulation
+      const modelId = message.model || payload.model || 'RSACLASSIC';
       const model = getModel(modelId);
-      const result = model.simulate(incoming);
+      const result = model.simulate(payload);
 
       // Send success response
       const response: WorkerSuccessResponse = {
