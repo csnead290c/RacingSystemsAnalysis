@@ -63,12 +63,12 @@ export default function RunInspector() {
 
     try {
       // Convert race length to distance in feet
-      const distanceFt = raceLength === 'EIGHTH' ? 660 : 1320;
+      const raceLengthFt = raceLength === 'EIGHTH' ? 660 : 1320;
       
       // Build flat normalized input (no wrapper)
-      const simInput = toSimInputFromVB6(fixture as any, distanceFt);
+      let simInput = toSimInputFromVB6(fixture as any, raceLengthFt);
       
-      // Apply UI alias tolerance
+      // quick aliases (safe no-ops if already set)
       if (simInput?.drivetrain?.shiftsRPM && !simInput.drivetrain.shiftRPM) {
         simInput.drivetrain.shiftRPM = simInput.drivetrain.shiftsRPM;
       }
@@ -76,16 +76,16 @@ export default function RunInspector() {
         simInput.drivetrain.overallEff = simInput.drivetrain.overallEfficiency;
       }
       
-      // Debug: verify powerHP exists
       console.debug('[RUN] powerHP?', !!(simInput as any)?.engineParams?.powerHP,
-                    (simInput as any)?.engineParams?.powerHP?.slice?.(0, 2));
+                    (simInput as any)?.engineParams?.powerHP?.slice?.(0, 2),
+                    'raceLengthFt', (simInput as any)?.raceLengthFt);
       
       // TODO: Capture step data from console logs
       // For now, we'll just run the simulation and get the result
       // In the future, we need to hook into the logger or pass a callback
       
-      const simResult = await simulate(selectedModel, simInput);
-      setResult(simResult);
+      const res = await simulate(selectedModel, simInput);
+      setResult(res);
       
       // Parse step data from console if available
       // This is a placeholder - in production, we'd need a proper hook
