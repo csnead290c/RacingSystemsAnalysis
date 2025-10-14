@@ -8,6 +8,61 @@ import type { PredictRequest } from '../domain/quarter/types';
 import { getModel, type PhysicsModelId, type SimInputs, type SimResult } from '../domain/physics';
 
 /**
+ * Power point for engine curve.
+ */
+type PowerPt = { rpm: number; hp: number };
+
+/**
+ * Normalize VB6-style inputs to modern format.
+ * Handles engineHP array conversion and fuel multiplier application.
+ */
+function normalizeEngineParams(input: any): any {
+  // If already has engineParams.powerHP, return as-is
+  if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) {
+    return input;
+  }
+
+  const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+
+  // Support VB6-style engineHP: [[rpm, hp], ...] OR [{rpm, hp}, ...]
+  const vb6HP = input?.engineHP;
+  if (Array.isArray(vb6HP) && vb6HP.length >= 2) {
+    const powerHP: PowerPt[] = vb6HP
+      .map((pt: any) => {
+        if (Array.isArray(pt)) {
+          const [rpm, hp] = pt;
+          return { rpm: Number(rpm), hp: Number(hp) * hpMult };
+        }
+        return { rpm: Number(pt.rpm), hp: Number(pt.hp) * hpMult };
+      })
+      .filter((p) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a, b) => a.rpm - b.rpm);
+
+    input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+  }
+
+  return input;
+}
+
+/**
+ * Normalize field name variations.
+ * Handles different naming conventions from Dev Portal.
+ */
+function normalizeFieldNames(input: any): any {
+  // Handle shiftsRPM → shiftRPM
+  if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
+    input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+  }
+
+  // Handle overallEfficiency → overallEff
+  if (input?.drivetrain?.overallEfficiency && !input.drivetrain.overallEff) {
+    input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
+  }
+
+  return input;
+}
+
+/**
  * Message envelope for worker communication.
  */
 type WorkerMessage =
@@ -73,9 +128,13 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
 
       self.postMessage(response);
     } else if (kind === 'physics') {
+      // Normalize VB6-style inputs
+      let normalized = normalizeEngineParams(message.payload);
+      normalized = normalizeFieldNames(normalized);
+
       // Execute physics model simulation
       const model = getModel(message.model);
-      const result = model.simulate(message.payload);
+      const result = model.simulate(normalized);
 
       // Send success response
       const response: WorkerSuccessResponse = {
