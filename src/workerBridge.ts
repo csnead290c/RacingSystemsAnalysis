@@ -156,28 +156,26 @@ export async function simulate(
     }, TIMEOUT_MS);
 
     // Handle worker messages
-    const handleMessage = (event: MessageEvent<WorkerResponse>) => {
-      const response = event.data;
-
-      // Ignore messages with different IDs
-      if (response.id !== messageId) {
-        return;
-      }
+    const handleMessage = (event: MessageEvent) => {
+      const msg = event.data;
 
       if (settled) {
         return;
       }
 
+      // Check for error response
+      if (!msg?.ok) {
+        settled = true;
+        const e = new Error(msg?.error ?? 'Worker returned error');
+        cleanup();
+        reject(e);
+        return;
+      }
+
+      // Success response
       settled = true;
       cleanup();
-
-      if (response.ok && response.kind === 'physics') {
-        resolve(response.result);
-      } else if (response.ok) {
-        reject(new Error('Unexpected response kind'));
-      } else {
-        reject(new Error(`Worker error: ${response.error}`));
-      }
+      resolve(msg.result);
     };
 
     // Handle worker errors
