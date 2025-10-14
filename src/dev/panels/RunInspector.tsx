@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
 import { useFlag } from '../../domain/flags/store.tsx';
 import { validateVB6Fixture } from '../validation/vb6Fixture';
-import { buildInputFromUiFixture } from '../../domain/physics/vb6/uiMapper';
+import { toSimInputFromVB6 } from '../vb6/fixtureAdapter';
 import { simulate } from '../../workerBridge';
 import type { PhysicsModelId, SimResult } from '../../domain/physics';
 import type { RaceLength } from '../../domain/config/raceLengths';
@@ -51,15 +51,22 @@ export default function RunInspector() {
   const validation = validateVB6Fixture(fixture as any);
 
   const handleRun = async () => {
+    if (!fixture) {
+      setError('No fixture loaded.');
+      return;
+    }
+
     setRunning(true);
     setError(null);
     setResult(null);
     setStepData([]);
 
     try {
-      // Build simulation input
-      const input = buildInputFromUiFixture(fixture as any);
-      input.raceLength = raceLength;
+      // Convert race length to distance in feet
+      const distanceFt = raceLength === 'EIGHTH' ? 660 : 1320;
+      
+      // Use adapter to convert VB6 fixture to simulation input
+      const input = toSimInputFromVB6(fixture as any, distanceFt);
       
       // TODO: Capture step data from console logs
       // For now, we'll just run the simulation and get the result
@@ -73,6 +80,7 @@ export default function RunInspector() {
       setStepData([]);
       
     } catch (err) {
+      console.error('Run Inspector error:', err);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRunning(false);

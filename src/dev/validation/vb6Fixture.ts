@@ -60,9 +60,9 @@ export function validateVB6Fixture(fx: Partial<VB6Fixture>): ValidationResult {
     missing.push('drivetrain.clutch or drivetrain.converter');
   }
 
-  // Check engine HP curve
-  if (!fx.engineHP?.length) {
-    missing.push('engineHP');
+  // Check engine HP curve (require at least 2 points)
+  if (!fx.engineHP || fx.engineHP.length < 2) {
+    missing.push('engineHP (>=2 points)');
   }
   
   // Check fuel type
