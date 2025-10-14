@@ -115,9 +115,9 @@ export function normalizeEnv(fx: VB6Fixture) {
 /**
  * Convert VB6 fixture to simulation input format.
  * Main entry point for fixture adaptation.
+ * Does not mutate the incoming fixture.
  */
 export function toSimInputFromVB6(fx: VB6Fixture, distanceFt: number) {
-  const engineParams = toEngineParams(fx);
   const drivetrain = toDrivetrainParams(fx);
   const pmi = ensurePMI(fx);
   const env = normalizeEnv(fx);
@@ -138,15 +138,38 @@ export function toSimInputFromVB6(fx: VB6Fixture, distanceFt: number) {
     overhangIn: (veh as any).overhang_in ?? (veh as any).overhang ?? 40,
   };
 
-  return {
+  // Build output object
+  const out: any = {
     model: "RSACLASSIC",
     distanceFt,
     raceLength: raceLength as 'EIGHTH' | 'QUARTER',
     env,
     vehicle,
     drivetrain,
-    engineParams,
     pmi,
     fuel: fx.fuel, // keep for multiplier auditing
-  } as any;
+  };
+
+  // Build engineParams.powerHP from fixture.engineHP
+  // Do not mutate incoming fixture, only write to out object
+  if (fx.engineHP && Array.isArray(fx.engineHP)) {
+    const hpMult = fx?.fuel?.hpTorqueMultiplier ?? 1;
+    const powerHP = (fx.engineHP ?? [])
+      .map((pt: any) =>
+        Array.isArray(pt)
+          ? ({ rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult })
+          : ({ rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult }))
+      .filter(p => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a, b) => a.rpm - b.rpm);
+    
+    if (powerHP.length >= 2) {
+      out.engineParams = { 
+        powerHP,
+        redlineRPM: inferRedlineRPM(powerHP),
+        idleRPM: 900,
+      };
+    }
+  }
+
+  return out;
 }
