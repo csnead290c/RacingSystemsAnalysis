@@ -5,7 +5,7 @@
  * Supports local profile saving/loading.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
 import { assertComplete, Vb6FixtureValidationError } from '../../domain/physics/vb6/fixtures';
@@ -292,10 +292,10 @@ export default function QuickPaste() {
         setValidationError(`Missing fields: ${missingFields}`);
       }
       
-      // Navigate to Input Inspector (use setTimeout to avoid sync navigation issues)
-      setTimeout(() => {
+      // Navigate to Input Inspector (use startTransition to avoid sync navigation issues)
+      startTransition(() => {
         navigate('/dev?panel=input-inspector');
-      }, 100);
+      });
       
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
