@@ -36,9 +36,9 @@ class RSACLASSICModel implements PhysicsModel {
   id: PhysicsModelId = 'RSACLASSIC';
 
   simulate(input: SimInputs): SimResult {
-    // Debug guard for visibility
-    console.debug('[RSACLASSIC] powerHP len:',
-      Array.isArray((input as any)?.engineParams?.powerHP) ? (input as any).engineParams.powerHP.length : 0);
+    const startTs = performance.now();
+    const raceLenFt = Number((input as any)?.raceLengthFt ?? 1320);
+    console.log('[RSACLASSIC] start', { raceLenFt, hpPts: (input as any)?.engineParams?.powerHP?.length });
     
     const { vehicle, env, raceLength } = input;
     
@@ -349,8 +349,17 @@ class RSACLASSICModel implements PhysicsModel {
     };
     
     // Integration loop
+    const MAX_WALL_MS = 90000;         // 90s wall-time in worker
+    
     while (true) {
       stepCount++;
+      
+      if (stepCount > MAX_STEPS) {
+        throw new Error(`simulation exceeded ${MAX_STEPS} steps`);
+      }
+      if ((performance.now() - startTs) > MAX_WALL_MS) {
+        throw new Error(`simulation wall-time exceeded ${MAX_WALL_MS/1000}s`);
+      }
       
       // VB6 tire growth (TIMESLIP.FRM:1091, 1585-1607)
       // Compute effective tire dimensions with growth and squat
@@ -1233,6 +1242,12 @@ class RSACLASSICModel implements PhysicsModel {
         },
       },
     };
+    
+    console.log('[RSACLASSIC] done', {
+      wallMs: Math.round(performance.now() - startTs),
+      et_s: result?.et_s,
+      mph: result?.mph,
+    });
     
     return result;
   }
