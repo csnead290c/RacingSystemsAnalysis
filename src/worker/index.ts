@@ -13,34 +13,27 @@ import { getModel, type PhysicsModelId, type SimInputs, type SimResult } from '.
 type PowerPt = { rpm: number; hp: number };
 
 /**
- * Normalize VB6-style inputs to modern format.
- * Handles engineHP array conversion and fuel multiplier application.
+ * Ensure engineParams.powerHP exists.
+ * Converts VB6-style engineHP array to modern format with fuel multiplier.
  */
-function normalizeEngineParams(input: any): any {
-  // If already has engineParams.powerHP, return as-is
-  if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) {
-    return input;
-  }
+function ensurePowerHP(input: any): any {
+  if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) return input;
 
   const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
-
-  // Support VB6-style engineHP: [[rpm, hp], ...] OR [{rpm, hp}, ...]
   const vb6HP = input?.engineHP;
+
   if (Array.isArray(vb6HP) && vb6HP.length >= 2) {
     const powerHP: PowerPt[] = vb6HP
-      .map((pt: any) => {
-        if (Array.isArray(pt)) {
-          const [rpm, hp] = pt;
-          return { rpm: Number(rpm), hp: Number(hp) * hpMult };
-        }
-        return { rpm: Number(pt.rpm), hp: Number(pt.hp) * hpMult };
-      })
-      .filter((p) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .map((pt: any) =>
+        Array.isArray(pt)
+          ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
+          : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult }
+      )
+      .filter(p => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
       .sort((a, b) => a.rpm - b.rpm);
 
     input.engineParams = { ...(input.engineParams ?? {}), powerHP };
   }
-
   return input;
 }
 
@@ -128,13 +121,34 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
 
       self.postMessage(response);
     } else if (kind === 'physics') {
-      // Normalize VB6-style inputs
-      let normalized = normalizeEngineParams(message.payload);
-      normalized = normalizeFieldNames(normalized);
+      // Accept both {input,...} and flat payloads
+      let incoming = message.payload || {};
+      const modelId = message.model || (incoming as any).model || 'RSACLASSIC';
+
+      // Normalize
+      incoming = normalizeFieldNames(incoming);
+      incoming = ensurePowerHP(incoming);
+
+      // DIAGNOSTIC: one-time snapshot of what we actually run with
+      console.log('[WORKER:normalized.input]', {
+        hasEngineParams: !!incoming.engineParams,
+        hasPowerHP: !!(incoming as any)?.engineParams?.powerHP,
+        sampleHP: (incoming as any)?.engineParams?.powerHP?.slice?.(0, 3),
+        engineHP_len: Array.isArray((incoming as any)?.engineHP) ? (incoming as any).engineHP.length : undefined,
+        fieldNames: Object.keys(incoming || {}),
+      });
+
+      if (!(incoming as any)?.engineParams?.powerHP && !(incoming as any)?.engineParams?.torqueCurve) {
+        throw new Error(
+          `Normalized input lacks engineParams.powerHP/torqueCurve. ` +
+          `engineHP present: ${Array.isArray((incoming as any)?.engineHP)} ` +
+          `length: ${Array.isArray((incoming as any)?.engineHP) ? (incoming as any).engineHP.length : 0}`
+        );
+      }
 
       // Execute physics model simulation
-      const model = getModel(message.model);
-      const result = model.simulate(normalized);
+      const model = getModel(modelId);
+      const result = model.simulate(incoming);
 
       // Send success response
       const response: WorkerSuccessResponse = {
