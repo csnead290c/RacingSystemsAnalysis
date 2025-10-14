@@ -94,70 +94,35 @@ type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
 /**
  * Handle incoming messages from the main thread.
  */
-self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
-  const message = event.data;
-  const { id, kind } = message;
-
+self.onmessage = async (event: MessageEvent) => {
   try {
-    if (kind === 'quarter') {
-      // Execute baseline prediction
-      const result = predictBaseline(message.payload);
+    // Accept {model, input} (preferred) and fallbacks
+    const modelId = event.data?.model ?? 'RSACLASSIC';
+    let input: any =
+      event.data?.input ??
+      event.data?.payload ??      // fallback
+      (event.data?.fixture ? { ...(event.data.fixture || {}) } : { ...event.data });
 
-      // Send success response
-      const response: WorkerSuccessResponse = {
-        id,
-        ok: true,
-        kind: 'quarter',
-        result,
-      };
+    input = aliasFields(input);
+    input = ensurePowerHP(input);
 
-      self.postMessage(response);
-    } else if (kind === 'physics') {
-      // Accept flat input or { input } or { fixture, raceLengthFt }
-      const raw = message.payload || {};
-      let payload: any = (raw as any)?.fixture ? { ...((raw as any).fixture || {}) } : { ...raw };
+    console.log('[WORKER:normalized.input]', {
+      hasEngineParams: !!input?.engineParams,
+      hasPowerHP: !!input?.engineParams?.powerHP,
+      powerHP_2: input?.engineParams?.powerHP?.slice?.(0, 2),
+    });
 
-      payload = aliasFields(payload);
-      payload = ensurePowerHP(payload);
-
-      console.log('[WORKER:normalized.input]', {
-        hasEngineParams: !!payload.engineParams,
-        hasPowerHP: !!payload?.engineParams?.powerHP,
-        sampleHP: payload?.engineParams?.powerHP?.slice?.(0, 3),
-      });
-
-      if (!payload?.engineParams?.powerHP && !payload?.engineParams?.torqueCurve) {
-        throw new Error('EngineParams must provide either torqueCurve or powerHP');
-      }
-
-      const modelId = message.model || payload.model || 'RSACLASSIC';
-      const model = getModel(modelId);
-      const result = model.simulate(payload);
-
-      // Send success response
-      const response: WorkerSuccessResponse = {
-        id,
-        ok: true,
-        kind: 'physics',
-        result,
-      };
-
-      self.postMessage(response);
-    } else {
-      throw new Error(`Unknown message kind: ${kind}`);
+    if (!input?.engineParams?.powerHP && !input?.engineParams?.torqueCurve) {
+      throw new Error('EngineParams must provide either torqueCurve or powerHP');
     }
-  } catch (error) {
-    // Send error response
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const response: WorkerErrorResponse = {
-      id,
-      ok: false,
-      error: errorMessage,
-    };
 
-    self.postMessage(response);
+    const model = getModel(modelId);
+    const result = await model.simulate(input);
+    (self as any).postMessage({ ok: true, result });
+  } catch (err: any) {
+    (self as any).postMessage({ ok: false, error: String(err?.message ?? err) });
   }
-});
+};
 
 // Export types for use in main thread
 export type { WorkerMessage, WorkerResponse, WorkerSuccessResponse, WorkerErrorResponse };
