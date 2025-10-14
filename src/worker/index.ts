@@ -96,19 +96,39 @@ type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
  */
 self.onmessage = async (event: MessageEvent) => {
   try {
-    // Accept {model, input} (preferred) and fallbacks
     const modelId = event.data?.model ?? 'RSACLASSIC';
+    // Accept {model, input} (preferred), and fallbacks
     let input: any =
       event.data?.input ??
-      event.data?.payload ??      // fallback
+      event.data?.payload ??
       (event.data?.fixture ? { ...(event.data.fixture || {}) } : { ...event.data });
 
-    input = aliasFields(input);
-    input = ensurePowerHP(input);
+    // Field aliases tolerated
+    if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
+      input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+    }
+    if (input?.drivetrain?.overallEfficiency && !input.drivetrain?.overallEff) {
+      input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
+    }
+
+    // Ensure powerHP if VB6 engineHP is present
+    if (!input?.engineParams?.powerHP && Array.isArray(input?.engineHP)) {
+      const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+      const powerHP = input.engineHP
+        .map((pt: any) => Array.isArray(pt)
+          ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
+          : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
+        .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+        .sort((a: any, b: any) => a.rpm - b.rpm);
+      if (powerHP.length >= 2) {
+        input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+      }
+    }
 
     console.log('[WORKER:normalized.input]', {
       hasEngineParams: !!input?.engineParams,
       hasPowerHP: !!input?.engineParams?.powerHP,
+      raceLengthFt: input?.raceLengthFt,
       powerHP_2: input?.engineParams?.powerHP?.slice?.(0, 2),
     });
 
@@ -117,7 +137,7 @@ self.onmessage = async (event: MessageEvent) => {
     }
 
     const model = getModel(modelId);
-    const result = await model.simulate(input);
+    const result = await Promise.resolve(model.simulate(input));
     (self as any).postMessage({ ok: true, result });
   } catch (err: any) {
     (self as any).postMessage({ ok: false, error: String(err?.message ?? err) });
