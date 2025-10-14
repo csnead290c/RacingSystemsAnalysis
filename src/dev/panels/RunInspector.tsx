@@ -91,9 +91,9 @@ export default function RunInspector() {
       // This is a placeholder - in production, we'd need a proper hook
       setStepData([]);
       
-    } catch (err) {
-      console.error('Run Inspector error:', err);
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (err: any) {
+      console.error('[Run Inspector error]', err);
+      setError(err?.message ?? String(err));
     } finally {
       setRunning(false);
     }
