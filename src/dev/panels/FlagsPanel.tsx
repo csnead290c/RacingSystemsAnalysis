@@ -5,11 +5,11 @@
  * All flags persist to localStorage.
  */
 
-import { useFlagsStore, useFlags } from '../../domain/flags/store.tsx';
+import { useFlagsStore, useFlags, type UserLevel } from '../../domain/flags/store.tsx';
 
 export default function FlagsPanel() {
   const flags = useFlags();
-  const { setFlag, resetFlags } = useFlagsStore();
+  const { setFlag, setUserLevel, resetFlags } = useFlagsStore();
 
   const flagDefinitions = [
     {
@@ -40,6 +40,69 @@ export default function FlagsPanel() {
         <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Feature Flags & Modes</h2>
         <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem', margin: 0 }}>
           Control development features and diagnostic modes. Flags are persisted to localStorage.
+        </p>
+      </div>
+
+      {/* User Level Control */}
+      <div
+        style={{
+          padding: '1rem',
+          backgroundColor: 'var(--color-surface)',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-border)',
+          marginBottom: '1.5rem',
+        }}
+      >
+        <div style={{ marginBottom: '0.5rem' }}>
+          <label
+            htmlFor="userLevel"
+            style={{
+              fontSize: '1rem',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            User Level
+            <span
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.125rem 0.5rem',
+                borderRadius: '9999px',
+                backgroundColor: flags.userLevel === 'admin' ? '#8b5cf6' : flags.userLevel === 'pro' ? '#3b82f6' : '#10b981',
+                color: 'white',
+                fontWeight: '600',
+                textTransform: 'uppercase',
+              }}
+            >
+              {flags.userLevel}
+            </span>
+          </label>
+        </div>
+        
+        <select
+          id="userLevel"
+          value={flags.userLevel}
+          onChange={(e) => setUserLevel(e.target.value as UserLevel)}
+          style={{
+            width: '100%',
+            padding: '0.5rem',
+            fontSize: '0.875rem',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--color-bg)',
+            cursor: 'pointer',
+            marginBottom: '0.5rem',
+          }}
+        >
+          <option value="jr">JR - Junior User</option>
+          <option value="pro">PRO - Professional User</option>
+          <option value="admin">ADMIN - Administrator</option>
+        </select>
+        
+        <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', margin: 0 }}>
+          Impersonate different user levels for testing access control and feature availability
         </p>
       </div>
 

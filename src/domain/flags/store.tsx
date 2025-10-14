@@ -7,7 +7,12 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+export type UserLevel = 'jr' | 'pro' | 'admin';
+
 export interface FeatureFlags {
+  // User Level: Impersonate user level for testing
+  userLevel: UserLevel;
+  
   // VB6 Strict Mode: Require complete VB6 fixture for simulation (no defaults/heuristics)
   vb6StrictMode: boolean;
   
@@ -24,10 +29,12 @@ export interface FeatureFlags {
 interface FlagsStore extends FeatureFlags {
   // Actions
   setFlag: <K extends keyof FeatureFlags>(key: K, value: FeatureFlags[K]) => void;
+  setUserLevel: (level: UserLevel) => void;
   resetFlags: () => void;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
+  userLevel: 'pro',
   vb6StrictMode: false,
   showDiagnostics: false,
   enableEnergyLogging: false,
@@ -72,6 +79,10 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     setFlags((prev) => ({ ...prev, [key]: value }));
   };
 
+  const setUserLevel = (level: UserLevel) => {
+    setFlags((prev) => ({ ...prev, userLevel: level }));
+  };
+
   const resetFlags = () => {
     setFlags(DEFAULT_FLAGS);
   };
@@ -81,6 +92,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
       value={{
         ...flags,
         setFlag,
+        setUserLevel,
         resetFlags,
       }}
     >
@@ -111,9 +123,18 @@ export function useFlag<K extends keyof FeatureFlags>(key: K): FeatureFlags[K] {
 export function useFlags(): FeatureFlags {
   const store = useFlagsStore();
   return {
+    userLevel: store.userLevel,
     vb6StrictMode: store.vb6StrictMode,
     showDiagnostics: store.showDiagnostics,
     enableEnergyLogging: store.enableEnergyLogging,
     enableStepTrace: store.enableStepTrace,
   };
+}
+
+/**
+ * Hook to get current user level
+ */
+export function useUserLevel(): UserLevel {
+  const store = useFlagsStore();
+  return store.userLevel;
 }
