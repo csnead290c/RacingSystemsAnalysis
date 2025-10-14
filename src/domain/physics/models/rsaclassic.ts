@@ -36,6 +36,10 @@ class RSACLASSICModel implements PhysicsModel {
   id: PhysicsModelId = 'RSACLASSIC';
 
   simulate(input: SimInputs): SimResult {
+    // Debug guard for visibility
+    console.debug('[RSACLASSIC] powerHP len:',
+      Array.isArray((input as any)?.engineParams?.powerHP) ? (input as any).engineParams.powerHP.length : 0);
+    
     const { vehicle, env, raceLength } = input;
     
     // Initialize warnings array early
