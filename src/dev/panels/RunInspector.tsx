@@ -50,6 +50,34 @@ export default function RunInspector() {
   // Validate fixture
   const validation = validateVB6Fixture(fixture as any);
 
+  /**
+   * Adapt VB6 fixture to engine params format.
+   * Ensures engineParams.powerHP exists and handles field name variations.
+   */
+  const adaptVB6ToEngineParams = (input: any) => {
+    if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) return input;
+    
+    const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+    
+    if (Array.isArray(input.engineHP) && input.engineHP.length >= 2) {
+      const powerHP = input.engineHP.map((pt: any) => {
+        if (Array.isArray(pt)) return { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult };
+        return { rpm: Number(pt.rpm), hp: Number(pt.hp) * hpMult };
+      }).sort((a: any, b: any) => a.rpm - b.rpm);
+      input.engineParams = { powerHP };
+    }
+    
+    // Field name tolerance
+    if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
+      input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+    }
+    if (input?.drivetrain?.overallEfficiency && !input.drivetrain.overallEff) {
+      input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
+    }
+    
+    return input;
+  };
+
   const handleRun = async () => {
     if (!fixture) {
       setError('No fixture loaded.');
@@ -66,7 +94,10 @@ export default function RunInspector() {
       const distanceFt = raceLength === 'EIGHTH' ? 660 : 1320;
       
       // Use adapter to convert VB6 fixture to simulation input
-      const input = toSimInputFromVB6(fixture as any, distanceFt);
+      let input = toSimInputFromVB6(fixture as any, distanceFt);
+      
+      // Apply additional VB6 adaptations
+      input = adaptVB6ToEngineParams(input);
       
       // TODO: Capture step data from console logs
       // For now, we'll just run the simulation and get the result
