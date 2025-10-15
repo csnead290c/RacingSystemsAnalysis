@@ -65,7 +65,7 @@ function App() {
     <ThemeProvider>
       <FlagsProvider>
         <Vb6FixtureProvider>
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div
           style={{
             minHeight: '100vh',
