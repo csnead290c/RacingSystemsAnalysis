@@ -14,6 +14,7 @@ import ParityRunner from './panels/ParityRunner';
 import QuickPaste from './panels/QuickPaste';
 import AirInspector from './panels/AirInspector';
 import LoggingPanel from './panels/LoggingPanel';
+import UserLevelPanel from './panels/UserLevelPanel';
 
 export interface DevPanel {
   id: string;
@@ -37,6 +38,11 @@ const WelcomePanel: FC = () => {
  * Add new panels here as they are created.
  */
 export const DEV_PANELS: DevPanel[] = [
+  {
+    id: 'user-level',
+    title: 'User Level',
+    component: UserLevelPanel,
+  },
   {
     id: 'flags',
     title: 'Feature Flags & Modes',
