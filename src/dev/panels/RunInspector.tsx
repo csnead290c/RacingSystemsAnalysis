@@ -12,6 +12,7 @@ import { useFlag } from '../../domain/flags/store.tsx';
 import { validateVB6Fixture } from '../validation/vb6Fixture';
 import { toSimInputFromVB6 } from '../vb6/fixtureAdapter';
 import { simulate } from '../../workerBridge';
+import { VehiclePicker } from '../components/VehiclePicker';
 import type { PhysicsModelId, SimResult } from '../../domain/physics';
 import type { RaceLength } from '../../domain/config/raceLengths';
 
@@ -57,7 +58,7 @@ interface StepData {
 
 export default function RunInspector() {
   const navigate = useNavigate();
-  const { fixture } = useVb6Fixture();
+  const { fixture, setFixture } = useVb6Fixture();
   const enableStepTrace = useFlag('enableStepTrace');
   
   const [selectedModel, setSelectedModel] = useState<PhysicsModelId>('RSACLASSIC');
@@ -69,6 +70,15 @@ export default function RunInspector() {
 
   // Validate fixture
   const validation = validateVB6Fixture(fixture as any);
+
+  // Handle vehicle selection
+  const handleVehicleSelect = (vehicleId: string) => {
+    // TODO: Implement fromVehicleToVB6Fixture adapter
+    console.log('[RunInspector] Vehicle selected:', vehicleId);
+    // For now, just log - will implement when vehicles store exists
+    // const vb6Fixture = fromVehicleToVB6Fixture(vehicle);
+    // setFixture(vb6Fixture);
+  };
 
   const handleRun = async () => {
     if (!fixture) {
@@ -270,6 +280,9 @@ export default function RunInspector() {
           {error}
         </div>
       )}
+
+      {/* Vehicle Picker */}
+      <VehiclePicker onSelect={handleVehicleSelect} />
 
       {/* Controls */}
       <div
