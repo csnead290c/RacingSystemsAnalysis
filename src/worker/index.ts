@@ -92,55 +92,77 @@ interface WorkerErrorResponse {
 type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
 
 /**
+ * Normalize field names (aliases)
+ */
+function normalizeFieldNames(input: any) {
+  if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
+    input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+  }
+  if (input?.drivetrain?.overallEfficiency && !input.drivetrain?.overallEff) {
+    input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
+  }
+}
+
+/**
+ * Normalize engine params from VB6 engineHP
+ */
+function normalizeEngineParams(input: any) {
+  if (!input?.engineParams?.powerHP && Array.isArray(input?.engineHP)) {
+    const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+    const powerHP = input.engineHP
+      .map((pt: any) => Array.isArray(pt)
+        ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
+        : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
+      .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: any, b: any) => a.rpm - b.rpm);
+    if (powerHP.length >= 2) {
+      input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+    }
+  }
+}
+
+/**
  * Handle incoming messages from the main thread.
  */
-self.onmessage = async (event: MessageEvent) => {
+self.onmessage = async (ev: MessageEvent) => {
   try {
-    const modelId = event.data?.model ?? 'RSACLASSIC';
-    // Accept {model, input} (preferred), and fallbacks
-    let input: any =
-      event.data?.input ??
-      event.data?.payload ??
-      (event.data?.fixture ? { ...(event.data.fixture || {}) } : { ...event.data });
+    const msg = ev.data;
+    if (!msg?.model || !msg?.payload) throw new Error('Bad worker message');
 
-    // Field aliases tolerated
-    if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
-      input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
-    }
-    if (input?.drivetrain?.overallEfficiency && !input.drivetrain?.overallEff) {
-      input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
-    }
+    // 1) Deep-clone to avoid structured clone surprises
+    const input = JSON.parse(JSON.stringify(msg.payload));
 
-    // Ensure powerHP if VB6 engineHP is present
-    if (!input?.engineParams?.powerHP && Array.isArray(input?.engineHP)) {
-      const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
-      const powerHP = input.engineHP
-        .map((pt: any) => Array.isArray(pt)
-          ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
-          : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
-        .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
-        .sort((a: any, b: any) => a.rpm - b.rpm);
-      if (powerHP.length >= 2) {
-        input.engineParams = { ...(input.engineParams ?? {}), powerHP };
-      }
-    }
+    // 2) Normalize field names (aliases)
+    normalizeFieldNames(input);
 
-    console.log('[WORKER:normalized.input]', {
-      hasEngineParams: !!input?.engineParams,
-      hasPowerHP: !!input?.engineParams?.powerHP,
-      raceLengthFt: input?.raceLengthFt,
-      powerHP_2: input?.engineParams?.powerHP?.slice?.(0, 2),
-    });
+    // 3) Normalize power curve if only engineHP exists
+    normalizeEngineParams(input);
 
-    if (!input?.engineParams?.powerHP && !input?.engineParams?.torqueCurve) {
+    // 4) Validate
+    const hp = input?.engineParams?.powerHP;
+    if (!Array.isArray(hp) || hp.length < 2) {
+      console.error('[WORKER] bad powerHP', { hpLen: hp?.length, sample: hp?.slice?.(0, 2) });
       throw new Error('EngineParams must provide either torqueCurve or powerHP');
     }
 
-    const model = getModel(modelId);
-    const result = await Promise.resolve(model.simulate(input));
+    // 5) Ensure race length
+    if (!Number.isFinite(input?.raceLengthFt)) {
+      input.raceLengthFt = msg?.raceLengthFt ?? 1320;
+    }
+
+    console.log('[WORKER:normalized.input]', {
+      hasEngineParams: !!input.engineParams,
+      hasPowerHP: !!hp,
+      raceLengthFt: input.raceLengthFt,
+      powerHP_2: hp.slice(0, 2),
+    });
+
+    const model = getModel(msg.model);
+    const result = await model.simulate(input);
     (self as any).postMessage({ ok: true, result });
-  } catch (err: any) {
-    (self as any).postMessage({ ok: false, error: 'MODEL_ERROR: ' + String(err?.message ?? err) });
+  } catch (e: any) {
+    console.error('[WORKER ERROR]', e);
+    (self as any).postMessage({ ok: false, error: String(e?.message || e) });
   }
 };
 
