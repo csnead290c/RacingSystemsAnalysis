@@ -45,18 +45,12 @@ class RSACLASSICModel implements PhysicsModel {
 
     function watchdog(step: number, dist_ft: number) {
       const now = Date.now();
-      if ((now - WATCH_START_MS) > WATCH_WALL_MS) {
-        throw new Error(`simulation wall-time exceeded ${WATCH_WALL_MS/1000}s @ step=${step} dist=${dist_ft.toFixed(2)}ft`);
-      }
-      if (step >= WATCH_STEP_CAP) {
-        throw new Error(`simulation step cap hit (${WATCH_STEP_CAP}) dist=${dist_ft.toFixed(2)}ft`);
-      }
+      if ((now - WATCH_START_MS) > WATCH_WALL_MS) throw new Error('simulation wall-time exceeded');
+      if (step >= WATCH_STEP_CAP) throw new Error('simulation step cap hit');
       if (step % WATCH_HEARTBEAT === 0) {
         const gained = dist_ft - watchLastDist;
-        console.log('[RSACLASSIC] heartbeat', { step, dist_ft: +dist_ft.toFixed(3), gained_ft: +gained.toExponential(2), ms: Date.now() - WATCH_START_MS });
-        if (step > 0 && gained < 1e-3) {
-          throw new Error(`simulation stalled (Δdist<1e-3 ft over ${WATCH_HEARTBEAT} steps) @ step=${step}, dist=${dist_ft.toFixed(6)}ft`);
-        }
+        console.log('[RSACLASSIC] heartbeat', { step, dist_ft, gained_ft: gained });
+        if (step > 0 && gained < 1e-3) throw new Error('simulation stalled');
         watchLastDist = dist_ft;
       }
     }
