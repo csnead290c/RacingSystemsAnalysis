@@ -15,6 +15,26 @@ import { simulate } from '../../workerBridge';
 import type { PhysicsModelId, SimResult } from '../../domain/physics';
 import type { RaceLength } from '../../domain/config/raceLengths';
 
+/**
+ * Local guard to ensure engineParams.powerHP exists (idempotent with worker).
+ * Converts VB6 engineHP if needed.
+ */
+function adaptVB6ToEngineParams(input: any): any {
+  if (!input?.engineParams?.powerHP && Array.isArray(input?.engineHP)) {
+    const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+    const powerHP = input.engineHP
+      .map((pt: any) => Array.isArray(pt)
+        ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
+        : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
+      .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: any, b: any) => a.rpm - b.rpm);
+    if (powerHP.length >= 2) {
+      input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+    }
+  }
+  return input;
+}
+
 interface StepData {
   step: number;
   v_ftps: number;
@@ -63,28 +83,24 @@ export default function RunInspector() {
 
     try {
       // Convert race length to distance in feet
-      const raceLengthFt = raceLength === 'EIGHTH' ? 660 : 1320;
+      const distanceFt = raceLength === 'EIGHTH' ? 660 : 1320;
       
-      // Build flat normalized input (no wrapper)
-      let simInput = toSimInputFromVB6(fixture as any, raceLengthFt);
+      // build VB6 → sim input
+      let input = toSimInputFromVB6(fixture as any, distanceFt);
       
-      // quick aliases (safe no-ops if already set)
-      if (simInput?.drivetrain?.shiftsRPM && !simInput.drivetrain.shiftRPM) {
-        simInput.drivetrain.shiftRPM = simInput.drivetrain.shiftsRPM;
-      }
-      if (simInput?.drivetrain?.overallEfficiency && !simInput.drivetrain.overallEff) {
-        simInput.drivetrain.overallEff = simInput.drivetrain.overallEfficiency;
-      }
+      // local guard (idempotent with worker)
+      input = adaptVB6ToEngineParams(input);
+      input.raceLengthFt = distanceFt;
       
-      console.debug('[RUN] powerHP?', !!(simInput as any)?.engineParams?.powerHP,
-                    (simInput as any)?.engineParams?.powerHP?.slice?.(0, 2),
-                    'raceLengthFt', (simInput as any)?.raceLengthFt);
+      console.log('[RUN] powerHP?', Array.isArray(input?.engineParams?.powerHP), 
+                  input?.engineParams?.powerHP?.slice?.(0, 2), 
+                  'raceLengthFt', input?.raceLengthFt);
       
       // TODO: Capture step data from console logs
       // For now, we'll just run the simulation and get the result
       // In the future, we need to hook into the logger or pass a callback
       
-      const res = await simulate(selectedModel, simInput);
+      const res = await simulate(selectedModel, input);
       setResult(res);
       
       // Parse step data from console if available
