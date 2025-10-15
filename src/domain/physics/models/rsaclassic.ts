@@ -102,6 +102,39 @@ class RSACLASSICModel implements PhysicsModel {
       throw new Error(`RSACLASSIC: powerHP invalid (len=${hpPts?.length ?? 0})`);
     }
     
+    // === Drivetrain: resolve clutch / converter once ===
+    const drivetrain = (input as any)?.drivetrain ?? {};
+    const clutch = drivetrain.clutch ?? (input as any)?.clutch;               // tolerate either location
+    const converter = drivetrain.converter ?? (input as any)?.converter;
+
+    const isClutch = !!clutch;
+    const isConverter = !!converter;
+
+    // Pull slip/launch/stall RPMs with tolerant casing
+    const slipRPM = isClutch ? Number((clutch as any).slipRPM ?? (clutch as any).slipRpm) : NaN;
+    const launchRPM = isClutch ? Number((clutch as any).launchRPM ?? (clutch as any).launchRpm) : NaN;
+    const stallRPM = isConverter ? Number((converter as any).stallRPM ?? (converter as any).stallRpm) : NaN;
+
+    // Validate: one and only one device must be present
+    if (!isClutch && !isConverter) {
+      throw new Error('RSACLASSIC: drivetrain must specify clutch or converter');
+    }
+    if (isClutch && !Number.isFinite(slipRPM)) {
+      throw new Error('RSACLASSIC: clutch.slipRPM missing/invalid');
+    }
+    if (isConverter && !Number.isFinite(stallRPM)) {
+      throw new Error('RSACLASSIC: converter.stallRPM missing/invalid');
+    }
+
+    // Canonical launch/lock RPM to use in bootstrap
+    const rpmPin = isClutch ? (Number.isFinite(launchRPM) ? launchRPM : slipRPM)
+                            : stallRPM;
+
+    // Debug
+    console.log('[RPM-RESOLVED]', {
+      isClutch, isConverter, slipRPM, launchRPM, stallRPM, rpmPin
+    });
+    
     const { vehicle, env, raceLength } = input;
     
     // Initialize warnings array early
@@ -196,17 +229,8 @@ class RSACLASSICModel implements PhysicsModel {
     // Rollout distance
     const rolloutFt = (rolloutIn ?? 12) / 12;
     
-    // Drivetrain configuration (with emergency fallbacks)
-    const drivetrain: Drivetrain = {
-      ratios: gearRatios ?? [1.0],
-      finalDrive: finalDrive ?? 3.73,
-      transEff: transEff ?? 0.9,
-      tireDiaIn: tireDiaIn,
-      shiftRPM: shiftRPM ?? [],
-    };
-    
+    // Note: drivetrain, clutch, converter already resolved at top of function
     // Note: hpPts is now used directly in wheelTorque_lbft calls
-    // No need for engineParams wrapper
     
     // Tire parameters (replaced with VB6 traction)
     // const tireParams: TireParams = {
@@ -265,26 +289,20 @@ class RSACLASSICModel implements PhysicsModel {
     // Previous state for acceleration calculation
     let prevV_fps = 0;
     
-    // Converter tracking
-    const converter = vehicle.converter;
+    // Converter tracking (converter already resolved at top)
     let sumTR = 0;
     let sumETA = 0;
     let sumSR = 0;
     let converterSteps = 0;
     
-    // Clutch tracking
-    const clutch = vehicle.clutch;
+    // Clutch tracking (clutch already resolved at top)
     let minC = 1.0;
     let lockupAt_ft: number | undefined = undefined;
     
     // VB6 launch conditions (TIMESLIP.FRM:1006)
     // VB6: EngRPM(L) = gc_LaunchRPM.Value
-    // Initialize engine RPM to launch RPM before first timestep
-    if (clutch) {
-      state.rpm = clutch.launchRPM ?? clutch.slipRPM ?? 0;
-    } else if (converter) {
-      state.rpm = converter.launchRPM ?? converter.stallRPM ?? 0;
-    }
+    // Initialize engine RPM to launch RPM before first timestep (use resolved rpmPin)
+    state.rpm = rpmPin;
     
     // Fuel tracking
     const fuel = (input as any).fuel as 'GAS' | 'METHANOL' | 'NITRO' | undefined;
@@ -313,16 +331,14 @@ class RSACLASSICModel implements PhysicsModel {
     
     // Calculate initial Ags0 at t=0 (VB6: TIMESLIP.FRM:1010-1027)
     if (clutch || converter) {
-      const launchRPM = clutch?.launchRPM ?? converter?.launchRPM ?? 
-                        clutch?.slipRPM ?? converter?.stallRPM ?? 0;
-      
+      // Use resolved rpmPin for launch
       // Get HP at launch RPM
-      const launchTorque = wheelTorque_lbft(launchRPM, hpPts, transEff ?? 0.9);
-      const launchHP = launchRPM > 0 ? (launchTorque * launchRPM) / 5252 : 0;
+      const launchTorque = wheelTorque_lbft(rpmPin, hpPts, transEff ?? 0.9);
+      const launchHP = rpmPin > 0 ? (launchTorque * rpmPin) / 5252 : 0;
       
       // VB6: TQ = Z6 * HP / EngRPM
       // Z6 = 5252 (HP to torque conversion)
-      const TQ = launchHP > 0 && launchRPM > 0 ? (5252 * launchHP) / launchRPM : 0;
+      const TQ = launchHP > 0 && rpmPin > 0 ? (5252 * launchHP) / rpmPin : 0;
       
       // VB6: TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
       const gearRatio = (gearRatios ?? [1.0])[0] ?? 1.0; // First gear
@@ -437,20 +453,16 @@ class RSACLASSICModel implements PhysicsModel {
       
       // --- VB6 RPM hold logic (clutch/converter) ---
       // VB6 holds EngRPM at slip/stall RPM until wheels catch up
-      const isClutch = !!clutch && !converter;
-      const isConverter = !!converter;
-      const slipRPM = isClutch
-        ? (clutch!.slipRPM ?? clutch!.launchRPM ?? 3000)
-        : (converter?.stallRPM ?? 3000);
+      // Use resolved values from top of function
       
       // DEBUG: Check what we're getting
       if (stepCount === 1 && typeof console !== 'undefined' && console.debug) {
         console.debug('[RPM-DEBUG]', {
           isClutch,
           isConverter,
-          clutch_slipRPM: clutch?.slipRPM,
-          clutch_launchRPM: clutch?.launchRPM,
-          converter_stallRPM: converter?.stallRPM,
+          slipRPM,
+          launchRPM,
+          stallRPM,
           calculated_slipRPM: slipRPM,
           rpm_from_speed: rpm,
         });
@@ -499,9 +511,9 @@ class RSACLASSICModel implements PhysicsModel {
         
       } else if (converter) {
         // VB6 converter model (TIMESLIP.FRM:1154-1172)
-        const stallRPM = converter.stallRPM ?? 3000;
-        const torqueMult = converter.torqueMult ?? 2.0;
-        const slippage = converter.slipRatio ?? 1.05; // VB6 typical slippage
+        // Use resolved stallRPM from top
+        const torqueMult = (converter as any).torqueMult ?? 2.0;
+        const slippage = (converter as any).slipRatio ?? 1.05; // VB6 typical slippage
         
         // Use VB6 converter coupling for HP path
         const converterResult = vb6ConverterCoupling(
@@ -650,9 +662,8 @@ class RSACLASSICModel implements PhysicsModel {
       
       if (stepCount <= BOOT_MAX_STEPS && LockRPM < LOCKRPM_MIN) {
         // Torque-based bootstrap (VB6 lines 1020-1027)
-        // Get engine torque at slipRPM (not at current RPM)
-        const slipRPM = clutch?.slipRPM ?? clutch?.launchRPM ?? converter?.stallRPM ?? 3000;
-        const tq_at_slip = wheelTorque_lbft(slipRPM, hpPts, currentGearEff);
+        // Get engine torque at rpmPin (resolved at top)
+        const tq_at_slip = wheelTorque_lbft(rpmPin, hpPts, currentGearEff);
         
         const bootstrapResult = computeAgs0({
           engineTorque_lbft_atSlip: tq_at_slip,
