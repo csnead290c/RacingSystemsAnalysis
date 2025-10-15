@@ -28,6 +28,35 @@ import { vb6StepDistance, vb6ApplyAccelClamp, vb6AGSFromPQWT } from '../vb6/inte
 // TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
 // import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
 
+// === Engine params normalization (resolve once) ===
+type PowerPt = { rpm: number; hp: number };
+
+function asPowerPtsFromTuple(arr: any[]): PowerPt[] {
+  return arr
+    .map((pt) => Array.isArray(pt) ? { rpm: Number(pt[0]), hp: Number(pt[1]) } : pt)
+    .filter((p) => Number.isFinite(p?.rpm) && Number.isFinite(p?.hp))
+    .sort((a, b) => a.rpm - b.rpm);
+}
+
+function resolveEngineParams(input: any): { powerHP: PowerPt[] } {
+  // Already normalized?
+  const hpA = input?.engineParams?.powerHP;
+  if (Array.isArray(hpA) && hpA.length >= 2) {
+    return { powerHP: asPowerPtsFromTuple(hpA) };
+  }
+  // VB6 tuple/object source?
+  const vb6 = input?.engineHP;
+  if (Array.isArray(vb6) && vb6.length >= 2) {
+    return { powerHP: asPowerPtsFromTuple(vb6) };
+  }
+  // Fail with context
+  throw new Error(
+    `RSACLASSIC: missing power curve. Keys(engineParams)=${
+      JSON.stringify(Object.keys(input?.engineParams || {}))
+    } len(engineHP)=${Array.isArray(vb6) ? vb6.length : 'n/a'}`
+  );
+}
+
 /**
  * RSACLASSIC physics model.
  * Advanced physics simulation for Quarter Jr/Pro parity.
@@ -64,7 +93,15 @@ class RSACLASSICModel implements PhysicsModel {
       throw new Error(`invalid timeStep ${dt}`);
     }
     
-    console.log('[RSACLASSIC] start', { raceLenFt, hpPts: (input as any)?.engineParams?.powerHP?.length });
+    // Resolve once and reuse
+    const engineResolved = resolveEngineParams(input);
+    const hpPts: PowerPt[] = engineResolved.powerHP;
+    console.log('[RSACLASSIC] start', { raceLenFt, hpPts: hpPts.length });
+
+    // Guard: minimum 2 points
+    if (!Array.isArray(hpPts) || hpPts.length < 2) {
+      throw new Error(`RSACLASSIC: powerHP invalid (len=${hpPts?.length ?? 0})`);
+    }
     
     const { vehicle, env, raceLength } = input;
     
@@ -143,33 +180,6 @@ class RSACLASSICModel implements PhysicsModel {
       warnings.push('Missing vehicle.rolloutIn - required for VB6 parity');
     }
     
-    // Build torque curve: prefer vehicle.engine.hpCurve, fallback to vehicle.torqueCurve
-    let torqueCurve = vehicle.torqueCurve;
-    
-    // If hpCurve is present, use it (preferred for VB6 parity)
-    if (vehicle.engine?.hpCurve && vehicle.engine.hpCurve.length > 0) {
-      const hpMultiplier = vehicle.engine.hpTorqueMultiplier ?? 1.0;
-      torqueCurve = vehicle.engine.hpCurve.map((pt) => {
-        const hp = pt.hp * hpMultiplier;
-        const tq_lbft = pt.rpm > 0 ? hpToTorqueLbFt(hp, pt.rpm) : 0;
-        return { rpm: pt.rpm, hp, tq_lbft };
-      });
-    } else if (torqueCurve) {
-      // Convert torque curve HP to TQ if needed
-      const hpMultiplier = vehicle.engine?.hpTorqueMultiplier ?? 1.0;
-      torqueCurve = torqueCurve.map((row) => {
-        if (row.tq_lbft !== undefined) {
-          return row;
-        } else if (row.hp !== undefined && row.rpm > 0) {
-          // Convert HP to TQ using VB6 formula, apply multiplier
-          const hp = row.hp * hpMultiplier;
-          const tq_lbft = hpToTorqueLbFt(hp, row.rpm);
-          return { ...row, hp, tq_lbft };
-        }
-        return row;
-      });
-    }
-    
     // Precompute atmospheric conditions
     // VB6 exact air density (constant for entire run)
     const airResult = airDensityVB6({
@@ -196,9 +206,13 @@ class RSACLASSICModel implements PhysicsModel {
       shiftRPM: shiftRPM ?? [],
     };
     
-    // Engine parameters
+    // Engine parameters (use canonical hpPts resolved at start)
     const engineParams: EngineParams = {
-      torqueCurve: torqueCurve,
+      torqueCurve: hpPts.map(pt => ({
+        rpm: pt.rpm,
+        hp: pt.hp,
+        tq_lbft: pt.rpm > 0 ? hpToTorqueLbFt(pt.hp, pt.rpm) : 0
+      })),
       powerHP: vehicle.powerHP,
       corr: corr,
     };
@@ -983,11 +997,6 @@ class RSACLASSICModel implements PhysicsModel {
       // 2. Safety caps (only if we haven't reached finish)
       if (state.t_s >= MAX_TIME_S) {
         terminationReason = 'TIME_CAP';
-        break;
-      }
-      
-      if (stepCount >= MAX_STEPS) {
-        terminationReason = 'STEP_CAP';
         break;
       }
       
