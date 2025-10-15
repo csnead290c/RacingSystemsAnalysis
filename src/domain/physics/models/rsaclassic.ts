@@ -4,8 +4,7 @@
  */
 
 import type { PhysicsModel, PhysicsModelId, SimInputs, SimResult } from '../index';
-import { hpCorrection } from '../weather/air';
-import { wheelTorque_lbft, type EngineParams } from '../engine/engine';
+import { wheelTorque_lbft } from '../engine/engine';
 import { rpmFromSpeed, type Drivetrain } from '../drivetrain/drivetrain';
 // import { drag_lb } from '../aero/drag'; // Replaced with direct calculation
 // import { rolling_lb } from '../aero/rolling'; // Replaced with direct calculation
@@ -14,7 +13,7 @@ import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
 import { g, FPS_TO_MPH, CMU, gc, AMin } from '../vb6/constants';
 import { computeAgs0 } from '../vb6/bootstrap';
-import { hpToTorqueLbFt } from '../vb6/convert';
+// import { hpToTorqueLbFt } from '../vb6/convert'; // No longer needed - using hpPts directly
 import { airDensityVB6 } from '../vb6/air';
 import { vb6RollingResistanceTorque } from '../vb6/forces';
 import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
@@ -189,7 +188,7 @@ class RSACLASSICModel implements PhysicsModel {
     });
     const rho_slug_ft3 = airResult.rho_slug_per_ft3;
     
-    const corr = hpCorrection(env);
+    // Note: HP correction no longer needed - hpPts already normalized
     
     // Precompute mass
     const mass_slugs = lbToSlug(vehicle.weightLb);
@@ -206,16 +205,8 @@ class RSACLASSICModel implements PhysicsModel {
       shiftRPM: shiftRPM ?? [],
     };
     
-    // Engine parameters (use canonical hpPts resolved at start)
-    const engineParams: EngineParams = {
-      torqueCurve: hpPts.map(pt => ({
-        rpm: pt.rpm,
-        hp: pt.hp,
-        tq_lbft: pt.rpm > 0 ? hpToTorqueLbFt(pt.hp, pt.rpm) : 0
-      })),
-      powerHP: vehicle.powerHP,
-      corr: corr,
-    };
+    // Note: hpPts is now used directly in wheelTorque_lbft calls
+    // No need for engineParams wrapper
     
     // Tire parameters (replaced with VB6 traction)
     // const tireParams: TireParams = {
@@ -326,7 +317,7 @@ class RSACLASSICModel implements PhysicsModel {
                         clutch?.slipRPM ?? converter?.stallRPM ?? 0;
       
       // Get HP at launch RPM
-      const launchTorque = wheelTorque_lbft(launchRPM, engineParams, transEff ?? 0.9);
+      const launchTorque = wheelTorque_lbft(launchRPM, hpPts, transEff ?? 0.9);
       const launchHP = launchRPM > 0 ? (launchTorque * launchRPM) / 5252 : 0;
       
       // VB6: TQ = Z6 * HP / EngRPM
@@ -417,7 +408,7 @@ class RSACLASSICModel implements PhysicsModel {
       
       // Calculate engine torque first (needed for driveline)
       const currentGearEff = getTransEff(state.gearIdx);
-      let tq_lbft = wheelTorque_lbft(rpm, engineParams, currentGearEff);
+      let tq_lbft = wheelTorque_lbft(rpm, hpPts, currentGearEff);
       
       // Apply fuel delivery factor
       let M_fuel = 1.0;
@@ -493,7 +484,7 @@ class RSACLASSICModel implements PhysicsModel {
       effectiveRPM = EngRPM;
       
       // Recalculate torque at the correct EngRPM
-      tq_lbft = wheelTorque_lbft(EngRPM, engineParams, currentGearEff);
+      tq_lbft = wheelTorque_lbft(EngRPM, hpPts, currentGearEff);
       tq_lbft = tq_lbft * M_fuel; // Reapply fuel factor
       
       if (clutch) {
@@ -661,7 +652,7 @@ class RSACLASSICModel implements PhysicsModel {
         // Torque-based bootstrap (VB6 lines 1020-1027)
         // Get engine torque at slipRPM (not at current RPM)
         const slipRPM = clutch?.slipRPM ?? clutch?.launchRPM ?? converter?.stallRPM ?? 3000;
-        const tq_at_slip = wheelTorque_lbft(slipRPM, engineParams, currentGearEff);
+        const tq_at_slip = wheelTorque_lbft(slipRPM, hpPts, currentGearEff);
         
         const bootstrapResult = computeAgs0({
           engineTorque_lbft_atSlip: tq_at_slip,

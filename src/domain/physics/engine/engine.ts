@@ -4,6 +4,7 @@
  */
 
 import { lerp } from '../core/units';
+import type { PowerPt } from './types';
 
 /**
  * Engine parameters for torque calculation.
@@ -30,46 +31,84 @@ export interface EngineParams {
 }
 
 /**
- * Calculate wheel torque at crank (before drivetrain losses).
- * 
- * If torque curve is provided, interpolates torque at given RPM.
- * Otherwise, calculates torque from power using: tq = (HP * 5252) / rpm
- * 
- * Applies correction factor for atmospheric conditions.
+ * Ensure we have valid PowerPt array from various input formats.
+ */
+function ensurePowerPts(src: any): PowerPt[] {
+  const hp =
+    (Array.isArray(src) ? src : src?.powerHP) ??
+    src?.engineParams?.powerHP; // last-ditch tolerance
+
+  if (!Array.isArray(hp) || hp.length < 2) {
+    const keys = src && typeof src === 'object' ? Object.keys(src) : [];
+    throw new Error(
+      `EngineParams must provide either torqueCurve or powerHP (got keys=${JSON.stringify(keys)}, len=${hp?.length ?? 0})`
+    );
+  }
+  return hp;
+}
+
+/**
+ * Get power (HP) at RPM from power points.
+ * Accepts either PowerPt[] directly or { powerHP: PowerPt[] }.
+ */
+export function power_hp_atRPM(rpm: number, src: PowerPt[] | { powerHP: PowerPt[] }): number {
+  const pts = ensurePowerPts(src);
+  // Simple linear interpolation
+  if (rpm <= pts[0].rpm) return pts[0].hp;
+  if (rpm >= pts[pts.length - 1].rpm) return pts[pts.length - 1].hp;
+  let lo = 0, hi = pts.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid].rpm <= rpm) lo = mid; else hi = mid;
+  }
+  const a = pts[lo], b = pts[hi];
+  const t = (rpm - a.rpm) / (b.rpm - a.rpm);
+  return a.hp + t * (b.hp - a.hp);
+}
+
+/**
+ * Calculate wheel torque from power points.
+ * Accepts either PowerPt[] directly or { powerHP: PowerPt[] }.
  * 
  * @param rpm - Engine RPM
- * @param p - Engine parameters
- * @param drivelineEff - Drivetrain efficiency (not used here, applied in drivetrain module)
- * @returns Torque at crank in lb-ft
+ * @param src - Power points array or object containing powerHP
+ * @param gearEff - Gear efficiency multiplier
+ * @returns Torque in lb-ft
  */
 export function wheelTorque_lbft(
   rpm: number,
-  p: EngineParams,
-  drivelineEff: number
+  src: PowerPt[] | { powerHP: PowerPt[] } | EngineParams,
+  gearEff: number
 ): number {
-  // Note: drivelineEff parameter kept for interface compatibility
-  // but not used here - applied in drivetrain module
-  void drivelineEff;
-  
-  let baseTorque: number;
-  
-  if (p.torqueCurve && p.torqueCurve.length > 0) {
-    // Use torque curve
-    baseTorque = interpolateTorqueCurve(rpm, p.torqueCurve);
-  } else if (p.powerHP !== undefined) {
-    // Fallback: calculate from power
-    // tq = (HP * 5252) / rpm
-    // Guard against low RPM to avoid unrealistic torque
-    const safeRpm = Math.max(rpm, 1000);
-    baseTorque = (p.powerHP * 5252) / safeRpm;
-  } else {
-    throw new Error('EngineParams must provide either torqueCurve or powerHP');
+  // Check if this is the old EngineParams format
+  if ('corr' in src && typeof src.corr === 'number') {
+    // Legacy path: use old logic
+    const p = src as EngineParams;
+    let baseTorque: number;
+    
+    if (p.torqueCurve && p.torqueCurve.length > 0) {
+      // Use torque curve
+      baseTorque = interpolateTorqueCurve(rpm, p.torqueCurve);
+    } else if (p.powerHP !== undefined) {
+      // Fallback: calculate from power
+      // tq = (HP * 5252) / rpm
+      // Guard against low RPM to avoid unrealistic torque
+      const safeRpm = Math.max(rpm, 1000);
+      baseTorque = (p.powerHP * 5252) / safeRpm;
+    } else {
+      throw new Error('EngineParams must provide either torqueCurve or powerHP');
+    }
+    
+    // Apply correction factor (e.g., air density)
+    const correctedTorque = baseTorque * p.corr;
+    return correctedTorque;
   }
   
-  // Apply correction factor (e.g., air density)
-  const correctedTorque = baseTorque * p.corr;
-  
-  return correctedTorque;
+  // New path: use power points directly
+  const hp = power_hp_atRPM(rpm, src as PowerPt[] | { powerHP: PowerPt[] });
+  // 5252 * HP / RPM = lb-ft (guard RPM)
+  const tq = rpm > 0 ? (5252 * hp) / rpm : 0;
+  return tq * (Number.isFinite(gearEff) ? gearEff : 1);
 }
 
 /**
