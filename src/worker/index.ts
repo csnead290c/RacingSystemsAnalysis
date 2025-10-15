@@ -122,6 +122,15 @@ function normalizeEngineParams(input: any) {
 }
 
 /**
+ * Create debug hash of HP array to verify data integrity.
+ */
+function hpDebugHash(hp?: any[]): string {
+  if (!Array.isArray(hp)) return 'none';
+  const first = hp[0]?.rpm, last = hp[hp.length - 1]?.rpm, n = hp.length;
+  return `n=${n},first=${first},last=${last}`;
+}
+
+/**
  * Handle incoming messages from the main thread.
  */
 self.onmessage = async (ev: MessageEvent) => {
@@ -154,7 +163,7 @@ self.onmessage = async (ev: MessageEvent) => {
       hasEngineParams: !!input.engineParams,
       hasPowerHP: !!hp,
       raceLengthFt: input.raceLengthFt,
-      powerHP_2: hp.slice(0, 2),
+      hpSummary: hpDebugHash(hp),
     });
 
     const model = getModel(msg.model);
