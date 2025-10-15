@@ -5,7 +5,7 @@
  * Displays the consolidated 12-step table with all physics values.
  */
 
-import { useState } from 'react';
+import { useState, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
 import { useFlag } from '../../domain/flags/store.tsx';
@@ -203,7 +203,7 @@ export default function RunInspector() {
           </pre>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
-              onClick={() => navigate('/dev?panel=input-inspector')}
+              onClick={() => startTransition(() => navigate('/dev?panel=input-inspector'))}
               style={{
                 padding: '0.5rem 1rem',
                 fontSize: '0.875rem',
