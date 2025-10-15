@@ -91,12 +91,13 @@ export default function RunInspector() {
     setResult(null);
     setStepData([]);
 
+    let input: any = null;
     try {
       // Convert race length to distance in feet
       const distanceFt = raceLength === 'EIGHTH' ? 660 : 1320;
       
       // build VB6 → sim input
-      let input = toSimInputFromVB6(fixture as any, distanceFt);
+      input = toSimInputFromVB6(fixture as any, distanceFt);
       
       // local guard (idempotent with worker)
       input = adaptVB6ToEngineParams(input);
@@ -118,7 +119,10 @@ export default function RunInspector() {
       setStepData([]);
       
     } catch (err: any) {
-      console.error('[Run Inspector error]', err);
+      const hp = input?.engineParams?.powerHP;
+      console.error('[Run Inspector error]', err, { 
+        hpSummary: Array.isArray(hp) ? `n=${hp.length},first=${hp[0]?.rpm},last=${hp[hp.length-1]?.rpm}` : 'none' 
+      });
       setError(err?.message ?? String(err));
     } finally {
       setRunning(false);
