@@ -5,7 +5,6 @@
 
 import type { PredictRequest, PredictResult } from './domain/quarter/types';
 import type { WorkerResponse } from './worker/index';
-import type { PhysicsModelId, SimInputs, SimResult } from './domain/physics';
 
 /**
  * Calculate quarter-mile prediction using a Web Worker.
@@ -117,97 +116,37 @@ export async function calculate(
  * Run physics model simulation using a Web Worker.
  * 
  * @param model - Physics model ID to use
- * @param input - Simulation inputs
+ * @param payload - Simulation inputs
  * @returns Promise resolving to simulation result
  * @throws Error if worker fails or times out
  */
 export async function simulate(
-  model: PhysicsModelId,
-  input: SimInputs
-): Promise<SimResult> {
+  model: string,
+  payload: any
+): Promise<any> {
   return new Promise((resolve, reject) => {
-    // Generate unique message ID
-    const messageId = `sim-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
     // Create worker
     const worker = new Worker(
       new URL('./worker/index.ts', import.meta.url),
       { type: 'module' }
     );
 
-    // dev: give worker more time (physics is heavy)
-    const TIMEOUT_MS = import.meta.env.DEV ? 120000 : 30000;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let settled = false;
+    const TIMEOUT_MS = 120_000;
+    const id = Math.random().toString(36).slice(2);
 
-    // Cleanup function
-    const cleanup = () => {
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      worker.terminate();
-    };
-
-    // Set up timeout
-    timeoutId = setTimeout(() => {
-      cleanup();
+    const timeoutId = setTimeout(() => {
       reject(new Error(`Worker simulation timed out after ${TIMEOUT_MS/1000}s`));
     }, TIMEOUT_MS);
 
-    // Handle worker messages
-    const handleMessage = (event: MessageEvent) => {
-      const msg = event.data;
-
-      if (settled) {
-        return;
-      }
-
-      // Check for error response
-      if (!msg?.ok) {
-        settled = true;
-        const e = new Error(msg?.error ?? 'Worker returned error');
-        cleanup();
-        reject(e);
-        return;
-      }
-
-      // Success response
-      settled = true;
-      cleanup();
-      resolve(msg.result);
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data;
+      clearTimeout(timeoutId);
+      worker.removeEventListener('message', onMessage);
+      if (!data?.ok) return reject(new Error(`MODEL_ERROR: ${data?.error ?? 'unknown'}`));
+      resolve(data.result);
     };
 
-    // Handle worker errors
-    const handleError = (error: ErrorEvent) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-      reject(new Error(`Worker error: ${error.message}`));
-    };
-
-    // Attach listeners
-    worker.addEventListener('message', handleMessage);
-    worker.addEventListener('error', handleError);
-
-    // Debug: verify input before sending
-    console.debug('[BRIDGE → WORKER]', {
-      model,
-      hasEngineParams: !!(input as any)?.engineParams,
-      hasPowerHP: !!(input as any)?.engineParams?.powerHP,
-      raceLengthFt: (input as any)?.raceLengthFt,
-      powerHP_2: (input as any)?.engineParams?.powerHP?.slice?.(0, 2),
-    });
-
-    // Send request to worker with flat input envelope
-    worker.postMessage({
-      id: messageId,
-      kind: 'physics',
-      model: model,
-      payload: input,
-    });
+    worker.addEventListener('message', onMessage);
+    worker.postMessage({ id, model, payload });
   });
 }
