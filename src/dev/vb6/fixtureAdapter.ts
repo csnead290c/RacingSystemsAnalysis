@@ -118,12 +118,24 @@ export function normalizeEnv(fx: VB6Fixture) {
  * Does not mutate the incoming fixture.
  */
 export function toSimInputFromVB6(fx: VB6Fixture, distanceFt: number) {
-  const drivetrain = toDrivetrainParams(fx);
   const pmi = ensurePMI(fx);
   const env = normalizeEnv(fx);
 
   // Determine race length from distance
   const raceLength = distanceFt <= 660 ? 'EIGHTH' : 'QUARTER';
+
+  // --- Drivetrain (preserve clutch/converter exactly) ---
+  const dt = fx.drivetrain ?? {};
+  const drivetrain = {
+    finalDrive: Number(dt.finalDrive ?? (dt as any).final_drive ?? 0),
+    overallEff: Number((dt as any).overallEff ?? (dt as any).overallEfficiency ?? dt.efficiency ?? 1),
+    gearRatios: Array.isArray(dt.gearRatios) ? dt.gearRatios.map(Number) : [],
+    perGearEff: Array.isArray(dt.perGearEff) ? dt.perGearEff.map(Number) : [],
+    shiftRPM: Array.isArray(dt.shiftRPM ?? (dt as any).shiftsRPM) ? (dt.shiftRPM ?? (dt as any).shiftsRPM).map(Number) : [],
+    // IMPORTANT: pass through objects unmodified so the model can read keys directly
+    clutch: dt.clutch ? { ...dt.clutch } : undefined,
+    converter: dt.converter ? { ...dt.converter } : undefined,
+  };
 
   // Minimal vehicle block (only the fields RSACLASSIC actually reads)
   const veh = fx.vehicle ?? {};
