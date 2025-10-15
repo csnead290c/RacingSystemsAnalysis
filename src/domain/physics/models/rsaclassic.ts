@@ -57,6 +57,22 @@ function resolveEngineParams(input: any): { powerHP: PowerPt[] } {
 }
 
 /**
+ * Guard against NaN: return fallback if x is not finite.
+ */
+function finite(x: any, fallback = 0): number {
+  return Number.isFinite(x) ? Number(x) : fallback;
+}
+
+/**
+ * Clamp value to range [lo, hi], return fallback if not finite.
+ */
+function clampFinite(x: any, lo: number, hi: number, fallback = lo): number {
+  const v = Number(x);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/**
  * RSACLASSIC physics model.
  * Advanced physics simulation for Quarter Jr/Pro parity.
  */
@@ -548,14 +564,17 @@ class RSACLASSICModel implements PhysicsModel {
       state.rpm = effectiveRPM;
       
       // === VB6 ATMOSPHERE PIPELINE (EXACT PORT) ===
-      // rho_slug_per_ft3 from airDensityVB6() above
-      const v_fps = state.v_fps;            // ft/s
-      const q_psf = 0.5 * rho_slug_ft3 * v_fps * v_fps;  // lbf/ft^2
-      const F_drag_lbf = q_psf * (cd ?? 0) * (frontalArea_ft2 ?? 0);       // lbf
-      const F_lift_up_lbf = q_psf * (vehicle.liftCoeff ?? 0) * (frontalArea_ft2 ?? 0);    // lbf (positive upward)
+      // Guard all inputs against NaN propagation
+      const v = finite(state.v_fps, 0);
+      const v2 = v * v;
+      const q_psf = finite(0.5 * rho_slug_ft3 * v2, 0);
+      
+      // All forces must be finite numbers
+      const F_drag_lbf = finite(q_psf * (cd ?? 0) * (frontalArea_ft2 ?? 0), 0);
+      const F_lift_up_lbf = finite(q_psf * (vehicle.liftCoeff ?? 0) * (frontalArea_ft2 ?? 0), 0);
       
       // Normal force for rolling/traction (VB6 applies lift by reducing normal load)
-      const normal_lbf = vehicle.weightLb - F_lift_up_lbf;
+      const normal_lbf = finite(vehicle.weightLb - F_lift_up_lbf, vehicle.weightLb);
       
       // Aliases for compatibility with existing code
       const F_drag = F_drag_lbf;
@@ -565,10 +584,10 @@ class RSACLASSICModel implements PhysicsModel {
       // Uses CMU coefficient (0.025 for Quarter Jr/Pro) with distance and speed dependence
       const cmu = vehicle.rrCoeff ?? CMU; // Allow override, default to VB6 CMU
       const cmuk = 0.01; // VB6 CMUK constant for Quarter Jr/Pro
-      const T_rr = vb6RollingResistanceTorque(normalForce_lbf, state.v_fps, state.s_ft, tireRadius_ft, cmu, cmuk);
+      const T_rr = vb6RollingResistanceTorque(normalForce_lbf, v, state.s_ft, tireRadius_ft, cmu, cmuk);
       
       // Convert rolling resistance torque to force at contact patch
-      const F_roll = T_rr / tireRadius_ft;
+      const F_roll = finite(T_rr / tireRadius_ft, 0);
       
       // VB6 maximum traction (TIMESLIP.FRM:1054, 1216)
       // AMAX = ((CRTF / TireGrowth) - DragForce) / Weight
@@ -862,6 +881,9 @@ class RSACLASSICModel implements PhysicsModel {
         PQWT_ftps2 = PQWT_ftps2 * clampResult.PQWT_scale; // Rescale PQWT per VB6
         const slip = clampResult.slip;
         
+        // Final guard: ensure AGS is finite and clamped
+        AGS = clampFinite(AGS, AMin, AMax, AMin);
+        
         // DEV: Consolidated table for first 12 steps (before integration)
         if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
           console.log('[CONSOLIDATED_ROW]', {
@@ -887,7 +909,7 @@ class RSACLASSICModel implements PhysicsModel {
         if (stepCount <= 20 && typeof console !== 'undefined' && console.log) {
           console.log('[AERO_TRACE]', {
             step: stepCount,
-            v_fps: +v_fps.toFixed(6),
+            v_fps: +v.toFixed(6),
             rho_slug_per_ft3: +rho_slug_ft3.toFixed(6),
             q_psf: +q_psf.toFixed(3),
             F_drag_lbf: +F_drag_lbf.toFixed(2),
@@ -968,7 +990,14 @@ class RSACLASSICModel implements PhysicsModel {
       // VB6 EXACT integration (TIMESLIP.FRM:1280)
       // Dist(L) = ((2*PQWT*dt + v0²)^1.5 - v0³) / (3*PQWT) + Dist0
       // Vel(L) = sqrt(v0² + 2*PQWT*dt)
-      const stepResult = vb6StepDistance(state.v_fps, state.s_ft, dt_s, PQWT_ftps2);
+      
+      // Guard inputs before integration
+      const v_now = finite(state.v_fps, 0);
+      const dist_now = finite(state.s_ft, 0);
+      const a_now = finite(AGS, AMin);
+      const pqwt_now = finite(PQWT_ftps2, 0);
+      
+      const stepResult = vb6StepDistance(v_now, dist_now, dt_s, pqwt_now);
       
       // DEV: Log integrated values for first 12 steps
       if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
@@ -979,11 +1008,18 @@ class RSACLASSICModel implements PhysicsModel {
         });
       }
       
+      // Check for NaN before updating state
+      if (!Number.isFinite(stepResult.Vel_ftps) || !Number.isFinite(stepResult.Dist_ft)) {
+        throw new Error(
+          `NaN in state @ step=${stepCount} v=${stepResult.Vel_ftps} dist=${stepResult.Dist_ft} AGS=${a_now} PQWT=${pqwt_now}`
+        );
+      }
+      
       state.v_fps = stepResult.Vel_ftps;
       state.s_ft = stepResult.Dist_ft;
       state.t_s = state.t_s + dt_s;
       
-      // NaN guards
+      // Final NaN guard after state update
       if (!Number.isFinite(state.v_fps) || !Number.isFinite(state.s_ft) || !Number.isFinite(AGS)) {
         throw new Error(`NaN in state @ step=${stepCount} v=${state.v_fps} dist=${state.s_ft} AGS=${AGS}`);
       }
