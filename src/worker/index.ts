@@ -159,11 +159,16 @@ self.onmessage = async (ev: MessageEvent) => {
       input.raceLengthFt = msg?.raceLengthFt ?? 1320;
     }
 
+    const dt = input?.drivetrain ?? {};
     console.log('[WORKER:normalized.input]', {
       hasEngineParams: !!input.engineParams,
       hasPowerHP: !!hp,
       raceLengthFt: input.raceLengthFt,
       hpSummary: hpDebugHash(hp),
+      hasClutch: !!dt.clutch,
+      hasConverter: !!dt.converter,
+      slipRPM: dt?.clutch?.slipRPM,
+      stallRPM: dt?.converter?.stallRPM,
     });
 
     const model = getModel(msg.model);
