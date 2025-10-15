@@ -4,7 +4,7 @@
  */
 
 import type { PhysicsModel, PhysicsModelId, SimInputs, SimResult } from '../index';
-import { wheelTorque_lbft } from '../engine/engine';
+import { wheelTorque_lbft, power_hp_atRPM } from '../engine/engine';
 import { rpmFromSpeed, type Drivetrain } from '../drivetrain/drivetrain';
 // import { drag_lb } from '../aero/drag'; // Replaced with direct calculation
 // import { rolling_lb } from '../aero/rolling'; // Replaced with direct calculation
@@ -710,7 +710,8 @@ class RSACLASSICModel implements PhysicsModel {
         // VB6 Shift Dwell: During shift, vehicle coasts with zero engine power
         // VB6: TIMESLIP.FRM:1071-1072, 1283-1287
         // During DTShift period, only drag and rolling resistance act on vehicle
-        let hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
+        // Get HP directly from power curve at EngRPM
+        let hp_at_EngRPM = power_hp_atRPM(EngRPM, hpPts);
         
         // Check if in shift dwell (no power window)
         if (shiftDwellRemaining_s > 0) {
@@ -937,7 +938,8 @@ class RSACLASSICModel implements PhysicsModel {
       
       // Energy accounting (DEV only)
       // Engine energy = HP × time × 550 (convert HP to ft-lb/s)
-      const hp_at_EngRPM = effectiveRPM > 0 ? (tq_lbft * effectiveRPM) / 5252 : 0;
+      // Get HP directly from power curve at EngRPM
+      const hp_at_EngRPM = power_hp_atRPM(EngRPM, hpPts);
       E_engine_total += hp_at_EngRPM * 550 * dt_s; // ft-lb
       
       // Losses = Force × Distance
