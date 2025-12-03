@@ -24,9 +24,12 @@ export interface Vb6VehicleFixture {
     readonly wheelbase_in: number;
     readonly overhang_in: number;
     readonly rollout_in: number;
+    readonly staticFrontWeight_lb: number;  // gc_StaticFWt
+    readonly cgHeight_in: number;           // gc_YCG (CG height above ground)
+    readonly bodyStyle: number;             // gc_BodyStyle (8 = motorcycle)
     readonly tire: {
-      readonly rollout_in: number;
-      readonly width_in: number;
+      readonly diameter_in: number;         // gc_TireDia
+      readonly width_in: number;            // gc_TireWidth
     };
   };
 
@@ -55,6 +58,7 @@ export interface Vb6VehicleFixture {
       readonly torqueMult: number;
       readonly slippageFactor: number;
       readonly lockup: boolean;
+      readonly diameter_in?: number;      // gc_ConvDia (optional)
     };
   };
 
@@ -114,10 +118,13 @@ export function assertComplete(fixture: Partial<Vb6VehicleFixture>): asserts fix
     if (fixture.vehicle.wheelbase_in === undefined) missing.push('vehicle.wheelbase_in');
     if (fixture.vehicle.overhang_in === undefined) missing.push('vehicle.overhang_in');
     if (fixture.vehicle.rollout_in === undefined) missing.push('vehicle.rollout_in');
+    if (fixture.vehicle.staticFrontWeight_lb === undefined) missing.push('vehicle.staticFrontWeight_lb');
+    if (fixture.vehicle.cgHeight_in === undefined) missing.push('vehicle.cgHeight_in');
+    if (fixture.vehicle.bodyStyle === undefined) missing.push('vehicle.bodyStyle');
     if (!fixture.vehicle.tire) {
       missing.push('vehicle.tire');
     } else {
-      if (fixture.vehicle.tire.rollout_in === undefined) missing.push('vehicle.tire.rollout_in');
+      if (fixture.vehicle.tire.diameter_in === undefined) missing.push('vehicle.tire.diameter_in');
       if (fixture.vehicle.tire.width_in === undefined) missing.push('vehicle.tire.width_in');
     }
   }
@@ -194,8 +201,11 @@ export function createEmptyFixture(): Partial<Vb6VehicleFixture> {
       wheelbase_in: 0,
       overhang_in: 0,
       rollout_in: 9,
+      staticFrontWeight_lb: 0,
+      cgHeight_in: 0,
+      bodyStyle: 1,
       tire: {
-        rollout_in: 0,
+        diameter_in: 0,
         width_in: 0,
       },
     },

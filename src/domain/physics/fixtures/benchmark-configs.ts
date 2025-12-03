@@ -714,8 +714,9 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
   v.overhangIn = vb.vehicle.overhang_in ?? v.overhangIn;
   v.rolloutIn = vb.vehicle.rollout_in ?? v.rolloutIn;
 
-  // Tires (normalize: rollout -> diameter)
-  v.tireRolloutIn = vb.vehicle.tire.rollout_in;
+  // Tires (diameter -> rollout)
+  v.tireDiaIn = vb.vehicle.tire.diameter_in;
+  v.tireRolloutIn = vb.vehicle.tire.diameter_in * Math.PI;
   v.tireWidthIn = vb.vehicle.tire.width_in;
 
   // Aero

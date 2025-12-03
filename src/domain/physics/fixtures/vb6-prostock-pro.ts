@@ -22,9 +22,12 @@ export const VB6_PROSTOCK_PRO = {
     wheelbase_in: 107,
     overhang_in: 40,           // front overhang (beam rollout geometry)
     rollout_in: 9,             // staging beam rollout (NOT tire rollout)
+    staticFrontWeight_lb: 895, // gc_StaticFWt (approx 38% of weight)
+    cgHeight_in: 19.75,        // gc_YCG (tire radius + 3.75" per VB6)
+    bodyStyle: 1,              // gc_BodyStyle (1 = car, 8 = motorcycle)
     tire: {
-      rollout_in: 102.5,       // tire circumference
-      width_in: 17.0,
+      diameter_in: 32.6,       // gc_TireDia (from circumference: 102.5 / PI)
+      width_in: 17.0,          // gc_TireWidth
     },
   },
 

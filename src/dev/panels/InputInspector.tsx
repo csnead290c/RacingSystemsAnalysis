@@ -46,8 +46,11 @@ function mapBenchmarkToVB6Fixture(benchmarkName: string): Partial<Vb6VehicleFixt
       wheelbase_in: config.vehicle.wheelbaseIn ?? 100,
       overhang_in: config.vehicle.overhangIn ?? 40,
       rollout_in: config.vehicle.rolloutIn,
+      staticFrontWeight_lb: config.vehicle.weightLb * 0.38, // Default 38% front
+      cgHeight_in: (config.vehicle.tireDiaIn ?? 32) / 2 + 3.75, // VB6 default
+      bodyStyle: 1, // Car
       tire: {
-        rollout_in: config.vehicle.tireRolloutIn ?? config.vehicle.rolloutIn,
+        diameter_in: config.vehicle.tireDiaIn ?? (config.vehicle.tireRolloutIn ?? 100) / Math.PI,
         width_in: config.vehicle.tireWidthIn ?? 10,
       },
     },

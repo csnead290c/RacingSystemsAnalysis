@@ -158,6 +158,14 @@ export default function VB6Inputs() {
                 />
               </label>
               <label>
+                Static Front Weight (lb):
+                <input
+                  type="number"
+                  value={fixture.vehicle?.staticFrontWeight_lb ?? ''}
+                  onChange={(e) => updateField('vehicle.staticFrontWeight_lb', parseFloat(e.target.value))}
+                />
+              </label>
+              <label>
                 Wheelbase (in):
                 <input
                   type="number"
@@ -176,6 +184,15 @@ export default function VB6Inputs() {
                 />
               </label>
               <label>
+                CG Height (in):
+                <input
+                  type="number"
+                  step="0.1"
+                  value={fixture.vehicle?.cgHeight_in ?? ''}
+                  onChange={(e) => updateField('vehicle.cgHeight_in', parseFloat(e.target.value))}
+                />
+              </label>
+              <label>
                 Staging Rollout (in):
                 <input
                   type="number"
@@ -185,12 +202,26 @@ export default function VB6Inputs() {
                 />
               </label>
               <label>
-                Tire Circumference (in):
+                Body Style:
+                <select
+                  value={fixture.vehicle?.bodyStyle ?? 1}
+                  onChange={(e) => updateField('vehicle.bodyStyle', parseInt(e.target.value))}
+                >
+                  <option value={1}>Car</option>
+                  <option value={8}>Motorcycle</option>
+                </select>
+              </label>
+            </div>
+            
+            <h4>Tires</h4>
+            <div className="form-grid">
+              <label>
+                Tire Diameter (in):
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.tire?.rollout_in ?? ''}
-                  onChange={(e) => updateField('vehicle.tire.rollout_in', parseFloat(e.target.value))}
+                  value={fixture.vehicle?.tire?.diameter_in ?? ''}
+                  onChange={(e) => updateField('vehicle.tire.diameter_in', parseFloat(e.target.value))}
                 />
               </label>
               <label>
@@ -303,7 +334,7 @@ export default function VB6Inputs() {
               }}
             />
 
-            <h4>Clutch Settings</h4>
+            <h4>Clutch Settings (for manual trans)</h4>
             <div className="form-grid">
               <label>
                 Launch RPM:
@@ -336,6 +367,53 @@ export default function VB6Inputs() {
                   type="checkbox"
                   checked={fixture.drivetrain?.clutch?.lockup ?? false}
                   onChange={(e) => updateField('drivetrain.clutch.lockup', e.target.checked)}
+                />
+              </label>
+            </div>
+
+            <h4>Converter Settings (for automatic trans)</h4>
+            <div className="form-grid">
+              <label>
+                Stall RPM:
+                <input
+                  type="number"
+                  value={fixture.drivetrain?.converter?.stallRPM ?? ''}
+                  onChange={(e) => updateField('drivetrain.converter.stallRPM', parseFloat(e.target.value))}
+                />
+              </label>
+              <label>
+                Torque Multiplier:
+                <input
+                  type="number"
+                  step="0.01"
+                  value={fixture.drivetrain?.converter?.torqueMult ?? ''}
+                  onChange={(e) => updateField('drivetrain.converter.torqueMult', parseFloat(e.target.value))}
+                />
+              </label>
+              <label>
+                Slippage Factor:
+                <input
+                  type="number"
+                  step="0.001"
+                  value={fixture.drivetrain?.converter?.slippageFactor ?? ''}
+                  onChange={(e) => updateField('drivetrain.converter.slippageFactor', parseFloat(e.target.value))}
+                />
+              </label>
+              <label>
+                Converter Diameter (in):
+                <input
+                  type="number"
+                  step="0.1"
+                  value={fixture.drivetrain?.converter?.diameter_in ?? ''}
+                  onChange={(e) => updateField('drivetrain.converter.diameter_in', parseFloat(e.target.value))}
+                />
+              </label>
+              <label>
+                Lockup:
+                <input
+                  type="checkbox"
+                  checked={fixture.drivetrain?.converter?.lockup ?? false}
+                  onChange={(e) => updateField('drivetrain.converter.lockup', e.target.checked)}
                 />
               </label>
             </div>

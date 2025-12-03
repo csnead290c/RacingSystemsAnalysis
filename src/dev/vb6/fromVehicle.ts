@@ -174,7 +174,6 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   const cd = v.cd ?? 0.35;
   const tireDiaIn = v.tireDiaIn ?? 28;
   const tireWidthIn = v.tireWidthIn ?? 14;
-  const tireRolloutIn = v.tireRolloutIn ?? (tireDiaIn * Math.PI);
   const wheelbase_in = v.wheelbase_in ?? 108;
   const rollout_in = v.rollout_in ?? 9;
   const liftCoeff = v.liftCoeff ?? 0.1;
@@ -237,8 +236,11 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
       wheelbase_in,
       overhang_in: 40, // Default overhang
       rollout_in,
+      staticFrontWeight_lb: weightLb * 0.38, // Default 38% front weight
+      cgHeight_in: tireDiaIn / 2 + 3.75, // VB6 default: tire radius + 3.75"
+      bodyStyle: 1, // Car (8 = motorcycle)
       tire: {
-        rollout_in: tireRolloutIn,
+        diameter_in: tireDiaIn,
         width_in: tireWidthIn,
       },
     },
@@ -305,10 +307,9 @@ export function validateAdapterOutput(fixture: Vb6VehicleFixture): AdapterValida
     errors.push('drivetrain.finalDrive must be a positive finite number');
   }
 
-  // Check tire diameter (rollout_in / PI gives diameter)
-  const tireRollout = fixture.vehicle?.tire?.rollout_in;
-  if (tireRollout) {
-    const tireDia = tireRollout / Math.PI;
+  // Check tire diameter
+  const tireDia = fixture.vehicle?.tire?.diameter_in;
+  if (tireDia) {
     if (tireDia < 20 || tireDia > 36) {
       errors.push(`tire diameter (${tireDia.toFixed(1)}") must be between 20" and 36"`);
     }

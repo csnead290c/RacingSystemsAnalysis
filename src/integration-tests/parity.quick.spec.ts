@@ -48,8 +48,8 @@ function buildProStockFixture(distanceFt: 660 | 1320): ParityFixture {
     vehicle: {
       weightLb: vb6.vehicle.weight_lb,
       wheelbase_in: vb6.vehicle.wheelbase_in,
-      tireDiaIn: vb6.vehicle.tire.rollout_in / Math.PI, // Derive from rollout
-      tireRolloutIn: vb6.vehicle.tire.rollout_in,
+      tireDiaIn: vb6.vehicle.tire.diameter_in,
+      tireRolloutIn: vb6.vehicle.tire.diameter_in * Math.PI, // Derive from diameter
       tireWidthIn: vb6.vehicle.tire.width_in,
       rolloutIn: vb6.vehicle.rollout_in,
       frontalArea_ft2: vb6.aero.frontalArea_ft2,
