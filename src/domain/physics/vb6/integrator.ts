@@ -534,13 +534,14 @@ export interface VB6IterationResult {
 
 export function vb6IterateConvergence(params: VB6IterationParams): VB6IterationResult {
   const {
-    Vel0_ftps, Ags0_g, Time0_s,
+    Ags0_g, Time0_s,
     Vel_ftps, VelSqrd,
     HPSave, ClutchSlip, TGEff, Efficiency, TireSlip, DragHP,
     EngAccHP, ChasAccHP,
     AMin_g, AMax_g,
     Weight_lbf
   } = params;
+  // Note: Vel0_ftps is in params but not used directly - VelSqrd already computed
   
   const PI = Math.PI;
   
