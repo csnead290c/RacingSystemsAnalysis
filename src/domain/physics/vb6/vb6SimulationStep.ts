@@ -103,6 +103,7 @@ export interface VB6VehicleParams {
   // Shift points
   ShiftRPM: number[];       // Shift RPMs per gear
   NGR: number;              // Number of gears
+  LaunchRPM: number;        // Launch RPM (for first step handling)
 }
 
 /**
@@ -280,6 +281,16 @@ export function vb6SimulationStep(
   state.RPM0 = state.EngRPM;
   state.DSRPM0 = state.DSRPM;
   
+  // TIMESLIP.FRM:1093-1094 - Special handling for first step at launch
+  // If RPM0 = LaunchRPM And Time0 = 0 Then
+  //     RPM0 = Stall: If LaunchRPM < Stall Then Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
+  if (state.RPM0 === vehicle.LaunchRPM && state.Time0_s === 0) {
+    state.RPM0 = vehicle.Stall;
+    if (vehicle.LaunchRPM < vehicle.Stall) {
+      state.Time0_s = vehicle.EnginePMI * (vehicle.Stall - vehicle.LaunchRPM) / 250000;
+    }
+  }
+  
   // ========================================================================
   // TIMESLIP.FRM:1091 - Update tire growth
   // ========================================================================
@@ -449,12 +460,14 @@ export function vb6SimulationStep(
   let PQWT = 550 * gc * HP / vehicle.Weight_lbf;
   let AGS_g = PQWT / (Vel_L * gc);
   
-  // Initial AMin/AMax clamps (same logic as iteration loop)
+  // TIMESLIP.FRM:1223-1228 - Initial AMin/AMax clamps
+  // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
+  // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
   let SLIP = false;
   if (AGS_g > AMax_g) {
     SLIP = true;
-    PQWT = PQWT * AMax_g / AGS_g;
-    AGS_g = AMax_g;
+    PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
+    AGS_g = AMax_g - (AGS_g - AMax_g);
   }
   if (AGS_g < AMin) {
     PQWT = PQWT * AMin / AGS_g;
@@ -518,17 +531,13 @@ export function vb6SimulationStep(
     }
     
     // TIMESLIP.FRM:1260-1266 - AMin/AMax clamps
-    // Note: VB6's reflection formula AGS = AMAX - (AGS - AMAX) can produce negative values
-    // when AGS >> AMAX. This is then clamped to AMin. However, at launch this produces
-    // unrealistically low acceleration. We use a modified approach that clamps to AMax
-    // directly when AGS > AMax, which better matches the physical behavior.
+    // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
+    // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
     SLIP = false;
     if (AGS_g > AMax_g) {
       SLIP = true;
-      // VB6 uses reflection: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
-      // This can go negative when AGS >> AMAX. Instead, clamp directly to AMax.
-      PQWT = PQWT * AMax_g / AGS_g;
-      AGS_g = AMax_g;
+      PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
+      AGS_g = AMax_g - (AGS_g - AMax_g);
     }
     if (AGS_g < AMin) {
       PQWT = PQWT * AMin / AGS_g;

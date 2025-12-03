@@ -249,6 +249,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     ShiftRPM: shiftRPMs,
     NGR: gearRatios.length,
+    LaunchRPM: isClutch ? (clutch?.launchRPM ?? stallRPM) : stallRPM,
   };
   
   // ========================================================================
