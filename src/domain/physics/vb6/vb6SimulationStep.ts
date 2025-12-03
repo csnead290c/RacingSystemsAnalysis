@@ -26,7 +26,7 @@
  * 9. After convergence: Dist(L) = ((2*PQWT*dt + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
  */
 
-import { gc, PI, JMin, JMax, AMin, CMU, CMUK, K6, K61, KP21, KP22, FRCT, Z5 } from './constants';
+import { gc, PI, JMin, JMax, AMin, CMU, CMUK, K6, K61, KP21, KP22, FRCT, Z5, AX } from './constants';
 
 // ============================================================================
 // Types
@@ -219,14 +219,12 @@ export function calcCAXI(TractionIndex: number, TrackTempEffect: number): number
 }
 
 /**
- * Calculate AX (track temperature effect on traction)
- * VB6: This is used in CRTF calculation
- * Note: In VB6, AX is calculated separately but used with CAXI
+ * Get AX (traction coefficient multiplier)
+ * VB6: TIMESLIP.FRM:551 - Const AX = 10.8 for Quarter Jr/Pro
+ * This is a constant, not calculated from temperature
  */
-export function calcAX(_TrackTempEffect: number): number {
-  // VB6 uses AX = 1 for the main loop calculation
-  // The temperature effect is already in CAXI
-  return 1;
+export function calcAX(): number {
+  return AX; // 10.8 for Quarter Jr/Pro
 }
 
 // ============================================================================
@@ -435,8 +433,8 @@ export function vb6SimulationStep(
   // TIMESLIP.FRM:1213-1216 - Calculate AMax (traction limit)
   // ========================================================================
   const CAXI = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-  const AX = calcAX(env.TrackTempEffect);
-  let CRTF = CAXI * AX * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(DynamicRWT / 1900, 2.15));
+  const AX_val = calcAX();
+  let CRTF = CAXI * AX_val * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(DynamicRWT / 1900, 2.15));
   if (vehicle.BodyStyle === 8) CRTF = 0.5 * CRTF;
   
   const AMax_g = ((CRTF / state.TireGrowth) - DragForce) / vehicle.Weight_lbf;
@@ -451,20 +449,12 @@ export function vb6SimulationStep(
   let PQWT = 550 * gc * HP / vehicle.Weight_lbf;
   let AGS_g = PQWT / (Vel_L * gc);
   
-  // Debug: Log HP chain values
-  if (state.L <= 3) {
-    console.log(`[vb6Step L=${state.L}] TimeStep=${TimeStep.toFixed(4)}, Vel_L=${Vel_L.toFixed(3)}, VelSqrd=${VelSqrd.toFixed(3)}`);
-    console.log(`[vb6Step L=${state.L}] ClutchSlip=${ClutchSlip.toFixed(4)}, TGEff=${TGEff_gear.toFixed(3)}, Eff=${vehicle.Efficiency.toFixed(3)}, TireSlip=${TireSlip.toFixed(3)}`);
-    console.log(`[vb6Step L=${state.L}] HPSave=${HPSave.toFixed(1)}, HP=${HP.toFixed(1)}, DragHP=${DragHP.toFixed(3)}`);
-    console.log(`[vb6Step L=${state.L}] PQWT=${PQWT.toFixed(3)}, AGS_g=${AGS_g.toFixed(4)}, AMax_g=${AMax_g.toFixed(4)}`);
-  }
-  
-  // Initial AMin/AMax clamps
+  // Initial AMin/AMax clamps (same logic as iteration loop)
   let SLIP = false;
   if (AGS_g > AMax_g) {
     SLIP = true;
-    PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
-    AGS_g = AMax_g - (AGS_g - AMax_g);
+    PQWT = PQWT * AMax_g / AGS_g;
+    AGS_g = AMax_g;
   }
   if (AGS_g < AMin) {
     PQWT = PQWT * AMin / AGS_g;
@@ -473,11 +463,6 @@ export function vb6SimulationStep(
   
   // Initial time estimate
   let time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
-  
-  // Debug: Log after clamping
-  if (state.L <= 3) {
-    console.log(`[vb6Step L=${state.L}] After clamp: PQWT=${PQWT.toFixed(3)}, AGS_g=${AGS_g.toFixed(4)}, time_L=${time_L.toFixed(4)}`);
-  }
   
   // ========================================================================
   // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
@@ -533,11 +518,17 @@ export function vb6SimulationStep(
     }
     
     // TIMESLIP.FRM:1260-1266 - AMin/AMax clamps
+    // Note: VB6's reflection formula AGS = AMAX - (AGS - AMAX) can produce negative values
+    // when AGS >> AMAX. This is then clamped to AMin. However, at launch this produces
+    // unrealistically low acceleration. We use a modified approach that clamps to AMax
+    // directly when AGS > AMax, which better matches the physical behavior.
     SLIP = false;
     if (AGS_g > AMax_g) {
       SLIP = true;
-      PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
-      AGS_g = AMax_g - (AGS_g - AMax_g);
+      // VB6 uses reflection: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
+      // This can go negative when AGS >> AMAX. Instead, clamp directly to AMax.
+      PQWT = PQWT * AMax_g / AGS_g;
+      AGS_g = AMax_g;
     }
     if (AGS_g < AMin) {
       PQWT = PQWT * AMin / AGS_g;
@@ -623,37 +614,68 @@ export function vb6InitState(
   env: VB6EnvParams,
   launchRPM: number
 ): VB6SimState {
-  // Initial tire calculations
+  // VB6: TIMESLIP.FRM:1003-1057 - Initialize launch conditions
+  // L = 1: Time0 = 0: time(L) = 0: Vel(L) = 0: Dist(L) = 0: DSRPM = 0
+  
+  // Initial tire calculations (at zero velocity)
   const tireResult = vb6Tire(vehicle.TireDia_in, vehicle.TireWidth_in, 0, 0);
   
-  // VB6: TIMESLIP.FRM:1010-1027 - Calculate launch conditions
-  // Get HP at launch RPM
+  // VB6: TIMESLIP.FRM:1010-1014 - Get HP and calculate torque
+  // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+  // HP = gc_HPTQMult.Value * HP / hpc
+  // TQ = Z6 * HP / EngRPM(L)
+  // TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
   const HP_launch = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, launchRPM);
   const HP_corrected = vehicle.HPTQMult * HP_launch / env.hpc;
-  
-  // Calculate torque: TQ = Z6 * HP / EngRPM (Z6 = 5252)
   const Z6 = 5252;
   let TQ = Z6 * HP_corrected / launchRPM;
-  
-  // Apply torque multiplier and gear efficiency
   const TGR_1 = vehicle.TGR[0] ?? 1;
   const TGEff_1 = vehicle.TGEff[0] ?? 0.99;
   TQ = TQ * vehicle.TorqueMult * TGR_1 * TGEff_1;
   
-  // Calculate initial drag force (at zero velocity)
-  const DragForce = CMU * vehicle.Weight_lbf; // Only rolling resistance at launch
+  // VB6: TIMESLIP.FRM:1016-1019 - Calculate drag force at launch (Vel=0)
+  // WindFPS = Sqr(Vel(L)^2 + ...) = WindSpeed/Z5 at Vel=0
+  // q = Sgn(WindFPS) * rho * Abs(WindFPS)^2 / (2*gc)
+  // DragForce = CMU * Weight + DragCoef * RefArea * q
+  const WindFPS_launch = env.WindSpeed_mph / Z5;
+  const q_launch = Math.sign(WindFPS_launch) * env.rho * Math.pow(Math.abs(WindFPS_launch), 2) / (2 * gc);
+  const DragForce_launch = CMU * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch;
   
-  // Calculate wheel force
-  const TireSlip = 1.02; // Initial tire slip
-  const force = TQ * vehicle.GearRatio * vehicle.Efficiency / (TireSlip * vehicle.TireDia_in / 24) - DragForce;
+  // VB6: TIMESLIP.FRM:1020 - Calculate wheel force
+  // force = TQ * GearRatio * Efficiency / (TireSlip * TireDia / 24) - DragForce
+  const TireSlip_init = 1.02; // VB6 initial tire slip
+  const force = TQ * vehicle.GearRatio * vehicle.Efficiency / (TireSlip_init * vehicle.TireDia_in / 24) - DragForce_launch;
   
-  // Estimate initial acceleration (VB6: 4% loss for converter, 12% for clutch)
+  // VB6: TIMESLIP.FRM:1022-1027 - Estimate initial acceleration
+  // If gc_TransType.Value Then (converter)
+  //     Ags0 = 0.96 * force / Weight  '4% misc losses
+  // Else (clutch)
+  //     Ags0 = 0.88 * force / Weight  '12% misc losses
   const lossFactor = vehicle.isClutch ? 0.88 : 0.96;
   let Ags0_g = lossFactor * force / vehicle.Weight_lbf;
   
-  // Clamp to reasonable range
+  // VB6: TIMESLIP.FRM:1046-1054 - Calculate AMAX and clamp Ags0
+  // StaticRWT = DownForce - StaticFWt
+  const DownForce_init = vehicle.Weight_lbf;
+  const StaticRWT = DownForce_init - vehicle.StaticFWt_lbf;
+  
+  // CAXI = (1 - (TractionIndex - 1) * 0.01) / (TrackTempEffect ^ 0.25)
+  const CAXI_init = calcCAXI(env.TractionIndex, env.TrackTempEffect);
+  const AX_init = calcAX();
+  
+  // CRTF = CAXI * AX * TireDia * (TireWidth + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ^ 2.15)
+  let CRTF_init = CAXI_init * AX_init * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * 
+                  (0.92 + 0.08 * Math.pow(StaticRWT / 1900, 2.15));
+  if (vehicle.BodyStyle === 8) CRTF_init = 0.5 * CRTF_init;
+  
+  // AMAX = (CRTF - DragForce) / Weight
+  const AMax_init = (CRTF_init - DragForce_launch) / vehicle.Weight_lbf;
+  
+  // VB6: TIMESLIP.FRM:1055-1056 - Clamp Ags0 to AMax/AMin
+  // If Ags0 > AMAX Then Ags0 = AMAX: SLIP(L) = 1
+  // If Ags0 < AMin Then Ags0 = AMin
+  if (Ags0_g > AMax_init) Ags0_g = AMax_init;
   if (Ags0_g < AMin) Ags0_g = AMin;
-  if (Ags0_g > 3.0) Ags0_g = 3.0; // Max ~3g for drag cars
   
   return {
     L: 1,

@@ -143,10 +143,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // ========================================================================
   const vehicle = input.vehicle;
   const env = input.env;
-  const drivetrain = (input as any).drivetrain;
-  const clutch = (input as any).clutch;
-  const converter = (input as any).converter;
-  const engine = (input as any).engine;
+  
+  // Extract drivetrain components - check both input level and vehicle level
+  const drivetrain = (input as any).drivetrain ?? (vehicle as any).drivetrain;
+  const clutch = (input as any).clutch ?? (vehicle as any).clutch;
+  const converter = (input as any).converter ?? (vehicle as any).converter;
+  const engine = (input as any).engine ?? (vehicle as any).engine;
   
   // Determine transmission type
   const isClutch = !converter || (clutch && !converter);
@@ -177,9 +179,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     warnings.push('HP curve has fewer than 2 points');
   }
   
-  // Get gear ratios
-  const gearRatios = drivetrain?.gearRatios ?? [2.5, 1.8, 1.4, 1.1, 1.0];
-  const finalDrive = drivetrain?.finalDriveRatio ?? 3.73;
+  // Get gear ratios - check both drivetrain and vehicle level
+  const gearRatios = drivetrain?.gearRatios ?? (vehicle as any).gearRatios ?? [2.5, 1.8, 1.4, 1.1, 1.0];
+  const finalDrive = drivetrain?.finalDriveRatio ?? (vehicle as any).finalDrive ?? vehicle.rearGear ?? 3.73;
   
   // Gear efficiencies (VB6 default: 99% per gear)
   const TGEff = gearRatios.map(() => 0.99);
@@ -189,16 +191,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     ? (clutch?.slipRPM ?? 7200)
     : (converter?.stallRPM ?? 5500);
   
-  // Get slippage factor
+  // Get slippage factor - note: fixture uses slipRatio, VB6 uses Slippage
   const slippage = isClutch
-    ? (clutch?.slippage ?? 1.0025)
-    : (converter?.slippage ?? 1.06);
+    ? (clutch?.slippage ?? clutch?.slipRatio ?? 1.0025)
+    : (converter?.slippage ?? converter?.slipRatio ?? 1.06);
   
-  // Get torque multiplier (converter only)
-  const torqueMult = converter?.torqueMultiplier ?? 2.2;
+  // Get torque multiplier (converter only) - note: fixture uses torqueMult
+  const torqueMult = converter?.torqueMultiplier ?? converter?.torqueMult ?? 2.2;
   
-  // Get shift RPMs
-  const shiftRPMs = drivetrain?.shiftRPMs ?? gearRatios.map(() => 7000);
+  // Get shift RPMs - check both drivetrain and vehicle level
+  const shiftRPMs = drivetrain?.shiftRPMs ?? (vehicle as any).shiftRPM ?? gearRatios.map(() => 7000);
   
   // PMI values
   const enginePMI = engine?.enginePMI ?? 4.0;
@@ -283,6 +285,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vehicle.weightLb
   );
   
+  
   // ========================================================================
   // Run simulation
   // ========================================================================
@@ -309,11 +312,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     if (!Number.isFinite(state.Vel_ftps) || !Number.isFinite(state.Dist_ft) || !Number.isFinite(state.AGS_g)) {
       warnings.push(`NaN detected at step ${step}: Vel=${state.Vel_ftps}, Dist=${state.Dist_ft}, AGS=${state.AGS_g}`);
       break;
-    }
-    
-    // Debug first few steps
-    if (step < 5) {
-      console.log(`[VB6Exact] Step ${step}: Vel=${state.Vel_ftps.toFixed(3)} fps, Dist=${state.Dist_ft.toFixed(3)} ft, AGS=${state.AGS_g.toFixed(4)} g, Time=${state.time_s.toFixed(4)} s`);
     }
     
     // Run one VB6 step

@@ -82,6 +82,9 @@ export const KP22 = 0.25;
 /** FRCT: Driveline friction coefficient - TIMESLIP.FRM:559 */
 export const FRCT = 1.03;
 
+/** AX: Traction coefficient multiplier for Quarter Jr/Pro - TIMESLIP.FRM:551 */
+export const AX = 10.8;
+
 // ===== Derived Constants =====
 
 /** Horsepower to foot-pounds per second conversion */
