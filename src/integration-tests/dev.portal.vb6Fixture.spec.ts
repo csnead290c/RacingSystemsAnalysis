@@ -39,7 +39,7 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     expect(fixture.drivetrain.perGearEff.length).toBeGreaterThan(0);
 
     // Check clutch or converter
-    expect(fixture.drivetrain.clutch || fixture.drivetrain.converter).toBeDefined();
+    expect(fixture.drivetrain.clutch || (fixture.drivetrain as any).converter).toBeDefined();
 
     // Check engineHP
     expect(fixture.engineHP).toBeDefined();
@@ -195,7 +195,7 @@ describe('Dev Portal - VB6 Fixture Workflow', () => {
     const fixture = ProStockProFixture as any;
 
     // Mock simulate function to capture inputs
-    const mockSimulate = vi.fn((model: string, inputs: any) => {
+    const mockSimulate = vi.fn((_model: string, _inputs: any) => {
       // Verify the fixture values are passed correctly
       return {
         et_s: 6.80,

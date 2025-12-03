@@ -3,10 +3,25 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  server: { hmr: { overlay: true } },
-  build: { sourcemap: true },
+  server: { 
+    hmr: { overlay: false }, // Disable noisy overlay, errors still in console
+  },
+  build: { 
+    sourcemap: true,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Silence known external sourcemap noise
+        if (warning.code === 'SOURCEMAP_ERROR') return;
+        if (/installHook\.js\.map/.test(warning.message ?? '')) return;
+        warn(warning);
+      },
+    },
+  },
   // silence source-map parse noise from worker devtools helper
   optimizeDeps: { exclude: ['installHook.js'] },
+  esbuild: {
+    sourcemap: 'linked', // avoid inlined data URLs that confuse devtools on certain extensions
+  },
   plugins: [
     react(),
     VitePWA({

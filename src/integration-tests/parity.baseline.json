@@ -1,0 +1,14 @@
+{
+  "_comment": "Baseline deltas for trend-based parity checks. Updated via PARITY_UPDATE_BASELINE=1",
+  "_updated": "2025-12-02T00:00:00.000Z",
+  "fixtures": {
+    "ProStock_Pro_QUARTER": {
+      "etDelta": 0.0,
+      "mphDelta": 0.0
+    },
+    "ProStock_Pro_EIGHTH": {
+      "etDelta": 0.0,
+      "mphDelta": 0.0
+    }
+  }
+}

@@ -16,6 +16,9 @@ export interface FeatureFlags {
   // VB6 Strict Mode: Require complete VB6 fixture for simulation (no defaults/heuristics)
   vb6StrictMode: boolean;
   
+  // VB6 Strict Math: Force Float32 precision and VB6-identical math path
+  vb6Strict: boolean;
+  
   // Show Diagnostics: Display debug info in console/UI
   showDiagnostics: boolean;
   
@@ -36,6 +39,7 @@ interface FlagsStore extends FeatureFlags {
 const DEFAULT_FLAGS: FeatureFlags = {
   userLevel: 'pro',
   vb6StrictMode: false,
+  vb6Strict: true, // Default ON for VB6 parity
   showDiagnostics: false,
   enableEnergyLogging: false,
   enableStepTrace: false,
@@ -101,7 +105,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useFlagsStore(): FlagsStore {
+function useFlagsStoreHook(): FlagsStore {
   const context = useContext(FlagsContext);
   if (!context) {
     throw new Error('useFlagsStore must be used within FlagsProvider');
@@ -113,7 +117,7 @@ export function useFlagsStore(): FlagsStore {
  * Hook to get a specific flag value
  */
 export function useFlag<K extends keyof FeatureFlags>(key: K): FeatureFlags[K] {
-  const store = useFlagsStore();
+  const store = useFlagsStoreHook();
   return store[key];
 }
 
@@ -121,10 +125,11 @@ export function useFlag<K extends keyof FeatureFlags>(key: K): FeatureFlags[K] {
  * Hook to get all flags
  */
 export function useFlags(): FeatureFlags {
-  const store = useFlagsStore();
+  const store = useFlagsStoreHook();
   return {
     userLevel: store.userLevel,
     vb6StrictMode: store.vb6StrictMode,
+    vb6Strict: store.vb6Strict,
     showDiagnostics: store.showDiagnostics,
     enableEnergyLogging: store.enableEnergyLogging,
     enableStepTrace: store.enableStepTrace,
@@ -135,6 +140,73 @@ export function useFlags(): FeatureFlags {
  * Hook to get current user level
  */
 export function useUserLevel(): UserLevel {
-  const store = useFlagsStore();
+  const store = useFlagsStoreHook();
   return store.userLevel;
 }
+
+// ============================================================================
+// Test-compatible store (for use in non-React test environments)
+// ============================================================================
+
+let _testState: FlagsStore | null = null;
+
+/**
+ * Create a test-compatible store that can be used outside React context.
+ * This is for integration tests that use `require()` and `getState()`.
+ */
+function createTestStore(): FlagsStore {
+  let state = loadFlags();
+  
+  const store: FlagsStore = {
+    ...state,
+    setFlag: <K extends keyof FeatureFlags>(key: K, value: FeatureFlags[K]) => {
+      state = { ...state, [key]: value };
+      Object.assign(store, state);
+    },
+    setUserLevel: (level: UserLevel) => {
+      state = { ...state, userLevel: level };
+      Object.assign(store, state);
+    },
+    resetFlags: () => {
+      state = { ...DEFAULT_FLAGS };
+      Object.assign(store, state);
+    },
+  };
+  
+  return store;
+}
+
+/**
+ * Hybrid hook/store that works both as a React hook and has getState() for tests.
+ * 
+ * Usage in React components:
+ *   const store = useFlagsStore();
+ * 
+ * Usage in tests:
+ *   const { useFlagsStore } = require('...');
+ *   const store = useFlagsStore.getState();
+ */
+interface UseFlagsStoreHybrid {
+  (): FlagsStore;
+  getState: () => FlagsStore;
+  _reset: () => void;
+}
+
+export const useFlagsStore: UseFlagsStoreHybrid = Object.assign(
+  // The hook function
+  function useFlagsStore(): FlagsStore {
+    return useFlagsStoreHook();
+  },
+  // Static methods for test compatibility
+  {
+    getState: (): FlagsStore => {
+      if (!_testState) {
+        _testState = createTestStore();
+      }
+      return _testState;
+    },
+    _reset: () => {
+      _testState = null;
+    },
+  }
+);

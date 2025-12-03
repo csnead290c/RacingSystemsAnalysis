@@ -1,0 +1,61 @@
+{
+  "meta": { "name": "QUARTER_Pro_tadrag_v32", "strict": true, "source": "tadrag.dat (QUARTER Pro v3.2)" },
+  "vb6Targets": { 
+    "quarter": { "et_s": 5.52, "mph": 243.1 }, 
+    "eighth": { "et_s": 3.56, "mph": 205.3 } 
+  },
+  "env": { 
+    "elevation_ft": 0, 
+    "barometer_inHg": 29.92, 
+    "temperature_F": 77, 
+    "relHumidity_pct": 45, 
+    "wind_mph": 0, 
+    "trackTemp_F": 110, 
+    "tractionIndex": 2 
+  },
+  "vehicle": { 
+    "weight_lb": 1980, 
+    "wheelbase_in": 280, 
+    "overhang_in": 30, 
+    "rollout_in": 12,
+    "tireRolloutIn": 110.0, 
+    "tireWidthIn": 17.0 
+  },
+  "aero": { 
+    "frontalArea_ft2": 19.5, 
+    "Cd": 0.580, 
+    "Cl": 0.400 
+  },
+  "drivetrain": {
+    "finalDrive": 4.56, 
+    "overallEfficiency": 0.970,
+    "gearRatios": [1.85, 1.30, 1.00], 
+    "perGearEff": [0.970, 0.980, 0.990],
+    "shiftRPM": [9200, 9400, 100],
+    "clutch": { 
+      "launchRPM": 6000, 
+      "slipRPM": 7200, 
+      "slippageFactor": 1.010, 
+      "lockup": false 
+    }
+  },
+  "engineHP": [
+    [6000, 1847],
+    [6500, 2058],
+    [7000, 2256],
+    [7500, 2458],
+    [8000, 2639],
+    [8500, 2729],
+    [9000, 2672],
+    [9500, 2415],
+    [10000, 1999],
+    [11000, 73],
+    [11500, 72]
+  ],
+  "fuel": { "type": "Supercharged Methanol", "hpTorqueMultiplier": 1.0 },
+  "pmi": { 
+    "engine_flywheel_clutch": 4.84, 
+    "transmission_driveshaft": 0.426, 
+    "tires_wheels_ringgear": 64.6 
+  }
+}

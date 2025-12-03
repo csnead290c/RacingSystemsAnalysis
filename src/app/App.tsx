@@ -3,6 +3,7 @@ import { lazy } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
+import { VehicleProvider } from '../state/vehicleStore';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import Log from '../pages/Log';
@@ -64,8 +65,9 @@ function App() {
   return (
     <ThemeProvider>
       <FlagsProvider>
-        <Vb6FixtureProvider>
-          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <VehicleProvider>
+          <Vb6FixtureProvider>
+            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div
           style={{
             minHeight: '100vh',
@@ -123,8 +125,9 @@ function App() {
           © RSA 2025
         </footer>
       </div>
-      </BrowserRouter>
-      </Vb6FixtureProvider>
+            </BrowserRouter>
+          </Vb6FixtureProvider>
+        </VehicleProvider>
       </FlagsProvider>
     </ThemeProvider>
   );

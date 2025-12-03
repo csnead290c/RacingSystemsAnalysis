@@ -53,6 +53,9 @@ export interface BootstrapInput {
   
   /** Transmission type: true = auto (0.96 factor), false = manual (0.88 factor) */
   isAutoTrans: boolean;
+  
+  /** Torque converter multiplication factor (gc_TorqueMult.Value), typically 1.0 for clutch, 1.5-2.5 for converter */
+  torqueMult?: number;
 }
 
 export interface BootstrapOutput {
@@ -96,11 +99,12 @@ export function computeAgs0(input: BootstrapInput): BootstrapOutput {
     dragForce_lbf,
     vehicleWeight_lbf,
     isAutoTrans,
+    torqueMult = 1.0,  // Default 1.0 for clutch, use actual value for converter
   } = input;
   
   // VB6: TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
-  // (gc_TorqueMult is typically 1.0, so we skip it)
-  const wheelTorque_lbft = engineTorque_lbft_atSlip * gearRatio * transEff;
+  // gc_TorqueMult is 1.0 for clutch, 1.5-2.5 for torque converter
+  const wheelTorque_lbft = engineTorque_lbft_atSlip * torqueMult * gearRatio * transEff;
   
   // VB6: force = TQ * gc_GearRatio.Value * gc_Efficiency.Value / (TireSlip * TireDia / 24) - DragForce
   // Note: TireDia is in inches, so TireDia / 24 converts to feet (diameter / 2 / 12 = radius in ft)

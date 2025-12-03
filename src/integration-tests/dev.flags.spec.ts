@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { useFlagsStore } from '../domain/flags/store.tsx';
 
 // Import the actual flags store used by the panels
 // Note: In a real test environment, we'd need to mock localStorage
@@ -17,11 +18,11 @@ describe('Dev Portal - Feature Flags', () => {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('rsa.flags.v1');
     }
+    // Reset test store state
+    useFlagsStore._reset();
   });
 
   it('should have correct default flag values', () => {
-    // Import fresh to get defaults
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     expect(store.vb6StrictMode).toBe(false);
@@ -31,7 +32,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should allow setting vb6StrictMode flag', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     // Set flag
@@ -42,7 +42,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should allow setting showDiagnostics flag', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     store.setFlag('showDiagnostics', true);
@@ -50,7 +49,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should allow setting enableEnergyLogging flag', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     store.setFlag('enableEnergyLogging', true);
@@ -58,7 +56,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should allow setting enableStepTrace flag', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     store.setFlag('enableStepTrace', true);
@@ -66,7 +63,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should reset all flags to defaults', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     // Set all flags to true
@@ -87,7 +83,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should maintain flag state across multiple reads', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     // Set flag
@@ -100,7 +95,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should allow toggling flags on and off', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     // Toggle on
@@ -117,7 +111,6 @@ describe('Dev Portal - Feature Flags', () => {
   });
 
   it('should not affect other flags when setting one flag', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     // Set one flag
@@ -131,10 +124,11 @@ describe('Dev Portal - Feature Flags', () => {
 });
 
 describe('Dev Portal - Flags Integration with Predict', () => {
+  beforeEach(() => {
+    useFlagsStore._reset();
+  });
+
   it('should expose vb6StrictMode flag for Predict page consumption', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
-    const store = useFlagsStore.getState();
-    
     // This simulates what Predict.tsx does
     const strictMode = useFlagsStore.getState().vb6StrictMode;
     
@@ -142,7 +136,6 @@ describe('Dev Portal - Flags Integration with Predict', () => {
   });
 
   it('should allow Predict page to read flag changes', () => {
-    const { useFlagsStore } = require('../domain/flags/store.tsx');
     const store = useFlagsStore.getState();
     
     // Initial state

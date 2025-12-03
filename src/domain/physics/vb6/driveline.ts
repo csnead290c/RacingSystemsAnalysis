@@ -190,35 +190,54 @@ export function vb6ConverterCoupling(
   torqueMult: number,
   slippage: number,
   stepCount: number = 1
-): { work: number; coupling: number; slipRatio: number; zStall: number } {
+): { work: number; coupling: number; slipRatio: number; zStall: number; engRPM: number } {
   // VB6: TIMESLIP.FRM:1155-1156
+  // zStall = Stall
+  // SlipRatio = gc_Slippage.Value * LockRPM / zStall
   let zStall = stallRPM;
   let SlipRatio = slippage * lockRPM / zStall;
   
   // VB6: TIMESLIP.FRM:1158-1161
-  // Dynamic stall adjustment after step 2 when slip ratio > 0.6
+  // If L > 2 Then
+  //     If SlipRatio > 0.6 Then zStall = zStall * (1 + (gc_Slippage.Value - 1) * (SlipRatio - 0.6) / ((1 / gc_Slippage.Value) - 0.6))
+  //     SlipRatio = gc_Slippage.Value * LockRPM / zStall
+  // End If
   if (stepCount > 2 && SlipRatio > 0.6) {
     zStall = zStall * (1 + (slippage - 1) * (SlipRatio - 0.6) / ((1 / slippage) - 0.6));
     SlipRatio = slippage * lockRPM / zStall;
   }
   
   // VB6: TIMESLIP.FRM:1162
+  // ClutchSlip = 1 / gc_Slippage.Value   <-- DEFAULT value
   let ClutchSlip = 1 / slippage;
   
-  // VB6: TIMESLIP.FRM:1166-1167
-  // Work = gc_TorqueMult.Value - (gc_TorqueMult.Value - 1) * SlipRatio
-  // ClutchSlip = Work * LockRPM / zStall
-  const Work = torqueMult - (torqueMult - 1) * SlipRatio;
-  ClutchSlip = Work * lockRPM / zStall;
+  // VB6: TIMESLIP.FRM:1146
+  // EngRPM(L) = gc_Slippage.Value * LockRPM
+  let engRPM = slippage * lockRPM;
+  
+  // VB6: TIMESLIP.FRM:1164-1168
+  // If EngRPM(L) < zStall Then
+  //     EngRPM(L) = zStall
+  //     Work = gc_TorqueMult.Value - (gc_TorqueMult.Value - 1) * SlipRatio
+  //     ClutchSlip = Work * LockRPM / zStall
+  // End If
+  let Work = 1.0; // Default when not stalling
+  if (engRPM < zStall) {
+    engRPM = zStall;
+    Work = torqueMult - (torqueMult - 1) * SlipRatio;
+    ClutchSlip = Work * lockRPM / zStall;
+  }
   
   // VB6: TIMESLIP.FRM:1174
+  // If ClutchSlip > 1 Then ClutchSlip = 1
   if (ClutchSlip > 1) ClutchSlip = 1;
   
   return {
     work: Work,
     coupling: ClutchSlip,
     slipRatio: SlipRatio,
-    zStall: zStall
+    zStall: zStall,
+    engRPM: engRPM
   };
 }
 

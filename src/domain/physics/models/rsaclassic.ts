@@ -5,54 +5,161 @@
 
 import type { PhysicsModel, PhysicsModelId, SimInputs, SimResult } from '../index';
 import { wheelTorque_lbft, power_hp_atRPM } from '../engine/engine';
-import { rpmFromSpeed, type Drivetrain } from '../drivetrain/drivetrain';
+import { rpmFromSpeed } from '../drivetrain/drivetrain';
 // import { drag_lb } from '../aero/drag'; // Replaced with direct calculation
 // import { rolling_lb } from '../aero/rolling'; // Replaced with direct calculation
 // import { maxTractive_lb, type TireParams } from '../tire/traction'; // Replaced with VB6 traction
 import { createInitialState } from '../core/integrator';
 import { lbToSlug } from '../core/units';
-import { g, FPS_TO_MPH, CMU, gc, AMin } from '../vb6/constants';
+import { g, FPS_TO_MPH, CMU, gc, AMin, JMin, JMax } from '../vb6/constants';
 import { computeAgs0 } from '../vb6/bootstrap';
 // import { hpToTorqueLbFt } from '../vb6/convert'; // No longer needed - using hpPts directly
-import { airDensityVB6 } from '../vb6/air';
+import { airDensityVB6, type FuelSystemType } from '../vb6/air';
 import { vb6RollingResistanceTorque } from '../vb6/forces';
 import { vb6DirectDrive, vb6ConverterCoupling } from '../vb6/driveline';
 import { computeAMaxVB6, computeAMinVB6, computeCAXI, clampAGSVB6, computeCRTF } from '../vb6/traction';
 import { hpEngPMI, hpChasPMI, computeChassisPMI, computeDSRPM } from '../vb6/pmi';
-import { computeTireGrowth } from '../vb6/tire';
-import { shouldShift, updateShiftState, ShiftState, vb6ShiftDwell_s } from '../vb6/shift';
+import { computeTireGrowth, computeRefAreaWithTireGrowth } from '../vb6/tire';
+import { shouldShift, shouldShift_f32, updateShiftState, ShiftState, vb6ShiftDwell_s } from '../vb6/shift';
 import { tireSlipFactor } from '../vb6/tireslip';
 import { vb6RearWeightDynamic } from '../vb6/weight_transfer';
-import { vb6StepDistance, vb6ApplyAccelClamp, vb6AGSFromPQWT } from '../vb6/integrator';
-// TODO: Replace current integrator with vb6Step() once VB6 loop structure is verified
-// import { vb6Step, vb6CheckShift, type VB6Params } from '../vb6/integrator';
+import { 
+  vb6StepDistance, 
+  vb6ApplyAccelClamp, 
+  vb6AGSFromPQWT,
+  vb6AdaptiveTimestep,
+  vb6CalcTSMax
+} from '../vb6/integrator';
+// VB6-STRICT: Float32 math helpers for exact parity
+import { F, f32, vb6Round, tableLookupF32 } from '../vb6/exactMath';
 
 // === Engine params normalization (resolve once) ===
 type PowerPt = { rpm: number; hp: number };
 
-function asPowerPtsFromTuple(arr: any[]): PowerPt[] {
+/**
+ * Map fuel string to VB6 fuel system type.
+ * VB6 gc_FuelSystem.Value: 1-9
+ */
+function getFuelSystemType(fuel: string | undefined): FuelSystemType {
+  if (!fuel) return 1; // Default: Gas + Carb
+  
+  const f = fuel.toUpperCase();
+  
+  // Check for supercharger first
+  if (f.includes('SUPERCHARG') || f.includes('BLOWN')) {
+    if (f.includes('NITRO')) return 8;      // Nitro + Supercharger
+    if (f.includes('METHANOL') || f.includes('ALCOHOL')) return 7; // Methanol + Supercharger
+    return 6; // Gas + Supercharger
+  }
+  
+  // Check for injector
+  if (f.includes('INJECT') || f.includes('EFI') || f.includes('FUEL INJECT')) {
+    if (f.includes('NITRO')) return 5;      // Nitro + Injector
+    if (f.includes('METHANOL') || f.includes('ALCOHOL')) return 4; // Methanol + Injector
+    return 2; // Gas + Injector
+  }
+  
+  // Carbureted (default)
+  if (f.includes('NITRO')) return 5;        // Nitro + Injector (nitro usually injected)
+  if (f.includes('METHANOL') || f.includes('ALCOHOL')) return 3; // Methanol + Carb
+  
+  // Electric
+  if (f.includes('ELECTRIC')) return 9;
+  
+  return 1; // Gas + Carb (default)
+}
+
+/**
+ * Convert torque curve point to HP.
+ * If point has hp, use it directly. If point has torque, compute hp = torque * rpm / 5252.
+ */
+function torquePtToHP(pt: any, mult: number): PowerPt | null {
+  const rpm = Number(pt?.rpm);
+  if (!Number.isFinite(rpm)) return null;
+  
+  // If hp is present, use it directly
+  if (Number.isFinite(pt?.hp)) {
+    return { rpm, hp: Number(pt.hp) * mult };
+  }
+  // If torque is present, convert: hp = torque * rpm / 5252
+  if (Number.isFinite(pt?.torque)) {
+    const hp = (Number(pt.torque) * rpm / 5252) * mult;
+    return { rpm, hp };
+  }
+  // Also check tq_lbft alias
+  if (Number.isFinite(pt?.tq_lbft)) {
+    const hp = (Number(pt.tq_lbft) * rpm / 5252) * mult;
+    return { rpm, hp };
+  }
+  return null;
+}
+
+function asPowerPtsFromTuple(arr: any[], mult = 1): PowerPt[] {
   return arr
-    .map((pt) => Array.isArray(pt) ? { rpm: Number(pt[0]), hp: Number(pt[1]) } : pt)
-    .filter((p) => Number.isFinite(p?.rpm) && Number.isFinite(p?.hp))
+    .map((pt) => {
+      if (Array.isArray(pt)) {
+        // [rpm, hp] tuple format
+        return { rpm: Number(pt[0]), hp: Number(pt[1]) * mult };
+      }
+      // Object format - try hp first, then torque conversion
+      return torquePtToHP(pt, mult);
+    })
+    .filter((p): p is PowerPt => p !== null && Number.isFinite(p.rpm) && Number.isFinite(p.hp))
     .sort((a, b) => a.rpm - b.rpm);
 }
 
 function resolveEngineParams(input: any): { powerHP: PowerPt[] } {
-  // Already normalized?
+  // Fuel multiplier applies to all sources
+  const mult = input?.fuel?.hpTorqueMultiplier ?? 1;
+  
+  // Track what we found for error message
+  const sources: string[] = [];
+  
+  // 1) Already normalized in engineParams.powerHP?
   const hpA = input?.engineParams?.powerHP;
-  if (Array.isArray(hpA) && hpA.length >= 2) {
-    return { powerHP: asPowerPtsFromTuple(hpA) };
+  if (Array.isArray(hpA)) {
+    sources.push(`engineParams.powerHP(${hpA.length})`);
+    if (hpA.length >= 2) {
+      const powerHP = asPowerPtsFromTuple(hpA, mult);
+      if (powerHP.length >= 2) return { powerHP };
+    }
   }
-  // VB6 tuple/object source?
+  
+  // 2) VB6 tuple/object source (engineHP)?
   const vb6 = input?.engineHP;
-  if (Array.isArray(vb6) && vb6.length >= 2) {
-    return { powerHP: asPowerPtsFromTuple(vb6) };
+  if (Array.isArray(vb6)) {
+    sources.push(`engineHP(${vb6.length})`);
+    if (vb6.length >= 2) {
+      const powerHP = asPowerPtsFromTuple(vb6, mult);
+      if (powerHP.length >= 2) return { powerHP };
+    }
   }
-  // Fail with context
+  
+  // 3) engineParams.torqueCurve (hp or torque points)?
+  const epTc = input?.engineParams?.torqueCurve;
+  if (Array.isArray(epTc)) {
+    sources.push(`engineParams.torqueCurve(${epTc.length})`);
+    if (epTc.length >= 2) {
+      const powerHP = asPowerPtsFromTuple(epTc, mult);
+      if (powerHP.length >= 2) return { powerHP };
+    }
+  }
+  
+  // 4) vehicle.torqueCurve (hp or torque points)?
+  const tc = input?.vehicle?.torqueCurve;
+  if (Array.isArray(tc)) {
+    sources.push(`vehicle.torqueCurve(${tc.length})`);
+    if (tc.length >= 2) {
+      const powerHP = asPowerPtsFromTuple(tc, mult);
+      if (powerHP.length >= 2) return { powerHP };
+    }
+  }
+  
+  // Fail with context showing all sources found
   throw new Error(
-    `RSACLASSIC: missing power curve. Keys(engineParams)=${
-      JSON.stringify(Object.keys(input?.engineParams || {}))
-    } len(engineHP)=${Array.isArray(vb6) ? vb6.length : 'n/a'}`
+    `RSACLASSIC: missing power curve. Sources found: [${sources.join(', ') || 'none'}]. ` +
+    `Keys(engineParams)=${JSON.stringify(Object.keys(input?.engineParams || {}))} ` +
+    `Keys(vehicle)=${JSON.stringify(Object.keys(input?.vehicle || {}))}`
   );
 }
 
@@ -61,6 +168,27 @@ function resolveEngineParams(input: any): { powerHP: PowerPt[] } {
  */
 function finite(x: any, fallback = 0): number {
   return Number.isFinite(x) ? Number(x) : fallback;
+}
+
+/**
+ * VB6-STRICT HP interpolation using Float32.
+ * Converts PowerPt[] to [rpm, hp][] table and uses tableLookupF32.
+ */
+function hpAtRPM_f32(rpm: number, hpPts: PowerPt[]): number {
+  const table: [number, number][] = hpPts.map(p => [p.rpm, p.hp]);
+  return tableLookupF32(rpm, table);
+}
+
+/**
+ * VB6-STRICT wheel torque using Float32.
+ * torque = hp * 5252 / rpm, then apply gear efficiency
+ */
+function wheelTorque_f32(rpm: number, hpPts: PowerPt[], gearEff: number): number {
+  const hp = hpAtRPM_f32(rpm, hpPts);
+  if (rpm <= 0) return f32(0);
+  // VB6: TQ = Z6 * HP / EngRPM where Z6 = 5252
+  const tq = F.div(F.mul(f32(5252), hp), f32(rpm));
+  return F.mul(tq, f32(gearEff));
 }
 
 /**
@@ -73,6 +201,21 @@ function clampFinite(x: any, lo: number, hi: number, fallback = lo): number {
 }
 
 /**
+ * Clamp efficiency to valid range [0.85, 1.0].
+ */
+function clamp01(x: number): number {
+  return Math.max(0.85, Math.min(1.0, x));
+}
+
+/**
+ * Optional tuning parameters for parity adjustment.
+ */
+type Tuning = {
+  aeroCdScale?: number;         // multiplies effective Cd (default 1)
+  drivelineEffOffset?: number;  // additive to overallEff before clamping [0.85, 1.0]
+};
+
+/**
  * RSACLASSIC physics model.
  * Advanced physics simulation for Quarter Jr/Pro parity.
  */
@@ -80,6 +223,14 @@ class RSACLASSICModel implements PhysicsModel {
   id: PhysicsModelId = 'RSACLASSIC';
 
   simulate(input: SimInputs): SimResult {
+    // === VB6-STRICT MODE ===
+    // When enabled, use Float32 precision and VB6-identical math path
+    // for bit-for-bit parity with Quarter Pro VB6 outputs
+    const STRICT = !!((input as any)?.flags?.vb6Strict);
+    if (STRICT) {
+      console.log('[RSACLASSIC] VB6-STRICT mode enabled - using Float32 math');
+    }
+    
     // --- watchdogs & helpers (DEV safety) ---
     const WATCH_START_MS = Date.now();
     const WATCH_WALL_MS  = 90_000;         // 90s wall limit
@@ -119,9 +270,11 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // === Drivetrain: resolve clutch / converter once ===
+    // Tolerate multiple locations: drivetrain.clutch, input.clutch, vehicle.clutch
     const drivetrain = (input as any)?.drivetrain ?? {};
-    const clutch = drivetrain.clutch ?? (input as any)?.clutch;               // tolerate either location
-    const converter = drivetrain.converter ?? (input as any)?.converter;
+    const vehicleBlock = (input as any)?.vehicle ?? {};
+    const clutch = drivetrain.clutch ?? (input as any)?.clutch ?? vehicleBlock.clutch;
+    const converter = drivetrain.converter ?? (input as any)?.converter ?? vehicleBlock.converter;
 
     const isClutch = !!clutch;
     const isConverter = !!converter;
@@ -130,6 +283,15 @@ class RSACLASSICModel implements PhysicsModel {
     const slipRPM = isClutch ? Number((clutch as any).slipRPM ?? (clutch as any).slipRpm) : NaN;
     const launchRPM = isClutch ? Number((clutch as any).launchRPM ?? (clutch as any).launchRpm) : NaN;
     const stallRPM = isConverter ? Number((converter as any).stallRPM ?? (converter as any).stallRpm) : NaN;
+    
+    // VB6 slippage factor (gc_Slippage.Value) - multiplier for LockRPM to get EngRPM
+    // Clutch default: 1.0025, Converter default: 1.05
+    const clutchSlippage = isClutch 
+      ? Number((clutch as any).slippageFactor ?? (clutch as any).slipRatio ?? 1.0025) 
+      : 1.0;
+    const converterSlippage = isConverter 
+      ? Number((converter as any).slippageFactor ?? (converter as any).slipRatio ?? 1.05) 
+      : 1.0;
 
     // Validate: one and only one device must be present
     if (!isClutch && !isConverter) {
@@ -150,6 +312,11 @@ class RSACLASSICModel implements PhysicsModel {
     console.log('[RPM-RESOLVED]', {
       isClutch, isConverter, slipRPM, launchRPM, stallRPM, rpmPin
     });
+    
+    // === Optional tuning parameters ===
+    const tuning: Tuning = (input as any)?.tuning ?? {};
+    const cdScale = Number.isFinite(tuning.aeroCdScale) ? tuning.aeroCdScale! : 1;
+    const effOffset = Number.isFinite(tuning.drivelineEffOffset) ? tuning.drivelineEffOffset! : 0;
     
     const { vehicle, env, raceLength } = input;
     
@@ -229,15 +396,20 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // Precompute atmospheric conditions
-    // VB6 exact air density (constant for entire run)
+    // VB6 exact air density and HP correction (constant for entire run)
+    // Determine fuel system type from fuel string (use input directly since fuel var defined later)
+    const fuelString = (input as any).fuel as string | undefined;
+    const fuelSystemType = getFuelSystemType(fuelString);
     const airResult = airDensityVB6({
       barometer_inHg: env.barometerInHg ?? 29.92,
       temperature_F: env.temperatureF ?? 59,
       relHumidity_pct: env.humidityPct ?? 50,
+      elevation_ft: env.elevation ?? 0, // Note: env uses 'elevation' not 'elevationFt'
+      fuelSystem: fuelSystemType,
     });
     const rho_slug_ft3 = airResult.rho_slug_per_ft3;
-    
-    // Note: HP correction no longer needed - hpPts already normalized
+    // hpc is available but not applied - see note in HP chain section
+    void airResult.hpc;
     
     // Precompute mass
     const mass_slugs = lbToSlug(vehicle.weightLb);
@@ -263,10 +435,17 @@ class RSACLASSICModel implements PhysicsModel {
     // Integration parameters
     // VB6 uses adaptive timestep (TIMESLIP.FRM:1082): TimeStep = TSMax * (AgsMax / Ags0)^4
     // Min: 0.005s (TIMESLIP.FRM:1064), Max: 0.05s (TIMESLIP.FRM:1120)
-    // For fixed-timestep implementation, use 0.002s matching VB6's TimeTol (TIMESLIP.FRM:554)
-    const dt_s = 0.002; // VB6 TimeTol = 0.002s (TIMESLIP.FRM:554)
     const MAX_TIME_S = 30; // Generous cap to avoid false stops while diagnosing
     const traceInterval_s = 0.01; // Collect traces every 10ms
+    
+    // VB6 adaptive timestep parameters (TIMESLIP.FRM:1063-1064, 1082)
+    // Get peak HP for TSMax calculation
+    const peakHP = hpPts.reduce((max, pt) => Math.max(max, pt.hp), 0);
+    const torqueMult = converter ? ((converter as any).torqueMult ?? 1.7) : 1.0;
+    const rollout_ft = (vehicle.rolloutIn ?? 12) / 12; // Convert inches to feet
+    const TSMax = vb6CalcTSMax(rollout_ft > 0 ? rollout_ft : 1, peakHP, torqueMult, vehicle.weightLb);
+    let AgsMax_g = 0; // Track maximum acceleration seen (in g's)
+    let dt_s = TSMax; // Start with TSMax, will adapt
     
     // Initialize state
     let state = createInitialState();
@@ -382,7 +561,9 @@ class RSACLASSICModel implements PhysicsModel {
     const LOCKRPM_MIN = 5;           // rpm threshold at which clutchSlip becomes meaningful
     
     // PMI state tracking (VB6: TIMESLIP.FRM:1092, 1104, 1231, 1240)
-    let RPM0 = 0;      // Previous engine RPM
+    // Initialize RPM0 to launch/stall RPM to avoid massive PMI spike on first step
+    // VB6 starts with engine already at stall/slip RPM, not from 0
+    let RPM0 = rpmPin;      // Previous engine RPM (start at launch/stall RPM)
     let DSRPM0 = 0;    // Previous driveshaft RPM
     
     // Shift state tracking (VB6: TIMESLIP.FRM:1355, 1433, 1071-1072)
@@ -398,7 +579,10 @@ class RSACLASSICModel implements PhysicsModel {
     };
     
     const getDrivelineEff = (): number => {
-      return transEff ?? 0.9; // gc_Efficiency.Value in VB6
+      // Base efficiency from drivetrain or vehicle config
+      const baseEff = drivetrain.overallEff ?? drivetrain.overallEfficiency ?? transEff ?? 0.97;
+      // Apply tuning offset and clamp to valid range [0.85, 1.0]
+      return clamp01(baseEff + effOffset);
     };
     
     const getTireSlip = (distance_ft: number): number => {
@@ -440,7 +624,10 @@ class RSACLASSICModel implements PhysicsModel {
       
       // Calculate engine torque first (needed for driveline)
       const currentGearEff = getTransEff(state.gearIdx);
-      let tq_lbft = wheelTorque_lbft(rpm, hpPts, currentGearEff);
+      // VB6-STRICT: Use Float32 torque calculation
+      let tq_lbft = STRICT
+        ? wheelTorque_f32(rpm, hpPts, currentGearEff)
+        : wheelTorque_lbft(rpm, hpPts, currentGearEff);
       
       // Apply fuel delivery factor
       let M_fuel = 1.0;
@@ -465,7 +652,12 @@ class RSACLASSICModel implements PhysicsModel {
       
       // VB6 driveline: converter, clutch, or direct drive
       const gearRatio = (gearRatios ?? [1.0])[state.gearIdx] ?? 1.0;
-      const wheelRPM = (state.v_fps * 60) / (2 * Math.PI * tireRadius_ft);
+      
+      // VB6: TIMESLIP.FRM:1140
+      // DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
+      // Note: VB6 uses DSRPM (driveshaft RPM) which includes tire slip factor
+      const currentTireSlip = getTireSlip(state.s_ft);
+      const wheelRPM = currentTireSlip * state.v_fps * 60 / tireCircumference_ft;
       
       // --- VB6 RPM hold logic (clutch/converter) ---
       // VB6 holds EngRPM at slip/stall RPM until wheels catch up
@@ -493,27 +685,34 @@ class RSACLASSICModel implements PhysicsModel {
       // If EngRPM(L) < Stall Then
       //     If iGear = 1 Or gc_LockUp.Value = 0 Then EngRPM(L) = Stall
       // End If
-      let EngRPM = (isClutch ? 1.0025 : 1.05) * LockRPM; // gc_Slippage.Value * LockRPM
+      // Use slippage factor from config (clutchSlippage or converterSlippage)
+      const slippage = isClutch ? clutchSlippage : converterSlippage;
+      let EngRPM = slippage * LockRPM; // gc_Slippage.Value * LockRPM
       
       // Hold engine RPM at slip/stall in 1st gear or no lockup
+      // VB6: TIMESLIP.FRM:1149-1151 (clutch uses slipRPM) or 1164-1165 (converter uses stallRPM)
       const inFirstGear = state.gearIdx === 0;
       const noLockup = true; // Most configs don't have lockup
+      const deviceStallRPM = isClutch ? slipRPM : stallRPM; // Use appropriate stall/slip RPM
       if ((isClutch || isConverter) && (inFirstGear || noLockup)) {
-        if (EngRPM < slipRPM) {
-          EngRPM = slipRPM;
+        if (EngRPM < deviceStallRPM) {
+          EngRPM = deviceStallRPM;
         }
       }
       
       // Track if engine is pinned at slip/stall RPM
-      const rpmIsPinned = EngRPM === slipRPM && LockRPM < slipRPM;
-      const lockThreshold = slipRPM; // For diagnostics
+      const rpmIsPinned = EngRPM === deviceStallRPM && LockRPM < deviceStallRPM;
+      const lockThreshold = deviceStallRPM; // For diagnostics
       
       // Update effectiveRPM to use the calculated value
       effectiveRPM = EngRPM;
       
       // Recalculate torque at the correct EngRPM
-      tq_lbft = wheelTorque_lbft(EngRPM, hpPts, currentGearEff);
-      tq_lbft = tq_lbft * M_fuel; // Reapply fuel factor
+      // VB6-STRICT: Use Float32 torque calculation
+      tq_lbft = STRICT
+        ? wheelTorque_f32(EngRPM, hpPts, currentGearEff)
+        : wheelTorque_lbft(EngRPM, hpPts, currentGearEff);
+      tq_lbft = STRICT ? F.mul(f32(tq_lbft), f32(M_fuel)) : tq_lbft * M_fuel; // Reapply fuel factor
       
       if (clutch) {
         // VB6 clutch model: ClutchSlip = LockRPM / EngRPM
@@ -529,14 +728,14 @@ class RSACLASSICModel implements PhysicsModel {
         // VB6 converter model (TIMESLIP.FRM:1154-1172)
         // Use resolved stallRPM from top
         const torqueMult = (converter as any).torqueMult ?? 2.0;
-        const slippage = (converter as any).slipRatio ?? 1.05; // VB6 typical slippage
+        // Use converterSlippage extracted at top (from slippageFactor or slipRatio)
         
         // Use VB6 converter coupling for HP path
         const converterResult = vb6ConverterCoupling(
           LockRPM,
           stallRPM,
           torqueMult,
-          slippage,
+          converterSlippage,  // Use the extracted value, not local lookup
           stepCount
         );
         
@@ -566,12 +765,60 @@ class RSACLASSICModel implements PhysicsModel {
       // === VB6 ATMOSPHERE PIPELINE (EXACT PORT) ===
       // Guard all inputs against NaN propagation
       const v = finite(state.v_fps, 0);
-      const v2 = v * v;
-      const q_psf = finite(0.5 * rho_slug_ft3 * v2, 0);
       
-      // All forces must be finite numbers
-      const F_drag_lbf = finite(q_psf * (cd ?? 0) * (frontalArea_ft2 ?? 0), 0);
-      const F_lift_up_lbf = finite(q_psf * (vehicle.liftCoeff ?? 0) * (frontalArea_ft2 ?? 0), 0);
+      // VB6: TIMESLIP.FRM:1181
+      // WindFPS = Sqr(Vel(L)^2 + 2*Vel(L)*(WindSpeed/Z5)*Cos(WindAngle*PI/180) + (WindSpeed/Z5)^2)
+      // Z5 = 3600/5280 (fps to mph conversion, so WindSpeed/Z5 converts mph to fps)
+      const windMph = env.windMph ?? 0;
+      const windAngleDeg = env.windAngleDeg ?? 0; // 0 = headwind, 180 = tailwind
+      const windFps = windMph / FPS_TO_MPH; // Convert mph to fps
+      const windAngleRad = (windAngleDeg * Math.PI) / 180;
+      // Law of cosines: combine vehicle velocity with wind velocity
+      const windEffectiveFps = Math.sqrt(
+        v * v + 
+        2 * v * windFps * Math.cos(windAngleRad) + 
+        windFps * windFps
+      );
+      
+      // VB6: TIMESLIP.FRM:1185-1189
+      // Increase frontal area based on tire growth
+      // RefArea2 = gc_RefArea.Value + ((TireGrowth - 1) * TireDia / 2) * (2 * gc_TireWidth.Value) / 144
+      const isMotorcycle = (vehicle as any).bodyStyle === 8;
+      const effectiveFrontalArea_ft2 = computeRefAreaWithTireGrowth(
+        frontalArea_ft2 ?? 0,
+        tireGrowthResult.growth,
+        tireDiaIn,
+        vehicle.tireWidthIn ?? 17.0,
+        isMotorcycle
+      );
+      
+      // VB6-STRICT: Use Float32 for aero calculations
+      // VB6: TIMESLIP.FRM:1182
+      // q = Sgn(WindFPS) * rho * Abs(WindFPS) ^ 2 / (2 * gc)
+      // Note: VB6 uses rho in lbm/ft³, we use slugs/ft³, so we don't divide by gc
+      let v2: number;
+      let q_psf: number;
+      let F_drag_lbf: number;
+      let F_lift_up_lbf: number;
+      
+      // Use wind-effective velocity for aero calculations
+      const v_aero = windMph !== 0 ? windEffectiveFps : v;
+      
+      if (STRICT) {
+        const v_f32 = f32(v_aero);
+        v2 = F.mul(v_f32, v_f32);
+        q_psf = F.mul(F.mul(f32(0.5), f32(rho_slug_ft3)), v2);
+        // F_drag = q * Cd * cdScale * A (using effective area with tire growth)
+        F_drag_lbf = F.mul(F.mul(F.mul(q_psf, f32(cd ?? 0)), f32(cdScale)), f32(effectiveFrontalArea_ft2));
+        F_lift_up_lbf = F.mul(F.mul(q_psf, f32(vehicle.liftCoeff ?? 0)), f32(effectiveFrontalArea_ft2));
+      } else {
+        v2 = v_aero * v_aero; // Use wind-effective velocity
+        q_psf = finite(0.5 * rho_slug_ft3 * v2, 0);
+        // All forces must be finite numbers
+        // Apply cdScale tuning to effective drag coefficient (using effective area with tire growth)
+        F_drag_lbf = finite(q_psf * (cd ?? 0) * cdScale * effectiveFrontalArea_ft2, 0);
+        F_lift_up_lbf = finite(q_psf * (vehicle.liftCoeff ?? 0) * effectiveFrontalArea_ft2, 0);
+      }
       
       // Normal force for rolling/traction (VB6 applies lift by reducing normal load)
       const normal_lbf = finite(vehicle.weightLb - F_lift_up_lbf, vehicle.weightLb);
@@ -603,10 +850,13 @@ class RSACLASSICModel implements PhysicsModel {
       const prevAGS_g = stepCount === 1 ? 0 : prevAGS_g_stored;
       
       // VB6 vehicle parameters
-      const wheelbase_in = 108; // Default 108" (typical drag car) - TODO: add to vehicle config
-      const cg_height_in = 24; // Default 24" (typical drag car) - TODO: add to vehicle config
-      const static_front_weight_lbf = vehicle.weightLb * 0.38; // Default 38% front - TODO: add to vehicle config
-      const frct = 0.04; // VB6 driveline friction coefficient
+      const wheelbase_in = vehicle.wheelbaseIn ?? 108; // Default 108" (typical drag car)
+      // VB6: TIMESLIP.FRM:1032 - gc_YCG.Value = (TireDia / 2) + 3.75
+      // CG height is tire radius + 3.75" (assumes CG is 3.75" above rear axle centerline)
+      const cg_height_in = (tireDiaIn / 2) + 3.75;
+      const static_front_weight_lbf = (vehicle as any).staticFrontWeightLb ?? (vehicle.weightLb * 0.38); // Default 38% front
+      // VB6: TIMESLIP.FRM:559 - FRCT = 1.03 (not 0.04!)
+      const frct = 1.03; // VB6 driveline friction coefficient
       
       // Calculate dynamic rear weight with weight transfer
       // VB6 uses normal force (weight - lift) for downforce calculation
@@ -684,6 +934,9 @@ class RSACLASSICModel implements PhysicsModel {
         // Get engine torque at rpmPin (resolved at top)
         const tq_at_slip = wheelTorque_lbft(rpmPin, hpPts, currentGearEff);
         
+        // Get torque multiplier for converter (1.0 for clutch)
+        const bootTorqueMult = isConverter ? ((converter as any).torqueMult ?? 2.0) : 1.0;
+        
         const bootstrapResult = computeAgs0({
           engineTorque_lbft_atSlip: tq_at_slip,
           gearRatio,
@@ -695,6 +948,7 @@ class RSACLASSICModel implements PhysicsModel {
           dragForce_lbf: F_drag + F_roll,
           vehicleWeight_lbf: vehicle.weightLb,
           isAutoTrans: !!converter,
+          torqueMult: bootTorqueMult,  // Apply converter torque multiplication
         });
         
         // Apply VB6 AMin/AMax clamps with PQWT rescaling
@@ -741,7 +995,10 @@ class RSACLASSICModel implements PhysicsModel {
         // VB6: TIMESLIP.FRM:1071-1072, 1283-1287
         // During DTShift period, only drag and rolling resistance act on vehicle
         // Get HP directly from power curve at EngRPM
-        let hp_at_EngRPM = power_hp_atRPM(EngRPM, hpPts);
+        // VB6-STRICT: Use Float32 HP interpolation
+        let hp_at_EngRPM = STRICT
+          ? hpAtRPM_f32(EngRPM, hpPts)
+          : power_hp_atRPM(EngRPM, hpPts);
         
         // Check if in shift dwell (no power window)
         if (shiftDwellRemaining_s > 0) {
@@ -767,11 +1024,18 @@ class RSACLASSICModel implements PhysicsModel {
         // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
         // HP = gc_HPTQMult.Value * HP / hpc
         // HPSave = HP:    HP = HP * ClutchSlip
+        // Note: gc_HPTQMult.Value is already applied in hpPts normalization
+        // Note: hpc correction is NOT applied here because our fixture HP curves
+        // are the same values VB6 uses, and VB6's target ETs already include hpc.
+        // The hpc value is available in airResult.hpc if needed for display.
         const HPSave = hp_at_EngRPM; // Engine HP before PMI losses
         
         // VB6: TIMESLIP.FRM:1180-1194
         // DragHP = DragForce * Vel(L) / 550
-        const dragHP = (F_drag + F_roll) * state.v_fps / 550;
+        // VB6-STRICT: Use Float32 arithmetic
+        const dragHP = STRICT
+          ? F.div(F.mul(F.add(f32(F_drag), f32(F_roll)), f32(state.v_fps)), f32(550))
+          : (F_drag + F_roll) * state.v_fps / 550;
         
         // DEV: Pre-HP-chain diagnostics for first 12 steps
         if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
@@ -857,25 +1121,79 @@ class RSACLASSICModel implements PhysicsModel {
         E_pmi_engine += HPEngPMI * 550 * dt_s; // Convert HP to ft-lb
         E_pmi_chassis += HPChasPMI * 550 * dt_s;
         
-        // VB6: TIMESLIP.FRM:1250-1252
-        // HP = (HPSave - HPEngPMI) * ClutchSlip
-        // HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
-        // PQWT = 550 * gc * HP / gc_Weight.Value
-        let HP_afterLine1 = (HPSave - HPEngPMI) * clutchCoupling;
-        let HP = HP_afterLine1;
-        HP = ((HP * currentGearEff * getDrivelineEff() - HPChasPMI) / getTireSlip(state.s_ft)) - dragHP;
+        // VB6: TIMESLIP.FRM:1178, 1219-1220
+        // HPSave = HP:    HP = HP * ClutchSlip
+        // HP = HP * TGEff(iGear) * gc_Efficiency.Value / TireSlip
+        // HP = HP - DragHP
+        //
+        // Note: VB6's ClutchSlip for converters is:
+        // - Default: 1 / gc_Slippage.Value (~0.94 for slippage=1.06)
+        // - When EngRPM < zStall: Work * LockRPM / zStall
+        // The vb6ConverterCoupling function now correctly implements this logic.
+        
+        let HP_afterLine1: number;
+        let HP: number;
+        const tireSlip = getTireSlip(state.s_ft);
+        
+        if (STRICT) {
+          // VB6-STRICT: Float32 HP chain (TIMESLIP.FRM:1250-1251)
+          // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
+          HP_afterLine1 = F.mul(F.sub(f32(HPSave), f32(HPEngPMI)), f32(clutchCoupling));
+          HP = HP_afterLine1;
+          // VB6: HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+          const hp_times_eff = F.mul(F.mul(f32(HP), f32(currentGearEff)), f32(getDrivelineEff()));
+          const hp_minus_pmi = F.sub(hp_times_eff, f32(HPChasPMI));
+          const hp_div_slip = F.div(hp_minus_pmi, f32(tireSlip));
+          HP = F.sub(hp_div_slip, f32(dragHP));
+        } else {
+          // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
+          HP_afterLine1 = (HPSave - HPEngPMI) * clutchCoupling;
+          HP = HP_afterLine1;
+          // VB6: HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+          HP = ((HP * currentGearEff * getDrivelineEff() - HPChasPMI) / tireSlip) - dragHP;
+        }
         const HP_afterLine2 = HP;
         
         // VB6: TIMESLIP.FRM:1252-1253
         // PQWT = 550 * gc * HP / Weight
-        PQWT_ftps2 = 550 * gc * HP / vehicle.weightLb;
+        PQWT_ftps2 = STRICT
+          ? F.div(F.mul(F.mul(f32(550), f32(gc)), f32(HP)), f32(vehicle.weightLb))
+          : 550 * gc * HP / vehicle.weightLb;
         
         // VB6: TIMESLIP.FRM:1253
         // AGS(L) = PQWT / (Vel(L) * gc)
         let AGS_candidate_ftps2 = vb6AGSFromPQWT(PQWT_ftps2, state.v_fps);
         
-        // VB6: TIMESLIP.FRM:1255-1266
-        // Apply jerk limits and AMin/AMax clamps with PQWT rescaling
+        // VB6: TIMESLIP.FRM:1255-1258
+        // Apply jerk limits BEFORE AMin/AMax clamps
+        // Jerk = (AGS(L) - Ags0) / dtk1
+        // If Jerk < JMin Then Jerk = JMin: AGS(L) = Ags0 + Jerk * dtk1: PQWT = AGS(L) * gc * Vel(L)
+        // If Jerk > JMax Then Jerk = JMax: AGS(L) = Ags0 + Jerk * dtk1: PQWT = AGS(L) * gc * Vel(L)
+        // Note: VB6's AGS is in g's, Jerk is in g/s
+        // Note: VB6 uses jerk limiting as part of an iterative convergence loop.
+        // With adaptive timestep, we only apply jerk limiting when dt is small enough
+        // that jerk would otherwise be unreasonably high.
+        if (dt_s > 0 && dt_s <= 0.01 && stepCount > 1) {
+          const AGS_g = AGS_candidate_ftps2 / gc;
+          const Ags0_g_local = Ags0 / gc;
+          let Jerk = (AGS_g - Ags0_g_local) / dt_s; // g/s
+          
+          if (Jerk < JMin) {
+            Jerk = JMin;
+            const newAGS_g = Ags0_g_local + Jerk * dt_s;
+            AGS_candidate_ftps2 = newAGS_g * gc;
+            PQWT_ftps2 = newAGS_g * gc * state.v_fps; // VB6: PQWT = AGS(L) * gc * Vel(L)
+          }
+          if (Jerk > JMax) {
+            Jerk = JMax;
+            const newAGS_g = Ags0_g_local + Jerk * dt_s;
+            AGS_candidate_ftps2 = newAGS_g * gc;
+            PQWT_ftps2 = newAGS_g * gc * state.v_fps;
+          }
+        }
+        
+        // VB6: TIMESLIP.FRM:1260-1266
+        // Apply AMin/AMax clamps with PQWT rescaling
         const clampResult = vb6ApplyAccelClamp(AGS_candidate_ftps2, AMin, AMax);
         AGS = clampResult.AGS_ftps2;
         PQWT_ftps2 = PQWT_ftps2 * clampResult.PQWT_scale; // Rescale PQWT per VB6
@@ -883,6 +1201,19 @@ class RSACLASSICModel implements PhysicsModel {
         
         // Final guard: ensure AGS is finite and clamped
         AGS = clampFinite(AGS, AMin, AMax, AMin);
+        
+        // VB6: Track maximum acceleration for adaptive timestep (TIMESLIP.FRM:1082)
+        const AGS_g = AGS / gc;
+        if (AGS_g > AgsMax_g) {
+          AgsMax_g = AGS_g;
+        }
+        
+        // VB6: Adaptive timestep (TIMESLIP.FRM:1082)
+        // TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+        const Ags0_g = Ags0 / gc;
+        if (Ags0_g > 0 && stepCount > 1) {
+          dt_s = vb6AdaptiveTimestep(TSMax, AgsMax_g, Ags0_g);
+        }
         
         // DEV: Consolidated table for first 12 steps (before integration)
         if (stepCount <= 12 && typeof console !== 'undefined' && console.log) {
@@ -1043,19 +1374,27 @@ class RSACLASSICModel implements PhysicsModel {
       // VB6 shift logic (TIMESLIP.FRM:1355, 1433)
       // Check if shift conditions are met
       const numGears = gearRatios?.length ?? 1;
-      const shiftTriggered = shouldShift(
-        state.gearIdx,
-        numGears,
-        EngRPM,
-        shiftRPM ?? []
-      );
+      const currentShiftRPM = (shiftRPM ?? [])[state.gearIdx] ?? 0;
       
-      // Update shift state machine
-      const shiftUpdate = updateShiftState(shiftState, shiftTriggered);
-      shiftState = shiftUpdate.newState;
+      // VB6-STRICT: Use >= operator directly, no tolerance
+      // Non-strict: Use tolerance-based check with state machine
+      const shiftTriggered = STRICT
+        ? shouldShift_f32(EngRPM, currentShiftRPM, state.gearIdx, numGears - 1)
+        : shouldShift(state.gearIdx, numGears, EngRPM, shiftRPM ?? []);
       
-      // Execute shift if state machine says to
-      if (shiftUpdate.executeShift) {
+      // Update shift state machine (non-STRICT uses 2-step process)
+      // STRICT: Execute shift immediately when triggered
+      let executeShift = false;
+      if (STRICT) {
+        executeShift = shiftTriggered;
+      } else {
+        const shiftUpdate = updateShiftState(shiftState, shiftTriggered);
+        shiftState = shiftUpdate.newState;
+        executeShift = shiftUpdate.executeShift;
+      }
+      
+      // Execute shift
+      if (executeShift) {
         const oldGear = state.gearIdx;
         const oldEngRPM = EngRPM;
         
@@ -1262,9 +1601,10 @@ class RSACLASSICModel implements PhysicsModel {
     }
     
     // Build result
+    // VB6-STRICT: Apply banker's rounding to final outputs (VB6 UI behavior)
     const result: SimResult = {
-      et_s: measuredET,
-      mph: finalMPH,
+      et_s: STRICT ? vb6Round(measuredET, 3) : measuredET,
+      mph: STRICT ? vb6Round(finalMPH, 2) : finalMPH,
       timeslip: timeslip,
       traces: traces.length > 0 ? traces : undefined,
       meta: {

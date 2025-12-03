@@ -15,6 +15,8 @@
  * - Converter: DTShift = 0.25 seconds (250 ms)
  */
 
+import { F, f32 } from './exactMath';
+
 /**
  * Check if vehicle should shift to next gear
  * 
@@ -126,4 +128,36 @@ export function updateShiftState(
 export function vb6ShiftDwell_s(isClutch: boolean): number {
   // VB6: DTShift = 0.2 for clutch, 0.25 for converter
   return isClutch ? 0.2 : 0.25;
+}
+
+/**
+ * VB6-STRICT: Check if should shift using >= operator.
+ * 
+ * VB6 typically uses >= for the actual shift trigger:
+ * If EngRPM >= ShiftRPM(iGear) Then shift
+ * 
+ * This is different from the tolerance-based check which uses Abs().
+ * For STRICT mode, we use the simpler >= check.
+ * 
+ * @param engRPM Current engine RPM (Float32)
+ * @param shiftRPM Shift RPM threshold for current gear
+ * @param currentGear Current gear index (0-based)
+ * @param maxGear Maximum gear index (numGears - 1)
+ * @returns True if should shift
+ */
+export function shouldShift_f32(
+  engRPM: number,
+  shiftRPM: number,
+  currentGear: number,
+  maxGear: number
+): boolean {
+  // Can't shift from highest gear
+  if (currentGear >= maxGear) return false;
+  
+  // No shift point defined
+  if (!shiftRPM || shiftRPM <= 0) return false;
+  
+  // VB6-STRICT: Use >= operator (not tolerance-based)
+  // F.sub returns Float32, compare to 0
+  return F.sub(f32(engRPM), f32(shiftRPM)) >= 0;
 }

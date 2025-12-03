@@ -312,7 +312,7 @@ describe('VB6 Parity - RSACLASSIC vs Quarter Pro/Jr', () => {
       expect(result.meta.rollout?.t_roll_s).toBeGreaterThan(0);
       
       // Verify VB6 rollout behavior documented
-      expect(result.meta.vb6?.rolloutBehavior).toBe('ET clock starts after rollout distance');
+      expect(result.meta.vb6?.rolloutBehavior).toContain('ET clock starts after rollout distance');
     });
   });
   

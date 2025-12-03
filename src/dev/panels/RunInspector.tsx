@@ -8,13 +8,17 @@
 import { useState, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
-import { useFlag } from '../../domain/flags/store.tsx';
+import { useFlag, useFlagsStore, type UserLevel } from '../../domain/flags/store.tsx';
+import { useVehicleStore } from '../../state/vehicleStore';
 import { validateVB6Fixture } from '../validation/vb6Fixture';
 import { toSimInputFromVB6 } from '../vb6/fixtureAdapter';
+import { fromVehicleToVB6Fixture, validateAdapterOutput } from '../vb6/fromVehicle';
 import { simulate } from '../../workerBridge';
 import { VehiclePicker } from '../components/VehiclePicker';
 import type { PhysicsModelId, SimResult } from '../../domain/physics';
 import type { RaceLength } from '../../domain/config/raceLengths';
+
+const USER_LEVELS: UserLevel[] = ['jr', 'pro', 'admin'];
 
 /**
  * Local guard to ensure engineParams.powerHP exists (idempotent with worker).
@@ -60,6 +64,9 @@ export default function RunInspector() {
   const navigate = useNavigate();
   const { fixture, setFixture } = useVb6Fixture();
   const enableStepTrace = useFlag('enableStepTrace');
+  const flagsStore = useFlagsStore();
+  const { userLevel, setUserLevel } = flagsStore;
+  const { activeVehicle } = useVehicleStore();
   
   const [selectedModel, setSelectedModel] = useState<PhysicsModelId>('RSACLASSIC');
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
@@ -71,13 +78,39 @@ export default function RunInspector() {
   // Validate fixture
   const validation = validateVB6Fixture(fixture as any);
 
-  // Handle vehicle selection
+  // Handle vehicle selection - convert to VB6 fixture and update state
   const handleVehicleSelect = (vehicleId: string) => {
-    // TODO: Implement fromVehicleToVB6Fixture adapter
     console.log('[RunInspector] Vehicle selected:', vehicleId);
-    // For now, just log - will implement when vehicles store exists
-    // const vb6Fixture = fromVehicleToVB6Fixture(vehicle);
-    // setFixture(vb6Fixture);
+    
+    if (activeVehicle && activeVehicle.id === vehicleId) {
+      try {
+        const vb6Fixture = fromVehicleToVB6Fixture(activeVehicle as any);
+        
+        // Validate adapter output before setting
+        const validation = validateAdapterOutput(vb6Fixture);
+        if (!validation.ok) {
+          console.warn('[RunInspector] Adapter validation warnings:', validation.errors);
+          setError(`Vehicle data incomplete: ${validation.errors.join('; ')}`);
+          return;
+        }
+        
+        setFixture(vb6Fixture as any);
+        console.log('[RunInspector] Fixture updated from vehicle:', {
+          vehicleId,
+          vehicleName: activeVehicle.name,
+          engineHPCount: vb6Fixture.engineHP?.length,
+          gearCount: vb6Fixture.drivetrain?.gearRatios?.length,
+        });
+      } catch (err: any) {
+        console.error('[RunInspector] Failed to convert vehicle to fixture:', err);
+        setError(`Failed to load vehicle: ${err.message}`);
+      }
+    }
+  };
+
+  // Navigate to vehicle editor
+  const handleEditVehicle = () => {
+    startTransition(() => navigate('/vehicles'));
   };
 
   const handleRun = async () => {
@@ -285,8 +318,60 @@ export default function RunInspector() {
         </div>
       )}
 
+      {/* User Level Control */}
+      <div
+        style={{
+          padding: '0.75rem',
+          backgroundColor: 'var(--color-bg-secondary)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '1rem',
+          border: '1px solid var(--color-border)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+        }}
+      >
+        <label style={{ 
+          fontSize: '0.875rem', 
+          fontWeight: '500',
+          color: 'var(--color-text)',
+          whiteSpace: 'nowrap',
+        }}>
+          User Level:
+        </label>
+        <div style={{ display: 'flex', gap: '0.25rem' }}>
+          {USER_LEVELS.map(level => (
+            <button
+              key={level}
+              onClick={() => setUserLevel(level)}
+              style={{
+                padding: '0.375rem 0.75rem',
+                fontSize: '0.75rem',
+                fontWeight: userLevel === level ? '600' : '400',
+                backgroundColor: userLevel === level ? 'var(--color-primary)' : 'var(--color-bg)',
+                color: userLevel === level ? 'white' : 'var(--color-text)',
+                border: `1px solid ${userLevel === level ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+              }}
+            >
+              {level}
+            </button>
+          ))}
+        </div>
+        {userLevel === 'admin' && (
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+            🔓 Full access
+          </span>
+        )}
+      </div>
+
       {/* Vehicle Picker */}
-      <VehiclePicker onSelect={handleVehicleSelect} />
+      <VehiclePicker 
+        onSelect={handleVehicleSelect} 
+        onEditClick={handleEditVehicle}
+      />
 
       {/* Controls */}
       <div

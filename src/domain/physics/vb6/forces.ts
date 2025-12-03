@@ -149,15 +149,21 @@ export function vb6AeroTorque(
 /**
  * Calculate aerodynamic lift force.
  * 
- * Formula: F_lift = 0.5 * rho * cl * area * v²
+ * VB6 Source: TIMESLIP.FRM:1191
+ * DownForce = gc_Weight.Value + gc_LiftCoef.Value * RefArea2 * q
  * 
- * TODO: Port VB6 lift calculation and verify if it affects weight transfer.
+ * Where q = rho * v² / (2 * gc) (dynamic pressure)
+ * 
+ * So lift force = cl * area * q = cl * area * rho * v² / (2 * gc)
+ * 
+ * Note: VB6 uses positive lift coefficient for upward lift (reduces downforce).
+ * The result is added to weight to get DownForce.
  * 
  * @param rho - Air density (slugs/ft³)
- * @param cl - Lift coefficient (dimensionless, negative for downforce)
+ * @param cl - Lift coefficient (dimensionless, positive = upward lift)
  * @param areaFt2 - Reference area (ft²)
  * @param vFps - Velocity (ft/s)
- * @returns Lift force (lb, positive = lift, negative = downforce)
+ * @returns Lift force (lb, positive = upward lift)
  */
 export function vb6AeroLift(
   rho: number,
@@ -165,7 +171,9 @@ export function vb6AeroLift(
   areaFt2: number,
   vFps: number
 ): number {
-  // Standard aerodynamic lift equation
-  const F_lift = 0.5 * rho * cl * areaFt2 * vFps * vFps;
+  // VB6: q = rho * v² / (2 * gc)
+  // VB6: LiftForce = cl * area * q
+  const q = rho * vFps * vFps / (2 * gc);
+  const F_lift = cl * areaFt2 * q;
   return F_lift;
 }

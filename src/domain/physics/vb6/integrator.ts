@@ -17,7 +17,7 @@
  * - Dist(L) = ((2*PQWT*dt + v0²)^1.5 - v0³) / (3*PQWT) + Dist0
  */
 
-import { gc } from './constants';
+import { gc, JMin, JMax, K6, K61 } from './constants';
 
 /**
  * VB6 simulation state.
@@ -402,4 +402,249 @@ export function vb6Jerk(
   
   // Jerk in g/s
   return (AGS_current_ftps2 - AGS_prev_ftps2) / (dt_s * gc);
+}
+
+/**
+ * VB6 Adaptive Timestep Calculation
+ * 
+ * VB6: TIMESLIP.FRM:1082
+ * TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+ * 
+ * With bounds (TIMESLIP.FRM:1064, 1120):
+ * - Min: 0.005s
+ * - Max: 0.05s
+ * 
+ * @param TSMax Base timestep (from rollout calculation)
+ * @param AgsMax Maximum acceleration seen (g's)
+ * @param Ags0 Current acceleration (g's)
+ * @returns Adaptive timestep (s)
+ */
+export function vb6AdaptiveTimestep(
+  TSMax: number,
+  AgsMax_g: number,
+  Ags0_g: number
+): number {
+  // VB6: TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+  // Guard against division by zero or negative
+  if (Ags0_g <= 0) {
+    return Math.max(0.005, Math.min(0.05, TSMax));
+  }
+  
+  let TimeStep = TSMax * Math.pow(AgsMax_g / Ags0_g, 4);
+  
+  // VB6: TIMESLIP.FRM:1120
+  // If TimeStep > 0.05 Then TimeStep = 0.05
+  if (TimeStep > 0.05) {
+    TimeStep = 0.05;
+  }
+  
+  // VB6: TIMESLIP.FRM:1064
+  // If TSMax < 0.005 Then TSMax = 0.005
+  if (TimeStep < 0.005) {
+    TimeStep = 0.005;
+  }
+  
+  return TimeStep;
+}
+
+/**
+ * VB6 Initial TSMax Calculation
+ * 
+ * VB6: TIMESLIP.FRM:1063-1064
+ * TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1 / 3)
+ * TSMax = TSMax / 15: If TSMax < 0.005 Then TSMax = 0.005
+ * 
+ * @param rollout_ft Rollout distance (ft)
+ * @param HP Engine HP
+ * @param torqueMult Torque multiplier (1.0 for clutch, 1.5-2.5 for converter)
+ * @param weight_lbf Vehicle weight (lbf)
+ * @returns TSMax (s)
+ */
+export function vb6CalcTSMax(
+  rollout_ft: number,
+  HP: number,
+  torqueMult: number,
+  weight_lbf: number
+): number {
+  // VB6: TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1 / 3)
+  const powerToWeight = HP * torqueMult / weight_lbf;
+  let TSMax = rollout_ft * 0.11 * Math.pow(powerToWeight, -1/3);
+  
+  // VB6: TSMax = TSMax / 15
+  TSMax = TSMax / 15;
+  
+  // VB6: If TSMax < 0.005 Then TSMax = 0.005
+  if (TSMax < 0.005) {
+    TSMax = 0.005;
+  }
+  
+  return TSMax;
+}
+
+/**
+ * VB6 Iterative Convergence Loop
+ * 
+ * VB6: TIMESLIP.FRM:1244-1276 (label 280)
+ * 
+ * This is the core VB6 iteration that converges PMI and time calculations.
+ * It iterates up to 12 times or until time converges within 0.01%.
+ * 
+ * @param params Iteration parameters
+ * @returns Converged values
+ */
+export interface VB6IterationParams {
+  // Previous step values
+  Vel0_ftps: number;      // Previous velocity (ft/s)
+  Ags0_g: number;         // Previous acceleration (g's)
+  Time0_s: number;        // Previous time (s)
+  
+  // Current step values
+  Vel_ftps: number;       // Current velocity (ft/s)
+  VelSqrd: number;        // Vel² - Vel0² (ft²/s²)
+  
+  // Engine/PMI values (pre-computed, don't change during iteration)
+  HPSave: number;         // Engine HP before PMI
+  ClutchSlip: number;     // Clutch/converter coupling
+  TGEff: number;          // Transmission efficiency
+  Efficiency: number;     // Overall driveline efficiency
+  TireSlip: number;       // Tire slip factor
+  DragHP: number;         // Drag HP
+  EngAccHP: number;       // Engine acceleration HP (before Work factor)
+  ChasAccHP: number;      // Chassis acceleration HP (before Work factor)
+  
+  // Limits
+  AMin_g: number;         // Minimum acceleration (g's)
+  AMax_g: number;         // Maximum acceleration (g's)
+  
+  // Vehicle
+  Weight_lbf: number;     // Vehicle weight (lbf)
+}
+
+export interface VB6IterationResult {
+  HP: number;             // Final HP after losses
+  PQWT_ftps2: number;     // Power-to-weight-time (ft/s²)
+  AGS_g: number;          // Acceleration (g's)
+  time_s: number;         // Converged time (s)
+  dt_s: number;           // Converged timestep (s)
+  HPEngPMI: number;       // Engine PMI HP loss
+  HPChasPMI: number;      // Chassis PMI HP loss
+  slip: boolean;          // True if traction limited
+  iterations: number;     // Number of iterations used
+}
+
+export function vb6IterateConvergence(params: VB6IterationParams): VB6IterationResult {
+  const {
+    Vel0_ftps, Ags0_g, Time0_s,
+    Vel_ftps, VelSqrd,
+    HPSave, ClutchSlip, TGEff, Efficiency, TireSlip, DragHP,
+    EngAccHP, ChasAccHP,
+    AMin_g, AMax_g,
+    Weight_lbf
+  } = params;
+  
+  const PI = Math.PI;
+  
+  // Initial time estimate (from velocity step)
+  // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
+  // But we need initial PQWT estimate - use simple forward Euler
+  let time_s = Time0_s + 0.002; // Initial guess
+  let dtk1 = time_s - Time0_s;
+  
+  let HP = 0;
+  let PQWT = 0;
+  let AGS_g = Ags0_g;
+  let HPEngPMI = 0;
+  let HPChasPMI = 0;
+  let slip = false;
+  let k = 0;
+  
+  // VB6: TIMESLIP.FRM:1244-1276 (iteration loop)
+  for (k = 1; k <= 12; k++) {
+    // VB6: TIMESLIP.FRM:1247
+    // Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+    const Work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dtk1);
+    
+    // VB6: TIMESLIP.FRM:1248
+    // HPEngPMI = EngAccHP * Work:    HPChasPMI = ChasAccHP * Work
+    HPEngPMI = EngAccHP * Work;
+    HPChasPMI = ChasAccHP * Work;
+    
+    // VB6: TIMESLIP.FRM:1250-1251
+    // HP = (HPSave - HPEngPMI) * ClutchSlip
+    // HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+    HP = (HPSave - HPEngPMI) * ClutchSlip;
+    HP = ((HP * TGEff * Efficiency - HPChasPMI) / TireSlip) - DragHP;
+    
+    // VB6: TIMESLIP.FRM:1252-1253
+    // PQWT = 550 * gc * HP / gc_Weight.Value
+    // AGS(L) = PQWT / (Vel(L) * gc)
+    PQWT = 550 * gc * HP / Weight_lbf;
+    AGS_g = PQWT / (Vel_ftps * gc);
+    
+    // VB6: TIMESLIP.FRM:1255-1258
+    // Apply jerk limits
+    let Jerk = 0;
+    if (dtk1 !== 0) {
+      Jerk = (AGS_g - Ags0_g) / dtk1;
+    }
+    if (Jerk < JMin) {
+      Jerk = JMin;
+      AGS_g = Ags0_g + Jerk * dtk1;
+      PQWT = AGS_g * gc * Vel_ftps;
+    }
+    if (Jerk > JMax) {
+      Jerk = JMax;
+      AGS_g = Ags0_g + Jerk * dtk1;
+      PQWT = AGS_g * gc * Vel_ftps;
+    }
+    
+    // VB6: TIMESLIP.FRM:1260-1266
+    // Apply AMin/AMax clamps
+    slip = false;
+    if (AGS_g > AMax_g) {
+      slip = true;
+      PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
+      AGS_g = AMax_g - (AGS_g - AMax_g);
+    }
+    if (AGS_g < AMin_g) {
+      PQWT = PQWT * AMin_g / AGS_g;
+      AGS_g = AMin_g;
+    }
+    
+    // VB6: TIMESLIP.FRM:1268-1270
+    // time(L) = VelSqrd / (2 * PQWT) + Time0
+    // dtk2 = time(L) - Time0
+    // If k = 12 Or Abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01 Then GoTo 300
+    const newTime = VelSqrd / (2 * PQWT) + Time0_s;
+    const dtk2 = newTime - Time0_s;
+    
+    // Check convergence
+    if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
+      time_s = newTime;
+      break;
+    }
+    
+    // VB6: TIMESLIP.FRM:1272-1275
+    // z = HP / HPSave
+    // If z < K6 Then z = K6
+    // If z > K61 Then z = K61
+    // time(L) = Time0 + dtk1 + z * (dtk2 - dtk1)
+    let z = HP / HPSave;
+    if (z < K6) z = K6;
+    if (z > K61) z = K61;
+    time_s = Time0_s + dtk1 + z * (dtk2 - dtk1);
+    dtk1 = time_s - Time0_s;
+  }
+  
+  return {
+    HP,
+    PQWT_ftps2: PQWT,
+    AGS_g,
+    time_s,
+    dt_s: time_s - Time0_s,
+    HPEngPMI,
+    HPChasPMI,
+    slip,
+    iterations: k
+  };
 }

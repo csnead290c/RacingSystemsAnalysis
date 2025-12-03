@@ -14,36 +14,115 @@ type PowerPt = { rpm: number; hp: number };
 
 /**
  * Add field name aliases for compatibility.
+ * Handles: shiftsRPM → shiftRPM, overallEfficiency → overallEff, ratios ↔ gearRatios
  */
-function aliasFields(input: any) {
-  if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
-    input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
+function aliasFields(input: any): any {
+  // Drivetrain aliases
+  if (input?.drivetrain) {
+    const dt = input.drivetrain;
+    
+    // shiftsRPM → shiftRPM
+    if (dt.shiftsRPM && !dt.shiftRPM) {
+      dt.shiftRPM = dt.shiftsRPM;
+    }
+    // overallEfficiency → overallEff
+    if (dt.overallEfficiency !== undefined && dt.overallEff === undefined) {
+      dt.overallEff = dt.overallEfficiency;
+    }
+    // Bidirectional: ratios ↔ gearRatios
+    if (dt.ratios && !dt.gearRatios) {
+      dt.gearRatios = dt.ratios;
+    }
+    if (dt.gearRatios && !dt.ratios) {
+      dt.ratios = dt.gearRatios;
+    }
   }
-  if (input?.drivetrain?.overallEfficiency && !input.drivetrain?.overallEff) {
-    input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
+  
+  // Vehicle aliases (same pattern)
+  if (input?.vehicle) {
+    const v = input.vehicle;
+    if (v.ratios && !v.gearRatios) {
+      v.gearRatios = v.ratios;
+    }
+    if (v.gearRatios && !v.ratios) {
+      v.ratios = v.gearRatios;
+    }
   }
+  
   return input;
 }
 
 /**
- * Ensure engineParams.powerHP exists.
- * Converts VB6-style engineHP array to modern format with fuel multiplier.
+ * Convert torque curve point to HP.
+ * If point has hp, use it directly. If point has torque, compute hp = torque * rpm / 5252.
  */
-function ensurePowerHP(input: any) {
-  if (input?.engineParams?.powerHP || input?.engineParams?.torqueCurve) return input;
-  const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
-  if (Array.isArray(input?.engineHP)) {
-    const powerHP: PowerPt[] = input.engineHP
-      .map((pt: any) =>
-        Array.isArray(pt)
-          ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
-          : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
-      .filter(p => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
-      .sort((a, b) => a.rpm - b.rpm);
-    if (powerHP.length >= 2) {
-      input.engineParams = { ...(input.engineParams ?? {}), powerHP };
-    }
+function torquePtToHP(pt: any, mult: number): PowerPt | null {
+  const rpm = Number(pt?.rpm);
+  if (!Number.isFinite(rpm)) return null;
+  
+  // If hp is present, use it directly
+  if (Number.isFinite(pt?.hp)) {
+    return { rpm, hp: Number(pt.hp) * mult };
   }
+  // If torque is present, convert: hp = torque * rpm / 5252
+  if (Number.isFinite(pt?.torque)) {
+    const hp = (Number(pt.torque) * rpm / 5252) * mult;
+    return { rpm, hp };
+  }
+  // Also check tq_lbft alias
+  if (Number.isFinite(pt?.tq_lbft)) {
+    const hp = (Number(pt.tq_lbft) * rpm / 5252) * mult;
+    return { rpm, hp };
+  }
+  return null;
+}
+
+/**
+ * Ensure engineParams.powerHP exists.
+ * Converts VB6-style engineHP array or torqueCurve to modern format with fuel multiplier.
+ */
+function ensurePowerHP(input: any): any {
+  // Already has powerHP?
+  if (Array.isArray(input?.engineParams?.powerHP) && input.engineParams.powerHP.length >= 2) {
+    return input;
+  }
+  
+  const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
+  let powerHP: PowerPt[] = [];
+  
+  // Try engineHP first (VB6 format)
+  if (Array.isArray(input?.engineHP) && input.engineHP.length >= 2) {
+    powerHP = input.engineHP
+      .map((pt: any) => {
+        if (Array.isArray(pt)) {
+          return { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult };
+        }
+        return torquePtToHP(pt, hpMult);
+      })
+      .filter((p: PowerPt | null): p is PowerPt => p !== null && Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: PowerPt, b: PowerPt) => a.rpm - b.rpm);
+  }
+  
+  // Try engineParams.torqueCurve
+  if (powerHP.length < 2 && Array.isArray(input?.engineParams?.torqueCurve) && input.engineParams.torqueCurve.length >= 2) {
+    powerHP = input.engineParams.torqueCurve
+      .map((pt: any) => torquePtToHP(pt, hpMult))
+      .filter((p: PowerPt | null): p is PowerPt => p !== null && Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: PowerPt, b: PowerPt) => a.rpm - b.rpm);
+  }
+  
+  // Try vehicle.torqueCurve
+  if (powerHP.length < 2 && Array.isArray(input?.vehicle?.torqueCurve) && input.vehicle.torqueCurve.length >= 2) {
+    powerHP = input.vehicle.torqueCurve
+      .map((pt: any) => torquePtToHP(pt, hpMult))
+      .filter((p: PowerPt | null): p is PowerPt => p !== null && Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: PowerPt, b: PowerPt) => a.rpm - b.rpm);
+  }
+  
+  if (powerHP.length >= 2) {
+    input.engineParams = { ...(input.engineParams ?? {}), powerHP };
+  }
+  
   return input;
 }
 
@@ -92,33 +171,12 @@ interface WorkerErrorResponse {
 type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
 
 /**
- * Normalize field names (aliases)
+ * Normalize field names (aliases) and ensure powerHP exists.
+ * Combines aliasFields and ensurePowerHP for complete normalization.
  */
-function normalizeFieldNames(input: any) {
-  if (input?.drivetrain?.shiftsRPM && !input.drivetrain.shiftRPM) {
-    input.drivetrain.shiftRPM = input.drivetrain.shiftsRPM;
-  }
-  if (input?.drivetrain?.overallEfficiency && !input.drivetrain?.overallEff) {
-    input.drivetrain.overallEff = input.drivetrain.overallEfficiency;
-  }
-}
-
-/**
- * Normalize engine params from VB6 engineHP
- */
-function normalizeEngineParams(input: any) {
-  if (!input?.engineParams?.powerHP && Array.isArray(input?.engineHP)) {
-    const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
-    const powerHP = input.engineHP
-      .map((pt: any) => Array.isArray(pt)
-        ? { rpm: Number(pt[0]), hp: Number(pt[1]) * hpMult }
-        : { rpm: Number(pt?.rpm), hp: Number(pt?.hp) * hpMult })
-      .filter((p: any) => Number.isFinite(p.rpm) && Number.isFinite(p.hp))
-      .sort((a: any, b: any) => a.rpm - b.rpm);
-    if (powerHP.length >= 2) {
-      input.engineParams = { ...(input.engineParams ?? {}), powerHP };
-    }
-  }
+function normalizeInput(input: any): void {
+  aliasFields(input);
+  ensurePowerHP(input);
 }
 
 /**
@@ -141,13 +199,10 @@ self.onmessage = async (ev: MessageEvent) => {
     // 1) Deep-clone to avoid structured clone surprises
     const input = JSON.parse(JSON.stringify(msg.payload));
 
-    // 2) Normalize field names (aliases)
-    normalizeFieldNames(input);
+    // 2) Normalize field names (aliases) and ensure powerHP exists
+    normalizeInput(input);
 
-    // 3) Normalize power curve if only engineHP exists
-    normalizeEngineParams(input);
-
-    // 4) Validate
+    // 3) Validate
     const hp = input?.engineParams?.powerHP;
     if (!Array.isArray(hp) || hp.length < 2) {
       console.error('[WORKER] bad powerHP', { hpLen: hp?.length, sample: hp?.slice?.(0, 2) });
@@ -170,6 +225,20 @@ self.onmessage = async (ev: MessageEvent) => {
       slipRPM: dt?.clutch?.slipRPM,
       stallRPM: dt?.converter?.stallRPM,
     });
+
+    // Log tuning parameters only when present (null-safe)
+    try {
+      if (input?.tuning) {
+        // eslint-disable-next-line no-console
+        console.debug('[WORKER:TUNING]', true, input.tuning);
+      }
+    } catch { /* ignore */ }
+
+    // Pipe vb6Strict flag (default true for VB6 parity)
+    if (input.flags === undefined) input.flags = {};
+    if (input.flags.vb6Strict === undefined) {
+      input.flags.vb6Strict = msg.payload?.flags?.vb6Strict ?? true;
+    }
 
     const model = getModel(msg.model);
     const result = await model.simulate(input);

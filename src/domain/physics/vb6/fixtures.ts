@@ -8,70 +8,70 @@
 export interface Vb6VehicleFixture {
   // Environment
   env: {
-    elevation_ft: number;
-    barometer_inHg: number;
-    temperature_F: number;
-    relHumidity_pct: number;
-    wind_mph: number;
-    wind_angle_deg: number;
-    trackTemp_F: number;
-    tractionIndex: number;
+    readonly elevation_ft: number;
+    readonly barometer_inHg: number;
+    readonly temperature_F: number;
+    readonly relHumidity_pct: number;
+    readonly wind_mph: number;
+    readonly wind_angle_deg: number;
+    readonly trackTemp_F: number;
+    readonly tractionIndex: number;
   };
 
   // Vehicle mass/geometry
   vehicle: {
-    weight_lb: number;
-    wheelbase_in: number;
-    overhang_in: number;
-    rollout_in: number;
-    tire: {
-      rollout_in: number;
-      width_in: number;
+    readonly weight_lb: number;
+    readonly wheelbase_in: number;
+    readonly overhang_in: number;
+    readonly rollout_in: number;
+    readonly tire: {
+      readonly rollout_in: number;
+      readonly width_in: number;
     };
   };
 
   // Aerodynamics
   aero: {
-    frontalArea_ft2: number;
-    Cd: number;
-    Cl: number;
+    readonly frontalArea_ft2: number;
+    readonly Cd: number;
+    readonly Cl: number;
   };
 
   // Drivetrain
   drivetrain: {
-    finalDrive: number;
-    overallEfficiency: number;
-    gearRatios: number[];
-    perGearEff: number[];
-    shiftsRPM: number[];
-    clutch?: {
-      launchRPM: number;
-      slipRPM: number;
-      slippageFactor: number;
-      lockup: boolean;
+    readonly finalDrive: number;
+    readonly overallEfficiency: number;
+    readonly gearRatios: readonly number[];
+    readonly perGearEff: readonly number[];
+    readonly shiftsRPM: readonly number[];
+    readonly clutch?: {
+      readonly launchRPM: number;
+      readonly slipRPM: number;
+      readonly slippageFactor: number;
+      readonly lockup: boolean;
     };
-    converter?: {
-      stallRPM: number;
-      torqueMult: number;
-      slippageFactor: number;
-      lockup: boolean;
+    readonly converter?: {
+      readonly stallRPM: number;
+      readonly torqueMult: number;
+      readonly slippageFactor: number;
+      readonly lockup: boolean;
     };
   };
 
   // Polar moments of inertia
   pmi: {
-    engine_flywheel_clutch: number;
-    transmission_driveshaft: number;
-    tires_wheels_ringgear: number;
+    readonly engine_flywheel_clutch: number;
+    readonly transmission_driveshaft: number;
+    readonly tires_wheels_ringgear: number;
   };
 
   // Engine dyno curve [RPM, HP]
-  engineHP: [number, number][];
+  readonly engineHP: readonly (readonly [number, number])[];
 
   // Fuel system
   fuel: {
-    type: string;
-    hpTorqueMultiplier: number;
+    readonly type: string;
+    readonly hpTorqueMultiplier: number;
   };
 }
 
