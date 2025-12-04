@@ -327,54 +327,50 @@ function Predict() {
   };
 
   return (
-    <Page
-      title="ET Simulation"
-      wide
-      actions={
-        <Link to="/" className="link" style={{ fontSize: '0.9rem' }}>
-          ← Back to Home
-        </Link>
-      }
-    >
+    <Page wide>
       <style>{`
         .et-sim-dashboard {
           display: flex;
           flex-direction: column;
           gap: var(--space-3);
-          height: calc(100vh - 160px);
-          min-height: 400px;
+          height: calc(100vh - 100px);
+          min-height: 500px;
         }
         .et-sim-top-row {
           display: flex;
           gap: var(--space-3);
+          flex: 1;
+          min-height: 300px;
+        }
+        .et-sim-bottom-row {
+          display: flex;
+          gap: var(--space-3);
+          height: 140px;
           flex-shrink: 0;
         }
         .et-sim-chart-area {
           flex: 1;
-          min-height: 250px;
-          display: flex;
-          flex-direction: column;
-        }
-        .et-sim-chart-area > div {
-          flex: 1;
+          min-width: 0;
         }
         .et-slip {
           font-family: 'Courier New', monospace;
           background: linear-gradient(180deg, #f8f8f0 0%, #e8e8d8 100%);
           color: #1a1a1a;
-          padding: 10px 14px;
+          padding: 12px 16px;
           border-radius: 4px;
-          font-size: 11px;
-          line-height: 1.3;
+          font-size: 12px;
+          line-height: 1.4;
           box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-          width: 180px;
+          width: 200px;
           flex-shrink: 0;
+          display: flex;
+          flex-direction: column;
         }
         .et-slip-header {
           text-align: center;
           border-bottom: 1px dashed #666;
-          padding-bottom: 4px;
-          margin-bottom: 6px;
+          padding-bottom: 6px;
+          margin-bottom: 8px;
         }
         .et-slip-row {
           display: flex;
@@ -389,50 +385,32 @@ function Predict() {
         }
         .et-slip-final {
           border-top: 1px solid #333;
-          margin-top: 4px;
-          padding-top: 4px;
-          font-size: 13px;
+          margin-top: auto;
+          padding-top: 8px;
+          font-size: 15px;
           font-weight: bold;
         }
-        .et-sim-controls {
-          width: 280px;
-          flex-shrink: 0;
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-2);
-        }
-        .et-sim-rpm-area {
-          flex: 1;
-          min-width: 200px;
+        .et-slip-vehicle {
+          border-top: 1px dashed #666;
+          margin-top: 8px;
+          padding-top: 6px;
+          font-size: 10px;
+          text-align: center;
+          color: #555;
         }
       `}</style>
-      
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-        <span className="text-muted" style={{ fontSize: '0.85rem' }}>
-          {vehicle.name} • {modelName}
-        </span>
-        {(isDebouncing || loading) && (
-          <span style={{ 
-            fontSize: '0.75rem', 
-            color: 'var(--color-accent)', 
-            fontStyle: 'italic',
-          }}>
-            updating...
-          </span>
-        )}
-      </div>
 
       <div className="et-sim-dashboard">
-        {/* TOP ROW: ET Slip + Controls + RPM Histogram */}
+        {/* TOP ROW: ET Slip + Data Logger Chart */}
         <div className="et-sim-top-row">
           {/* ET Slip Style Results */}
           <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
             <div className="et-slip-header">
-              <div style={{ fontWeight: 'bold', fontSize: '10px' }}>{vehicle.name}</div>
-              <div style={{ fontSize: '9px', color: '#666' }}>{raceLength === 'EIGHTH' ? '1/8 MILE' : '1/4 MILE'}</div>
+              <div style={{ fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>RACING SYSTEMS ANALYSIS</div>
+              <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>ET Simulation</div>
             </div>
             
-            {/* Splits - show 60', 330', 660' for 1/8; add 1/8 MPH, 1000' for 1/4 */}
+            {/* Splits */}
             <div className="et-slip-row">
               <span className="et-slip-label">60'</span>
               <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}</span>
@@ -469,33 +447,68 @@ function Predict() {
                 <span>{baseMPH.toFixed(2)}</span>
               </div>
             </div>
+            
+            {/* Vehicle info at bottom */}
+            <div className="et-slip-vehicle">
+              {vehicle.name}<br/>
+              {raceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'} • {modelName}
+            </div>
           </div>
 
-          {/* Controls Column */}
-          <div className="et-sim-controls">
-            {/* Environment - compact */}
-            <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem' }}>
-              <div style={{ fontWeight: '600', marginBottom: 'var(--space-1)', color: 'var(--color-text)' }}>Environment</div>
-              <EnvironmentForm value={env} onChange={setEnv} compact />
-            </div>
+          {/* Data Logger Chart */}
+          <div className="et-sim-chart-area card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column' }}>
+            <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>Loading chart...</div>}>
+              {simResult?.traces && simResult.traces.length > 0 && (
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
+                </div>
+              )}
+            </Suspense>
+            {(isDebouncing || loading) && (
+              <div style={{ position: 'absolute', top: '8px', right: '12px', fontSize: '0.75rem', color: 'var(--color-accent)', fontStyle: 'italic' }}>
+                updating...
+              </div>
+            )}
+          </div>
+        </div>
 
-            {/* Race Length - inline */}
+        {/* BOTTOM ROW: RPM Histogram + Environment + Race Length + Advanced */}
+        <div className="et-sim-bottom-row">
+          {/* RPM Histogram */}
+          <div className="card" style={{ flex: 1, padding: 'var(--space-2) var(--space-3)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: 'var(--space-1)' }}>RPM Distribution</div>
+            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.75rem' }}>Loading...</div>}>
+              {simResult?.traces && simResult.traces.length > 0 && (
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <RPMHistogram data={simResult.traces as any} compact />
+                </div>
+              )}
+            </Suspense>
+          </div>
+
+          {/* Environment */}
+          <div className="card" style={{ width: '320px', flexShrink: 0, padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem', overflow: 'hidden' }}>
+            <div style={{ fontWeight: '600', marginBottom: 'var(--space-1)', color: 'var(--color-text)' }}>Environment</div>
+            <EnvironmentForm value={env} onChange={setEnv} compact />
+          </div>
+
+          {/* Race Length + Advanced */}
+          <div style={{ width: '160px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             <div className="card" style={{ padding: 'var(--space-2) var(--space-3)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', fontSize: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: '0.75rem' }}>
                 <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>Race:</span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
                   <input type="radio" name="raceLength" value="EIGHTH" checked={raceLength === 'EIGHTH'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
                   <span>1/8</span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
                   <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
                   <span>1/4</span>
                 </label>
               </div>
             </div>
 
-            {/* Advanced - collapsed */}
-            <details className="card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem' }}>
+            <details className="card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem', flex: 1 }}>
               <summary style={{ fontWeight: '600', cursor: 'pointer', color: 'var(--color-text)' }}>Advanced</summary>
               <div style={{ marginTop: 'var(--space-2)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
@@ -503,36 +516,13 @@ function Predict() {
                   <span>VB6 Strict</span>
                 </label>
                 {strictMode && (
-                  <button onClick={() => setShowVb6Panel(true)} className="btn" style={{ marginTop: 'var(--space-2)', padding: '4px 8px', fontSize: '0.7rem', width: '100%' }}>
+                  <button onClick={() => setShowVb6Panel(true)} className="btn" style={{ marginTop: 'var(--space-1)', padding: '3px 6px', fontSize: '0.65rem', width: '100%' }}>
                     VB6 Inputs
                   </button>
                 )}
               </div>
             </details>
           </div>
-
-          {/* RPM Histogram - compact in remaining space */}
-          <div className="et-sim-rpm-area card" style={{ padding: 'var(--space-2) var(--space-3)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: 'var(--space-1)' }}>RPM Distribution</div>
-            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.75rem' }}>Loading...</div>}>
-              {simResult?.traces && simResult.traces.length > 0 && (
-                <div style={{ flex: 1, minHeight: '60px' }}>
-                  <RPMHistogram data={simResult.traces as any} compact />
-                </div>
-              )}
-            </Suspense>
-          </div>
-        </div>
-
-        {/* MAIN CHART AREA */}
-        <div className="et-sim-chart-area card" style={{ padding: 'var(--space-3)' }}>
-          <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>Loading chart...</div>}>
-            {simResult?.traces && simResult.traces.length > 0 && (
-              <div style={{ height: '100%', width: '100%' }}>
-                <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
-              </div>
-            )}
-          </Suspense>
         </div>
       </div>
       
