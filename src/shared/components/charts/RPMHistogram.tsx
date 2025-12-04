@@ -15,12 +15,14 @@ interface RPMHistogramProps {
   data: { rpm: number; t_s: number }[];
   /** Target number of bins (will adjust based on data range) */
   targetBins?: number;
+  /** Compact mode for dashboard layout */
+  compact?: boolean;
 }
 
 /**
  * RPM Histogram - shows time spent at each RPM range
  */
-function RPMHistogram({ data, targetBins = 15 }: RPMHistogramProps) {
+function RPMHistogram({ data, targetBins = 15, compact = false }: RPMHistogramProps) {
   const histogramData = useMemo(() => {
     if (!data || data.length < 2) return [];
 
@@ -99,31 +101,37 @@ function RPMHistogram({ data, targetBins = 15 }: RPMHistogramProps) {
   };
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={histogramData} margin={{ top: 5, right: 20, left: 0, bottom: 25 }}>
+    <ResponsiveContainer width="100%" height={compact ? 80 : 200}>
+      <BarChart data={histogramData} margin={compact ? { top: 2, right: 5, left: 0, bottom: 2 } : { top: 5, right: 20, left: 0, bottom: 25 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
-        <XAxis
-          dataKey="rpmRange"
-          stroke="var(--color-text-muted)"
-          tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
-          interval={0}
-          angle={-45}
-          textAnchor="end"
-          height={50}
-          label={{ 
-            value: 'Engine RPM', 
-            position: 'insideBottom', 
-            offset: -5,
-            fontSize: 10,
-            fill: 'var(--color-text-muted)',
-          }}
-        />
-        <YAxis
-          stroke="var(--color-text-muted)"
-          tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
-          tickFormatter={(v) => `${v.toFixed(1)}s`}
-          width={40}
-        />
+        {!compact && (
+          <XAxis
+            dataKey="rpmRange"
+            stroke="var(--color-text-muted)"
+            tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
+            interval={0}
+            angle={-45}
+            textAnchor="end"
+            height={50}
+            label={{ 
+              value: 'Engine RPM', 
+              position: 'insideBottom', 
+              offset: -5,
+              fontSize: 10,
+              fill: 'var(--color-text-muted)',
+            }}
+          />
+        )}
+        {compact && <XAxis dataKey="rpmRange" hide />}
+        {!compact && (
+          <YAxis
+            stroke="var(--color-text-muted)"
+            tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
+            tickFormatter={(v) => `${v.toFixed(1)}s`}
+            width={40}
+          />
+        )}
+        {compact && <YAxis hide />}
         <Tooltip
           contentStyle={{
             backgroundColor: 'var(--color-bg)',

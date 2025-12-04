@@ -337,162 +337,184 @@ function Predict() {
       }
     >
       <style>{`
-        .et-sim-layout {
+        .et-sim-dashboard {
           display: grid;
           grid-template-columns: 1fr;
-          gap: var(--space-4);
+          grid-template-rows: auto 1fr;
+          gap: var(--space-3);
+          height: calc(100vh - 180px);
+          min-height: 500px;
+        }
+        .et-sim-top-row {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: var(--space-3);
+        }
+        .et-sim-chart-area {
+          min-height: 300px;
+          overflow: hidden;
         }
         @media (min-width: 1200px) {
-          .et-sim-layout {
-            grid-template-columns: 320px 1fr;
-            gap: var(--space-6);
+          .et-sim-top-row {
+            grid-template-columns: 220px 280px 1fr;
           }
-          .et-sim-controls {
-            position: sticky;
-            top: var(--space-4);
-            max-height: calc(100vh - var(--space-8));
-            overflow-y: auto;
+        }
+        @media (min-width: 900px) and (max-width: 1199px) {
+          .et-sim-top-row {
+            grid-template-columns: 200px 260px 1fr;
           }
+        }
+        .et-slip {
+          font-family: 'Courier New', monospace;
+          background: linear-gradient(180deg, #f8f8f0 0%, #e8e8d8 100%);
+          color: #1a1a1a;
+          padding: 12px 16px;
+          border-radius: 4px;
+          font-size: 11px;
+          line-height: 1.4;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .et-slip-header {
+          text-align: center;
+          border-bottom: 1px dashed #666;
+          padding-bottom: 6px;
+          margin-bottom: 8px;
+        }
+        .et-slip-row {
+          display: flex;
+          justify-content: space-between;
+        }
+        .et-slip-label {
+          color: #444;
+        }
+        .et-slip-value {
+          font-weight: bold;
+          text-align: right;
+        }
+        .et-slip-final {
+          border-top: 1px solid #333;
+          margin-top: 6px;
+          padding-top: 6px;
+          font-size: 14px;
+          font-weight: bold;
         }
       `}</style>
       
-      <p className="text-muted mb-4" style={{ fontSize: '0.9rem' }}>
-        {vehicle.name} • Model: {modelName}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+        <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+          {vehicle.name} • {modelName}
+        </span>
         {(isDebouncing || loading) && (
           <span style={{ 
-            marginLeft: 'var(--space-2)',
+            fontSize: '0.75rem', 
             color: 'var(--color-accent)', 
             fontStyle: 'italic',
-            animation: 'pulse 1s ease-in-out infinite',
           }}>
-            • updating...
+            updating...
           </span>
         )}
-      </p>
+      </div>
 
-      <div className="et-sim-layout">
-        {/* LEFT COLUMN: Controls */}
-        <div className="et-sim-controls">
-          {/* Results Summary - compact at top */}
-          <div className="card card-compact mb-4" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1, transition: 'opacity 0.2s' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 'var(--space-2)' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>ET</div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--color-text)' }}>
-                  {baseET.toFixed(3)}<span style={{ fontSize: '0.875rem', fontWeight: 'normal' }}>s</span>
-                </div>
+      <div className="et-sim-dashboard">
+        {/* TOP ROW: ET Slip + Controls + Mini Chart */}
+        <div className="et-sim-top-row">
+          {/* ET Slip Style Results */}
+          <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
+            <div className="et-slip-header">
+              <div style={{ fontWeight: 'bold' }}>{vehicle.name}</div>
+              <div style={{ fontSize: '9px', color: '#666' }}>{raceLength === 'EIGHTH' ? '1/8 MILE' : '1/4 MILE'}</div>
+            </div>
+            
+            {/* Splits */}
+            {timeslip.filter(s => s.d_ft < (raceLength === 'EIGHTH' ? 660 : 1320)).map((split) => (
+              <div className="et-slip-row" key={split.d_ft}>
+                <span className="et-slip-label">{split.d_ft}'</span>
+                <span className="et-slip-value">{split.t_s.toFixed(3)}</span>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Trap</div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--color-text)' }}>
-                  {baseMPH.toFixed(1)}<span style={{ fontSize: '0.875rem', fontWeight: 'normal' }}>mph</span>
-                </div>
+            ))}
+            {raceLength === 'QUARTER' && (
+              <div className="et-slip-row">
+                <span className="et-slip-label">1/8 MPH</span>
+                <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+            {raceLength === 'QUARTER' && (
+              <div className="et-slip-row">
+                <span className="et-slip-label">1000'</span>
+                <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(3)}</span>
+              </div>
+            )}
+            
+            {/* Final ET/MPH */}
+            <div className="et-slip-final">
+              <div className="et-slip-row">
+                <span>ET</span>
+                <span>{baseET.toFixed(3)}</span>
+              </div>
+              <div className="et-slip-row">
+                <span>MPH</span>
+                <span>{baseMPH.toFixed(2)}</span>
               </div>
             </div>
-            {/* Compact timeslip */}
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-2)' }}>
-              {timeslip.map((split, i) => (
-                <span key={split.d_ft}>
-                  {split.d_ft}': {split.t_s.toFixed(3)}s
-                  {i < timeslip.length - 1 && ' • '}
-                </span>
-              ))}
+          </div>
+
+          {/* Controls Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            {/* Environment - ultra compact */}
+            <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem' }}>
+              <div style={{ fontWeight: '600', marginBottom: 'var(--space-1)', color: 'var(--color-text)' }}>Environment</div>
+              <EnvironmentForm value={env} onChange={setEnv} compact />
             </div>
-          </div>
 
-          {/* Environment Panel */}
-          <div className="card card-compact mb-4">
-            <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: 'var(--space-3)' }}>
-              Environment
-            </h3>
-            <EnvironmentForm value={env} onChange={setEnv} compact />
-          </div>
-
-          {/* Race Length Control */}
-          <div className="card card-compact mb-4">
-            <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: 'var(--space-2)' }}>
-              Race Length
-            </h3>
-            <div className="radio-group" style={{ fontSize: '0.875rem' }}>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="raceLength"
-                  value="EIGHTH"
-                  checked={raceLength === 'EIGHTH'}
-                  onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)}
-                />
-                <span>1/8 Mile</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="raceLength"
-                  value="QUARTER"
-                  checked={raceLength === 'QUARTER'}
-                  onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)}
-                />
-                <span>1/4 Mile</span>
-              </label>
+            {/* Race Length - inline */}
+            <div className="card" style={{ padding: 'var(--space-2) var(--space-3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', fontSize: '0.75rem' }}>
+                <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>Race:</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input type="radio" name="raceLength" value="EIGHTH" checked={raceLength === 'EIGHTH'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
+                  <span>1/8</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
+                  <span>1/4</span>
+                </label>
+              </div>
             </div>
-          </div>
 
-          {/* VB6 Strict Mode - collapsed by default */}
-          <div className="card card-compact">
-            <details>
-              <summary style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--color-text)', cursor: 'pointer' }}>
-                Advanced Settings
-              </summary>
-              <div style={{ marginTop: 'var(--space-3)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer', fontSize: '0.875rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={strictMode}
-                    onChange={(e) => setFlag('vb6StrictMode', e.target.checked)}
-                  />
-                  <span>VB6 Strict Mode</span>
+            {/* Advanced - collapsed */}
+            <details className="card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem' }}>
+              <summary style={{ fontWeight: '600', cursor: 'pointer', color: 'var(--color-text)' }}>Advanced</summary>
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={strictMode} onChange={(e) => setFlag('vb6StrictMode', e.target.checked)} />
+                  <span>VB6 Strict</span>
                 </label>
                 {strictMode && (
-                  <button
-                    onClick={() => setShowVb6Panel(true)}
-                    style={{
-                      marginTop: 'var(--space-2)',
-                      padding: '0.375rem 0.75rem',
-                      fontSize: '0.75rem',
-                      backgroundColor: 'var(--color-primary)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer',
-                      width: '100%',
-                    }}
-                  >
-                    Configure VB6 Inputs
+                  <button onClick={() => setShowVb6Panel(true)} className="btn" style={{ marginTop: 'var(--space-2)', padding: '4px 8px', fontSize: '0.7rem', width: '100%' }}>
+                    VB6 Inputs
                   </button>
                 )}
               </div>
             </details>
           </div>
+
+          {/* RPM Histogram - compact */}
+          <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', minWidth: 0 }}>
+            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.75rem' }}>Loading...</div>}>
+              {simResult?.traces && simResult.traces.length > 0 && (
+                <div style={{ height: '100%', minHeight: '80px' }}>
+                  <RPMHistogram data={simResult.traces as any} compact />
+                </div>
+              )}
+            </Suspense>
+          </div>
         </div>
 
-        {/* RIGHT COLUMN: Charts */}
-        <div className="et-sim-results">
-          <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>Loading charts...</div>}>
-            {/* Data Logger Chart */}
+        {/* MAIN CHART AREA */}
+        <div className="et-sim-chart-area card" style={{ padding: 'var(--space-3)' }}>
+          <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>Loading chart...</div>}>
             {simResult?.traces && simResult.traces.length > 0 && (
-              <div className="card card-compact mb-4">
-                <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
-              </div>
-            )}
-            
-            {/* RPM Histogram */}
-            {simResult?.traces && simResult.traces.length > 0 && (
-              <div className="card card-compact">
-                <h3 className="mb-3" style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--color-text)' }}>
-                  Engine RPM Distribution
-                </h3>
-                <RPMHistogram data={simResult.traces as any} />
-              </div>
+              <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
             )}
           </Suspense>
         </div>
