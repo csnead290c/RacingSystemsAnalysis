@@ -300,7 +300,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const pmi = (input as any).pmi ?? (vehicle as any).pmi;
   
   // Determine transmission type
-  const isClutch = !converter || (clutch && !converter);
+  // Check transmissionType field first (set by fixtureToSimInputs), then fall back to object detection
+  const txType = (vehicle as any).transmissionType ?? (input as any).transmissionType;
+  const isClutch = txType === 'clutch' ? true : 
+                   txType === 'converter' ? false :
+                   !converter || (clutch && !converter);
   
   // ========================================================================
   // Calculate air density and hpc
@@ -657,10 +661,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const trackDist_ft = Math.max(0, state.Dist_ft - rolloutFt + ovradj);
     const trackTime_s = timerStartTime_s !== null ? state.time_s - timerStartTime_s : 0;
     
-    // Calculate driveshaft RPM from engine side (Engine RPM / Trans Gear Ratio)
-    // This is what a driveshaft RPM sensor would read
+    // Calculate driveshaft RPM (transmission output, accounting for clutch/converter slip)
+    // Driveline: Engine → Clutch/Converter → Trans → Driveshaft → Final Drive → Wheels
+    // LockRPM is the clutch/converter output (accounts for slip)
+    // Driveshaft RPM = LockRPM / Trans Gear Ratio
     const transGearRatio = vb6Vehicle.TGR[state.Gear - 1] ?? 1;
-    const engineSideDsrpm = state.EngRPM / transGearRatio;
+    const driveshaftRPM = (stepResult.LockRPM ?? state.EngRPM) / transGearRatio;
     
     // Calculate wheel surface speed (what the tire tread is doing)
     // This differs from car speed when there's tire slip
@@ -675,7 +681,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       v_mph: state.Vel_ftps * FPS_TO_MPH,
       a_g: state.AGS_g,
       rpm: state.EngRPM,
-      dsrpm: engineSideDsrpm,  // Engine-side driveshaft RPM
+      dsrpm: driveshaftRPM,  // Driveshaft RPM (accounts for clutch/converter slip)
       lockRpm: stepResult.LockRPM,
       gear: state.Gear,
       slip: state.SLIP,
