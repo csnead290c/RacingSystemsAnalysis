@@ -20,6 +20,7 @@ interface TraceData {
   v_fps?: number;
   a_g: number;
   rpm: number;
+  dsrpm?: number;  // Driveshaft RPM (Engine RPM / Trans Gear Ratio)
   lockRpm?: number;
   gear: number;
   slip?: boolean;
@@ -44,6 +45,12 @@ const SERIES_CONFIG = {
   rpm: {
     name: 'Engine RPM',
     color: '#ef4444', // red
+    unit: 'RPM',
+    yAxisId: 'rpm',
+  },
+  dsrpm: {
+    name: 'Driveshaft RPM',
+    color: '#f97316', // orange
     unit: 'RPM',
     yAxisId: 'rpm',
   },
@@ -389,6 +396,9 @@ function DataLoggerChart({
           {/* Data lines */}
           {enabledSeries.has('rpm') && (
             <Line type="monotone" dataKey="rpm" stroke={SERIES_CONFIG.rpm.color} strokeWidth={2} dot={false} name={SERIES_CONFIG.rpm.name} yAxisId="rpm" />
+          )}
+          {enabledSeries.has('dsrpm') && (
+            <Line type="monotone" dataKey="dsrpm" stroke={SERIES_CONFIG.dsrpm.color} strokeWidth={2} dot={false} name={SERIES_CONFIG.dsrpm.name} yAxisId="rpm" />
           )}
           {enabledSeries.has('lockRpm') && (
             <Line type="monotone" dataKey="lockRpm" stroke={SERIES_CONFIG.lockRpm.color} strokeWidth={2} dot={false} name={SERIES_CONFIG.lockRpm.name} yAxisId="rpm" />
