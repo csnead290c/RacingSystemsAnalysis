@@ -36,12 +36,56 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
     });
   };
 
-  const gridClass = compact ? 'grid grid-4 gap-4' : 'grid grid-2 gap-4';
+  // Compact mode: inline layout without spinners
+  if (compact) {
+    const inputStyle: React.CSSProperties = {
+      width: '50px',
+      padding: '2px 4px',
+      fontSize: '0.75rem',
+      textAlign: 'center' as const,
+      MozAppearance: 'textfield',
+    };
+    const labelStyle: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--color-muted)', marginBottom: '1px' };
+    const groupStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center' };
+    
+    return (
+      <div>
+        <style>{`
+          .env-compact input::-webkit-outer-spin-button,
+          .env-compact input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          .env-compact input[type=number] {
+            -moz-appearance: textfield;
+          }
+        `}</style>
+        <div className="env-compact" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={groupStyle}>
+            <label style={labelStyle}>Elev (ft)</label>
+            <input type="number" style={inputStyle} className="input" value={value.elevation} onChange={(e) => handleChange('elevation', e.target.value)} />
+          </div>
+          <div style={groupStyle}>
+            <label style={labelStyle}>Temp (°F)</label>
+            <input type="number" style={inputStyle} className="input" value={value.temperatureF} onChange={(e) => handleChange('temperatureF', e.target.value)} />
+          </div>
+          <div style={groupStyle}>
+            <label style={labelStyle}>Baro (inHg)</label>
+            <input type="number" style={inputStyle} className="input" value={value.barometerInHg} onChange={(e) => handleChange('barometerInHg', e.target.value)} />
+          </div>
+          <div style={groupStyle}>
+            <label style={labelStyle}>Humid (%)</label>
+            <input type="number" style={inputStyle} className="input" value={value.humidityPct} onChange={(e) => handleChange('humidityPct', e.target.value)} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       {/* Required fields */}
-      <div className={gridClass}>
+      <div className="grid grid-2 gap-4">
         <div>
           <label className="label" htmlFor="elevation">
             Elevation (ft)
@@ -106,7 +150,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
       </div>
 
       {/* Optional fields toggle */}
-      {!disabled && !compact && (
+      {!disabled && (
         <div className="mt-4">
           <button
             type="button"
