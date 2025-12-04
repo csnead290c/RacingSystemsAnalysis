@@ -344,8 +344,8 @@ function Predict() {
         }
         .et-sim-bottom-row {
           display: flex;
-          gap: var(--space-2);
-          height: 100px;
+          gap: var(--space-3);
+          height: 120px;
           flex-shrink: 0;
         }
         .et-sim-chart-area {
@@ -517,12 +517,12 @@ function Predict() {
           </div>
         </div>
 
-        {/* BOTTOM ROW: RPM Histogram + Environment + Race Length + Advanced */}
+        {/* BOTTOM ROW: RPM Histogram + Environment + Race Length */}
         <div className="et-sim-bottom-row">
           {/* RPM Histogram */}
-          <div className="card" style={{ flex: 1, padding: '6px 10px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '2px' }}>RPM Distribution</div>
-            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.7rem' }}>Loading...</div>}>
+          <div className="card" style={{ flex: 1, padding: '10px 14px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '4px' }}>RPM Distribution</div>
+            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.75rem' }}>Loading...</div>}>
               {simResult?.traces && simResult.traces.length > 0 && (
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <RPMHistogram data={simResult.traces as any} compact />
@@ -532,41 +532,24 @@ function Predict() {
           </div>
 
           {/* Environment */}
-          <div className="card" style={{ width: '280px', flexShrink: 0, padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-text)', fontSize: '0.7rem' }}>Environment</div>
+          <div className="card" style={{ flexShrink: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontWeight: '600', marginBottom: '6px', color: 'var(--color-text)', fontSize: '0.75rem' }}>Environment</div>
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
 
-          {/* Race Length + Advanced */}
-          <div style={{ width: '130px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div className="card" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem' }}>
-                <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>Race:</span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-                  <input type="radio" name="raceLength" value="EIGHTH" checked={raceLength === 'EIGHTH'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
-                  <span>1/8</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-                  <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
-                  <span>1/4</span>
-                </label>
-              </div>
+          {/* Race Length */}
+          <div className="card" style={{ width: '120px', flexShrink: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.75rem' }}>Race Length</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input type="radio" name="raceLength" value="EIGHTH" checked={raceLength === 'EIGHTH'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
+                <span>1/8 Mile</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
+                <span>1/4 Mile</span>
+              </label>
             </div>
-
-            <details className="card" style={{ padding: '6px 10px', fontSize: '0.7rem', flex: 1 }}>
-              <summary style={{ fontWeight: '600', cursor: 'pointer', color: 'var(--color-text)' }}>Advanced</summary>
-              <div style={{ marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={strictMode} onChange={(e) => setFlag('vb6StrictMode', e.target.checked)} />
-                  <span>VB6 Strict</span>
-                </label>
-                {strictMode && (
-                  <button onClick={() => setShowVb6Panel(true)} className="btn" style={{ marginTop: '4px', padding: '2px 4px', fontSize: '0.6rem', width: '100%' }}>
-                    VB6 Inputs
-                  </button>
-                )}
-              </div>
-            </details>
           </div>
         </div>
       </div>
