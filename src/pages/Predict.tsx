@@ -338,47 +338,43 @@ function Predict() {
     >
       <style>{`
         .et-sim-dashboard {
-          display: grid;
-          grid-template-columns: 1fr;
-          grid-template-rows: auto 1fr;
+          display: flex;
+          flex-direction: column;
           gap: var(--space-3);
-          height: calc(100vh - 180px);
-          min-height: 500px;
+          height: calc(100vh - 160px);
+          min-height: 400px;
         }
         .et-sim-top-row {
-          display: grid;
-          grid-template-columns: 1fr;
+          display: flex;
           gap: var(--space-3);
+          flex-shrink: 0;
         }
         .et-sim-chart-area {
-          min-height: 300px;
-          overflow: hidden;
+          flex: 1;
+          min-height: 250px;
+          display: flex;
+          flex-direction: column;
         }
-        @media (min-width: 1200px) {
-          .et-sim-top-row {
-            grid-template-columns: 220px 280px 1fr;
-          }
-        }
-        @media (min-width: 900px) and (max-width: 1199px) {
-          .et-sim-top-row {
-            grid-template-columns: 200px 260px 1fr;
-          }
+        .et-sim-chart-area > div {
+          flex: 1;
         }
         .et-slip {
           font-family: 'Courier New', monospace;
           background: linear-gradient(180deg, #f8f8f0 0%, #e8e8d8 100%);
           color: #1a1a1a;
-          padding: 12px 16px;
+          padding: 10px 14px;
           border-radius: 4px;
           font-size: 11px;
-          line-height: 1.4;
+          line-height: 1.3;
           box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          width: 180px;
+          flex-shrink: 0;
         }
         .et-slip-header {
           text-align: center;
           border-bottom: 1px dashed #666;
-          padding-bottom: 6px;
-          margin-bottom: 8px;
+          padding-bottom: 4px;
+          margin-bottom: 6px;
         }
         .et-slip-row {
           display: flex;
@@ -393,10 +389,21 @@ function Predict() {
         }
         .et-slip-final {
           border-top: 1px solid #333;
-          margin-top: 6px;
-          padding-top: 6px;
-          font-size: 14px;
+          margin-top: 4px;
+          padding-top: 4px;
+          font-size: 13px;
           font-weight: bold;
+        }
+        .et-sim-controls {
+          width: 280px;
+          flex-shrink: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+        }
+        .et-sim-rpm-area {
+          flex: 1;
+          min-width: 200px;
         }
       `}</style>
       
@@ -416,33 +423,39 @@ function Predict() {
       </div>
 
       <div className="et-sim-dashboard">
-        {/* TOP ROW: ET Slip + Controls + Mini Chart */}
+        {/* TOP ROW: ET Slip + Controls + RPM Histogram */}
         <div className="et-sim-top-row">
           {/* ET Slip Style Results */}
           <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
             <div className="et-slip-header">
-              <div style={{ fontWeight: 'bold' }}>{vehicle.name}</div>
+              <div style={{ fontWeight: 'bold', fontSize: '10px' }}>{vehicle.name}</div>
               <div style={{ fontSize: '9px', color: '#666' }}>{raceLength === 'EIGHTH' ? '1/8 MILE' : '1/4 MILE'}</div>
             </div>
             
-            {/* Splits */}
-            {timeslip.filter(s => s.d_ft < (raceLength === 'EIGHTH' ? 660 : 1320)).map((split) => (
-              <div className="et-slip-row" key={split.d_ft}>
-                <span className="et-slip-label">{split.d_ft}'</span>
-                <span className="et-slip-value">{split.t_s.toFixed(3)}</span>
-              </div>
-            ))}
+            {/* Splits - show 60', 330', 660' for 1/8; add 1/8 MPH, 1000' for 1/4 */}
+            <div className="et-slip-row">
+              <span className="et-slip-label">60'</span>
+              <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}</span>
+            </div>
+            <div className="et-slip-row">
+              <span className="et-slip-label">330'</span>
+              <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(3)}</span>
+            </div>
             {raceLength === 'QUARTER' && (
-              <div className="et-slip-row">
-                <span className="et-slip-label">1/8 MPH</span>
-                <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(2)}</span>
-              </div>
-            )}
-            {raceLength === 'QUARTER' && (
-              <div className="et-slip-row">
-                <span className="et-slip-label">1000'</span>
-                <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(3)}</span>
-              </div>
+              <>
+                <div className="et-slip-row">
+                  <span className="et-slip-label">1/8</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(3)}</span>
+                </div>
+                <div className="et-slip-row">
+                  <span className="et-slip-label">MPH</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(2)}</span>
+                </div>
+                <div className="et-slip-row">
+                  <span className="et-slip-label">1000'</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(3)}</span>
+                </div>
+              </>
             )}
             
             {/* Final ET/MPH */}
@@ -459,8 +472,8 @@ function Predict() {
           </div>
 
           {/* Controls Column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            {/* Environment - ultra compact */}
+          <div className="et-sim-controls">
+            {/* Environment - compact */}
             <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.75rem' }}>
               <div style={{ fontWeight: '600', marginBottom: 'var(--space-1)', color: 'var(--color-text)' }}>Environment</div>
               <EnvironmentForm value={env} onChange={setEnv} compact />
@@ -498,11 +511,12 @@ function Predict() {
             </details>
           </div>
 
-          {/* RPM Histogram - compact */}
-          <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', minWidth: 0 }}>
+          {/* RPM Histogram - compact in remaining space */}
+          <div className="et-sim-rpm-area card" style={{ padding: 'var(--space-2) var(--space-3)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: 'var(--space-1)' }}>RPM Distribution</div>
             <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.75rem' }}>Loading...</div>}>
               {simResult?.traces && simResult.traces.length > 0 && (
-                <div style={{ height: '100%', minHeight: '80px' }}>
+                <div style={{ flex: 1, minHeight: '60px' }}>
                   <RPMHistogram data={simResult.traces as any} compact />
                 </div>
               )}
@@ -514,7 +528,9 @@ function Predict() {
         <div className="et-sim-chart-area card" style={{ padding: 'var(--space-3)' }}>
           <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>Loading chart...</div>}>
             {simResult?.traces && simResult.traces.length > 0 && (
-              <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
+              <div style={{ height: '100%', width: '100%' }}>
+                <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
+              </div>
             )}
           </Suspense>
         </div>
