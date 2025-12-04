@@ -18,9 +18,11 @@ export default defineConfig({
     },
   },
   // silence source-map parse noise from worker devtools helper
-  optimizeDeps: { exclude: ['installHook.js'] },
-  esbuild: {
-    sourcemap: 'linked', // avoid inlined data URLs that confuse devtools on certain extensions
+  optimizeDeps: { 
+    exclude: ['installHook.js'],
+    esbuildOptions: {
+      sourcemap: false, // Disable source maps in dep optimization to avoid linked sourcemap errors
+    }
   },
   plugins: [
     react(),

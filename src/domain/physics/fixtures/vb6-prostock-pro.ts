@@ -38,20 +38,19 @@ export const VB6_PROSTOCK_PRO = {
     Cl: 0.100,
   },
 
-  // Drivetrain
+  // Drivetrain (from VB6 printout)
   drivetrain: {
     finalDrive: 4.86,
-    overallEfficiency: 0.97,    // gc_Efficiency (VB6: TIMESLIP.FRM:764 - non-motorcycle)
-    gearRatios: [2.60, 1.90, 1.50, 1.20, 1.00],   // 2nd..6th shown; treat as 1..5 usable
-    // VB6: TIMESLIP.FRM:722-727 (clutch, NGR=5)
-    // TGEff(i) = 0.99 - (NGR - i) * 0.005
-    perGearEff:  [0.970, 0.975, 0.980, 0.985, 0.990],  // Gear 1..5
-    shiftsRPM:   [9400, 9400, 9400, 9400],       // shift points between gears
+    overallEfficiency: 0.975,   // gc_Efficiency from printout
+    gearRatios: [2.60, 1.90, 1.50, 1.20, 1.00],   // 2nd..6th from printout
+    // Per-gear efficiencies from printout (Eff column)
+    perGearEff:  [0.990, 0.991, 0.992, 0.993, 0.994],  // Gear 2nd-6th
+    shiftsRPM:   [9400, 9400, 9400, 9400],       // Shift@ from printout
     clutch: {
       launchRPM: 7200,
       slipRPM:   7600,
-      slippageFactor: 1.004,    // VB6 "Clutch Slippage"
-      lockup: false,
+      slippageFactor: 1.004,    // Clutch Slippage from printout
+      lockup: false,            // Lock-up option? No
     },
   },
 

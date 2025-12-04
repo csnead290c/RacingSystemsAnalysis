@@ -3,95 +3,89 @@
  * 
  * Register development/debugging panels here.
  * Only loaded in DEV builds.
+ * 
+ * Panel Categories:
+ * - Core: Settings, Health Check
+ * - Simulation: Run Inspector, Energy Accounting
+ * - Data: Input Inspector, Quick Paste, Air Model
+ * - Testing: Parity Runner
  */
 
 import type { FC } from 'react';
-import FlagsPanel from './panels/FlagsPanel';
-import InputInspector from './panels/InputInspector';
+import SettingsPanel from './panels/SettingsPanel';
+import HealthCheck from './panels/HealthCheck';
 import RunInspector from './panels/RunInspector';
 import EnergyPanel from './panels/EnergyPanel';
-import ParityRunner from './panels/ParityRunner';
+import InputInspector from './panels/InputInspector';
 import QuickPaste from './panels/QuickPaste';
 import AirInspector from './panels/AirInspector';
-import LoggingPanel from './panels/LoggingPanel';
-import UserLevelPanel from './panels/UserLevelPanel';
-import HealthCheck from './panels/HealthCheck';
+import ParityRunner from './panels/ParityRunner';
 
 export interface DevPanel {
   id: string;
   title: string;
   component: FC;
+  category?: 'core' | 'simulation' | 'data' | 'testing';
 }
-
-// Welcome panel component
-const WelcomePanel: FC = () => {
-  return (
-    <div style={{ padding: '2rem' }}>
-      <h2>Dev Portal</h2>
-      <p>Development and debugging tools will appear in the left navigation.</p>
-      <p>This portal is only available in DEV builds.</p>
-    </div>
-  );
-};
 
 /**
  * Registry of all dev panels.
- * Add new panels here as they are created.
+ * Organized by category for better navigation.
  */
 export const DEV_PANELS: DevPanel[] = [
+  // === CORE ===
+  {
+    id: 'settings',
+    title: '⚙️ Settings & Flags',
+    component: SettingsPanel,
+    category: 'core',
+  },
   {
     id: 'health-check',
-    title: 'Health Check',
+    title: '🩺 Health Check',
     component: HealthCheck,
+    category: 'core',
   },
-  {
-    id: 'user-level',
-    title: 'User Level',
-    component: UserLevelPanel,
-  },
-  {
-    id: 'flags',
-    title: 'Feature Flags & Modes',
-    component: FlagsPanel,
-  },
-  {
-    id: 'input-inspector',
-    title: 'Input Inspector (VB6)',
-    component: InputInspector,
-  },
+  
+  // === SIMULATION ===
   {
     id: 'run-inspector',
-    title: 'Run Inspector & Steps',
+    title: '▶️ Run Inspector',
     component: RunInspector,
+    category: 'simulation',
   },
   {
     id: 'energy',
-    title: 'Energy Accounting',
+    title: '⚡ Energy Accounting',
     component: EnergyPanel,
+    category: 'simulation',
   },
+  
+  // === DATA ===
   {
-    id: 'parity',
-    title: 'Legacy Parity Runner',
-    component: ParityRunner,
+    id: 'input-inspector',
+    title: '🔍 Input Inspector',
+    component: InputInspector,
+    category: 'data',
   },
   {
     id: 'quick-paste',
-    title: 'Quick Paste (Dyno & PMI)',
+    title: '📋 Quick Paste',
     component: QuickPaste,
+    category: 'data',
   },
   {
     id: 'air',
-    title: 'Environment & Air Model',
+    title: '🌡️ Air Model',
     component: AirInspector,
+    category: 'data',
   },
+  
+  // === TESTING ===
   {
-    id: 'logging',
-    title: 'Logging & Downloads',
-    component: LoggingPanel,
-  },
-  {
-    id: 'welcome',
-    title: 'Welcome',
-    component: WelcomePanel,
+    id: 'parity',
+    title: '🧪 Parity Runner',
+    component: ParityRunner,
+    category: 'testing',
   },
 ];

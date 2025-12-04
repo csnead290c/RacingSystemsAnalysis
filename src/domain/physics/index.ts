@@ -4,6 +4,7 @@
  * Models:
  * - SimpleV1: Current baseline physics (simplified)
  * - RSACLASSIC: Advanced physics for Quarter Jr/Pro parity
+ * - VB6Exact: Exact VB6 TIMESLIP.FRM replication (bit-for-bit parity)
  * - Blend: RSACLASSIC + adaptive learning
  */
 
@@ -15,7 +16,7 @@ import { predictBaseline } from '../../worker/pipeline';
 /**
  * Available physics model identifiers.
  */
-export type PhysicsModelId = 'SimpleV1' | 'RSACLASSIC' | 'Blend';
+export type PhysicsModelId = 'SimpleV1' | 'RSACLASSIC' | 'VB6Exact' | 'Blend';
 
 /**
  * Extended vehicle configuration for advanced physics models.
@@ -197,9 +198,29 @@ class SimpleV1Model implements PhysicsModel {
   }
 }
 
-// Import RSACLASSIC and Blend implementations
+// Import RSACLASSIC, VB6Exact, and Blend implementations
 import { RSACLASSIC as RSACLASSICImpl } from './models/rsaclassic';
+import { simulateVB6Exact } from './models/vb6Exact';
 import { Blend as BlendImpl } from './models/blend';
+
+/**
+ * VB6 Exact model wrapper
+ */
+class VB6ExactModel implements PhysicsModel {
+  id: PhysicsModelId = 'VB6Exact';
+  
+  simulate(input: SimInputs): SimResult {
+    const result = simulateVB6Exact(input);
+    // Ensure model ID is correct
+    return {
+      ...result,
+      meta: {
+        ...result.meta,
+        model: 'VB6Exact',
+      },
+    };
+  }
+}
 
 /**
  * Model registry.
@@ -207,6 +228,7 @@ import { Blend as BlendImpl } from './models/blend';
 const models: Record<PhysicsModelId, PhysicsModel> = {
   SimpleV1: new SimpleV1Model(),
   RSACLASSIC: RSACLASSICImpl,
+  VB6Exact: new VB6ExactModel(),
   Blend: BlendImpl,
 };
 

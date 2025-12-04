@@ -1,27 +1,190 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, saveVehicle, deleteVehicle, type VehicleLite } from '../state/vehicles';
-import { VehicleSchema } from '../domain/schemas/vehicle.schema';
+import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
+import { useUserLevel, hasProAccess } from '../domain/flags/store';
+
+type TransType = 'clutch' | 'converter';
+
+// Fuel system options (matches VB6 TIMESLIP.FRM)
+const FUEL_SYSTEMS = [
+  { value: 'Gas+Carb', label: 'Gasoline + Carburetor' },
+  { value: 'Gas+Inject', label: 'Gasoline + Fuel Injection' },
+  { value: 'Methanol+Carb', label: 'Methanol + Carburetor' },
+  { value: 'Methanol+Inject', label: 'Methanol + Fuel Injection' },
+  { value: 'Nitro+Inject', label: 'Nitromethane + Fuel Injection' },
+  { value: 'Gas+Supercharged', label: 'Gasoline + Supercharged' },
+  { value: 'Methanol+Supercharged', label: 'Methanol + Supercharged' },
+  { value: 'Nitro+Supercharged', label: 'Nitromethane + Supercharged' },
+] as const;
+
+// Legacy fuel type options (for Pro mode)
+const FUEL_TYPES = ['Gasoline', 'Methanol', 'Ethanol', 'Nitromethane', 'E85', 'Diesel'] as const;
+
+// Calculate torque from HP: TQ = HP × 5252 / RPM
+const hpToTorque = (hp: number, rpm: number): number => {
+  if (rpm <= 0) return 0;
+  return (hp * 5252) / rpm;
+};
+
+// Default form values
+const defaultForm: Partial<Vehicle> = {
+  id: '',
+  name: '',
+  defaultRaceLength: 'QUARTER',
+  transmissionType: 'clutch',
+  // Mass & Geometry
+  weightLb: 3000,
+  staticFrontWeightLb: undefined,
+  wheelbaseIn: 108,
+  overhangIn: 40,
+  cgHeightIn: undefined,
+  rolloutIn: 12,
+  bodyStyle: 1,
+  // Tires
+  tireDiaIn: 28,
+  tireWidthIn: 14,
+  // Aero
+  frontalAreaFt2: 22,
+  cd: 0.35,
+  liftCoeff: 0.1,
+  // Drivetrain
+  rearGear: 3.73,
+  transEfficiency: 0.97,
+  gearRatios: [2.5, 1.8, 1.4, 1.1, 1.0],
+  gearEfficiencies: [0.97, 0.975, 0.98, 0.985, 0.99],
+  shiftRPMs: [7000, 7000, 7000, 7000],
+  // Clutch
+  clutchLaunchRPM: 5500,
+  clutchSlipRPM: 6000,
+  clutchSlippage: 1.004,
+  clutchLockup: false,
+  // Converter
+  converterStallRPM: undefined,
+  converterTorqueMult: undefined,
+  converterSlippage: undefined,
+  converterDiameterIn: undefined,
+  converterLockup: undefined,
+  // PMI
+  enginePMI: 3.5,
+  transPMI: 0.25,
+  tiresPMI: 50,
+  // Engine - QuarterJr mode
+  powerHP: 400,
+  rpmAtPeakHP: 6500,
+  displacementCID: 350,
+  // Engine - QuarterPro mode
+  hpCurve: undefined,
+  hpTorqueMultiplier: 1.0,
+  // Fuel
+  fuelType: 'Gasoline',
+  fuelSystem: 'Gas+Carb',
+  // N2O option
+  n2oEnabled: false,
+};
 
 function Vehicles() {
+  const userLevel = useUserLevel();
+  const isPro = hasProAccess(userLevel);
+  
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('basic');
   
-  // Form state
-  const [formId, setFormId] = useState('');
-  const [formName, setFormName] = useState('');
-  const [formWeightLb, setFormWeightLb] = useState('3000');
-  const [formTireDiaIn, setFormTireDiaIn] = useState('28');
-  const [formRearGear, setFormRearGear] = useState('3.73');
-  const [formRolloutIn, setFormRolloutIn] = useState('12');
-  const [formPowerHP, setFormPowerHP] = useState('400');
-  const [formDefaultRaceLength, setFormDefaultRaceLength] = useState<RaceLength>('QUARTER');
+  // Form state - single object
+  const [form, setForm] = useState<Partial<Vehicle>>({ ...defaultForm });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [hpMultiplier, setHpMultiplier] = useState(1.0);
+  
+  // Derive transType from form
+  const transType: TransType = (form.transmissionType as TransType) ?? 'clutch';
+  const setTransType = (type: TransType) => updateForm('transmissionType', type);
+  
+  // Helper to update form fields
+  const updateForm = (field: keyof Vehicle, value: any) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+  
+  // Helper to update gear array at index
+  const updateGearAt = (field: 'gearRatios' | 'gearEfficiencies' | 'shiftRPMs', index: number, value: number) => {
+    setForm(prev => {
+      const arr = [...(prev[field] ?? [])];
+      arr[index] = value;
+      return { ...prev, [field]: arr };
+    });
+  };
+  
+  // Helper to add gear
+  const addGear = () => {
+    setForm(prev => ({
+      ...prev,
+      gearRatios: [...(prev.gearRatios ?? []), 1.0],
+      gearEfficiencies: [...(prev.gearEfficiencies ?? []), 0.98],
+      shiftRPMs: [...(prev.shiftRPMs ?? []), 7000],
+    }));
+  };
+  
+  // Helper to remove gear
+  const removeGear = (index: number) => {
+    setForm(prev => ({
+      ...prev,
+      gearRatios: (prev.gearRatios ?? []).filter((_, i) => i !== index),
+      gearEfficiencies: (prev.gearEfficiencies ?? []).filter((_, i) => i !== index),
+      shiftRPMs: (prev.shiftRPMs ?? []).filter((_, i) => i !== index),
+    }));
+  };
+  
+  // Helper to update HP curve point
+  const updateHPCurveAt = (index: number, field: 'rpm' | 'hp', value: number) => {
+    setForm(prev => {
+      const curve = [...(prev.hpCurve ?? [])];
+      curve[index] = { ...curve[index], [field]: value };
+      return { ...prev, hpCurve: curve };
+    });
+  };
+  
+  // Helper to add HP curve point
+  const addHPPoint = () => {
+    setForm(prev => {
+      const curve = prev.hpCurve ?? [];
+      const lastRPM = curve.length > 0 ? curve[curve.length - 1].rpm + 500 : 5000;
+      const lastHP = curve.length > 0 ? curve[curve.length - 1].hp : 300;
+      return { ...prev, hpCurve: [...curve, { rpm: lastRPM, hp: lastHP }] };
+    });
+  };
+  
+  // Helper to remove HP curve point
+  const removeHPPoint = (index: number) => {
+    setForm(prev => ({
+      ...prev,
+      hpCurve: (prev.hpCurve ?? []).filter((_, i) => i !== index),
+    }));
+  };
+  
+  // Sorted HP curve for graph
+  const sortedHPCurve = useMemo(() => {
+    return [...(form.hpCurve ?? [])].sort((a, b) => a.rpm - b.rpm);
+  }, [form.hpCurve]);
+  
+  // Apply HP multiplier to all HP values and reset multiplier
+  const applyHPMultiplier = () => {
+    if (hpMultiplier === 1.0) return;
+    
+    setForm(prev => {
+      const newPowerHP = prev.powerHP ? Math.round(prev.powerHP * hpMultiplier) : prev.powerHP;
+      const newHPCurve = prev.hpCurve?.map(p => ({
+        rpm: p.rpm,
+        hp: Math.round(p.hp * hpMultiplier),
+      }));
+      return { ...prev, powerHP: newPowerHP, hpCurve: newHPCurve };
+    });
+    setHpMultiplier(1.0);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -40,34 +203,21 @@ function Vehicles() {
   }, []);
 
   const resetForm = () => {
-    setFormId('');
-    setFormName('');
-    setFormWeightLb('3000');
-    setFormTireDiaIn('28');
-    setFormRearGear('3.73');
-    setFormRolloutIn('12');
-    setFormPowerHP('400');
-    setFormDefaultRaceLength('QUARTER');
+    setForm({ ...defaultForm, id: crypto.randomUUID() });
     setFormError(null);
     setEditingId(null);
+    setActiveTab('basic');
   };
 
   const handleNew = () => {
     resetForm();
-    setFormId(crypto.randomUUID());
     setShowForm(true);
   };
 
   const handleEdit = (vehicle: VehicleLite) => {
-    setFormId(vehicle.id);
-    setFormName(vehicle.name);
-    setFormWeightLb(vehicle.weightLb.toString());
-    setFormTireDiaIn(vehicle.tireDiaIn.toString());
-    setFormRearGear(vehicle.rearGear.toString());
-    setFormRolloutIn(vehicle.rolloutIn.toString());
-    setFormPowerHP(vehicle.powerHP.toString());
-    setFormDefaultRaceLength(vehicle.defaultRaceLength);
+    setForm({ ...defaultForm, ...vehicle });
     setEditingId(vehicle.id);
+    setActiveTab('basic');
     setShowForm(true);
   };
 
@@ -81,16 +231,10 @@ function Vehicles() {
     setSaving(true);
 
     try {
-      // Build vehicle object
-      const vehicle: VehicleLite = {
-        id: formId,
-        name: formName.trim(),
-        weightLb: parseFloat(formWeightLb),
-        tireDiaIn: parseFloat(formTireDiaIn),
-        rearGear: parseFloat(formRearGear),
-        rolloutIn: parseFloat(formRolloutIn),
-        powerHP: parseFloat(formPowerHP),
-        defaultRaceLength: formDefaultRaceLength,
+      // Build vehicle object with trimmed name
+      const vehicle = {
+        ...form,
+        name: form.name?.trim() || '',
       };
 
       // Validate with zod
@@ -150,121 +294,615 @@ function Vehicles() {
             </div>
           )}
 
-          <div className="grid grid-2 gap-4 mb-4">
-            <div>
-              <label className="label" htmlFor="name">
-                Vehicle Name *
-              </label>
-              <input
-                id="name"
-                type="text"
-                className="input"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="My Mustang"
-              />
-            </div>
+          {/* Tab Navigation - Different tabs for QuarterJr vs QuarterPro */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            {(isPro 
+              ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine']
+              : ['basic', 'vehicle', 'engine', 'transmission', 'finaldrive']
+            ).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: '1px solid var(--color-border)',
+                  background: activeTab === tab ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: activeTab === tab ? 'white' : 'var(--color-text)',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {tab === 'finaldrive' ? 'Final Drive' : tab}
+              </button>
+            ))}
+          </div>
 
-            <div>
-              <label className="label">Default Race Length *</label>
-              <div className="radio-group">
-                <label className="radio-label">
-                  <input
-                    type="radio"
-                    name="defaultRaceLength"
-                    value="EIGHTH"
-                    checked={formDefaultRaceLength === 'EIGHTH'}
-                    onChange={(e) => setFormDefaultRaceLength(e.target.value as RaceLength)}
-                  />
-                  <span>1/8 Mile</span>
-                </label>
-                <label className="radio-label">
-                  <input
-                    type="radio"
-                    name="defaultRaceLength"
-                    value="QUARTER"
-                    checked={formDefaultRaceLength === 'QUARTER'}
-                    onChange={(e) => setFormDefaultRaceLength(e.target.value as RaceLength)}
-                  />
-                  <span>1/4 Mile</span>
-                </label>
+          {/* Basic Tab - Just identity info */}
+          {activeTab === 'basic' && (
+            <div className="grid grid-2 gap-4 mb-4">
+              <div>
+                <label className="label" htmlFor="name">Vehicle Name *</label>
+                <input id="name" type="text" className="input" value={form.name ?? ''} onChange={(e) => updateForm('name', e.target.value)} placeholder="My Mustang" />
+              </div>
+              <div>
+                <label className="label">Default Race Length *</label>
+                <div className="radio-group">
+                  <label className="radio-label">
+                    <input type="radio" name="defaultRaceLength" value="EIGHTH" checked={form.defaultRaceLength === 'EIGHTH'} onChange={(e) => updateForm('defaultRaceLength', e.target.value as RaceLength)} />
+                    <span>1/8 Mile</span>
+                  </label>
+                  <label className="radio-label">
+                    <input type="radio" name="defaultRaceLength" value="QUARTER" checked={form.defaultRaceLength === 'QUARTER'} onChange={(e) => updateForm('defaultRaceLength', e.target.value as RaceLength)} />
+                    <span>1/4 Mile</span>
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="grid grid-3 gap-4 mb-4">
-            <div>
-              <label className="label" htmlFor="weightLb">
-                Weight (lb) *
-              </label>
-              <input
-                id="weightLb"
-                type="number"
-                step="1"
-                className="input"
-                value={formWeightLb}
-                onChange={(e) => setFormWeightLb(e.target.value)}
-              />
-            </div>
+          {/* ============================================== */}
+          {/* QUARTER JR TABS (simplified VB6-style inputs) */}
+          {/* ============================================== */}
 
-            <div>
-              <label className="label" htmlFor="tireDiaIn">
-                Tire Diameter (in) *
-              </label>
-              <input
-                id="tireDiaIn"
-                type="number"
-                step="0.1"
-                className="input"
-                value={formTireDiaIn}
-                onChange={(e) => setFormTireDiaIn(e.target.value)}
-              />
+          {/* QuarterJr Vehicle Tab - Weight, Rollout, Wheelbase, Body Style, Frontal Area */}
+          {activeTab === 'vehicle' && !isPro && (
+            <div className="mb-4">
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Weight (lb) *</label>
+                  <input type="number" step="1" className="input" value={form.weightLb ?? ''} onChange={(e) => updateForm('weightLb', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Staging Rollout (in) *</label>
+                  <input type="number" step="0.1" className="input" value={form.rolloutIn ?? ''} onChange={(e) => updateForm('rolloutIn', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Distance from staging beam to start</small>
+                </div>
+              </div>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Wheelbase (in)</label>
+                  <input type="number" step="0.1" className="input" value={form.wheelbaseIn ?? 108} onChange={(e) => updateForm('wheelbaseIn', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Body Style</label>
+                  <select className="input" value={form.bodyStyle ?? 6} onChange={(e) => updateForm('bodyStyle', parseInt(e.target.value))}>
+                    <option value={1}>Dragster with Wing</option>
+                    <option value={2}>Dragster</option>
+                    <option value={3}>Funny Car Body</option>
+                    <option value={4}>Altered/Roadster</option>
+                    <option value={5}>Fastback</option>
+                    <option value={6}>Sedan</option>
+                    <option value={7}>Station Wagon/Van</option>
+                    <option value={8}>Motorcycle</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-2 gap-4">
+                <div>
+                  <label className="label">Frontal Area (ft²)</label>
+                  <input type="number" step="0.1" className="input" value={form.frontalAreaFt2 ?? 22} onChange={(e) => updateForm('frontalAreaFt2', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Cross-sectional area facing wind</small>
+                </div>
+              </div>
             </div>
+          )}
 
-            <div>
-              <label className="label" htmlFor="rearGear">
-                Rear Gear Ratio *
-              </label>
-              <input
-                id="rearGear"
-                type="number"
-                step="0.01"
-                className="input"
-                value={formRearGear}
-                onChange={(e) => setFormRearGear(e.target.value)}
-              />
+          {/* QuarterJr Engine Tab - Fuel System, Displacement, RPM@Peak HP, Peak HP, Shift RPM, N2O */}
+          {activeTab === 'engine' && !isPro && (
+            <div className="mb-4">
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Fuel System *</label>
+                  <select className="input" value={form.fuelSystem ?? 'Gas+Carb'} onChange={(e) => updateForm('fuelSystem', e.target.value)}>
+                    {FUEL_SYSTEMS.map(fs => <option key={fs.value} value={fs.value}>{fs.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Displacement (CID)</label>
+                  <input type="number" step="1" className="input" value={form.displacementCID ?? 350} onChange={(e) => updateForm('displacementCID', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Used to shape HP curve</small>
+                </div>
+              </div>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Peak HP *</label>
+                  <input type="number" step="1" className="input" value={form.powerHP ?? ''} onChange={(e) => updateForm('powerHP', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">RPM @ Peak HP *</label>
+                  <input type="number" step="100" className="input" value={form.rpmAtPeakHP ?? 6500} onChange={(e) => updateForm('rpmAtPeakHP', parseFloat(e.target.value))} />
+                </div>
+              </div>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Shift RPM</label>
+                  <input type="number" step="100" className="input" value={form.shiftRPMs?.[0] ?? 6500} onChange={(e) => {
+                    const rpm = parseFloat(e.target.value);
+                    // Set all shift RPMs to the same value for QuarterJr
+                    const numGears = form.gearRatios?.length ?? 4;
+                    updateForm('shiftRPMs', Array(numGears).fill(rpm));
+                  }} />
+                  <small style={{ color: 'var(--color-muted)' }}>RPM to shift at (all gears)</small>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', paddingTop: '1.5rem' }}>
+                  <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form.n2oEnabled ?? false} onChange={(e) => updateForm('n2oEnabled', e.target.checked)} />
+                    N2O (Nitrous Oxide)
+                  </label>
+                </div>
+              </div>
+              <div style={{ padding: '0.75rem', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
+                <small style={{ color: 'var(--color-muted)' }}>
+                  💡 A synthetic HP curve will be generated from your peak HP, RPM, and displacement.
+                </small>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="grid grid-2 gap-4 mb-4">
-            <div>
-              <label className="label" htmlFor="rolloutIn">
-                Rollout (in) *
-              </label>
-              <input
-                id="rolloutIn"
-                type="number"
-                step="0.1"
-                className="input"
-                value={formRolloutIn}
-                onChange={(e) => setFormRolloutIn(e.target.value)}
-              />
-            </div>
+          {/* QuarterJr Transmission Tab - Clutch/Converter, Slip/Stall RPM, Gear Ratios (no efficiencies) */}
+          {activeTab === 'transmission' && !isPro && (
+            <div className="mb-4">
+              {/* Transmission Type Selector */}
+              <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Type</h4>
+              <div className="radio-group" style={{ marginBottom: '1rem' }}>
+                <label className="radio-label">
+                  <input type="radio" name="transType" value="clutch" checked={transType === 'clutch'} onChange={() => setTransType('clutch')} />
+                  <span>Manual (Clutch)</span>
+                </label>
+                <label className="radio-label">
+                  <input type="radio" name="transType" value="converter" checked={transType === 'converter'} onChange={() => setTransType('converter')} />
+                  <span>Automatic (Converter)</span>
+                </label>
+              </div>
 
-            <div>
-              <label className="label" htmlFor="powerHP">
-                Power (HP) *
-              </label>
-              <input
-                id="powerHP"
-                type="number"
-                step="1"
-                className="input"
-                value={formPowerHP}
-                onChange={(e) => setFormPowerHP(e.target.value)}
-              />
+              {/* Clutch Settings */}
+              {transType === 'clutch' && (
+                <div className="grid grid-2 gap-4 mb-4">
+                  <div>
+                    <label className="label">Slip RPM</label>
+                    <input type="number" className="input" value={form.clutchSlipRPM ?? 5500} onChange={(e) => updateForm('clutchSlipRPM', parseFloat(e.target.value))} />
+                    <small style={{ color: 'var(--color-muted)' }}>RPM where clutch fully engages</small>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingTop: '1.5rem' }}>
+                    <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={form.clutchLockup ?? false} onChange={(e) => updateForm('clutchLockup', e.target.checked)} />
+                      Lockup Clutch
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Converter Settings */}
+              {transType === 'converter' && (
+                <div className="grid grid-2 gap-4 mb-4">
+                  <div>
+                    <label className="label">Stall RPM</label>
+                    <input type="number" className="input" value={form.converterStallRPM ?? 3500} onChange={(e) => updateForm('converterStallRPM', parseFloat(e.target.value))} />
+                    <small style={{ color: 'var(--color-muted)' }}>Converter stall speed</small>
+                  </div>
+                  <div>
+                    <label className="label">Converter Diameter (in)</label>
+                    <input type="number" step="0.1" className="input" value={form.converterDiameterIn ?? 11} onChange={(e) => updateForm('converterDiameterIn', parseFloat(e.target.value))} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingTop: '0.5rem' }}>
+                    <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={form.converterLockup ?? false} onChange={(e) => updateForm('converterLockup', e.target.checked)} />
+                      Lockup Converter
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Gear Ratios (simplified - no efficiencies) */}
+              <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Gear Ratios</h4>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                {(form.gearRatios ?? [2.5, 1.8, 1.4, 1.0]).map((ratio, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{i + 1}:</span>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      className="input" 
+                      style={{ width: '70px' }} 
+                      value={ratio} 
+                      onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))} 
+                    />
+                    {(form.gearRatios?.length ?? 0) > 2 && (
+                      <button 
+                        type="button" 
+                        onClick={() => removeGear(i)} 
+                        style={{ background: 'var(--color-error)', color: 'white', border: 'none', borderRadius: '4px', padding: '0.125rem 0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addGear} className="btn btn-secondary" style={{ fontSize: '0.875rem', padding: '0.375rem 0.75rem' }}>+ Add Gear</button>
             </div>
-          </div>
+          )}
+
+          {/* QuarterJr Final Drive Tab - Gear Ratio, Tire Diameter, Tire Width */}
+          {activeTab === 'finaldrive' && !isPro && (
+            <div className="mb-4">
+              <div className="grid grid-3 gap-4">
+                <div>
+                  <label className="label">Final Drive Ratio *</label>
+                  <input type="number" step="0.01" className="input" value={form.rearGear ?? ''} onChange={(e) => updateForm('rearGear', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Ring & pinion ratio</small>
+                </div>
+                <div>
+                  <label className="label">Tire Diameter (in) *</label>
+                  <input type="number" step="0.1" className="input" value={form.tireDiaIn ?? ''} onChange={(e) => updateForm('tireDiaIn', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Tire Width (in)</label>
+                  <input type="number" step="0.1" className="input" value={form.tireWidthIn ?? 14} onChange={(e) => updateForm('tireWidthIn', parseFloat(e.target.value))} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================== */}
+          {/* QUARTER PRO TABS (advanced inputs) */}
+          {/* ============================================== */}
+
+          {/* Geometry Tab - Weight and dimensions (Pro only) */}
+          {activeTab === 'geometry' && isPro && (
+            <div className="mb-4">
+              {/* Basic fields for all users */}
+              <div className="grid grid-3 gap-4 mb-4">
+                <div>
+                  <label className="label">Weight (lb) *</label>
+                  <input type="number" step="1" className="input" value={form.weightLb ?? ''} onChange={(e) => updateForm('weightLb', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Tire Diameter (in) *</label>
+                  <input type="number" step="0.1" className="input" value={form.tireDiaIn ?? ''} onChange={(e) => updateForm('tireDiaIn', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Staging Rollout (in) *</label>
+                  <input type="number" step="0.1" className="input" value={form.rolloutIn ?? ''} onChange={(e) => updateForm('rolloutIn', parseFloat(e.target.value))} />
+                </div>
+              </div>
+
+              {/* Pro fields */}
+              {isPro && (
+                <>
+                  <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Advanced Geometry</h4>
+                  <div className="grid grid-3 gap-4">
+                    <div>
+                      <label className="label">Static Front Weight (lb)</label>
+                      <input type="number" step="1" className="input" value={form.staticFrontWeightLb ?? ''} onChange={(e) => updateForm('staticFrontWeightLb', parseFloat(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="label">Wheelbase (in)</label>
+                      <input type="number" step="0.1" className="input" value={form.wheelbaseIn ?? ''} onChange={(e) => updateForm('wheelbaseIn', parseFloat(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="label">Front Overhang (in)</label>
+                      <input type="number" step="0.1" className="input" value={form.overhangIn ?? ''} onChange={(e) => updateForm('overhangIn', parseFloat(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="label">CG Height (in)</label>
+                      <input type="number" step="0.1" className="input" value={form.cgHeightIn ?? ''} onChange={(e) => updateForm('cgHeightIn', parseFloat(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="label">Tire Width (in)</label>
+                      <input type="number" step="0.1" className="input" value={form.tireWidthIn ?? ''} onChange={(e) => updateForm('tireWidthIn', parseFloat(e.target.value))} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Aero Tab - Aerodynamics + body style (Pro only) */}
+          {activeTab === 'aero' && isPro && (
+            <div className="mb-4">
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Body Style</label>
+                  <select className="input" value={form.bodyStyle ?? 1} onChange={(e) => updateForm('bodyStyle', parseInt(e.target.value))}>
+                    <option value={1}>Dragster with Wing (Cd=0.66, Cl=0.8)</option>
+                    <option value={2}>Dragster (Cd=0.50, Cl=0.2)</option>
+                    <option value={3}>Funny Car Body (Cd=0.52, Cl=0.8)</option>
+                    <option value={4}>Altered/Roadster (Cd=0.52, Cl=0.1)</option>
+                    <option value={5}>Fastback (Cd=0.28, Cl=0.1)</option>
+                    <option value={6}>Sedan (Cd=0.40, Cl=0.1)</option>
+                    <option value={7}>Station Wagon/Van (Cd=0.46, Cl=0.1)</option>
+                    <option value={8}>Motorcycle (Cd=0.54, Cl=0.1)</option>
+                  </select>
+                  <small style={{ color: 'var(--color-muted)' }}>Select body style or enter custom values below</small>
+                </div>
+                <div>
+                  <label className="label">Frontal Area (ft²)</label>
+                  <input type="number" step="0.1" className="input" value={form.frontalAreaFt2 ?? ''} onChange={(e) => updateForm('frontalAreaFt2', parseFloat(e.target.value))} />
+                </div>
+              </div>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Drag Coefficient (Cd)</label>
+                  <input type="number" step="0.001" className="input" value={form.cd ?? ''} onChange={(e) => updateForm('cd', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Override body style default</small>
+                </div>
+                <div>
+                  <label className="label">Lift Coefficient (Cl)</label>
+                  <input type="number" step="0.001" className="input" value={form.liftCoeff ?? ''} onChange={(e) => updateForm('liftCoeff', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Positive = lift, Negative = downforce</small>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Drivetrain Tab - Gears, trans type, clutch/converter (Pro only) */}
+          {activeTab === 'drivetrain' && isPro && (
+            <div className="mb-4">
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Final Drive Ratio *</label>
+                  <input type="number" step="0.01" className="input" value={form.rearGear ?? ''} onChange={(e) => updateForm('rearGear', parseFloat(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Trans Efficiency</label>
+                  <input type="number" step="0.001" className="input" value={form.transEfficiency ?? ''} onChange={(e) => updateForm('transEfficiency', parseFloat(e.target.value))} />
+                </div>
+              </div>
+
+              {/* Gears Table */}
+              <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Gears</h4>
+              <table style={{ width: '100%', marginBottom: '1rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', width: '60px' }}>Gear</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Ratio</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Efficiency</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Shift RPM</th>
+                    <th style={{ padding: '0.5rem', width: '60px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(form.gearRatios ?? []).map((ratio, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{i + 1}</td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="0.01" className="input" style={{ width: '100px' }} value={ratio} onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="0.001" className="input" style={{ width: '100px' }} value={form.gearEfficiencies?.[i] ?? 0.98} onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="100" className="input" style={{ width: '100px' }} value={form.shiftRPMs?.[i] ?? 7000} onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <button type="button" onClick={() => removeGear(i)} style={{ background: 'var(--color-error)', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer' }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button type="button" onClick={addGear} className="btn btn-secondary" style={{ marginBottom: '1.5rem' }}>+ Add Gear</button>
+
+              {/* Transmission Type Selector */}
+              <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Type</h4>
+              <div className="radio-group" style={{ marginBottom: '1rem' }}>
+                <label className="radio-label">
+                  <input type="radio" name="transType" value="clutch" checked={transType === 'clutch'} onChange={() => setTransType('clutch')} />
+                  <span>Manual (Clutch)</span>
+                </label>
+                <label className="radio-label">
+                  <input type="radio" name="transType" value="converter" checked={transType === 'converter'} onChange={() => setTransType('converter')} />
+                  <span>Automatic (Converter)</span>
+                </label>
+              </div>
+
+              {/* Clutch Settings */}
+              {transType === 'clutch' && (
+                <div className="grid grid-2 gap-4">
+                  <div>
+                    <label className="label">Launch RPM</label>
+                    <input type="number" className="input" value={form.clutchLaunchRPM ?? ''} onChange={(e) => updateForm('clutchLaunchRPM', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label">Slip RPM</label>
+                    <input type="number" className="input" value={form.clutchSlipRPM ?? ''} onChange={(e) => updateForm('clutchSlipRPM', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label">Slippage Factor</label>
+                    <input type="number" step="0.001" className="input" value={form.clutchSlippage ?? ''} onChange={(e) => updateForm('clutchSlippage', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input type="checkbox" checked={form.clutchLockup ?? false} onChange={(e) => updateForm('clutchLockup', e.target.checked)} />
+                      Lockup
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Converter Settings */}
+              {transType === 'converter' && (
+                <div className="grid grid-2 gap-4">
+                  <div>
+                    <label className="label">Stall RPM</label>
+                    <input type="number" className="input" value={form.converterStallRPM ?? ''} onChange={(e) => updateForm('converterStallRPM', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label">Torque Multiplier</label>
+                    <input type="number" step="0.01" className="input" value={form.converterTorqueMult ?? ''} onChange={(e) => updateForm('converterTorqueMult', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label">Slippage Factor</label>
+                    <input type="number" step="0.001" className="input" value={form.converterSlippage ?? ''} onChange={(e) => updateForm('converterSlippage', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label">Diameter (in)</label>
+                    <input type="number" step="0.1" className="input" value={form.converterDiameterIn ?? ''} onChange={(e) => updateForm('converterDiameterIn', parseFloat(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input type="checkbox" checked={form.converterLockup ?? false} onChange={(e) => updateForm('converterLockup', e.target.checked)} />
+                      Lockup
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PMI Tab - QuarterPro only */}
+          {activeTab === 'pmi' && isPro && (
+            <div className="mb-4">
+              <div className="grid grid-3 gap-4">
+                <div>
+                  <label className="label">Engine PMI (slug-ft²)</label>
+                  <input type="number" step="0.01" className="input" value={form.enginePMI ?? ''} onChange={(e) => updateForm('enginePMI', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Engine, flywheel, clutch</small>
+                </div>
+                <div>
+                  <label className="label">Trans PMI (slug-ft²)</label>
+                  <input type="number" step="0.001" className="input" value={form.transPMI ?? ''} onChange={(e) => updateForm('transPMI', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Transmission, driveshaft</small>
+                </div>
+                <div>
+                  <label className="label">Tires PMI (slug-ft²)</label>
+                  <input type="number" step="0.1" className="input" value={form.tiresPMI ?? ''} onChange={(e) => updateForm('tiresPMI', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>Tires, wheels, ring gear</small>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Engine Tab - Power, fuel, HP curve with graph (Pro only) */}
+          {activeTab === 'engine' && isPro && (
+            <div className="mb-4">
+                  <div className="grid grid-3 gap-4 mb-4">
+                    <div>
+                      <label className="label">Peak Power (HP)</label>
+                      <input type="number" step="1" className="input" value={form.powerHP ?? ''} onChange={(e) => updateForm('powerHP', parseFloat(e.target.value))} />
+                      <small style={{ color: 'var(--color-muted)' }}>Used if no dyno curve</small>
+                    </div>
+                    <div>
+                      <label className="label">Fuel Type</label>
+                      <select className="input" value={form.fuelType ?? 'Gasoline'} onChange={(e) => updateForm('fuelType', e.target.value)}>
+                        {FUEL_TYPES.map(fuel => <option key={fuel} value={fuel}>{fuel}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">HP Multiplier</label>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input type="number" step="0.01" className="input" style={{ width: '100px' }} value={hpMultiplier} onChange={(e) => setHpMultiplier(parseFloat(e.target.value) || 1)} />
+                        <button type="button" onClick={applyHPMultiplier} className="btn btn-secondary" disabled={hpMultiplier === 1.0} style={{ whiteSpace: 'nowrap' }}>
+                          Apply to All
+                        </button>
+                      </div>
+                      <small style={{ color: 'var(--color-muted)' }}>Multiply all HP values</small>
+                    </div>
+                  </div>
+
+                  <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Dyno Curve</h4>
+              
+              {/* Dyno Graph */}
+              {sortedHPCurve.length > 1 && (
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
+                  <svg viewBox="0 0 400 200" style={{ width: '100%', maxWidth: '600px', height: 'auto' }}>
+                    {/* Grid lines */}
+                    {[0, 1, 2, 3, 4].map(i => (
+                      <line key={`h${i}`} x1="50" y1={40 + i * 35} x2="380" y2={40 + i * 35} stroke="var(--color-border)" strokeWidth="1" />
+                    ))}
+                    {/* Y-axis labels */}
+                    {(() => {
+                      const maxHP = Math.max(...sortedHPCurve.map(p => p.hp));
+                      const minHP = Math.min(...sortedHPCurve.map(p => p.hp));
+                      const range = maxHP - minHP || 100;
+                      return [0, 1, 2, 3, 4].map(i => (
+                        <text key={`yl${i}`} x="45" y={44 + i * 35} textAnchor="end" fontSize="10" fill="var(--color-muted)">
+                          {Math.round(maxHP - (i / 4) * range)}
+                        </text>
+                      ));
+                    })()}
+                    {/* X-axis labels */}
+                    {(() => {
+                      const minRPM = Math.min(...sortedHPCurve.map(p => p.rpm));
+                      const maxRPM = Math.max(...sortedHPCurve.map(p => p.rpm));
+                      const range = maxRPM - minRPM || 1000;
+                      return [0, 1, 2, 3, 4].map(i => (
+                        <text key={`xl${i}`} x={50 + i * 82.5} y="195" textAnchor="middle" fontSize="10" fill="var(--color-muted)">
+                          {Math.round(minRPM + (i / 4) * range)}
+                        </text>
+                      ));
+                    })()}
+                    {/* HP curve line */}
+                    {(() => {
+                      const minRPM = Math.min(...sortedHPCurve.map(p => p.rpm));
+                      const maxRPM = Math.max(...sortedHPCurve.map(p => p.rpm));
+                      const minHP = Math.min(...sortedHPCurve.map(p => p.hp));
+                      const maxHP = Math.max(...sortedHPCurve.map(p => p.hp));
+                      const rpmRange = maxRPM - minRPM || 1000;
+                      const hpRange = maxHP - minHP || 100;
+                      const points = sortedHPCurve.map(p => {
+                        const x = 50 + ((p.rpm - minRPM) / rpmRange) * 330;
+                        const y = 180 - ((p.hp - minHP) / hpRange) * 140;
+                        return `${x},${y}`;
+                      }).join(' ');
+                      return <polyline points={points} fill="none" stroke="var(--color-primary)" strokeWidth="2" />;
+                    })()}
+                    {/* Data points */}
+                    {(() => {
+                      const minRPM = Math.min(...sortedHPCurve.map(p => p.rpm));
+                      const maxRPM = Math.max(...sortedHPCurve.map(p => p.rpm));
+                      const minHP = Math.min(...sortedHPCurve.map(p => p.hp));
+                      const maxHP = Math.max(...sortedHPCurve.map(p => p.hp));
+                      const rpmRange = maxRPM - minRPM || 1000;
+                      const hpRange = maxHP - minHP || 100;
+                      return sortedHPCurve.map((p, i) => {
+                        const x = 50 + ((p.rpm - minRPM) / rpmRange) * 330;
+                        const y = 180 - ((p.hp - minHP) / hpRange) * 140;
+                        return <circle key={i} cx={x} cy={y} r="4" fill="var(--color-primary)" />;
+                      });
+                    })()}
+                    {/* Axis labels */}
+                    <text x="215" y="12" textAnchor="middle" fontSize="12" fill="var(--color-text)" fontWeight="bold">HP vs RPM</text>
+                    <text x="10" y="110" textAnchor="middle" fontSize="10" fill="var(--color-muted)" transform="rotate(-90, 10, 110)">HP</text>
+                    <text x="215" y="198" textAnchor="middle" fontSize="10" fill="var(--color-muted)">RPM</text>
+                  </svg>
+                </div>
+              )}
+
+              {/* HP Curve Table with Torque */}
+              <table style={{ width: '100%', marginBottom: '1rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>RPM</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>HP</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Torque (lb-ft)</th>
+                    <th style={{ padding: '0.5rem', width: '60px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(form.hpCurve ?? []).map((point, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="100" className="input" style={{ width: '100px' }} value={point.rpm} onChange={(e) => updateHPCurveAt(i, 'rpm', parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="1" className="input" style={{ width: '100px' }} value={point.hp} onChange={(e) => updateHPCurveAt(i, 'hp', parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem', fontFamily: 'monospace', color: 'var(--color-muted)' }}>
+                        {hpToTorque(point.hp, point.rpm).toFixed(1)}
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <button type="button" onClick={() => removeHPPoint(i)} style={{ background: 'var(--color-error)', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer' }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button type="button" onClick={addHPPoint} className="btn btn-secondary">+ Add HP Point</button>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <button onClick={handleSave} className="btn" disabled={saving}>

@@ -58,6 +58,10 @@ export interface VB6SimState {
   AgsMax_g: number;       // Maximum acceleration seen (for adaptive timestep)
   TireGrowth: number;     // Current tire growth factor
   TireCirFt: number;      // Current tire circumference (ft)
+  
+  // Shift tracking (VB6 TIMESLIP.FRM:1070-1072)
+  ShiftFlag: number;      // 0=normal, 1=shift initiated, 2=shift in progress
+  PrevGear: number;       // Previous gear (to detect shifts)
 }
 
 /**
@@ -77,6 +81,7 @@ export interface VB6VehicleParams {
   TGR: number[];            // Transmission gear ratios (1-indexed in VB6)
   TGEff: number[];          // Gear efficiencies
   Efficiency: number;       // Overall driveline efficiency
+  DTShift: number;          // Shift time (0.2s clutch, 0.25s converter) - VB6 TIMESLIP.FRM:702-703
   Slippage: number;         // Clutch/converter slippage factor
   TorqueMult: number;       // Converter torque multiplier
   Stall: number;            // Stall/slip RPM
@@ -252,12 +257,25 @@ export function vb6SimulationStep(
   const iGear = state.Gear;
   
   // ========================================================================
-  // TIMESLIP.FRM:1082 - Calculate adaptive timestep
-  // TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+  // TIMESLIP.FRM:1070-1076 - Check for gear change
+  // At top of gear change loop, TimeStep = DTShift
   // ========================================================================
-  let TimeStep = TSMax;
-  if (state.Ags0_g > 0 && state.L > 1) {
-    TimeStep = TSMax * Math.pow(state.AgsMax_g / state.Ags0_g, 4);
+  let TimeStep: number;
+  const gearChanged = state.Gear !== state.PrevGear;
+  
+  if (gearChanged) {
+    // VB6: TIMESLIP.FRM:1072 - TimeStep = DTShift at gear change
+    TimeStep = vehicle.DTShift;
+    state.PrevGear = state.Gear;
+  } else {
+    // ========================================================================
+    // TIMESLIP.FRM:1082 - Calculate adaptive timestep
+    // TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+    // ========================================================================
+    TimeStep = TSMax;
+    if (state.Ags0_g > 0 && state.L > 1) {
+      TimeStep = TSMax * Math.pow(state.AgsMax_g / state.Ags0_g, 4);
+    }
   }
   
   // ========================================================================
@@ -312,18 +330,41 @@ export function vb6SimulationStep(
   const ChassisPMI = vehicle.TiresPMI + vehicle.TransPMI * Math.pow(vehicle.GearRatio, 2) * Math.pow(TGR_gear, 2);
   
   // ========================================================================
-  // TIMESLIP.FRM:1107 - Estimate next velocity
+  // TIMESLIP.FRM:1107 - Estimate next velocity (first pass)
   // Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep^2 / 2
   // ========================================================================
   let Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
   
   // ========================================================================
-  // TIMESLIP.FRM:1111-1120 - Limit timestep
+  // TIMESLIP.FRM:1109 - Skip timestep limiting during shift
+  // If ShiftFlag = 2 Then GoTo 270
   // ========================================================================
-  if (TimeStep > 0.05) TimeStep = 0.05;
+  const ShiftRPM_gear = vehicle.ShiftRPM[iGear - 1] ?? 9000;
   
-  // Recalculate velocity with limited timestep
-  Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
+  if (!gearChanged) {
+    // Only apply timestep limits when NOT in a gear change
+    // TIMESLIP.FRM:1111-1120 - Limit timestep
+    // TIMESLIP.FRM:1064 - Minimum timestep (from TSMax init)
+    if (TimeStep < 0.005) TimeStep = 0.005;
+    // TIMESLIP.FRM:1120 - Absolute max timestep
+    if (TimeStep > 0.05) TimeStep = 0.05;
+    
+    // Recalculate velocity with limited timestep
+    Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
+    
+    // TIMESLIP.FRM:1125-1129 - Limit velocity to shift point
+    if (state.Vel0_ftps > 0 && state.RPM0 > vehicle.Stall && iGear < vehicle.NGR) {
+      const VelAtShift = state.Vel0_ftps * (ShiftRPM_gear + 5) / state.RPM0;
+      if (Vel_L > VelAtShift) {
+        Vel_L = VelAtShift;
+        // Recalculate timestep to match this velocity
+        if (state.Ags0_g * gc > 0) {
+          TimeStep = (Vel_L - state.Vel0_ftps) / (state.Ags0_g * gc);
+        }
+      }
+    }
+  }
+  // During gear change (gearChanged=true), TimeStep=DTShift is used without limiting
   
   // ========================================================================
   // TIMESLIP.FRM:1139 - Calculate VelSqrd
@@ -452,6 +493,10 @@ export function vb6SimulationStep(
   
   // ========================================================================
   // TIMESLIP.FRM:1218-1229 - Initial HP chain and time estimate
+  // VB6: HP = HP * TGEff(iGear) * Efficiency / TireSlip - DragHP
+  // 
+  // NOTE: TorqueMult is handled through ClutchSlip when converter is stalling.
+  // The VB6 HP chain does NOT directly apply TorqueMult - it's incorporated via ClutchSlip.
   // ========================================================================
   const TGEff_gear = vehicle.TGEff[iGear - 1] ?? 0.99;
   HP = HP * TGEff_gear * vehicle.Efficiency / TireSlip;
@@ -509,6 +554,8 @@ export function vb6SimulationStep(
     HPChasPMI = ChasAccHP * Work;
     
     // TIMESLIP.FRM:1250-1253
+    // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
+    // VB6: HP = ((HP * TGEff(iGear) * Efficiency - HPChasPMI) / TireSlip) - DragHP
     HP = (HPSave - HPEngPMI) * ClutchSlip;
     HP = ((HP * TGEff_gear * vehicle.Efficiency - HPChasPMI) / TireSlip) - DragHP;
     PQWT = 550 * gc * HP / vehicle.Weight_lbf;
@@ -581,10 +628,9 @@ export function vb6SimulationStep(
   state.DSRPM = DSRPM;
   state.SLIP = SLIP;
   
-  // Track maximum acceleration
-  if (AGS_g > state.AgsMax_g) {
-    state.AgsMax_g = AGS_g;
-  }
+  // VB6: AgsMax is set ONCE at launch (line 1028) and never updated
+  // It's the initial launch acceleration, NOT the maximum seen during the run
+  // Do NOT update AgsMax_g here - it should remain at the initial value
   
   return {
     TimeStep_s: TimeStep,
@@ -650,9 +696,12 @@ export function vb6InitState(
   const q_launch = Math.sign(WindFPS_launch) * env.rho * Math.pow(Math.abs(WindFPS_launch), 2) / (2 * gc);
   const DragForce_launch = CMU * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch;
   
+  // VB6: TIMESLIP.FRM:872 - Initial tire slip
+  // TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
+  const TireSlip_init = 1.02 + (env.TractionIndex - 1) * 0.005 + (env.TrackTempEffect - 1) * 3;
+  
   // VB6: TIMESLIP.FRM:1020 - Calculate wheel force
   // force = TQ * GearRatio * Efficiency / (TireSlip * TireDia / 24) - DragForce
-  const TireSlip_init = 1.02; // VB6 initial tire slip
   const force = TQ * vehicle.GearRatio * vehicle.Efficiency / (TireSlip_init * vehicle.TireDia_in / 24) - DragForce_launch;
   
   // VB6: TIMESLIP.FRM:1022-1027 - Estimate initial acceleration
@@ -707,6 +756,10 @@ export function vb6InitState(
     AgsMax_g: Ags0_g,
     TireGrowth: tireResult.TireGrowth,
     TireCirFt: tireResult.TireCirFt,
+    
+    // Shift tracking
+    ShiftFlag: 0,
+    PrevGear: 1,
   };
 }
 

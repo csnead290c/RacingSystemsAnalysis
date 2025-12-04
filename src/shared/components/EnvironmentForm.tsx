@@ -9,7 +9,7 @@ interface EnvironmentFormProps {
 }
 
 function EnvironmentForm({ value, onChange, compact = false, disabled = false }: EnvironmentFormProps) {
-  const [showOptional, setShowOptional] = useState(false);
+  const [showOptional, setShowOptional] = useState(true); // Show track conditions by default
 
   const handleChange = (field: keyof Env, inputValue: string) => {
     const numValue = parseFloat(inputValue) || 0;

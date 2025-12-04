@@ -4,11 +4,13 @@ import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import type { RaceLength } from '../domain/config/raceLengths';
+import type { PhysicsModelId } from '../domain/physics';
 
 function Home() {
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
+  const [selectedModel, setSelectedModel] = useState<PhysicsModelId>('VB6Exact');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -36,6 +38,7 @@ function Home() {
       state: {
         vehicle: selectedVehicle,
         raceLength,
+        selectedModel,
       },
     });
   };
@@ -103,10 +106,19 @@ function Home() {
 
           {selectedVehicle && (
             <div className="text-muted" style={{ fontSize: '0.9rem' }}>
-              <div>Weight: {selectedVehicle.weightLb} lb</div>
-              <div>Power: {selectedVehicle.powerHP} HP</div>
-              <div>Tire Diameter: {selectedVehicle.tireDiaIn} in</div>
-              <div>Rear Gear: {selectedVehicle.rearGear}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                <div>Weight: <strong>{selectedVehicle.weightLb}</strong> lb</div>
+                <div>Power: <strong>{selectedVehicle.powerHP}</strong> HP</div>
+                <div>Tire: <strong>{selectedVehicle.tireDiaIn}</strong>" dia</div>
+                <div>Final Drive: <strong>{selectedVehicle.rearGear}</strong></div>
+                <div>Rollout: <strong>{selectedVehicle.rolloutIn}</strong>"</div>
+                <div>Trans: <strong>{(selectedVehicle as any).transmissionType === 'converter' ? 'Auto' : 'Manual'}</strong></div>
+              </div>
+              <div style={{ marginTop: '0.5rem' }}>
+                <Link to="/vehicles" style={{ fontSize: '0.8rem', color: 'var(--color-primary)' }}>
+                  Edit Vehicle →
+                </Link>
+              </div>
             </div>
           )}
         </div>
@@ -134,6 +146,27 @@ function Home() {
               />
               <span>1/4 Mile (1320 ft)</span>
             </label>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h3 className="label">Physics Model</h3>
+          <select
+            className="input"
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value as PhysicsModelId)}
+            style={{ cursor: 'pointer' }}
+          >
+            <option value="SimpleV1">SimpleV1 (Basic)</option>
+            <option value="RSACLASSIC">RSACLASSIC (Advanced)</option>
+            <option value="VB6Exact">VB6 Exact (Bit-for-bit Parity)</option>
+            <option value="Blend">Blend (Learning)</option>
+          </select>
+          <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}>
+            {selectedModel === 'SimpleV1' && 'Simplified physics model'}
+            {selectedModel === 'RSACLASSIC' && 'Advanced physics with detailed modeling'}
+            {selectedModel === 'VB6Exact' && 'Exact VB6 TIMESLIP.FRM replication'}
+            {selectedModel === 'Blend' && 'RSACLASSIC + learned corrections'}
           </div>
         </div>
 

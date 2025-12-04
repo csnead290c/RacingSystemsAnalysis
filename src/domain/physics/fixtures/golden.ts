@@ -75,6 +75,74 @@ export const GOLDEN_CASES: GoldenCase[] = [
     etRange: [10, 14],
     mphRange: [95, 130],
   },
+  // QuarterJr test case from VB6 printout (supercmp.dat)
+  // Expected: 1/8 Mile: 5.59 sec @ 120.0 MPH, 1/4 Mile: 8.90 sec @ 146.2 MPH
+  {
+    name: 'QuarterJr_Dragster_430hp',
+    vehicle: {
+      weightLb: 1450,
+      tireDiaIn: 32.4,
+      tireWidthIn: 12.3,
+      rearGear: 4.86,
+      rolloutIn: 10,
+      powerHP: 430,
+      rpmAtPeakHP: 6700,
+      displacementCID: 355,
+      wheelbaseIn: 225,
+      frontalAreaFt2: 14.7,
+      bodyStyle: 2, // Dragster
+      fuelSystem: 'Methanol+Carb',
+      transmissionType: 'converter',
+      gearRatios: [1.82, 1.0], // 2nd and 3rd only (starts in 2nd)
+      converterStallRPM: 5500,
+      converterDiameterIn: 8,
+      converterLockup: false,
+      shiftRPMs: [7200, 7200],
+    },
+    env: {
+      elevation: 1200,
+      temperatureF: 88,
+      barometerInHg: 29.92,
+      humidityPct: 35,
+      tractionIndex: 5,
+    },
+    raceLength: 'QUARTER',
+    etRange: [8.85, 8.95], // VB6: 8.90 sec
+    mphRange: [145, 148],  // VB6: 146.2 MPH
+  },
+  {
+    name: 'QuarterJr_Dragster_430hp_Eighth',
+    vehicle: {
+      weightLb: 1450,
+      tireDiaIn: 32.4,
+      tireWidthIn: 12.3,
+      rearGear: 4.86,
+      rolloutIn: 10,
+      powerHP: 430,
+      rpmAtPeakHP: 6700,
+      displacementCID: 355,
+      wheelbaseIn: 225,
+      frontalAreaFt2: 14.7,
+      bodyStyle: 2, // Dragster
+      fuelSystem: 'Methanol+Carb',
+      transmissionType: 'converter',
+      gearRatios: [1.82, 1.0],
+      converterStallRPM: 5500,
+      converterDiameterIn: 8,
+      converterLockup: false,
+      shiftRPMs: [7200, 7200],
+    },
+    env: {
+      elevation: 1200,
+      temperatureF: 88,
+      barometerInHg: 29.92,
+      humidityPct: 35,
+      tractionIndex: 5,
+    },
+    raceLength: 'EIGHTH',
+    etRange: [5.55, 5.65], // VB6: 5.59 sec
+    mphRange: [118, 122],  // VB6: 120.0 MPH
+  },
 ];
 
 /**

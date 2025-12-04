@@ -33,6 +33,7 @@ export default function EnergyPanel() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimResult | null>(null);
   const [energyData, setEnergyData] = useState<EnergyBreakdown | null>(null);
+  // Always use VB6Exact model
 
   const handleRun = async () => {
     setRunning(true);
@@ -49,7 +50,7 @@ export default function EnergyPanel() {
       input.raceLength = 'QUARTER';
       
       // Run simulation
-      const simResult = await simulate('RSACLASSIC', input);
+      const simResult = await simulate('VB6Exact', input);
       setResult(simResult);
       
       // Extract energy data from meta
@@ -187,7 +188,7 @@ export default function EnergyPanel() {
             cursor: running ? 'not-allowed' : 'pointer',
           }}
         >
-          {running ? 'Running...' : 'Run current VB6 UI Fixture (QUARTER)'}
+          {running ? 'Running...' : 'Run VB6Exact (QUARTER)'}
         </button>
       </div>
 

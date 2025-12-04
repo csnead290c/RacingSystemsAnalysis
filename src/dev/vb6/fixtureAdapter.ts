@@ -57,7 +57,7 @@ export function toEngineParams(fx: VB6Fixture) {
   return {
     powerHP,                // REQUIRED for worker
     redlineRPM: inferRedlineRPM(powerHP),
-    idleRPM: 900,           // harmless default; VB6 doesn't use it in RSACLASSIC
+    idleRPM: 900,           // harmless default
   };
 }
 
@@ -137,7 +137,7 @@ export function toSimInputFromVB6(fx: VB6Fixture, distanceFt: number) {
     converter: dt.converter ? { ...dt.converter } : undefined,
   };
 
-  // Minimal vehicle block (only the fields RSACLASSIC actually reads)
+  // Minimal vehicle block (only the fields VB6Exact actually reads)
   const veh = fx.vehicle ?? {};
   const vehicle = {
     weightLb: (veh as any).weight_lb ?? (veh as any).weight ?? (fx as any).weight ?? 2400,
@@ -152,7 +152,7 @@ export function toSimInputFromVB6(fx: VB6Fixture, distanceFt: number) {
 
   // Build output object
   const out: any = {
-    model: "RSACLASSIC",
+    model: "VB6Exact",
     distanceFt,
     raceLength: raceLength as 'EIGHTH' | 'QUARTER',
     env,

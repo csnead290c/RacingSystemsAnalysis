@@ -79,10 +79,10 @@ function torquePtToHP(pt: any, mult: number): PowerPt | null {
 
 /**
  * Ensure engineParams.powerHP exists.
- * Converts VB6-style engineHP array or torqueCurve to modern format with fuel multiplier.
+ * Converts VB6-style engineHP array, torqueCurve, or simple powerHP to modern format.
  */
 function ensurePowerHP(input: any): any {
-  // Already has powerHP?
+  // Already has powerHP array?
   if (Array.isArray(input?.engineParams?.powerHP) && input.engineParams.powerHP.length >= 2) {
     return input;
   }
@@ -90,8 +90,16 @@ function ensurePowerHP(input: any): any {
   const hpMult = input?.fuel?.hpTorqueMultiplier ?? 1;
   let powerHP: PowerPt[] = [];
   
-  // Try engineHP first (VB6 format)
-  if (Array.isArray(input?.engineHP) && input.engineHP.length >= 2) {
+  // Try vehicle.hpCurve first (new Vehicle schema format)
+  if (Array.isArray(input?.vehicle?.hpCurve) && input.vehicle.hpCurve.length >= 2) {
+    powerHP = input.vehicle.hpCurve
+      .map((pt: any) => torquePtToHP(pt, hpMult))
+      .filter((p: PowerPt | null): p is PowerPt => p !== null && Number.isFinite(p.rpm) && Number.isFinite(p.hp))
+      .sort((a: PowerPt, b: PowerPt) => a.rpm - b.rpm);
+  }
+  
+  // Try engineHP (VB6 format)
+  if (powerHP.length < 2 && Array.isArray(input?.engineHP) && input.engineHP.length >= 2) {
     powerHP = input.engineHP
       .map((pt: any) => {
         if (Array.isArray(pt)) {
@@ -117,6 +125,24 @@ function ensurePowerHP(input: any): any {
       .map((pt: any) => torquePtToHP(pt, hpMult))
       .filter((p: PowerPt | null): p is PowerPt => p !== null && Number.isFinite(p.rpm) && Number.isFinite(p.hp))
       .sort((a: PowerPt, b: PowerPt) => a.rpm - b.rpm);
+  }
+  
+  // Fallback: Generate synthetic curve from peak powerHP (QuarterJr mode)
+  if (powerHP.length < 2) {
+    const peakHP = Number(input?.vehicle?.powerHP);
+    if (Number.isFinite(peakHP) && peakHP > 0) {
+      // Generate a simple flat curve at peak HP (simplified model)
+      // This assumes peak HP is available across the RPM range
+      powerHP = [
+        { rpm: 4000, hp: peakHP * 0.85 * hpMult },
+        { rpm: 5000, hp: peakHP * 0.92 * hpMult },
+        { rpm: 6000, hp: peakHP * 0.97 * hpMult },
+        { rpm: 6500, hp: peakHP * 1.00 * hpMult },
+        { rpm: 7000, hp: peakHP * 0.98 * hpMult },
+        { rpm: 7500, hp: peakHP * 0.94 * hpMult },
+        { rpm: 8000, hp: peakHP * 0.88 * hpMult },
+      ];
+    }
   }
   
   if (powerHP.length >= 2) {
@@ -199,7 +225,23 @@ self.onmessage = async (ev: MessageEvent) => {
     // 1) Deep-clone to avoid structured clone surprises
     const input = JSON.parse(JSON.stringify(msg.payload));
 
-    // 2) Normalize field names (aliases) and ensure powerHP exists
+    // VB6Exact model: Pass SimInputs directly without RSACLASSIC normalization
+    if (msg.model === 'VB6Exact') {
+      console.log('[WORKER:VB6Exact] Running with SimInputs format', {
+        hasVehicle: !!input.vehicle,
+        vehicleName: input.vehicle?.name,
+        powerHP: input.vehicle?.powerHP,
+        hasHpCurve: !!input.vehicle?.hpCurve,
+        raceLength: input.raceLength,
+      });
+      
+      const model = getModel(msg.model);
+      const result = model.simulate(input);
+      (self as any).postMessage({ ok: true, result });
+      return;
+    }
+
+    // 2) Normalize field names (aliases) and ensure powerHP exists (for RSACLASSIC/Blend)
     normalizeInput(input);
 
     // 3) Validate
@@ -241,7 +283,7 @@ self.onmessage = async (ev: MessageEvent) => {
     }
 
     const model = getModel(msg.model);
-    const result = await model.simulate(input);
+    const result = model.simulate(input);
     (self as any).postMessage({ ok: true, result });
   } catch (e: any) {
     console.error('[WORKER ERROR]', e);

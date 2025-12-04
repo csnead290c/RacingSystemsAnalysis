@@ -184,6 +184,72 @@ export function assertComplete(fixture: Partial<Vb6VehicleFixture>): asserts fix
 /**
  * Create an empty fixture template for the UI
  */
+/**
+ * Convert a complete VB6 fixture to SimInputs format for the VB6Exact model.
+ * This allows VB6 Strict Mode to run simulations using the fixture data.
+ */
+export function fixtureToSimInputs(fixture: Vb6VehicleFixture, raceLength: 'EIGHTH' | 'QUARTER' = 'QUARTER'): any {
+  const raceLengthFt = raceLength === 'EIGHTH' ? 660 : 1320;
+  
+  return {
+    vehicle: {
+      id: 'vb6-fixture',
+      name: 'VB6 Fixture',
+      defaultRaceLength: raceLength,
+      weightLb: fixture.vehicle.weight_lb,
+      staticFrontWeightLb: fixture.vehicle.staticFrontWeight_lb,
+      wheelbaseIn: fixture.vehicle.wheelbase_in,
+      overhangIn: fixture.vehicle.overhang_in,
+      cgHeightIn: fixture.vehicle.cgHeight_in,
+      rolloutIn: fixture.vehicle.rollout_in,
+      bodyStyle: fixture.vehicle.bodyStyle,
+      tireDiaIn: fixture.vehicle.tire.diameter_in,
+      tireWidthIn: fixture.vehicle.tire.width_in,
+      frontalAreaFt2: fixture.aero.frontalArea_ft2,
+      cd: fixture.aero.Cd,
+      liftCoeff: fixture.aero.Cl,
+      rearGear: fixture.drivetrain.finalDrive,
+      transEfficiency: fixture.drivetrain.overallEfficiency,
+      gearRatios: [...fixture.drivetrain.gearRatios],
+      gearEfficiencies: [...fixture.drivetrain.perGearEff],
+      shiftRPMs: [...fixture.drivetrain.shiftsRPM],
+      // Clutch or converter
+      transmissionType: fixture.drivetrain.converter ? 'converter' : 'clutch',
+      clutchLaunchRPM: fixture.drivetrain.clutch?.launchRPM,
+      clutchSlipRPM: fixture.drivetrain.clutch?.slipRPM,
+      clutchSlippage: fixture.drivetrain.clutch?.slippageFactor,
+      clutchLockup: fixture.drivetrain.clutch?.lockup,
+      converterStallRPM: fixture.drivetrain.converter?.stallRPM,
+      converterTorqueMult: fixture.drivetrain.converter?.torqueMult,
+      converterSlippage: fixture.drivetrain.converter?.slippageFactor,
+      converterDiameterIn: fixture.drivetrain.converter?.diameter_in,
+      converterLockup: fixture.drivetrain.converter?.lockup,
+      // PMI
+      enginePMI: fixture.pmi.engine_flywheel_clutch,
+      transPMI: fixture.pmi.transmission_driveshaft,
+      tiresPMI: fixture.pmi.tires_wheels_ringgear,
+      // Engine - use peak HP for powerHP, full curve for hpCurve
+      powerHP: Math.max(...fixture.engineHP.map(pt => pt[1])),
+      hpCurve: fixture.engineHP.map(([rpm, hp]) => ({ rpm, hp })),
+      hpTorqueMultiplier: fixture.fuel.hpTorqueMultiplier,
+      fuelType: fixture.fuel.type,
+    },
+    env: {
+      // Use field names expected by vb6Exact.ts
+      elevation: fixture.env.elevation_ft,
+      barometerInHg: fixture.env.barometer_inHg,
+      temperatureF: fixture.env.temperature_F,
+      humidityPct: fixture.env.relHumidity_pct,
+      windMph: fixture.env.wind_mph,
+      windAngleDeg: fixture.env.wind_angle_deg,
+      trackTempF: fixture.env.trackTemp_F,
+      tractionIndex: fixture.env.tractionIndex,
+    },
+    raceLength,
+    raceLengthFt,
+  };
+}
+
 export function createEmptyFixture(): Partial<Vb6VehicleFixture> {
   return {
     env: {

@@ -3,15 +3,22 @@
 :root[data-theme='light'] {
   /* Colors */
   --color-bg: #ffffff;
+  --color-bg-secondary: #f1f3f5;
   --color-surface: #f8f9fa;
   --color-surface-alt: #e9ecef;
   --color-text: #213547;
+  --color-text-muted: #6c757d;
   --color-muted: #6c757d;
+  --color-primary: #007bff;
   --color-accent: #007bff;
   --color-accent-hover: #0056b3;
   --color-border: #dee2e6;
   --color-error: #dc3545;
   --color-success: #28a745;
+  
+  /* Chart colors for light mode */
+  --color-chart-grid: #e9ecef;
+  --color-chart-marker: #495057;
 
   /* Radius */
   --radius-sm: 4px;
@@ -47,15 +54,22 @@
 :root[data-theme='dark'] {
   /* Colors */
   --color-bg: #1a1a1a;
+  --color-bg-secondary: #2d2d2d;
   --color-surface: #2d2d2d;
   --color-surface-alt: #3a3a3a;
   --color-text: #e9ecef;
+  --color-text-muted: #adb5bd;
   --color-muted: #adb5bd;
+  --color-primary: #4a9eff;
   --color-accent: #4a9eff;
   --color-accent-hover: #3182ce;
   --color-border: #495057;
   --color-error: #f56565;
   --color-success: #48bb78;
+  
+  /* Chart colors for dark mode */
+  --color-chart-grid: #3a3a3a;
+  --color-chart-marker: #ffffff;
 
   /* Radius */
   --radius-sm: 4px;

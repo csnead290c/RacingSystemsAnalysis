@@ -5,24 +5,37 @@
  * All fields mirror the Vb6VehicleFixture type exactly.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
 import { VB6_PROSTOCK_PRO } from '../domain/physics/fixtures/vb6-prostock-pro';
 
 export default function VB6Inputs() {
   const { fixture, setFixture } = useVb6Fixture();
   const [activeSection, setActiveSection] = useState<string>('env');
+  
+  // Local draft state - changes are held here until committed
+  const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(fixture)));
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Sync draft when fixture changes externally (e.g., loading a preset)
+  useEffect(() => {
+    setDraft(JSON.parse(JSON.stringify(fixture)));
+    setHasChanges(false);
+  }, [fixture]);
 
   const loadProStockPro = () => {
     // Deep clone to convert readonly arrays to mutable
-    setFixture(JSON.parse(JSON.stringify(VB6_PROSTOCK_PRO)));
+    const newFixture = JSON.parse(JSON.stringify(VB6_PROSTOCK_PRO));
+    setDraft(newFixture);
+    setFixture(newFixture);
+    setHasChanges(false);
   };
 
   const updateField = (path: string, value: any) => {
     const keys = path.split('.');
-    const newFixture = JSON.parse(JSON.stringify(fixture));
+    const newDraft = JSON.parse(JSON.stringify(draft));
     
-    let current = newFixture;
+    let current = newDraft;
     for (let i = 0; i < keys.length - 1; i++) {
       if (!current[keys[i]]) {
         current[keys[i]] = {};
@@ -31,7 +44,18 @@ export default function VB6Inputs() {
     }
     current[keys[keys.length - 1]] = value;
     
-    setFixture(newFixture);
+    setDraft(newDraft);
+    setHasChanges(true);
+  };
+
+  const commitChanges = () => {
+    setFixture(draft);
+    setHasChanges(false);
+  };
+
+  const discardChanges = () => {
+    setDraft(JSON.parse(JSON.stringify(fixture)));
+    setHasChanges(false);
   };
 
   const sections = [
@@ -48,9 +72,33 @@ export default function VB6Inputs() {
     <div className="vb6-inputs-panel">
       <div className="panel-header">
         <h2>VB6 Strict Mode Inputs</h2>
-        <button onClick={loadProStockPro} className="btn-secondary">
-          Load ProStock_Pro
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button onClick={loadProStockPro} className="btn-secondary">
+            Load ProStock_Pro
+          </button>
+          {hasChanges && (
+            <>
+              <button 
+                onClick={commitChanges} 
+                className="btn"
+                style={{ backgroundColor: '#28a745' }}
+              >
+                Apply Changes
+              </button>
+              <button 
+                onClick={discardChanges} 
+                className="btn-secondary"
+              >
+                Discard
+              </button>
+            </>
+          )}
+        </div>
+        {hasChanges && (
+          <div style={{ color: '#ffc107', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+            * Unsaved changes - click "Apply Changes" to run simulation
+          </div>
+        )}
       </div>
 
       <div className="panel-content">
@@ -76,7 +124,7 @@ export default function VB6Inputs() {
                 Elevation (ft):
                 <input
                   type="number"
-                  value={fixture.env?.elevation_ft ?? ''}
+                  value={draft.env?.elevation_ft ?? ''}
                   onChange={(e) => updateField('env.elevation_ft', parseFloat(e.target.value))}
                 />
               </label>
@@ -85,7 +133,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.01"
-                  value={fixture.env?.barometer_inHg ?? ''}
+                  value={draft.env?.barometer_inHg ?? ''}
                   onChange={(e) => updateField('env.barometer_inHg', parseFloat(e.target.value))}
                 />
               </label>
@@ -93,7 +141,7 @@ export default function VB6Inputs() {
                 Temperature (°F):
                 <input
                   type="number"
-                  value={fixture.env?.temperature_F ?? ''}
+                  value={draft.env?.temperature_F ?? ''}
                   onChange={(e) => updateField('env.temperature_F', parseFloat(e.target.value))}
                 />
               </label>
@@ -101,7 +149,7 @@ export default function VB6Inputs() {
                 Relative Humidity (%):
                 <input
                   type="number"
-                  value={fixture.env?.relHumidity_pct ?? ''}
+                  value={draft.env?.relHumidity_pct ?? ''}
                   onChange={(e) => updateField('env.relHumidity_pct', parseFloat(e.target.value))}
                 />
               </label>
@@ -110,7 +158,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.env?.wind_mph ?? ''}
+                  value={draft.env?.wind_mph ?? ''}
                   onChange={(e) => updateField('env.wind_mph', parseFloat(e.target.value))}
                 />
               </label>
@@ -118,7 +166,7 @@ export default function VB6Inputs() {
                 Wind Angle (deg):
                 <input
                   type="number"
-                  value={fixture.env?.wind_angle_deg ?? ''}
+                  value={draft.env?.wind_angle_deg ?? ''}
                   onChange={(e) => updateField('env.wind_angle_deg', parseFloat(e.target.value))}
                 />
               </label>
@@ -126,7 +174,7 @@ export default function VB6Inputs() {
                 Track Temperature (°F):
                 <input
                   type="number"
-                  value={fixture.env?.trackTemp_F ?? ''}
+                  value={draft.env?.trackTemp_F ?? ''}
                   onChange={(e) => updateField('env.trackTemp_F', parseFloat(e.target.value))}
                 />
               </label>
@@ -136,7 +184,7 @@ export default function VB6Inputs() {
                   type="number"
                   min="1"
                   max="10"
-                  value={fixture.env?.tractionIndex ?? ''}
+                  value={draft.env?.tractionIndex ?? ''}
                   onChange={(e) => updateField('env.tractionIndex', parseInt(e.target.value))}
                 />
               </label>
@@ -153,7 +201,7 @@ export default function VB6Inputs() {
                 Weight (lb):
                 <input
                   type="number"
-                  value={fixture.vehicle?.weight_lb ?? ''}
+                  value={draft.vehicle?.weight_lb ?? ''}
                   onChange={(e) => updateField('vehicle.weight_lb', parseFloat(e.target.value))}
                 />
               </label>
@@ -161,7 +209,7 @@ export default function VB6Inputs() {
                 Static Front Weight (lb):
                 <input
                   type="number"
-                  value={fixture.vehicle?.staticFrontWeight_lb ?? ''}
+                  value={draft.vehicle?.staticFrontWeight_lb ?? ''}
                   onChange={(e) => updateField('vehicle.staticFrontWeight_lb', parseFloat(e.target.value))}
                 />
               </label>
@@ -170,7 +218,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.wheelbase_in ?? ''}
+                  value={draft.vehicle?.wheelbase_in ?? ''}
                   onChange={(e) => updateField('vehicle.wheelbase_in', parseFloat(e.target.value))}
                 />
               </label>
@@ -179,7 +227,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.overhang_in ?? ''}
+                  value={draft.vehicle?.overhang_in ?? ''}
                   onChange={(e) => updateField('vehicle.overhang_in', parseFloat(e.target.value))}
                 />
               </label>
@@ -188,7 +236,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.cgHeight_in ?? ''}
+                  value={draft.vehicle?.cgHeight_in ?? ''}
                   onChange={(e) => updateField('vehicle.cgHeight_in', parseFloat(e.target.value))}
                 />
               </label>
@@ -197,14 +245,14 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.rollout_in ?? ''}
+                  value={draft.vehicle?.rollout_in ?? ''}
                   onChange={(e) => updateField('vehicle.rollout_in', parseFloat(e.target.value))}
                 />
               </label>
               <label>
                 Body Style:
                 <select
-                  value={fixture.vehicle?.bodyStyle ?? 1}
+                  value={draft.vehicle?.bodyStyle ?? 1}
                   onChange={(e) => updateField('vehicle.bodyStyle', parseInt(e.target.value))}
                 >
                   <option value={1}>Car</option>
@@ -220,7 +268,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.tire?.diameter_in ?? ''}
+                  value={draft.vehicle?.tire?.diameter_in ?? ''}
                   onChange={(e) => updateField('vehicle.tire.diameter_in', parseFloat(e.target.value))}
                 />
               </label>
@@ -229,7 +277,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.vehicle?.tire?.width_in ?? ''}
+                  value={draft.vehicle?.tire?.width_in ?? ''}
                   onChange={(e) => updateField('vehicle.tire.width_in', parseFloat(e.target.value))}
                 />
               </label>
@@ -247,7 +295,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.aero?.frontalArea_ft2 ?? ''}
+                  value={draft.aero?.frontalArea_ft2 ?? ''}
                   onChange={(e) => updateField('aero.frontalArea_ft2', parseFloat(e.target.value))}
                 />
               </label>
@@ -256,7 +304,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.aero?.Cd ?? ''}
+                  value={draft.aero?.Cd ?? ''}
                   onChange={(e) => updateField('aero.Cd', parseFloat(e.target.value))}
                 />
               </label>
@@ -265,7 +313,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.aero?.Cl ?? ''}
+                  value={draft.aero?.Cl ?? ''}
                   onChange={(e) => updateField('aero.Cl', parseFloat(e.target.value))}
                 />
               </label>
@@ -283,7 +331,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.01"
-                  value={fixture.drivetrain?.finalDrive ?? ''}
+                  value={draft.drivetrain?.finalDrive ?? ''}
                   onChange={(e) => updateField('drivetrain.finalDrive', parseFloat(e.target.value))}
                 />
               </label>
@@ -292,7 +340,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.drivetrain?.overallEfficiency ?? ''}
+                  value={draft.drivetrain?.overallEfficiency ?? ''}
                   onChange={(e) => updateField('drivetrain.overallEfficiency', parseFloat(e.target.value))}
                 />
               </label>
@@ -303,7 +351,7 @@ export default function VB6Inputs() {
               type="text"
               className="full-width"
               placeholder="2.60, 1.90, 1.50, 1.20, 1.00"
-              value={fixture.drivetrain?.gearRatios?.join(', ') ?? ''}
+              value={draft.drivetrain?.gearRatios?.join(', ') ?? ''}
               onChange={(e) => {
                 const ratios = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
                 updateField('drivetrain.gearRatios', ratios);
@@ -315,7 +363,7 @@ export default function VB6Inputs() {
               type="text"
               className="full-width"
               placeholder="0.970, 0.975, 0.980, 0.985, 0.990"
-              value={fixture.drivetrain?.perGearEff?.join(', ') ?? ''}
+              value={draft.drivetrain?.perGearEff?.join(', ') ?? ''}
               onChange={(e) => {
                 const effs = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
                 updateField('drivetrain.perGearEff', effs);
@@ -327,7 +375,7 @@ export default function VB6Inputs() {
               type="text"
               className="full-width"
               placeholder="9400, 9400, 9400, 9400"
-              value={fixture.drivetrain?.shiftsRPM?.join(', ') ?? ''}
+              value={draft.drivetrain?.shiftsRPM?.join(', ') ?? ''}
               onChange={(e) => {
                 const rpms = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
                 updateField('drivetrain.shiftsRPM', rpms);
@@ -340,7 +388,7 @@ export default function VB6Inputs() {
                 Launch RPM:
                 <input
                   type="number"
-                  value={fixture.drivetrain?.clutch?.launchRPM ?? ''}
+                  value={draft.drivetrain?.clutch?.launchRPM ?? ''}
                   onChange={(e) => updateField('drivetrain.clutch.launchRPM', parseFloat(e.target.value))}
                 />
               </label>
@@ -348,7 +396,7 @@ export default function VB6Inputs() {
                 Slip RPM:
                 <input
                   type="number"
-                  value={fixture.drivetrain?.clutch?.slipRPM ?? ''}
+                  value={draft.drivetrain?.clutch?.slipRPM ?? ''}
                   onChange={(e) => updateField('drivetrain.clutch.slipRPM', parseFloat(e.target.value))}
                 />
               </label>
@@ -357,7 +405,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.drivetrain?.clutch?.slippageFactor ?? ''}
+                  value={draft.drivetrain?.clutch?.slippageFactor ?? ''}
                   onChange={(e) => updateField('drivetrain.clutch.slippageFactor', parseFloat(e.target.value))}
                 />
               </label>
@@ -377,7 +425,7 @@ export default function VB6Inputs() {
                 Stall RPM:
                 <input
                   type="number"
-                  value={fixture.drivetrain?.converter?.stallRPM ?? ''}
+                  value={draft.drivetrain?.converter?.stallRPM ?? ''}
                   onChange={(e) => updateField('drivetrain.converter.stallRPM', parseFloat(e.target.value))}
                 />
               </label>
@@ -386,7 +434,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.01"
-                  value={fixture.drivetrain?.converter?.torqueMult ?? ''}
+                  value={draft.drivetrain?.converter?.torqueMult ?? ''}
                   onChange={(e) => updateField('drivetrain.converter.torqueMult', parseFloat(e.target.value))}
                 />
               </label>
@@ -395,7 +443,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.drivetrain?.converter?.slippageFactor ?? ''}
+                  value={draft.drivetrain?.converter?.slippageFactor ?? ''}
                   onChange={(e) => updateField('drivetrain.converter.slippageFactor', parseFloat(e.target.value))}
                 />
               </label>
@@ -404,7 +452,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.drivetrain?.converter?.diameter_in ?? ''}
+                  value={draft.drivetrain?.converter?.diameter_in ?? ''}
                   onChange={(e) => updateField('drivetrain.converter.diameter_in', parseFloat(e.target.value))}
                 />
               </label>
@@ -430,7 +478,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.01"
-                  value={fixture.pmi?.engine_flywheel_clutch ?? ''}
+                  value={draft.pmi?.engine_flywheel_clutch ?? ''}
                   onChange={(e) => updateField('pmi.engine_flywheel_clutch', parseFloat(e.target.value))}
                 />
               </label>
@@ -439,7 +487,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.pmi?.transmission_driveshaft ?? ''}
+                  value={draft.pmi?.transmission_driveshaft ?? ''}
                   onChange={(e) => updateField('pmi.transmission_driveshaft', parseFloat(e.target.value))}
                 />
               </label>
@@ -448,7 +496,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.1"
-                  value={fixture.pmi?.tires_wheels_ringgear ?? ''}
+                  value={draft.pmi?.tires_wheels_ringgear ?? ''}
                   onChange={(e) => updateField('pmi.tires_wheels_ringgear', parseFloat(e.target.value))}
                 />
               </label>
@@ -466,7 +514,7 @@ export default function VB6Inputs() {
             <textarea
               rows={15}
               className="full-width monospace"
-              value={fixture.engineHP?.map(([rpm, hp]) => `${rpm},${hp}`).join('\n') ?? ''}
+              value={draft.engineHP?.map(([rpm, hp]: [number, number]) => `${rpm},${hp}`).join('\n') ?? ''}
               onChange={(e) => {
                 const lines = e.target.value.split('\n');
                 const curve = lines
@@ -490,7 +538,7 @@ export default function VB6Inputs() {
                 Fuel Type:
                 <input
                   type="text"
-                  value={fixture.fuel?.type ?? ''}
+                  value={draft.fuel?.type ?? ''}
                   onChange={(e) => updateField('fuel.type', e.target.value)}
                 />
               </label>
@@ -499,7 +547,7 @@ export default function VB6Inputs() {
                 <input
                   type="number"
                   step="0.001"
-                  value={fixture.fuel?.hpTorqueMultiplier ?? ''}
+                  value={draft.fuel?.hpTorqueMultiplier ?? ''}
                   onChange={(e) => updateField('fuel.hpTorqueMultiplier', parseFloat(e.target.value))}
                 />
               </label>

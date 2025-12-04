@@ -1,14 +1,14 @@
 /**
- * Legacy Parity Runner Panel
+ * Parity Runner Panel
  * 
- * Run legacy benchmark tests and compare against Quarter Pro/Jr targets.
- * Validates RSACLASSIC model against VB6 printout benchmarks.
+ * Run benchmark tests and compare VB6Exact against Quarter Pro/Jr targets.
+ * Validates simulation accuracy against VB6 printout benchmarks.
  */
 
 import { useState } from 'react';
 import { LEGACY_BENCHMARKS, validateAgainstBenchmark, type RaceLength } from '../../domain/physics/fixtures/benchmarks';
 import { BENCHMARK_CONFIGS, validateBenchmarkConfig } from '../../domain/physics/fixtures/benchmark-configs';
-import { RSACLASSIC } from '../../domain/physics/models/rsaclassic';
+import { VB6ExactModel } from '../../domain/physics/models/vb6Exact';
 import type { SimInputs, SimResult, ExtendedVehicle } from '../../domain/physics';
 
 interface TestResult {
@@ -143,8 +143,8 @@ export default function ParityRunner() {
             // Build inputs
             const inputs = buildSimInputs(benchmarkName, raceLength);
             
-            // Run simulation
-            const result: SimResult = RSACLASSIC.simulate(inputs);
+            // Run simulation with VB6Exact
+            const result: SimResult = VB6ExactModel.simulate(inputs);
             
             // Validate against benchmark
             const validation = validateAgainstBenchmark(
@@ -260,9 +260,9 @@ export default function ParityRunner() {
   return (
     <div style={{ padding: '2rem', height: '100%', overflow: 'auto' }}>
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Legacy Parity Runner</h2>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Parity Runner</h2>
         <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem', margin: 0 }}>
-          Run legacy benchmark tests and compare RSACLASSIC against Quarter Pro/Jr targets.
+          Run benchmark tests and compare VB6Exact against Quarter Pro/Jr targets.
         </p>
       </div>
 

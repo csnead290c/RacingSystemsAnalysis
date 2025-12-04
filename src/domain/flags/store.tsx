@@ -3,11 +3,24 @@
  * 
  * Centralized feature flag management with localStorage persistence.
  * Flags control development features, diagnostics, and experimental modes.
+ * 
+ * NOTE: User level is now managed by the consolidated system in:
+ * src/shared/state/userLevel.ts
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { 
+  type UserLevel, 
+  USER_LEVELS,
+  USER_LEVEL_DISPLAY,
+  hasAccess,
+  hasProAccess,
+  hasAdminAccess,
+} from '../../shared/state/userLevel';
 
-export type UserLevel = 'jr' | 'pro' | 'admin';
+// Re-export for convenience
+export type { UserLevel };
+export { USER_LEVELS, USER_LEVEL_DISPLAY, hasAccess, hasProAccess, hasAdminAccess };
 
 export interface FeatureFlags {
   // User Level: Impersonate user level for testing
@@ -37,7 +50,7 @@ interface FlagsStore extends FeatureFlags {
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
-  userLevel: 'pro',
+  userLevel: 'quarterPro',
   vb6StrictMode: false,
   vb6Strict: true, // Default ON for VB6 parity
   showDiagnostics: false,

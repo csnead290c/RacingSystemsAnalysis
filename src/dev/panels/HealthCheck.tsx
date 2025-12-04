@@ -57,8 +57,8 @@ export default function HealthCheck() {
     setError(null);
     setSmokeResult(null);
     try {
-      // Run a quick simulation
-      const result = await simulate('RSACLASSIC', {
+      // Run a quick simulation with VB6Exact
+      const result = await simulate('VB6Exact', {
         ...fixture,
         raceLengthFt: 1320,
       });

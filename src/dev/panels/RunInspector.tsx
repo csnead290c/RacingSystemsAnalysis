@@ -8,17 +8,15 @@
 import { useState, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVb6Fixture } from '../../shared/state/vb6FixtureStore';
-import { useFlag, useFlagsStore, type UserLevel } from '../../domain/flags/store.tsx';
+import { useFlag, useFlagsStore, USER_LEVELS } from '../../domain/flags/store.tsx';
 import { useVehicleStore } from '../../state/vehicleStore';
 import { validateVB6Fixture } from '../validation/vb6Fixture';
 import { toSimInputFromVB6 } from '../vb6/fixtureAdapter';
 import { fromVehicleToVB6Fixture, validateAdapterOutput } from '../vb6/fromVehicle';
 import { simulate } from '../../workerBridge';
 import { VehiclePicker } from '../components/VehiclePicker';
-import type { PhysicsModelId, SimResult } from '../../domain/physics';
+import type { SimResult } from '../../domain/physics';
 import type { RaceLength } from '../../domain/config/raceLengths';
-
-const USER_LEVELS: UserLevel[] = ['jr', 'pro', 'admin'];
 
 /**
  * Local guard to ensure engineParams.powerHP exists (idempotent with worker).
@@ -68,7 +66,7 @@ export default function RunInspector() {
   const { userLevel, setUserLevel } = flagsStore;
   const { activeVehicle } = useVehicleStore();
   
-  const [selectedModel, setSelectedModel] = useState<PhysicsModelId>('RSACLASSIC');
+  // Always use VB6Exact model
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +142,7 @@ export default function RunInspector() {
       // For now, we'll just run the simulation and get the result
       // In the future, we need to hook into the logger or pass a callback
       
-      const res = await simulate(selectedModel, input);
+      const res = await simulate('VB6Exact', input);
       setResult(res);
       
       // Parse step data from console if available
@@ -204,7 +202,7 @@ export default function RunInspector() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `run-inspector-${selectedModel}-${raceLength}-${Date.now()}.csv`;
+    a.download = `run-inspector-VB6Exact-${raceLength}-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -387,30 +385,7 @@ export default function RunInspector() {
           Controls
         </h3>
         
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
-          {/* Model Selection */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-              Select Model
-            </label>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value as PhysicsModelId)}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                fontSize: '0.875rem',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-bg)',
-              }}
-            >
-              <option value="SimpleV1">SimpleV1</option>
-              <option value="RSACLASSIC">RSACLASSIC</option>
-              <option value="Blend">Blend</option>
-            </select>
-          </div>
-
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
           {/* Distance Selection */}
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>

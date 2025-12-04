@@ -8,8 +8,8 @@ import './shared/ui/tokens.css';
 import './shared/ui/atoms.css';
 import './shared/ui/layout.css';
 
-// Register service worker for PWA functionality
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA functionality (production only)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

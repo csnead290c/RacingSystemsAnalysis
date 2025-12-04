@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import EnvironmentForm from '../shared/components/EnvironmentForm';
@@ -12,6 +12,7 @@ import { storage } from '../state/storage';
 import { hasFeature, getEntitlements, CURRENT_TIER } from '../domain/config/entitlements';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import { parseCsv, mapWeatherRow, csvToObjects } from '../shared/utils/csvImport';
+import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
@@ -21,10 +22,27 @@ function Log() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Vehicles list
+  const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
+  
   // Section A: Run Context
-  const [vehicleId, setVehicleId] = useState('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
   const [env, setEnv] = useState<Env>(DEFAULT_ENV);
+  
+  // Load vehicles on mount
+  useEffect(() => {
+    loadVehicles().then(v => {
+      setVehicles(v);
+      if (v.length > 0) {
+        setSelectedVehicleId(v[0].id);
+        setRaceLength(v[0].defaultRaceLength);
+      }
+    });
+  }, []);
+  
+  // Get selected vehicle object
+  const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId) ?? null;
   const [baselineRequest, setBaselineRequest] = useState<PredictRequest | null>(null);
   const [baselineResult, setBaselineResult] = useState<PredictResult | null>(null);
   const [baselineLoading, setBaselineLoading] = useState(false);
@@ -84,25 +102,16 @@ function Log() {
     setFeatures(null);
     setCompletionResult(null);
 
-    if (!vehicleId.trim()) {
-      setBaselineError('Vehicle ID is required');
+    if (!selectedVehicle) {
+      setBaselineError('Please select a vehicle');
       return;
     }
 
     setBaselineLoading(true);
 
     try {
-      // Dummy vehicle for baseline calculation
-      const vehicle = {
-        id: vehicleId,
-        name: vehicleId,
-        weightLb: 3000,
-        tireDiaIn: 28,
-        rearGear: 3.73,
-        rolloutIn: 12,
-        powerHP: 400,
-        defaultRaceLength: raceLength,
-      };
+      // Use the selected vehicle for baseline calculation
+      const vehicle = selectedVehicle;
 
       const req: PredictRequest = { vehicle, env, raceLength };
       const result = await calculate(req);
@@ -187,16 +196,16 @@ function Log() {
       if (features) {
         const observedError = actualETValue - baselineResult.baseET_s;
         
-        const m0 = getModel(vehicleId) ?? createModel(features.length);
+        const m0 = getModel(selectedVehicleId) ?? createModel(features.length);
         const m1 = update(m0, features, observedError);
-        saveModel(vehicleId, m1);
+        saveModel(selectedVehicleId, m1);
       }
 
       // Build and save run record
       const run: RunRecordV1 = {
         id: crypto.randomUUID(),
         createdAt: Date.now(),
-        vehicleId,
+        vehicleId: selectedVehicleId,
         raceLength,
         env,
         prediction: {
@@ -251,17 +260,37 @@ function Log() {
 
         <div className="grid grid-2 gap-4 mb-4">
           <div>
-            <label className="label" htmlFor="vehicleId">
-              Vehicle ID *
+            <label className="label" htmlFor="vehicle">
+              Select Vehicle *
             </label>
-            <input
-              id="vehicleId"
-              type="text"
-              className="input"
-              value={vehicleId}
-              onChange={(e) => setVehicleId(e.target.value)}
-              placeholder="My Car"
-            />
+            {vehicles.length === 0 ? (
+              <div style={{ padding: 'var(--space-3)', color: 'var(--color-muted)' }}>
+                No vehicles yet. <Link to="/vehicles" style={{ color: 'var(--color-primary)' }}>Create one first</Link>
+              </div>
+            ) : (
+              <select
+                id="vehicle"
+                className="input"
+                value={selectedVehicleId}
+                onChange={(e) => {
+                  setSelectedVehicleId(e.target.value);
+                  const v = vehicles.find(v => v.id === e.target.value);
+                  if (v) setRaceLength(v.defaultRaceLength);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedVehicle && (
+              <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}>
+                {selectedVehicle.weightLb} lb • {selectedVehicle.powerHP} HP • {selectedVehicle.tireDiaIn}" tire
+              </div>
+            )}
           </div>
 
           <div>

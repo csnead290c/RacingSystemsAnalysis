@@ -494,13 +494,13 @@ export default function QuickPaste() {
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>
-              PMI Engine (HP)
+              PMI Engine (slug-ft²)
             </label>
             <input
               type="text"
               value={pmiEngine}
               onChange={(e) => setPmiEngine(e.target.value)}
-              placeholder="e.g., 125.5"
+              placeholder="e.g., 3.42"
               style={{
                 width: '100%',
                 padding: '0.5rem',
@@ -514,13 +514,13 @@ export default function QuickPaste() {
 
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>
-              PMI Chassis (HP)
+              PMI Chassis (slug-ft²)
             </label>
             <input
               type="text"
               value={pmiChassis}
               onChange={(e) => setPmiChassis(e.target.value)}
-              placeholder="e.g., 45.2"
+              placeholder="e.g., 50.8"
               style={{
                 width: '100%',
                 padding: '0.5rem',
