@@ -191,13 +191,14 @@ function DataLoggerChart({
   const rightAxesCount = ['speed', 'accel', 'hp'].filter(a => activeYAxes.has(a)).length;
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Controls row */}
       <div style={{ 
         display: 'flex', 
         flexDirection: 'column',
-        gap: 'var(--space-3)',
-        marginBottom: 'var(--space-4)',
+        gap: 'var(--space-2)',
+        marginBottom: 'var(--space-2)',
+        flexShrink: 0,
       }}>
         {/* X-axis mode toggle - segmented control style */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
@@ -289,8 +290,9 @@ function DataLoggerChart({
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={350}>
-        <ComposedChart data={chartData} margin={{ top: 20, right: 20 + rightAxesCount * 45, left: 10, bottom: 20 }}>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={chartData} margin={{ top: 10, right: 20 + rightAxesCount * 45, left: 10, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
           
           {/* X-Axis - use 'number' type for proper scaling */}
@@ -419,7 +421,8 @@ function DataLoggerChart({
             <Line type="stepAfter" dataKey="gear" stroke={SERIES_CONFIG.gear.color} strokeWidth={2} dot={false} name={SERIES_CONFIG.gear.name} yAxisId="gear" />
           )}
         </ComposedChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
 
       {/* Compact legend below chart */}
       <div style={{ 
