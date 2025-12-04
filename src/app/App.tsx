@@ -39,8 +39,8 @@ function Navigation() {
       <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))}>
         Vehicles
       </Link>
-      <Link to="/predict" style={navLinkStyle(isActive('/predict'))}>
-        Predict
+      <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))}>
+        ET Sim
       </Link>
       <Link to="/log" style={navLinkStyle(isActive('/log'))}>
         Log
@@ -101,7 +101,8 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/vehicles" element={<Vehicles />} />
-            <Route path="/predict" element={<Predict />} />
+            <Route path="/et-sim" element={<Predict />} />
+            <Route path="/predict" element={<Predict />} /> {/* Legacy redirect */}
             <Route path="/log" element={<Log />} />
             <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />

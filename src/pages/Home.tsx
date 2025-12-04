@@ -34,7 +34,7 @@ function Home() {
       return;
     }
 
-    navigate('/predict', {
+    navigate('/et-sim', {
       state: {
         vehicle: selectedVehicle,
         raceLength,
@@ -53,7 +53,7 @@ function Home() {
 
   if (loading) {
     return (
-      <Page title="Quarter-Mile Prediction">
+      <Page title="Racing Systems Analysis">
         <div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>
           Loading...
         </div>
@@ -63,7 +63,7 @@ function Home() {
 
   if (vehicles.length === 0) {
     return (
-      <Page title="Quarter-Mile Prediction">
+      <Page title="Racing Systems Analysis">
         <div className="card text-center" style={{ maxWidth: '600px', margin: '0 auto' }}>
           <h2 style={{ fontSize: '1.25rem', marginBottom: 'var(--space-4)', color: 'var(--color-text)' }}>
             No Vehicles Yet
@@ -82,7 +82,7 @@ function Home() {
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
 
   return (
-    <Page title="Quarter-Mile Prediction">
+    <Page title="Racing Systems Analysis">
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         <div className="card mb-6">
           <div className="mb-4">
@@ -171,7 +171,7 @@ function Home() {
         </div>
 
         <button onClick={handlePredict} className="btn btn-full">
-          Predict ET
+          Run ET Sim
         </button>
       </div>
 
@@ -180,7 +180,7 @@ function Home() {
           💡 How It Works
         </h3>
         <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: 'var(--space-2)' }}>
-          <strong>Predict</strong> is baseline-only — it shows pure physics predictions based on vehicle specs and weather. 
+          <strong>ET Sim</strong> is baseline-only — it shows pure physics predictions based on vehicle specs and weather. 
           No learning, no completion, just instant baseline ET and MPH.
         </p>
         <p className="text-muted" style={{ fontSize: '0.9rem', margin: 0 }}>
