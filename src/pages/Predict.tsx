@@ -339,14 +339,14 @@ function Predict() {
         .et-sim-top-row {
           display: flex;
           gap: var(--space-2);
-          flex: 1;
-          min-height: 250px;
+          flex: 7;
+          min-height: 200px;
         }
         .et-sim-bottom-row {
           display: flex;
           gap: var(--space-3);
-          height: 120px;
-          flex-shrink: 0;
+          flex: 3;
+          min-height: 120px;
         }
         .et-sim-chart-area {
           flex: 1;
