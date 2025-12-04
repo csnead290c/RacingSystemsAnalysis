@@ -329,6 +329,7 @@ function Predict() {
   return (
     <Page
       title="ET Simulation"
+      wide
       actions={
         <Link to="/" className="link" style={{ fontSize: '0.9rem' }}>
           ← Back to Home
