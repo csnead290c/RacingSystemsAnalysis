@@ -292,7 +292,7 @@ function DataLoggerChart({
       {/* Chart */}
       <div style={{ flex: 1, minHeight: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 20 + rightAxesCount * 45, left: 10, bottom: 20 }}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 5 + rightAxesCount * 40, left: 5, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
           
           {/* X-Axis - use 'number' type for proper scaling */}

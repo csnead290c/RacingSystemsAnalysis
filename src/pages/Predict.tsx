@@ -384,13 +384,6 @@ function Predict() {
           font-weight: bold;
           text-align: right;
         }
-        .et-slip-final {
-          border-top: 1px solid #333;
-          margin-top: auto;
-          padding-top: 6px;
-          font-size: 14px;
-          font-weight: bold;
-        }
         .et-slip-vehicle {
           border-top: 1px dashed #666;
           margin-top: 6px;
@@ -481,16 +474,14 @@ function Predict() {
               </>
             )}
             
-            {/* Final ET/MPH */}
-            <div className="et-slip-final">
-              <div className="et-slip-row">
-                <span>ET</span>
-                <span>{baseET.toFixed(3)}</span>
-              </div>
-              <div className="et-slip-row">
-                <span>MPH</span>
-                <span>{baseMPH.toFixed(2)}</span>
-              </div>
+            {/* Final ET/MPH - inline with splits */}
+            <div className="et-slip-row" style={{ marginTop: '4px', borderTop: '1px solid #999', paddingTop: '4px' }}>
+              <span className="et-slip-label">ET</span>
+              <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseET.toFixed(3)}</span>
+            </div>
+            <div className="et-slip-row">
+              <span className="et-slip-label">MPH</span>
+              <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(2)}</span>
             </div>
             
             {/* Vehicle info at bottom */}
@@ -520,9 +511,9 @@ function Predict() {
         {/* BOTTOM ROW: RPM Histogram + Environment + Race Length */}
         <div className="et-sim-bottom-row">
           {/* RPM Histogram */}
-          <div className="card" style={{ flex: 1, padding: '10px 14px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '4px' }}>RPM Distribution</div>
-            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.75rem' }}>Loading...</div>}>
+          <div className="card" style={{ flex: 2, padding: '12px 16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '6px' }}>RPM Distribution</div>
+            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.8rem' }}>Loading...</div>}>
               {simResult?.traces && simResult.traces.length > 0 && (
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <RPMHistogram data={simResult.traces as any} compact />
@@ -532,20 +523,20 @@ function Predict() {
           </div>
 
           {/* Environment */}
-          <div className="card" style={{ flexShrink: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontWeight: '600', marginBottom: '6px', color: 'var(--color-text)', fontSize: '0.75rem' }}>Environment</div>
+          <div className="card" style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '400px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Environment</div>
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
 
           {/* Race Length */}
-          <div className="card" style={{ width: '120px', flexShrink: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.75rem' }}>Race Length</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <div className="card" style={{ width: '130px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Race Length</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                 <input type="radio" name="raceLength" value="EIGHTH" checked={raceLength === 'EIGHTH'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
                 <span>1/8 Mile</span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                 <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
                 <span>1/4 Mile</span>
               </label>
