@@ -82,7 +82,6 @@ const finalTrace = traces[traces.length - 1] as any;
 const finalTime = finalTrace?.t_s ?? 0;
 const finalSpeed = finalTrace?.v_mph ?? 0;
 const finalRPM = finalTrace?.rpm ?? 0;
-const finalGear = finalTrace?.gear ?? 0;
 
 // Print results
 console.log('\n' + '='.repeat(70));

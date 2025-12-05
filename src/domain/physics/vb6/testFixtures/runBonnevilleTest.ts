@@ -105,7 +105,6 @@ async function runTest() {
     // Find closest trace point by time
     const trace = result.traces?.find((t: any) => Math.abs(t.t_s - checkpoint.time) < 0.5);
     if (trace) {
-      const distMi = trace.s_ft / 5280;
       const mphError = trace.v_mph - checkpoint.mph;
       console.log(
         `${checkpoint.time.toFixed(2).padStart(6)}    ` +
