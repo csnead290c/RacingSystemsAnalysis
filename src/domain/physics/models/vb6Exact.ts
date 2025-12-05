@@ -283,6 +283,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const raceLength = (input as any).raceLength ?? 'QUARTER';
   const raceLengthFt = (input as any).raceLengthFt ?? getRaceLengthFt(raceLength);
   
+  // Determine if this is a land speed run (uses different constants)
+  // VB6: TIMESLIP.FRM:550-570 - different constants for ISBVPRO
+  const isLandSpeed = RACE_LENGTH_INFO[raceLength as RaceLength]?.category === 'landspeed';
+  
   // VB6 Rollout/Overhang timing geometry:
   // 
   // STAGING: Front tire sits on stage beam, nose is ahead by overhang distance
@@ -590,6 +594,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     TrackTempEffect: trackTempEffect,
     WindSpeed_mph: env.windMph ?? 0,
     WindAngle_deg: env.windAngleDeg ?? 0,
+    isLandSpeed,  // Use Bonneville Pro constants for land speed runs
   };
   
   // ========================================================================
@@ -618,7 +623,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Run simulation
   // ========================================================================
   // For land speed runs, allow more steps and time
-  const isLandSpeed = RACE_LENGTH_INFO[raceLength as RaceLength]?.category === 'landspeed';
   const MAX_STEPS = isLandSpeed ? 50000 : 5000;
   const MAX_TIME_S = isLandSpeed ? 300 : 30;  // 5 minutes for land speed
   

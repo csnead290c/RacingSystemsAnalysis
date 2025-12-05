@@ -47,6 +47,32 @@ export const CMU = 0.025;
 /** CMUK: Distance-dependent CMU reduction for Quarter Jr/Pro - TIMESLIP.FRM:553 */
 export const CMUK = 0.01;
 
+// ===== Bonneville Pro Constants (ISBVPRO) - TIMESLIP.FRM:560-569 =====
+
+/** CMU_BV: Rolling resistance coefficient for Bonneville Pro - TIMESLIP.FRM:562 */
+export const CMU_BV = 0.03;
+
+/** CMUK_BV: Distance-dependent CMU reduction for Bonneville Pro (none) - TIMESLIP.FRM:563 */
+export const CMUK_BV = 0;
+
+/** AX_BV: Traction coefficient multiplier for Bonneville Pro - TIMESLIP.FRM:561 */
+export const AX_BV = 9.7;
+
+/** FRCT_BV: Driveline friction coefficient for Bonneville Pro - TIMESLIP.FRM:569 */
+export const FRCT_BV = 1.01;
+
+/** KP21_BV: Engine PMI deceleration factor for Bonneville Pro (none) - TIMESLIP.FRM:567 */
+export const KP21_BV = 0;
+
+/** KP22_BV: Engine PMI deceleration factor for Bonneville Pro (none) - TIMESLIP.FRM:568 */
+export const KP22_BV = 0;
+
+/** KV_BV: Velocity tolerance for Bonneville Pro - TIMESLIP.FRM:565 */
+export const KV_BV = 0.05 / Z5;
+
+/** K7_BV: Steps per time print increment for Bonneville Pro - TIMESLIP.FRM:566 */
+export const K7_BV = 5.5;
+
 /** Time tolerance (seconds) - TIMESLIP.FRM:554 */
 export const TimeTol = 0.002;
 

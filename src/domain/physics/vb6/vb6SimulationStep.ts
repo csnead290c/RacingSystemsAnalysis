@@ -26,7 +26,13 @@
  * 9. After convergence: Dist(L) = ((2*PQWT*dt + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
  */
 
-import { gc, PI, JMin, JMax, AMin, CMU, CMUK, K6, K61, KP21, KP22, FRCT, Z5, AX } from './constants';
+import { 
+  gc, PI, JMin, JMax, AMin, K6, K61, Z5,
+  // Quarter Pro constants
+  CMU, CMUK, KP21, KP22, FRCT, AX,
+  // Bonneville Pro constants
+  CMU_BV, CMUK_BV, KP21_BV, KP22_BV, FRCT_BV, AX_BV
+} from './constants';
 
 // ============================================================================
 // Types
@@ -121,6 +127,7 @@ export interface VB6EnvParams {
   TrackTempEffect: number;
   WindSpeed_mph: number;
   WindAngle_deg: number;
+  isLandSpeed?: boolean;    // True for Bonneville Pro mode (different constants)
 }
 
 /**
@@ -227,10 +234,11 @@ export function calcCAXI(TractionIndex: number, TrackTempEffect: number): number
 /**
  * Get AX (traction coefficient multiplier)
  * VB6: TIMESLIP.FRM:551 - Const AX = 10.8 for Quarter Jr/Pro
+ * VB6: TIMESLIP.FRM:561 - Const AX = 9.7 for Bonneville Pro
  * This is a constant, not calculated from temperature
  */
-export function calcAX(): number {
-  return AX; // 10.8 for Quarter Jr/Pro
+export function calcAX(isLandSpeed?: boolean): number {
+  return isLandSpeed ? AX_BV : AX;
 }
 
 // ============================================================================
@@ -468,8 +476,14 @@ export function vb6SimulationStep(
   // Down force (weight + aero lift)
   const DownForce = vehicle.Weight_lbf + vehicle.LiftCoef * RefArea2 * q;
   
-  // Rolling resistance coefficient (decreases with distance)
-  const cmu1 = CMU - (state.Dist0_ft / 1320) * CMUK;
+  // Select constants based on land speed mode
+  // VB6: TIMESLIP.FRM:550-570 - different constants for ISBVPRO
+  const cmu_const = env.isLandSpeed ? CMU_BV : CMU;
+  const cmuk_const = env.isLandSpeed ? CMUK_BV : CMUK;
+  const frct_const = env.isLandSpeed ? FRCT_BV : FRCT;
+  
+  // Rolling resistance coefficient (decreases with distance for QPro, constant for BVPro)
+  const cmu1 = cmu_const - (state.Dist0_ft / 1320) * cmuk_const;
   
   // Total drag force
   const DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel_L) + vehicle.DragCoef * RefArea2 * q;
@@ -479,7 +493,7 @@ export function vb6SimulationStep(
   // TIMESLIP.FRM:1196-1211 - Calculate dynamic weight transfer
   // ========================================================================
   const TireRadIn = 12 * state.TireCirFt / (2 * PI);
-  const deltaFWT = (state.Ags0_g * vehicle.Weight_lbf * ((vehicle.YCG_in - TireRadIn) + (FRCT / vehicle.Efficiency) * TireRadIn) + DragForce * vehicle.YCG_in) / vehicle.Wheelbase_in;
+  const deltaFWT = (state.Ags0_g * vehicle.Weight_lbf * ((vehicle.YCG_in - TireRadIn) + (frct_const / vehicle.Efficiency) * TireRadIn) + DragForce * vehicle.YCG_in) / vehicle.Wheelbase_in;
   let DynamicFWT = vehicle.StaticFWt_lbf - deltaFWT;
   
   // Wheelie bar
@@ -497,7 +511,7 @@ export function vb6SimulationStep(
   // TIMESLIP.FRM:1213-1216 - Calculate AMax (traction limit)
   // ========================================================================
   const CAXI = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-  const AX_val = calcAX();
+  const AX_val = calcAX(env.isLandSpeed);
   let CRTF = CAXI * AX_val * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(DynamicRWT / 1900, 2.15));
   if (vehicle.BodyStyle === 8) CRTF = 0.5 * CRTF;
   
@@ -544,12 +558,17 @@ export function vb6SimulationStep(
   // ========================================================================
   // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
   // ========================================================================
+  // Select KP21/KP22 based on land speed mode
+  // VB6: TIMESLIP.FRM:557-558 (QPro) vs 567-568 (BVPro)
+  const kp21_const = env.isLandSpeed ? KP21_BV : KP21;
+  const kp22_const = env.isLandSpeed ? KP22_BV : KP22;
+  
   let EngAccHP = vehicle.EnginePMI * EngRPM_L * (EngRPM_L - state.RPM0);
   if (EngAccHP < 0) {
     if (vehicle.isClutch) {
-      EngAccHP = KP21 * EngAccHP;
+      EngAccHP = kp21_const * EngAccHP;
     } else {
-      EngAccHP = KP22 * EngAccHP;
+      EngAccHP = kp22_const * EngAccHP;
     }
   }
   
@@ -725,9 +744,10 @@ export function vb6InitState(
   // WindFPS = Sqr(Vel(L)^2 + ...) = WindSpeed/Z5 at Vel=0
   // q = Sgn(WindFPS) * rho * Abs(WindFPS)^2 / (2*gc)
   // DragForce = CMU * Weight + DragCoef * RefArea * q
+  const cmu_launch = env.isLandSpeed ? CMU_BV : CMU;
   const WindFPS_launch = env.WindSpeed_mph / Z5;
   const q_launch = Math.sign(WindFPS_launch) * env.rho * Math.pow(Math.abs(WindFPS_launch), 2) / (2 * gc);
-  const DragForce_launch = CMU * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch;
+  const DragForce_launch = cmu_launch * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch;
   
   // VB6: TIMESLIP.FRM:872 - Initial tire slip
   // TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
@@ -752,7 +772,7 @@ export function vb6InitState(
   
   // CAXI = (1 - (TractionIndex - 1) * 0.01) / (TrackTempEffect ^ 0.25)
   const CAXI_init = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-  const AX_init = calcAX();
+  const AX_init = calcAX(env.isLandSpeed);
   
   // CRTF = CAXI * AX * TireDia * (TireWidth + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ^ 2.15)
   let CRTF_init = CAXI_init * AX_init * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * 

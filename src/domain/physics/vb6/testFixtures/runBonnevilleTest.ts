@@ -33,9 +33,21 @@ async function runTest() {
   console.log(`  Gears: ${simInputs.vehicle.gearRatios.join(', ')}`);
   console.log(`  Elevation: ${simInputs.env.elevation} ft`);
   console.log(`  Race Length: ${simInputs.raceLength} (${simInputs.raceLengthFt} ft)`);
-  console.log(`  Air Density: ${airResult.rho_slug_per_ft3.toFixed(6)} slug/ft³`);
+  const rho_lbm = airResult.rho_slug_per_ft3 * 32.174;
+  console.log(`  Air Density: ${airResult.rho_slug_per_ft3.toFixed(6)} slug/ft³ = ${rho_lbm.toFixed(6)} lbm/ft³`);
   console.log(`  HP Correction (hpc): ${airResult.hpc.toFixed(4)}`);
   console.log(`  Pressure Ratio (delta): ${airResult.delta.toFixed(4)}`);
+  
+  // Calculate expected terminal velocity
+  // Terminal velocity: Power = Drag
+  // HP * 550 = 0.5 * rho * v³ * Cd * A / gc
+  // v³ = HP * 550 * 2 * gc / (rho * Cd * A)
+  const effectiveHP = 1200 / airResult.hpc;
+  const v_cubed = effectiveHP * 550 * 2 * 32.174 / (rho_lbm * 0.29 * 19.5);
+  const v_fps = Math.pow(v_cubed, 1/3);
+  const v_mph = v_fps * 3600 / 5280;
+  console.log(`  Effective HP at altitude: ${effectiveHP.toFixed(0)} HP`);
+  console.log(`  Theoretical terminal velocity: ${v_mph.toFixed(1)} MPH (simplified calc)`);
   console.log(`  Frontal Area: ${simInputs.vehicle.frontalAreaFt2} ft²`);
   console.log(`  Drag Coef: ${simInputs.vehicle.cd}`);
   console.log(`  Lift Coef: ${simInputs.vehicle.liftCoeff}`);
