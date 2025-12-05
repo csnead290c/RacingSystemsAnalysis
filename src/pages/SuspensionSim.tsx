@@ -20,57 +20,67 @@ import {
   type HoleCodeDetails,
 } from '../domain/physics/models/fourLink';
 
-// Default input values based on FOURLINK manual
+// Default input values based on FOURLINK BaseCase.4LB test case
 const defaultInput: FourLinkInput = {
-  note: 'Sample Four Link Setup',
-  estimated60ft: 1.3,
-  maxAcceleration: 1.5,
-  tireRollout: 96, // ~30.5" diameter
+  note: 'BaseCase.4LB - sample case for FOURLINK',
+  estimated60ft: 1.12,
+  maxAcceleration: 2.26,
+  tireRollout: 102.0,
   
-  shockMountLocation: 0,
-  rearSpringRate: 150,
-  shockRateCompression: 60,
-  shockRateExtension: 120,
-  wheelieBarLength: 48,
+  shockMountLocation: -5.0,
+  rearSpringRate: 85,
+  shockRateCompression: 66,
+  shockRateExtension: 209,
+  wheelieBarLength: 68.0,
   
+  // Upper bar: 5 holes each end (from VB6 test case image 2)
   upperBar: {
     axleEnd: [
-      { x: -4, y: 14 },
-      { x: -4, y: 13 },
-      { x: -4, y: 12 },
+      { x: 1.0, y: 20.0 },
+      { x: 1.0, y: 19.0 },
+      { x: 1.0, y: 18.0 },
+      { x: 1.0, y: 17.0 },
+      { x: 1.0, y: 16.0 },
     ],
     chassisEnd: [
-      { x: 24, y: 16 },
-      { x: 24, y: 15 },
-      { x: 24, y: 14 },
+      { x: 20.1, y: 14.25 },
+      { x: 20.1, y: 13.25 },
+      { x: 20.1, y: 12.25 },
+      { x: 20.1, y: 11.25 },
+      { x: 20.1, y: 10.25 },
     ],
   },
+  // Lower bar: 5 holes each end
   lowerBar: {
     axleEnd: [
-      { x: 2, y: 10 },
-      { x: 2, y: 9 },
-      { x: 2, y: 8 },
+      { x: 0.5, y: 9.0 },
+      { x: 0.5, y: 8.0 },
+      { x: 0.5, y: 7.0 },
+      { x: 0.5, y: 6.0 },
+      { x: 0.5, y: 5.0 },
     ],
     chassisEnd: [
-      { x: 30, y: 10 },
-      { x: 30, y: 9 },
-      { x: 30, y: 8 },
+      { x: 20.5, y: 9.0 },
+      { x: 20.5, y: 8.0 },
+      { x: 20.5, y: 7.0 },
+      { x: 20.5, y: 6.0 },
+      { x: 20.5, y: 5.0 },
     ],
   },
-  holeCode: '1111',
+  holeCode: '2123',  // Upper: hole 2 axle, hole 1 chassis; Lower: hole 2 axle, hole 3 chassis
   
   axleHeightAdj: 0,
   chassisHeightAdj: 0,
   pinionAngleAdj: 0,
   
-  frontWeight: 900,
-  rearWeight: 2100,
+  frontWeight: 1105,
+  rearWeight: 1075,
   
-  wheelbase: 110,
-  verticalCG: 18,
-  frontStrutLift: 2,
-  frontTireLift: 4,
-  rearAxleWeight: 375,
+  wheelbase: 105.0,
+  verticalCG: 17.0,
+  frontStrutLift: 2.0,
+  frontTireLift: 1.0,
+  rearAxleWeight: 350,
 };
 
 function SuspensionSim() {
