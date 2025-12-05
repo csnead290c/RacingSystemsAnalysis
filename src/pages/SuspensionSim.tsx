@@ -11,6 +11,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import Page from '../shared/components/Page';
+import FourLinkDiagram from '../shared/components/charts/FourLinkDiagram';
 import {
   analyzeFourLink,
   type FourLinkInput,
@@ -161,9 +162,40 @@ function SuspensionSim() {
           flex: 1;
           min-width: 0;
         }
-        .susp-sim-dynamic {
-          height: 200px;
+        .susp-sim-bottom {
+          display: flex;
+          gap: var(--space-3);
+          height: 220px;
           flex-shrink: 0;
+        }
+        .susp-sim-chart {
+          flex: 1;
+          min-width: 0;
+        }
+        .susp-sim-table {
+          width: 380px;
+          flex-shrink: 0;
+          overflow-y: auto;
+        }
+        .dynamic-table {
+          width: 100%;
+          font-size: 0.7rem;
+          border-collapse: collapse;
+        }
+        .dynamic-table th, .dynamic-table td {
+          padding: 2px 4px;
+          text-align: right;
+          border-bottom: 1px solid var(--color-border);
+        }
+        .dynamic-table th {
+          position: sticky;
+          top: 0;
+          background: var(--color-surface);
+          font-weight: 600;
+          color: var(--color-muted);
+        }
+        .dynamic-table td:first-child, .dynamic-table th:first-child {
+          text-align: left;
         }
         .input-row {
           display: flex;
@@ -545,98 +577,127 @@ function SuspensionSim() {
 
             {/* Geometry Diagram / Graph Area */}
             <div className="susp-sim-graph card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column' }}>
-              <div style={sectionTitleStyle}>Four Link Geometry</div>
-              <div style={{ 
-                flex: 1, 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                backgroundColor: 'var(--color-bg-secondary)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--color-muted)',
-                fontSize: '0.9rem'
-              }}>
-                {/* TODO: SVG geometry diagram showing link bars, instant center, etc. */}
-                Geometry visualization coming soon...
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={sectionTitleStyle}>Four Link Geometry</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>
+                  Upper: {result.upperBar.length.toFixed(1)}" @ {result.upperBar.angle.toFixed(1)}° | 
+                  Lower: {result.lowerBar.length.toFixed(1)}" @ {result.lowerBar.angle.toFixed(1)}°
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                <FourLinkDiagram
+                  upperBar={result.upperBar}
+                  lowerBar={result.lowerBar}
+                  instantCenter={{ x: result.instantCenter.x, y: result.instantCenter.y }}
+                  verticalCG={input.verticalCG}
+                  horizontalCG={horizontalCG}
+                  tireRadius={input.tireRollout > 60 ? input.tireRollout / Math.PI / 2 : input.tireRollout / 2}
+                  wheelbase={input.wheelbase}
+                  shockSeparation={result.instantCenter.shockSeparation}
+                  percentAntiSquat={result.instantCenter.percentAntiSquat}
+                />
               </div>
             </div>
           </div>
 
-          {/* Bottom: Dynamic Analysis / Rear Tire Force Graph */}
-          <div className="susp-sim-dynamic card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-              <div style={sectionTitleStyle}>Rear Tire Force vs Time</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                Avg: <span style={{ color: 'var(--color-text)', fontWeight: '600' }}>{result.avgRearTireForce.toFixed(0)} lbs</span>
-                {' | '}
-                Var: <span style={{ color: 'var(--color-text)', fontWeight: '600' }}>{result.rearTireForceVariation.toFixed(0)}%</span>
+          {/* Bottom: Dynamic Analysis Chart + Data Table */}
+          <div className="susp-sim-bottom">
+            {/* Rear Tire Force Graph */}
+            <div className="susp-sim-chart card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                <div style={sectionTitleStyle}>Rear Tire Force vs Time</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>
+                  <span style={{ color: '#ef4444' }}>■</span> Rear | 
+                  <span style={{ color: '#3b82f6' }}> ■</span> Front | 
+                  <span style={{ color: '#22c55e' }}> ---</span> Avg
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                {result.timeSteps.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={result.timeSteps} margin={{ top: 5, right: 15, left: 5, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
+                      <XAxis
+                        dataKey="time"
+                        stroke="var(--color-text-muted)"
+                        tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
+                        tickFormatter={(v) => v.toFixed(2)}
+                        label={{ value: 'Time (s)', position: 'insideBottom', offset: -10, fontSize: 10, fill: 'var(--color-text-muted)' }}
+                      />
+                      <YAxis
+                        stroke="var(--color-text-muted)"
+                        tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
+                        tickFormatter={(v) => v.toFixed(0)}
+                        width={45}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'var(--color-bg)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.7rem',
+                        }}
+                        formatter={(value: number, name: string) => [
+                          `${value.toFixed(0)} lbs`,
+                          name === 'rearTireForce' ? 'Rear Tire' : name === 'frontTireForce' ? 'Front Tire' : name
+                        ]}
+                        labelFormatter={(label) => `Time: ${Number(label).toFixed(2)}s`}
+                      />
+                      <ReferenceLine y={result.avgRearTireForce} stroke="#22c55e" strokeDasharray="5 5" />
+                      <Line type="monotone" dataKey="rearTireForce" stroke="#ef4444" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="frontTireForce" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-muted)' }}>
+                    No simulation data
+                  </div>
+                )}
               </div>
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              {result.timeSteps.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={result.timeSteps} margin={{ top: 5, right: 20, left: 10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
-                    <XAxis
-                      dataKey="time"
-                      stroke="var(--color-text-muted)"
-                      tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
-                      tickFormatter={(v) => v.toFixed(2)}
-                      label={{ value: 'Time (s)', position: 'insideBottom', offset: -10, fontSize: 11, fill: 'var(--color-text-muted)' }}
-                    />
-                    <YAxis
-                      stroke="var(--color-text-muted)"
-                      tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
-                      tickFormatter={(v) => v.toFixed(0)}
-                      width={50}
-                      label={{ value: 'Force (lbs)', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'var(--color-text-muted)' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--color-bg)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: '0.75rem',
-                      }}
-                      formatter={(value: number, name: string) => [
-                        `${value.toFixed(0)} lbs`,
-                        name === 'rearTireForce' ? 'Rear Tire' : name === 'frontTireForce' ? 'Front Tire' : name
-                      ]}
-                      labelFormatter={(label) => `Time: ${Number(label).toFixed(2)}s`}
-                    />
-                    <ReferenceLine y={result.avgRearTireForce} stroke="#22c55e" strokeDasharray="5 5" />
-                    <Line
-                      type="monotone"
-                      dataKey="rearTireForce"
-                      stroke="#ef4444"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Rear Tire"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="frontTireForce"
-                      stroke="#3b82f6"
-                      strokeWidth={1.5}
-                      dot={false}
-                      name="Front Tire"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div style={{ 
-                  height: '100%',
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  backgroundColor: 'var(--color-bg-secondary)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--color-muted)',
-                  fontSize: '0.9rem'
-                }}>
-                  No simulation data
-                </div>
-              )}
+
+            {/* Dynamic Analysis Data Table */}
+            <div className="susp-sim-table card" style={{ padding: 'var(--space-2)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 'var(--space-1)' }}>Dynamic Chassis Analysis</div>
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <table className="dynamic-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Sep</th>
+                      <th>Vel</th>
+                      <th>Spring</th>
+                      <th>Shock</th>
+                      <th>Rear</th>
+                      <th>Front</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.timeSteps.map((step, i) => (
+                      <tr key={i}>
+                        <td>{step.time.toFixed(2)}</td>
+                        <td>{step.separationDist.toFixed(2)}</td>
+                        <td>{step.separationVel.toFixed(1)}</td>
+                        <td>{step.springForce.toFixed(0)}</td>
+                        <td>{step.shockForce.toFixed(0)}</td>
+                        <td style={{ fontWeight: '600' }}>{step.rearTireForce.toFixed(0)}</td>
+                        <td>{step.frontTireForce.toFixed(0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ 
+                borderTop: '1px solid var(--color-border)', 
+                paddingTop: 'var(--space-1)', 
+                marginTop: 'var(--space-1)',
+                fontSize: '0.75rem',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}>
+                <span>Avg: <strong>{result.avgRearTireForce.toFixed(0)} lbs</strong></span>
+                <span>Var: <strong>{result.rearTireForceVariation.toFixed(0)}%</strong></span>
+              </div>
             </div>
           </div>
         </div>
