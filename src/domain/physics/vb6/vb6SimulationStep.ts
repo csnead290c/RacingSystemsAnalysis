@@ -194,30 +194,44 @@ export function TABY(xrpm: number[], yhp: number[], NHP: number, _order: number,
 
 /**
  * VB6 Tire subroutine - calculates tire growth and circumference
- * TIMESLIP.FRM line 1091
+ * TIMESLIP.FRM line 1585-1606
+ * 
+ * Note: Bonneville Pro uses a completely different formula than Quarter Pro!
  */
 export function vb6Tire(
   TireDia_in: number,
   TireWidth_in: number,
   Vel_ftps: number,
-  Ags0_g: number
+  Ags0_g: number,
+  isLandSpeed?: boolean
 ): { TireGrowth: number; TireCirFt: number } {
-  // VB6: TIMESLIP.FRM:1589-1596
-  // TGK = (TireWidth^1.4 + TireDia - 16) / (0.171 * TireDia^1.7)
-  // TireGrowth = 1 + TGK * 0.0000135 * Vel^1.6
-  // TGLinear = 1 + TGK * 0.00035 * Vel
-  // If TGLinear < TireGrowth Then TireGrowth = TGLinear
-  // TireSQ = TireGrowth - 0.035 * Abs(Ags0)
-  // TireCirFt = TireSQ * TireDia * PI / 12
+  let TireGrowth: number;
+  let TireCirFt: number;
   
-  const TGK = (Math.pow(TireWidth_in, 1.4) + TireDia_in - 16) / (0.171 * Math.pow(TireDia_in, 1.7));
-  let TireGrowth = 1 + TGK * 0.0000135 * Math.pow(Vel_ftps, 1.6);
-  const TGLinear = 1 + TGK * 0.00035 * Vel_ftps;
-  if (TGLinear < TireGrowth) TireGrowth = TGLinear;
-  
-  // Tire squat under load
-  const TireSQ = TireGrowth - 0.035 * Math.abs(Ags0_g);
-  const TireCirFt = TireSQ * TireDia_in * PI / 12;
+  if (isLandSpeed) {
+    // VB6: TIMESLIP.FRM:1603-1605 - Bonneville Pro
+    // TireGrowth = 1 + 0.00004 * Vel(L)
+    // TireCirFt = TireGrowth * TireDia * PI / 12
+    // Note: No tire squat for BVPro!
+    TireGrowth = 1 + 0.00004 * Vel_ftps;
+    TireCirFt = TireGrowth * TireDia_in * PI / 12;
+  } else {
+    // VB6: TIMESLIP.FRM:1589-1596 - Quarter Pro
+    // TGK = (TireWidth^1.4 + TireDia - 16) / (0.171 * TireDia^1.7)
+    // TireGrowth = 1 + TGK * 0.0000135 * Vel^1.6
+    // TGLinear = 1 + TGK * 0.00035 * Vel
+    // If TGLinear < TireGrowth Then TireGrowth = TGLinear
+    // TireSQ = TireGrowth - 0.035 * Abs(Ags0)
+    // TireCirFt = TireSQ * TireDia * PI / 12
+    const TGK = (Math.pow(TireWidth_in, 1.4) + TireDia_in - 16) / (0.171 * Math.pow(TireDia_in, 1.7));
+    TireGrowth = 1 + TGK * 0.0000135 * Math.pow(Vel_ftps, 1.6);
+    const TGLinear = 1 + TGK * 0.00035 * Vel_ftps;
+    if (TGLinear < TireGrowth) TireGrowth = TGLinear;
+    
+    // Tire squat under load
+    const TireSQ = TireGrowth - 0.035 * Math.abs(Ags0_g);
+    TireCirFt = TireSQ * TireDia_in * PI / 12;
+  }
   
   return { TireGrowth, TireCirFt };
 }
@@ -324,7 +338,7 @@ export function vb6SimulationStep(
   // ========================================================================
   // TIMESLIP.FRM:1091 - Update tire growth
   // ========================================================================
-  const tireResult = vb6Tire(vehicle.TireDia_in, vehicle.TireWidth_in, state.Vel_ftps, state.Ags0_g);
+  const tireResult = vb6Tire(vehicle.TireDia_in, vehicle.TireWidth_in, state.Vel_ftps, state.Ags0_g, env.isLandSpeed);
   state.TireGrowth = tireResult.TireGrowth;
   state.TireCirFt = tireResult.TireCirFt;
   
@@ -742,7 +756,7 @@ export function vb6InitState(
   // L = 1: Time0 = 0: time(L) = 0: Vel(L) = 0: Dist(L) = 0: DSRPM = 0
   
   // Initial tire calculations (at zero velocity)
-  const tireResult = vb6Tire(vehicle.TireDia_in, vehicle.TireWidth_in, 0, 0);
+  const tireResult = vb6Tire(vehicle.TireDia_in, vehicle.TireWidth_in, 0, 0, env.isLandSpeed);
   
   // VB6: TIMESLIP.FRM:1010-1014 - Get HP and calculate torque
   // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
