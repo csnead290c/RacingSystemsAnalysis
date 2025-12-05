@@ -515,7 +515,19 @@ export function vb6SimulationStep(
     AGS_g = AMax_g - (AGS_g - AMax_g);
   }
   if (AGS_g < AMin) {
-    PQWT = PQWT * AMin / AGS_g;
+    // Protect against division by zero or negative AGS at terminal velocity
+    if (AGS_g !== 0) {
+      PQWT = PQWT * AMin / AGS_g;
+    } else {
+      PQWT = AMin * Vel_L * gc;
+    }
+    AGS_g = AMin;
+  }
+  
+  // Protect against zero or negative PQWT at terminal velocity
+  // This happens when drag equals or exceeds power
+  if (PQWT <= 0) {
+    PQWT = AMin * Vel_L * gc;
     AGS_g = AMin;
   }
   
@@ -587,7 +599,18 @@ export function vb6SimulationStep(
       AGS_g = AMax_g - (AGS_g - AMax_g);
     }
     if (AGS_g < AMin) {
-      PQWT = PQWT * AMin / AGS_g;
+      // Protect against division by zero or negative AGS at terminal velocity
+      if (AGS_g !== 0) {
+        PQWT = PQWT * AMin / AGS_g;
+      } else {
+        PQWT = AMin * Vel_L * gc;
+      }
+      AGS_g = AMin;
+    }
+    
+    // Protect against zero or negative PQWT at terminal velocity
+    if (PQWT <= 0) {
+      PQWT = AMin * Vel_L * gc;
       AGS_g = AMin;
     }
     

@@ -8,6 +8,7 @@ import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
 import ClutchSim from '../pages/ClutchSim';
+import Calculators from '../pages/Calculators';
 import Log from '../pages/Log';
 import History from '../pages/History';
 import Vehicles from '../pages/Vehicles';
@@ -49,6 +50,9 @@ function Navigation() {
       </Link>
       <Link to="/clutch-sim" style={navLinkStyle(isActive('/clutch-sim'))}>
         Clutch Sim
+      </Link>
+      <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))}>
+        Calcs
       </Link>
       <Link to="/log" style={navLinkStyle(isActive('/log'))}>
         Log
@@ -113,6 +117,7 @@ function App() {
             <Route path="/predict" element={<Predict />} /> {/* Legacy redirect */}
             <Route path="/suspension-sim" element={<SuspensionSim />} />
             <Route path="/clutch-sim" element={<ClutchSim />} />
+            <Route path="/calculators" element={<Calculators />} />
             <Route path="/log" element={<Log />} />
             <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />

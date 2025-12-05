@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
-import type { RaceLength } from '../domain/config/raceLengths';
+import { type RaceLength, RACE_LENGTH_INFO } from '../domain/config/raceLengths';
 import type { PhysicsModelId } from '../domain/physics';
 
 function Home() {
@@ -124,28 +124,35 @@ function Home() {
         </div>
 
         <div className="mb-6">
-          <h3 className="label">Race Length</h3>
-          <div className="radio-group">
-            <label className="radio-label">
-              <input
-                type="radio"
-                name="raceLength"
-                value="EIGHTH"
-                checked={raceLength === 'EIGHTH'}
-                onChange={(e) => setRaceLength(e.target.value as RaceLength)}
-              />
-              <span>1/8 Mile (660 ft)</span>
-            </label>
-            <label className="radio-label">
-              <input
-                type="radio"
-                name="raceLength"
-                value="QUARTER"
-                checked={raceLength === 'QUARTER'}
-                onChange={(e) => setRaceLength(e.target.value as RaceLength)}
-              />
-              <span>1/4 Mile (1320 ft)</span>
-            </label>
+          <h3 className="label">Track / Distance</h3>
+          <select
+            className="input"
+            value={raceLength}
+            onChange={(e) => setRaceLength(e.target.value as RaceLength)}
+            style={{ cursor: 'pointer' }}
+          >
+            <optgroup label="Drag Racing">
+              {Object.entries(RACE_LENGTH_INFO)
+                .filter(([, info]) => info.category === 'drag')
+                .map(([key, info]) => (
+                  <option key={key} value={key}>
+                    {info.label} ({info.lengthFt.toLocaleString()} ft)
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="Land Speed Racing">
+              {Object.entries(RACE_LENGTH_INFO)
+                .filter(([, info]) => info.category === 'landspeed')
+                .map(([key, info]) => (
+                  <option key={key} value={key}>
+                    {info.label} ({info.lengthMiles} mi)
+                  </option>
+                ))}
+            </optgroup>
+          </select>
+          <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}>
+            {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' && 
+              '🏁 Land speed mode - simulation runs to terminal velocity'}
           </div>
         </div>
 

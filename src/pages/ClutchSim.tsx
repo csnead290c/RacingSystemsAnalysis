@@ -13,33 +13,143 @@ import {
 } from 'recharts';
 import Page from '../shared/components/Page';
 import {
-  analyzeClutch,
-  defaultClutchInput,
-  defaultArmData,
+  clutchCalc,
+  calcDetails,
+  totalLbs,
   type ClutchInput,
   type ClutchResult,
-} from '../domain/physics/models/clutch';
+} from '../domain/physics/models/clutchVb6';
+import { armData } from '../domain/physics/models/clutchArmData';
+
+// Default input matching VB6 test case
+const defaultClutchInput: ClutchInput = {
+  barometer: 29.92,
+  barometerIsAltimeter: false,
+  temperature: 70,
+  humidity: 50,
+
+  isBike: false,
+  isGlide: false,
+
+  lowGear: 2.48,
+  highGear: 1.00,
+  gearRatio: 4.10,
+  tireDiameter: 33,
+  tireDiaIsRollout: false,
+  primaryDriveRatio: 1.0,
+
+  estimated60ft: 1.10,
+  maxAcceleration: 2.5,
+  tractionIndex: 3,
+
+  enginePMI: 0.85,
+  transPMI: 0.15,
+  tiresPMI: 12,
+
+  fuelSystem: 1,
+  hpTorqueMultiplier: 1.0,
+  dynoData: [
+    { rpm: 4000, horsepower: 350, torque: 460 },
+    { rpm: 4500, horsepower: 420, torque: 490 },
+    { rpm: 5000, horsepower: 490, torque: 515 },
+    { rpm: 5500, horsepower: 560, torque: 535 },
+    { rpm: 6000, horsepower: 620, torque: 543 },
+    { rpm: 6500, horsepower: 670, torque: 542 },
+    { rpm: 7000, horsepower: 710, torque: 533 },
+    { rpm: 7500, horsepower: 740, torque: 518 },
+    { rpm: 8000, horsepower: 750, torque: 492 },
+    { rpm: 8500, horsepower: 740, torque: 457 },
+  ],
+
+  arm1: {
+    armTypeIndex: 16, // CRW.1 - Crower 10" 59 gram arm
+    numArms: 6,
+    totalCounterweight: 180,
+    counterweightPerArm: 30,
+    ringHeight: 0.702,
+    armDepth: 0,
+  },
+  arm2: {
+    armTypeIndex: 0,
+    numArms: 0,
+    totalCounterweight: 0,
+    counterweightPerArm: 0,
+    ringHeight: 0,
+    armDepth: 0,
+  },
+
+  disk: {
+    numDisks: 5,
+    diskWeight: 4.0,
+    outerDiameter: 10.0,
+    innerDiameter: 6.5,
+    effectiveArea: 85,
+    frictionCoefficient: 0.35,
+  },
+
+  spring: {
+    numSprings: 9,
+    springBasePreload: 50,
+    totalBasePreload: 450,
+    springRate: 20,
+    totalSpringRate: 180,
+    adjusterTurns: 3.5,
+    threadPitch: 24,
+    deltaRingHeight: 0,
+  },
+
+  launchRPM: 6500,
+  airGap: 0.020,
+
+  staticPlateForce: 1080,
+};
 
 function ClutchSim() {
   const [input, setInput] = useState<ClutchInput>(defaultClutchInput);
-  const [activeTab, setActiveTab] = useState<'main' | 'details' | 'dyno'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'details' | 'dyno' | 'arms'>('main');
 
-  // Run clutch analysis
+  // Run clutch analysis using VB6 port
   const result: ClutchResult = useMemo(() => {
-    return analyzeClutch(input, defaultArmData);
+    return clutchCalc(input, armData);
   }, [input]);
 
-  // Prepare chart data
-  const chartData = useMemo(() => {
-    return result.plateForceData.map((pf, i) => ({
-      rpm: pf.rpm,
-      totalForce: pf.totalForce,
-      centrifugalForce: pf.centrifugalForce,
-      staticForce: input.staticPlateForce,
+  // Calculate details if on details tab
+  const detailsResult = useMemo(() => {
+    if (activeTab !== 'details') return null;
+    const rpmPoints = input.dynoData.filter(d => d.rpm > 0).slice(0, 3).map(d => d.rpm);
+    if (rpmPoints.length < 3) {
+      rpmPoints.push(6000, 7000, 8000);
+    }
+    return calcDetails(input, armData, result, rpmPoints.slice(0, 3));
+  }, [input, result, activeTab]);
+
+  // Prepare chart data for plate force graph
+  const plateForceChartData = useMemo(() => {
+    const data: { rpm: number; totalForce: number; centrifugalForce: number; staticForce: number }[] = [];
+    const maxRpm = Math.max(...input.dynoData.map(d => d.rpm));
+    const step = maxRpm / 25;
+    
+    for (let rpm = 0; rpm <= maxRpm; rpm += step) {
+      const centrifugal = totalLbs(0, result.cf1, result.retLbf1, result.cf2, result.retLbf2, rpm, input.primaryDriveRatio);
+      const total = totalLbs(input.staticPlateForce, result.cf1, result.retLbf1, result.cf2, result.retLbf2, rpm, input.primaryDriveRatio);
+      data.push({
+        rpm: Math.round(rpm),
+        totalForce: Math.round(total),
+        centrifugalForce: Math.round(centrifugal),
+        staticForce: input.staticPlateForce,
+      });
+    }
+    return data;
+  }, [input, result]);
+
+  // Prepare chart data for torque graph
+  const torqueChartData = useMemo(() => {
+    return result.clutchGridData.map((cg, i) => ({
+      rpm: cg.rpm,
       clutchTorque: result.clutchTorqueCapacityLow[i] || 0,
       engineTorque: result.engineTorqueLow[i] || 0,
     }));
-  }, [result, input.staticPlateForce]);
+  }, [result]);
 
   const handleInputChange = (field: keyof ClutchInput, value: number | string | boolean) => {
     setInput(prev => ({ ...prev, [field]: value }));
@@ -191,17 +301,12 @@ function ClutchSim() {
         <div className="clutch-sim-layout">
           {/* INPUT PANEL */}
           <div className="clutch-sim-inputs card" style={{ padding: 'var(--space-3)' }}>
-            {/* Note */}
+            {/* Setup Header */}
             <div style={sectionStyle}>
-              <div style={sectionTitleStyle}>Setup</div>
-              <input
-                type="text"
-                className="input"
-                style={{ width: '100%', fontSize: '0.85rem' }}
-                value={input.note}
-                onChange={(e) => handleInputChange('note', e.target.value)}
-                placeholder="Setup name/notes"
-              />
+              <div style={sectionTitleStyle}>Clutch Pro Analysis</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                Complete VB6 port with {armData.filter(a => a !== null).length - 1} arm types
+              </div>
             </div>
 
             {/* Environment */}
@@ -429,10 +534,10 @@ function ClutchSim() {
                     type="number"
                     className="input"
                     style={inputStyle}
-                    value={input.disk.frictionArea}
+                    value={input.disk.effectiveArea}
                     onChange={(e) => setInput(prev => ({
                       ...prev,
-                      disk: { ...prev.disk, frictionArea: parseFloat(e.target.value) || 0 }
+                      disk: { ...prev.disk, effectiveArea: parseFloat(e.target.value) || 0 }
                     }))}
                   />
                 </div>
@@ -589,7 +694,7 @@ function ClutchSim() {
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
+                    <LineChart data={plateForceChartData} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
                       <XAxis
                         dataKey="rpm"
@@ -632,7 +737,7 @@ function ClutchSim() {
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 20 }}>
+                  <LineChart data={torqueChartData} margin={{ top: 5, right: 20, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
                     <XAxis
                       dataKey="rpm"
@@ -714,13 +819,11 @@ function ClutchSim() {
         </div>
       ) : (
         /* DETAILS TAB */
-        <div className="card" style={{ padding: 'var(--space-3)', maxWidth: '800px' }}>
-          <div style={sectionTitleStyle}>Clutch Details</div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-            Detailed clutch arm geometry and sensitivity analysis coming soon...
-          </p>
+        <div className="card" style={{ padding: 'var(--space-3)', maxWidth: '900px' }}>
+          <div style={sectionTitleStyle}>Clutch Details & Sensitivity Analysis</div>
           
-          <div style={{ marginTop: 'var(--space-3)' }}>
+          {/* Plate Force Data */}
+          <div style={{ marginBottom: 'var(--space-4)' }}>
             <div style={{ fontSize: '0.8rem', fontWeight: '600', marginBottom: 'var(--space-2)' }}>Plate Force Data</div>
             <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
               <thead>
@@ -731,15 +834,63 @@ function ClutchSim() {
                 </tr>
               </thead>
               <tbody>
-                {result.plateForceData.map((pf, i) => (
+                {result.clutchGridData.map((cg, i) => (
                   <tr key={i}>
-                    <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{pf.rpm}</td>
-                    <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{Math.round(pf.centrifugalForce)}</td>
-                    <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)', fontWeight: '600' }}>{Math.round(pf.totalForce)}</td>
+                    <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{cg.rpm}</td>
+                    <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{cg.centrifugal}</td>
+                    <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)', fontWeight: '600' }}>{cg.total}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Sensitivity Analysis */}
+          {detailsResult && (
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: '600', marginBottom: 'var(--space-2)' }}>
+                Sensitivity Analysis (Change in Plate Force)
+              </div>
+              <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '6px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>RPM</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>+1 Arm</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>+1g CWt</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>+.010" Ring</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>+.5 Turn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailsResult.rpmPoints.map((rpm, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{rpm}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{detailsResult.addArm[i]}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{detailsResult.addCounterweight[i]}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{detailsResult.addRingHeight[i]}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>{detailsResult.addAdjusterTurns[i]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Calculation Parameters */}
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', marginBottom: 'var(--space-2)' }}>Calculation Parameters</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-2)', fontSize: '0.75rem' }}>
+              <div style={resultRowStyle}><span>HP Correction</span><span>{result.hpCorrectionFactor.toFixed(4)}</span></div>
+              <div style={resultRowStyle}><span>CMU Ratio</span><span>{result.cmuRatio.toFixed(4)}</span></div>
+              <div style={resultRowStyle}><span>CF1 (×10⁶)</span><span>{(result.cf1 * 1e6).toFixed(4)}</span></div>
+              <div style={resultRowStyle}><span>CF2 (×10⁶)</span><span>{(result.cf2 * 1e6).toFixed(4)}</span></div>
+              <div style={resultRowStyle}><span>C1 Low</span><span>{result.c1Low.toFixed(4)}</span></div>
+              <div style={resultRowStyle}><span>C1 High</span><span>{result.c1High.toFixed(4)}</span></div>
+              <div style={resultRowStyle}><span>Z Low</span><span>{result.zLow.toFixed(2)}</span></div>
+              <div style={resultRowStyle}><span>Z High</span><span>{result.zHigh.toFixed(2)}</span></div>
+              <div style={resultRowStyle}><span>Friction Area</span><span>{result.frictionArea.toFixed(2)} in²</span></div>
+              <div style={resultRowStyle}><span>Geometry Const</span><span>{result.geometryConstant.toFixed(4)}</span></div>
+            </div>
           </div>
         </div>
       )}

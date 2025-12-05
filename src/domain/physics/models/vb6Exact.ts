@@ -34,6 +34,31 @@ import {
 import { type FuelSystemValue } from '../vb6/calcWork';
 import { taby } from '../vb6/dtaby';
 import { Z6 } from '../vb6/constants';
+import { DISTANCES, RACE_LENGTH_INFO, type RaceLength } from '../../config/raceLengths';
+
+/**
+ * Get race length in feet from race length key
+ */
+function getRaceLengthFt(raceLength: RaceLength | string): number {
+  const info = RACE_LENGTH_INFO[raceLength as RaceLength];
+  if (info) return info.lengthFt;
+  
+  // Fallback for legacy values
+  if (raceLength === 'EIGHTH') return 660;
+  if (raceLength === 'QUARTER') return 1320;
+  return 1320; // Default to quarter mile
+}
+
+/**
+ * Get distance checkpoints for a race length
+ */
+function getDistanceTargets(raceLength: RaceLength | string): readonly number[] {
+  const distances = DISTANCES[raceLength as RaceLength];
+  if (distances) return distances;
+  
+  // Fallback
+  return raceLength === 'EIGHTH' ? DISTANCES.EIGHTH : DISTANCES.QUARTER;
+}
 
 /**
  * Trace point for simulation output
@@ -254,8 +279,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const env = input.env;
   
   // Race length - default to quarter mile (1320 ft)
+  // Support all track types from raceLengths.ts
   const raceLength = (input as any).raceLength ?? 'QUARTER';
-  const raceLengthFt = (input as any).raceLengthFt ?? (raceLength === 'EIGHTH' ? 660 : 1320);
+  const raceLengthFt = (input as any).raceLengthFt ?? getRaceLengthFt(raceLength);
   
   // VB6 Rollout/Overhang timing geometry:
   // 
@@ -591,8 +617,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // ========================================================================
   // Run simulation
   // ========================================================================
-  const MAX_STEPS = 5000;
-  const MAX_TIME_S = 30;
+  // For land speed runs, allow more steps and time
+  const isLandSpeed = RACE_LENGTH_INFO[raceLength as RaceLength]?.category === 'landspeed';
+  const MAX_STEPS = isLandSpeed ? 50000 : 5000;
+  const MAX_TIME_S = isLandSpeed ? 300 : 30;  // 5 minutes for land speed
   
   const convergenceHistory: VB6ExactResult['vb6Diagnostics'] = {
     iterations: [],
@@ -602,9 +630,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Timeslip results (array format per SimResult)
   const timeslip: { d_ft: number; t_s: number; v_mph: number }[] = [];
   // Distance targets depend on race length (these are TRACK distances, not rear tire distances)
-  const distanceTargets = raceLengthFt === 660 
-    ? [60, 330, 660]  // Eighth mile
-    : [60, 330, 660, 1000, 1320];  // Quarter mile
+  const distanceTargets = getDistanceTargets(raceLength);
   let targetIdx = 0;
   
   // Track when the timer starts (when car has moved rolloutFt distance)

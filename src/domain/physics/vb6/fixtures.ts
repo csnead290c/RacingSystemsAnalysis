@@ -5,6 +5,8 @@
  * All fields are required - no defaults, no heuristics.
  */
 
+import { type RaceLength, RACE_LENGTH_INFO } from '../../config/raceLengths';
+
 export interface Vb6VehicleFixture {
   // Environment
   env: {
@@ -188,8 +190,8 @@ export function assertComplete(fixture: Partial<Vb6VehicleFixture>): asserts fix
  * Convert a complete VB6 fixture to SimInputs format for the VB6Exact model.
  * This allows VB6 Strict Mode to run simulations using the fixture data.
  */
-export function fixtureToSimInputs(fixture: Vb6VehicleFixture, raceLength: 'EIGHTH' | 'QUARTER' = 'QUARTER'): any {
-  const raceLengthFt = raceLength === 'EIGHTH' ? 660 : 1320;
+export function fixtureToSimInputs(fixture: Vb6VehicleFixture, raceLength: RaceLength = 'QUARTER'): any {
+  const raceLengthFt = RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320;
   
   return {
     vehicle: {

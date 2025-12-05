@@ -5,7 +5,7 @@ import EnvironmentForm from '../shared/components/EnvironmentForm';
 import { simulate } from '../workerBridge';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import type { Vehicle } from '../domain/schemas/vehicle.schema';
-import type { RaceLength } from '../domain/config/raceLengths';
+import { type RaceLength, RACE_LENGTH_INFO } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { SimResult } from '../domain/physics';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
@@ -445,49 +445,78 @@ function Predict() {
           <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
             <div className="et-slip-header">
               <div style={{ fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>RACING SYSTEMS ANALYSIS</div>
-              <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>ET Simulation</div>
+              <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
+                {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Land Speed Sim' : 'ET Simulation'}
+              </div>
             </div>
             
-            {/* Splits */}
-            <div className="et-slip-row">
-              <span className="et-slip-label">60'</span>
-              <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}</span>
-            </div>
-            <div className="et-slip-row">
-              <span className="et-slip-label">330'</span>
-              <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(3)}</span>
-            </div>
-            {raceLength === 'QUARTER' && (
+            {/* Splits - show based on track type */}
+            {RACE_LENGTH_INFO[raceLength]?.category === 'drag' ? (
               <>
+                {/* Drag racing splits */}
                 <div className="et-slip-row">
-                  <span className="et-slip-label">1/8</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(3)}</span>
+                  <span className="et-slip-label">60'</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}</span>
                 </div>
                 <div className="et-slip-row">
-                  <span className="et-slip-label">MPH</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(2)}</span>
+                  <span className="et-slip-label">330'</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(3)}</span>
+                </div>
+                {raceLength === 'QUARTER' && (
+                  <>
+                    <div className="et-slip-row">
+                      <span className="et-slip-label">1/8</span>
+                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(3)}</span>
+                    </div>
+                    <div className="et-slip-row">
+                      <span className="et-slip-label">MPH</span>
+                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(2)}</span>
+                    </div>
+                    <div className="et-slip-row">
+                      <span className="et-slip-label">1000'</span>
+                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(3)}</span>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Land speed splits - show mile markers */}
+                <div className="et-slip-row">
+                  <span className="et-slip-label">1/8 mi</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(1)} mph</span>
                 </div>
                 <div className="et-slip-row">
-                  <span className="et-slip-label">1000'</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(3)}</span>
+                  <span className="et-slip-label">1/4 mi</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1320)?.v_mph ?? 0).toFixed(1)} mph</span>
                 </div>
+                <div className="et-slip-row">
+                  <span className="et-slip-label">1/2 mi</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 2640)?.v_mph ?? 0).toFixed(1)} mph</span>
+                </div>
+                {RACE_LENGTH_INFO[raceLength]?.lengthFt >= 5280 && (
+                  <div className="et-slip-row">
+                    <span className="et-slip-label">1 mi</span>
+                    <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 5280)?.v_mph ?? 0).toFixed(1)} mph</span>
+                  </div>
+                )}
               </>
             )}
             
             {/* Final ET/MPH - inline with splits */}
             <div className="et-slip-row" style={{ marginTop: '4px', borderTop: '1px solid #999', paddingTop: '4px' }}>
-              <span className="et-slip-label">ET</span>
+              <span className="et-slip-label">{RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Time' : 'ET'}</span>
               <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseET.toFixed(3)}</span>
             </div>
             <div className="et-slip-row">
-              <span className="et-slip-label">MPH</span>
+              <span className="et-slip-label">{RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Top Speed' : 'MPH'}</span>
               <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(2)}</span>
             </div>
             
             {/* Vehicle info at bottom */}
             <div className="et-slip-vehicle">
               {vehicle.name}<br/>
-              {raceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'} • {modelName}
+              {RACE_LENGTH_INFO[raceLength]?.label ?? raceLength} • {modelName}
             </div>
           </div>
 
@@ -501,7 +530,7 @@ function Predict() {
             <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-4)' }}>Loading chart...</div>}>
               {simResult?.traces && simResult.traces.length > 0 && (
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <DataLoggerChart data={simResult.traces as any} raceLengthFt={raceLength === 'EIGHTH' ? 660 : 1320} />
+                  <DataLoggerChart data={simResult.traces as any} raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320} />
                 </div>
               )}
             </Suspense>
