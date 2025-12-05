@@ -54,10 +54,27 @@ async function runTest() {
   console.log(`  HP Curve: ${JSON.stringify(simInputs.vehicle.hpCurve)}`);
   
   console.log('\nRunning simulation...');
+  const tractionIdx = simInputs.env.tractionIndex ?? 5;
+  console.log(`  TireSlip (BVPro): ${1.01 + (tractionIdx-1) * 0.01}`);
   const startTime = Date.now();
   
   // Run simulation
   const result = VB6ExactModel.simulate(simInputs);
+  
+  // Debug: Check first and last few trace points
+  const traces = result.traces || [];
+  if (traces.length > 10) {
+    console.log('\nFirst 5 trace points:');
+    for (let i = 0; i < 5; i++) {
+      const t = traces[i] as any;
+      console.log(`  t=${t.t_s.toFixed(2)}s, d=${t.s_ft.toFixed(0)}ft, v=${t.v_mph.toFixed(1)}mph, a=${t.a_g.toFixed(4)}g, gear=${t.gear}, rpm=${t.rpm.toFixed(0)}`);
+    }
+    console.log('\nLast 5 trace points:');
+    for (let i = traces.length - 5; i < traces.length; i++) {
+      const t = traces[i] as any;
+      console.log(`  t=${t.t_s.toFixed(2)}s, d=${t.s_ft.toFixed(0)}ft, v=${t.v_mph.toFixed(1)}mph, a=${t.a_g.toFixed(4)}g, gear=${t.gear}, rpm=${t.rpm.toFixed(0)}`);
+    }
+  }
   
   const elapsed = Date.now() - startTime;
   console.log(`Simulation completed in ${elapsed}ms`);

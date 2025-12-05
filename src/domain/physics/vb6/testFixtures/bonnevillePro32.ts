@@ -21,7 +21,7 @@ export const BONNEVILLE_PRO_32_GASCOUPE: Vb6VehicleFixture = {
     wind_mph: 5.0,
     wind_angle_deg: 90,  // Crosswind
     trackTemp_F: 75,     // Same as ambient for salt flats
-    tractionIndex: 5,    // Salt surface
+    tractionIndex: 5,    // Salt surface - "Traction Index 5" from VB6 output
   },
 
   vehicle: {
@@ -33,7 +33,7 @@ export const BONNEVILLE_PRO_32_GASCOUPE: Vb6VehicleFixture = {
     cgHeight_in: 18,     // Typical for coupe
     bodyStyle: 1,        // Coupe
     tire: {
-      diameter_in: 26,   // Calculated from rollout: circumference = 103 * PI / PI ≈ 32.8", so dia ≈ 26"
+      diameter_in: 32.8,   // Calculated from rollout: diameter = 103 / PI ≈ 32.8"
       width_in: 10.0,    // "Tire Width - inches 10.00"
     },
   },

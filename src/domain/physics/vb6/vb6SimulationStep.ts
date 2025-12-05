@@ -330,9 +330,21 @@ export function vb6SimulationStep(
   
   // ========================================================================
   // TIMESLIP.FRM:1098-1102 - Calculate tire slip
+  // VB6: Different formulas for Quarter Pro vs Bonneville Pro
   // ========================================================================
-  const Work_slip = 0.005 * (env.TractionIndex - 1) + 3 * (env.TrackTempEffect - 1);
-  const TireSlip = 1.02 + Work_slip * (1 - Math.pow(state.Dist0_ft / 1320, 2));
+  let TireSlip: number;
+  if (env.isLandSpeed) {
+    // Bonneville Pro: TIMESLIP.FRM:875
+    // TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
+    // Note: No distance-based reduction for BVPro
+    TireSlip = 1.01 + (env.TractionIndex - 1) * 0.01;
+  } else {
+    // Quarter Pro: TIMESLIP.FRM:1098-1101
+    // Work = 0.005 * (TractionIndex - 1) + 3 * (TrackTempEffect - 1)
+    // TireSlip = 1.02 + Work * (1 - (Dist0 / 1320) ^ 2)
+    const Work_slip = 0.005 * (env.TractionIndex - 1) + 3 * (env.TrackTempEffect - 1);
+    TireSlip = 1.02 + Work_slip * (1 - Math.pow(state.Dist0_ft / 1320, 2));
+  }
   
   // ========================================================================
   // TIMESLIP.FRM:1074-1075 - Calculate chassis PMI for this gear
@@ -542,18 +554,17 @@ export function vb6SimulationStep(
   }
   if (AGS_g < AMin) {
     // VB6: TIMESLIP.FRM:1226 - Clamp to AMin
-    // This is the VB6 behavior - it clamps acceleration to a minimum
-    // but only adjusts PQWT if AGS is positive (to avoid division issues)
-    if (AGS_g > 0) {
-      PQWT = PQWT * AMin / AGS_g;
-    }
-    // If AGS_g <= 0, we're at or past terminal velocity
-    // VB6 still clamps to AMin but PQWT calculation may differ
+    // When AGS is clamped, PQWT must be recalculated to be consistent
+    // PQWT = AGS * gc * Vel, so if AGS = AMin, PQWT = AMin * gc * Vel
     AGS_g = AMin;
+    PQWT = AMin * gc * Vel_L;
   }
   
   // Initial time estimate
-  let time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
+  // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
+  // Protect against negative VelSqrd (shouldn't happen with AMin clamp)
+  const safeVelSqrd = Math.max(0, VelSqrd);
+  let time_L = safeVelSqrd / (2 * PQWT) + state.Time0_s;
   
   // ========================================================================
   // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
@@ -626,16 +637,15 @@ export function vb6SimulationStep(
     }
     if (AGS_g < AMin) {
       // VB6: TIMESLIP.FRM:1264 - Clamp to AMin
-      if (AGS_g > 0) {
-        PQWT = PQWT * AMin / AGS_g;
-      }
+      // When AGS is clamped, PQWT must be recalculated to be consistent
       AGS_g = AMin;
+      PQWT = AMin * gc * Vel_L;
     }
     
     // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
-    // Protect against zero/negative PQWT for time calculation only
-    const safePQWT = PQWT > 0 ? PQWT : AMin * Vel_L * gc;
-    const dtk2_time = VelSqrd / (2 * safePQWT) + state.Time0_s;
+    // Protect against negative VelSqrd (shouldn't happen with AMin clamp)
+    const safeVelSqrd_iter = Math.max(0, VelSqrd);
+    const dtk2_time = safeVelSqrd_iter / (2 * PQWT) + state.Time0_s;
     const dtk2 = dtk2_time - state.Time0_s;
     
     if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
@@ -657,15 +667,22 @@ export function vb6SimulationStep(
   const dt_final = time_L - state.Time0_s;
   let Dist_L: number;
   
-  // At terminal velocity, PQWT is very small, so use simple distance = velocity * time
-  if (PQWT < 0.1) {
-    // Near terminal velocity - use average velocity for distance
+  // At terminal velocity, PQWT is very small or negative, so use simple distance = velocity * time
+  // The complex VB6 formula can produce NaN when PQWT is negative (drag > power)
+  if (PQWT < 0.1 || dt_final <= 0) {
+    // Near terminal velocity or invalid timestep - use average velocity for distance
     const avgVel = (state.Vel0_ftps + Vel_L) / 2;
-    Dist_L = state.Dist0_ft + avgVel * dt_final;
+    Dist_L = state.Dist0_ft + Math.max(0, avgVel * Math.abs(dt_final));
   } else {
     const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
     const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-    Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+    if (term < 0) {
+      // Numerical instability - fall back to simple formula
+      const avgVel = (state.Vel0_ftps + Vel_L) / 2;
+      Dist_L = state.Dist0_ft + avgVel * dt_final;
+    } else {
+      Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+    }
   }
   
   // ========================================================================
@@ -749,9 +766,18 @@ export function vb6InitState(
   const q_launch = Math.sign(WindFPS_launch) * env.rho * Math.pow(Math.abs(WindFPS_launch), 2) / (2 * gc);
   const DragForce_launch = cmu_launch * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch;
   
-  // VB6: TIMESLIP.FRM:872 - Initial tire slip
-  // TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
-  const TireSlip_init = 1.02 + (env.TractionIndex - 1) * 0.005 + (env.TrackTempEffect - 1) * 3;
+  // VB6: TIMESLIP.FRM:872-875 - Initial tire slip
+  // Different formulas for Quarter Pro vs Bonneville Pro
+  let TireSlip_init: number;
+  if (env.isLandSpeed) {
+    // Bonneville Pro: TIMESLIP.FRM:875
+    // TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
+    TireSlip_init = 1.01 + (env.TractionIndex - 1) * 0.01;
+  } else {
+    // Quarter Pro: TIMESLIP.FRM:872
+    // TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
+    TireSlip_init = 1.02 + (env.TractionIndex - 1) * 0.005 + (env.TrackTempEffect - 1) * 3;
+  }
   
   // VB6: TIMESLIP.FRM:1020 - Calculate wheel force
   // force = TQ * GearRatio * Efficiency / (TireSlip * TireDia / 24) - DragForce

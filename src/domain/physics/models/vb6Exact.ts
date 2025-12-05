@@ -585,7 +585,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Build VB6 environment params
   // ========================================================================
   const trackTempF = env.trackTempF ?? 100;
-  const trackTempEffect = calcTrackTempEffect(trackTempF);
+  // VB6: TIMESLIP.FRM:874 - Bonneville Pro forces TrackTempEffect = 1
+  const trackTempEffect = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF);
   
   const vb6Env: VB6EnvParams = {
     rho: rho_lbm_ft3,
