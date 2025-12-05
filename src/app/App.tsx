@@ -18,6 +18,7 @@ import About from '../pages/About';
 import Login from '../pages/Login';
 import Account from '../pages/Account';
 import ThemeToggle from '../shared/components/ThemeToggle';
+import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
 
 // DEV-only imports (lazy loaded)
@@ -126,52 +127,78 @@ function UserMenu() {
 
 function Navigation() {
   const location = useLocation();
+  const { isAuthenticated, hasFeature, hasProduct } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
 
-  const navLinkStyle = (active: boolean) => ({
-    color: 'var(--color-header-text)',
+  const navLinkStyle = (active: boolean, disabled: boolean = false) => ({
+    color: disabled ? 'rgba(255, 255, 255, 0.3)' : 'var(--color-header-text)',
     textDecoration: 'none',
     padding: 'var(--space-2) var(--space-3)',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: active ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
     transition: 'background-color 0.2s',
+    pointerEvents: disabled ? 'none' as const : 'auto' as const,
   });
 
+  // Check access for each nav item
+  const canAccessVehicles = isAuthenticated && hasFeature('save_vehicles');
+  const canAccessETSim = isAuthenticated && hasProduct('quarter_jr');
+  const canAccessSuspSim = isAuthenticated && hasProduct('fourlink');
+  const canAccessClutchSim = isAuthenticated && hasFeature('clutch_sim');
+  const canAccessEngineSim = isAuthenticated && hasProduct('engine_pro');
+  const canAccessLog = isAuthenticated && hasFeature('save_runs');
+  const canAccessHistory = isAuthenticated && hasFeature('save_runs');
+  const canAccessDev = isAuthenticated && hasFeature('dev_tools');
+
   return (
-    <nav style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+    <nav style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
       <Link to="/" style={navLinkStyle(isActive('/'))}>
         Home
       </Link>
-      <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))}>
-        Vehicles
-      </Link>
-      <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))}>
-        ET Sim
-      </Link>
-      <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))}>
-        Susp Sim
-      </Link>
-      <Link to="/clutch-sim" style={navLinkStyle(isActive('/clutch-sim'))}>
-        Clutch Sim
-      </Link>
-      <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))}>
-        Engine Sim
-      </Link>
+      {canAccessVehicles && (
+        <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))}>
+          Vehicles
+        </Link>
+      )}
+      {canAccessETSim && (
+        <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))}>
+          ET Sim
+        </Link>
+      )}
+      {canAccessSuspSim && (
+        <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))}>
+          Susp Sim
+        </Link>
+      )}
+      {canAccessClutchSim && (
+        <Link to="/clutch-sim" style={navLinkStyle(isActive('/clutch-sim'))}>
+          Clutch Sim
+        </Link>
+      )}
+      {canAccessEngineSim && (
+        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))}>
+          Engine Sim
+        </Link>
+      )}
       <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))}>
         Calcs
       </Link>
-      <Link to="/log" style={navLinkStyle(isActive('/log'))}>
-        Log
-      </Link>
-      <Link to="/history" style={navLinkStyle(isActive('/history'))}>
-        History
-      </Link>
+      {canAccessLog && (
+        <Link to="/log" style={navLinkStyle(isActive('/log'))}>
+          Log
+        </Link>
+      )}
+      {canAccessHistory && (
+        <Link to="/history" style={navLinkStyle(isActive('/history'))}>
+          History
+        </Link>
+      )}
       <Link to="/about" style={navLinkStyle(isActive('/about'))}>
         About
       </Link>
       {/* DEV-only link */}
-      {import.meta.env.DEV && (
+      {import.meta.env.DEV && canAccessDev && (
         <Link to="/dev" style={navLinkStyle(isActive('/dev'))}>
           Dev
         </Link>
@@ -220,22 +247,74 @@ function App() {
 
         <main style={{ flex: 1 }}>
           <Routes>
+            {/* Public routes */}
             <Route path="/" element={<Home />} />
-            <Route path="/vehicles" element={<Vehicles />} />
-            <Route path="/et-sim" element={<Predict />} />
-            <Route path="/predict" element={<Predict />} /> {/* Legacy redirect */}
-            <Route path="/suspension-sim" element={<SuspensionSim />} />
-            <Route path="/clutch-sim" element={<ClutchSim />} />
-            <Route path="/engine-sim" element={<EngineSim />} />
-            <Route path="/calculators" element={<Calculators />} />
-            <Route path="/log" element={<Log />} />
-            <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/account" element={<Account />} />
+            <Route path="/calculators" element={<Calculators />} />
+            
+            {/* Protected routes - require auth */}
+            <Route path="/account" element={
+              <ProtectedRoute>
+                <Account />
+              </ProtectedRoute>
+            } />
+            
+            {/* Quarter Jr/Pro features */}
+            <Route path="/vehicles" element={
+              <ProtectedRoute requireFeature="save_vehicles">
+                <Vehicles />
+              </ProtectedRoute>
+            } />
+            <Route path="/et-sim" element={
+              <ProtectedRoute requireProduct="quarter_jr">
+                <Predict />
+              </ProtectedRoute>
+            } />
+            <Route path="/predict" element={
+              <ProtectedRoute requireProduct="quarter_jr">
+                <Predict />
+              </ProtectedRoute>
+            } />
+            <Route path="/log" element={
+              <ProtectedRoute requireFeature="save_runs">
+                <Log />
+              </ProtectedRoute>
+            } />
+            <Route path="/history" element={
+              <ProtectedRoute requireFeature="save_runs">
+                <History />
+              </ProtectedRoute>
+            } />
+            
+            {/* Quarter Pro features */}
+            <Route path="/clutch-sim" element={
+              <ProtectedRoute requireFeature="clutch_sim">
+                <ClutchSim />
+              </ProtectedRoute>
+            } />
+            
+            {/* Engine Pro features */}
+            <Route path="/engine-sim" element={
+              <ProtectedRoute requireProduct="engine_pro">
+                <EngineSim />
+              </ProtectedRoute>
+            } />
+            
+            {/* Four Link features */}
+            <Route path="/suspension-sim" element={
+              <ProtectedRoute requireProduct="fourlink">
+                <SuspensionSim />
+              </ProtectedRoute>
+            } />
+            
             {/* DEV-only route */}
             {import.meta.env.DEV && DevPortal && (
-              <Route path="/dev" element={<DevPortal />} />
+              <Route path="/dev" element={
+                <ProtectedRoute requireFeature="dev_tools">
+                  <DevPortal />
+                </ProtectedRoute>
+              } />
             )}
           </Routes>
         </main>
