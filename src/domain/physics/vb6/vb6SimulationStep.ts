@@ -274,8 +274,12 @@ export function vb6SimulationStep(
     // ========================================================================
     TimeStep = TSMax;
     if (state.Ags0_g > 0 && state.L > 1) {
-      TimeStep = TSMax * Math.pow(state.AgsMax_g / state.Ags0_g, 4);
+      // Limit the ratio to prevent huge timesteps at terminal velocity
+      const ratio = Math.min(state.AgsMax_g / state.Ags0_g, 10);
+      TimeStep = TSMax * Math.pow(ratio, 4);
     }
+    // Cap timestep to prevent numerical instability at terminal velocity
+    if (TimeStep > 0.1) TimeStep = 0.1;
   }
   
   // ========================================================================
@@ -334,6 +338,14 @@ export function vb6SimulationStep(
   // Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep^2 / 2
   // ========================================================================
   let Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
+  
+  // Sanity check: velocity should never go negative or drop dramatically
+  // At terminal velocity, maintain current speed
+  if (Vel_L < state.Vel0_ftps * 0.9 && state.Vel0_ftps > 100) {
+    // Velocity dropped more than 10% at high speed - likely numerical issue
+    Vel_L = state.Vel0_ftps;
+  }
+  if (Vel_L < 0) Vel_L = 0;
   
   // ========================================================================
   // TIMESLIP.FRM:1109 - Skip timestep limiting during shift
@@ -515,19 +527,14 @@ export function vb6SimulationStep(
     AGS_g = AMax_g - (AGS_g - AMax_g);
   }
   if (AGS_g < AMin) {
-    // Protect against division by zero or negative AGS at terminal velocity
-    if (AGS_g !== 0) {
+    // VB6: TIMESLIP.FRM:1226 - Clamp to AMin
+    // This is the VB6 behavior - it clamps acceleration to a minimum
+    // but only adjusts PQWT if AGS is positive (to avoid division issues)
+    if (AGS_g > 0) {
       PQWT = PQWT * AMin / AGS_g;
-    } else {
-      PQWT = AMin * Vel_L * gc;
     }
-    AGS_g = AMin;
-  }
-  
-  // Protect against zero or negative PQWT at terminal velocity
-  // This happens when drag equals or exceeds power
-  if (PQWT <= 0) {
-    PQWT = AMin * Vel_L * gc;
+    // If AGS_g <= 0, we're at or past terminal velocity
+    // VB6 still clamps to AMin but PQWT calculation may differ
     AGS_g = AMin;
   }
   
@@ -599,23 +606,17 @@ export function vb6SimulationStep(
       AGS_g = AMax_g - (AGS_g - AMax_g);
     }
     if (AGS_g < AMin) {
-      // Protect against division by zero or negative AGS at terminal velocity
-      if (AGS_g !== 0) {
+      // VB6: TIMESLIP.FRM:1264 - Clamp to AMin
+      if (AGS_g > 0) {
         PQWT = PQWT * AMin / AGS_g;
-      } else {
-        PQWT = AMin * Vel_L * gc;
       }
       AGS_g = AMin;
     }
     
-    // Protect against zero or negative PQWT at terminal velocity
-    if (PQWT <= 0) {
-      PQWT = AMin * Vel_L * gc;
-      AGS_g = AMin;
-    }
-    
     // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
-    const dtk2_time = VelSqrd / (2 * PQWT) + state.Time0_s;
+    // Protect against zero/negative PQWT for time calculation only
+    const safePQWT = PQWT > 0 ? PQWT : AMin * Vel_L * gc;
+    const dtk2_time = VelSqrd / (2 * safePQWT) + state.Time0_s;
     const dtk2 = dtk2_time - state.Time0_s;
     
     if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
@@ -635,9 +636,18 @@ export function vb6SimulationStep(
   // Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
   // ========================================================================
   const dt_final = time_L - state.Time0_s;
-  const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
-  const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-  const Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+  let Dist_L: number;
+  
+  // At terminal velocity, PQWT is very small, so use simple distance = velocity * time
+  if (PQWT < 0.1) {
+    // Near terminal velocity - use average velocity for distance
+    const avgVel = (state.Vel0_ftps + Vel_L) / 2;
+    Dist_L = state.Dist0_ft + avgVel * dt_final;
+  } else {
+    const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
+    const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
+    Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+  }
   
   // ========================================================================
   // Update state
