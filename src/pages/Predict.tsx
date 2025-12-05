@@ -13,6 +13,7 @@ import { assertComplete, fixtureToSimInputs } from '../domain/physics/vb6/fixtur
 import { useFlag, useFlagsStore } from '../domain/flags/store.tsx';
 import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
+import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
 
 // Lazy load charts
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -36,7 +37,16 @@ function Predict() {
   const [error, setError] = useState<string | null>(null);
   const [showVb6Panel, setShowVb6Panel] = useState(false);
   const { fixture } = useVb6Fixture();
+  
+  // What-If adjustments
+  const [hpAdjust, setHpAdjust] = useState(0); // HP delta (+/- from base)
+  const [weightAdjust, setWeightAdjust] = useState(0); // Weight delta (+/- from base)
   const strictMode = useFlag('vb6StrictMode');
+  
+  // Run history
+  const { saveRun, getRecentRuns } = useRunHistory();
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [comparisonRun, setComparisonRun] = useState<SavedRun | null>(null);
   
   // Check if fixture is complete for VB6 Strict Mode
   const isFixtureComplete = (() => {
@@ -153,9 +163,22 @@ function Predict() {
       // Normal mode: Convert vehicle to VB6 fixture format
       // Works for both QuarterPro (full HP curve) and QuarterJr (peak HP/RPM - synthetic curve)
       try {
+        // Apply What-If adjustments to vehicle
+        const adjustedVehicle = {
+          ...currentVehicle,
+          // Adjust weight
+          weightLb: (currentVehicle.weightLb ?? 3000) + weightAdjust,
+          // Adjust HP - scale the HP curve if present, or adjust peak HP
+          powerHP: (currentVehicle.powerHP ?? 500) + hpAdjust,
+          hpCurve: currentVehicle.hpCurve?.map(point => ({
+            ...point,
+            hp: point.hp + hpAdjust,
+          })),
+        };
+        
         // Convert standard vehicle to VB6 fixture format
         // This will use synthetic HP curve if no full curve is available (QuarterJr mode)
-        const vb6Fixture = fromVehicleToVB6Fixture(currentVehicle as any);
+        const vb6Fixture = fromVehicleToVB6Fixture(adjustedVehicle as any);
         const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
         // Override with UI environment settings
         simInputs.env = {
@@ -186,7 +209,7 @@ function Predict() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicle, env, raceLength, strictMode, fixture]);
+  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust]);
 
   // Show loading state only on initial load (no results yet)
   // Once we have results, show them while recalculating
@@ -323,6 +346,32 @@ function Predict() {
 
   const handleRaceLengthChange = (newLength: RaceLength) => {
     setRaceLength(newLength);
+  };
+
+  // Save current run to history
+  const handleSaveRun = () => {
+    if (!vehicle || !env || !simResult) return;
+    
+    saveRun({
+      vehicleName: vehicle.name,
+      vehicleId: vehicle.id,
+      raceLength,
+      env,
+      result: {
+        et_s: simResult.et_s,
+        mph: simResult.mph,
+      },
+      hpAdjust,
+      weightAdjust,
+    });
+    
+    setShowSaveConfirm(true);
+    setTimeout(() => setShowSaveConfirm(false), 2000);
+  };
+
+  // Load a saved run for comparison
+  const handleLoadComparison = (run: SavedRun) => {
+    setComparisonRun(comparisonRun?.id === run.id ? null : run);
   };
 
   return (
@@ -549,6 +598,60 @@ function Predict() {
             <div className="et-slip-vehicle">
               Vehicle: {vehicle.name}
             </div>
+            
+            {/* Save Run Button */}
+            <button
+              onClick={handleSaveRun}
+              style={{
+                marginTop: '8px',
+                padding: '6px 12px',
+                fontSize: '0.7rem',
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: showSaveConfirm ? '#22c55e' : '#333',
+                color: 'white',
+                cursor: 'pointer',
+                width: '100%',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {showSaveConfirm ? '✓ Saved!' : 'Save Run'}
+            </button>
+            
+            {/* Comparison indicator */}
+            {comparisonRun && (
+              <div style={{ 
+                marginTop: '6px', 
+                padding: '4px 6px', 
+                backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                color: '#3b82f6',
+              }}>
+                <div style={{ fontWeight: 600 }}>vs {comparisonRun.vehicleName}</div>
+                <div>
+                  ET: {(baseET - comparisonRun.result.et_s) >= 0 ? '+' : ''}{(baseET - comparisonRun.result.et_s).toFixed(3)}s
+                </div>
+                <div>
+                  MPH: {(baseMPH - comparisonRun.result.mph) >= 0 ? '+' : ''}{(baseMPH - comparisonRun.result.mph).toFixed(2)}
+                </div>
+                <button 
+                  onClick={() => setComparisonRun(null)}
+                  style={{ 
+                    marginTop: '4px',
+                    padding: '2px 6px',
+                    fontSize: '0.6rem',
+                    border: '1px solid #3b82f6',
+                    borderRadius: '3px',
+                    backgroundColor: 'transparent',
+                    color: '#3b82f6',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Data Logger Chart */}
@@ -588,8 +691,116 @@ function Predict() {
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
 
+          {/* What-If Adjustments */}
+          <div className="card" style={{ width: '200px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>What-If</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.75rem' }}>
+              {/* HP Adjustment */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>HP</span>
+                  <span style={{ 
+                    fontWeight: 600, 
+                    color: hpAdjust > 0 ? '#22c55e' : hpAdjust < 0 ? '#ef4444' : 'var(--color-text)' 
+                  }}>
+                    {hpAdjust >= 0 ? '+' : ''}{hpAdjust}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-200"
+                  max="200"
+                  step="10"
+                  value={hpAdjust}
+                  onChange={(e) => setHpAdjust(Number(e.target.value))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+              {/* Weight Adjustment */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Weight (lbs)</span>
+                  <span style={{ 
+                    fontWeight: 600, 
+                    color: weightAdjust < 0 ? '#22c55e' : weightAdjust > 0 ? '#ef4444' : 'var(--color-text)' 
+                  }}>
+                    {weightAdjust >= 0 ? '+' : ''}{weightAdjust}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-500"
+                  max="500"
+                  step="25"
+                  value={weightAdjust}
+                  onChange={(e) => setWeightAdjust(Number(e.target.value))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+              {/* Reset button */}
+              {(hpAdjust !== 0 || weightAdjust !== 0) && (
+                <button
+                  onClick={() => { setHpAdjust(0); setWeightAdjust(0); }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.7rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                    marginTop: '4px',
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Runs - for comparison */}
+          <div className="card" style={{ width: '180px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Recent Runs</div>
+            <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.7rem' }}>
+              {getRecentRuns(5).length === 0 ? (
+                <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No saved runs yet</div>
+              ) : (
+                getRecentRuns(5).map(run => (
+                  <button
+                    key={run.id}
+                    onClick={() => handleLoadComparison(run)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '6px 8px',
+                      marginBottom: '4px',
+                      borderRadius: '4px',
+                      border: comparisonRun?.id === run.id ? '1px solid #3b82f6' : '1px solid var(--color-border)',
+                      backgroundColor: comparisonRun?.id === run.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-bg-secondary)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '0.7rem', marginBottom: '2px' }}>{run.vehicleName}</div>
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.65rem' }}>
+                      {run.result.et_s.toFixed(3)}s @ {run.result.mph.toFixed(1)} mph
+                    </div>
+                    {(run.hpAdjust !== 0 || run.weightAdjust !== 0) && (
+                      <div style={{ color: '#f59e0b', fontSize: '0.6rem' }}>
+                        {run.hpAdjust !== 0 && `HP ${run.hpAdjust > 0 ? '+' : ''}${run.hpAdjust}`}
+                        {run.hpAdjust !== 0 && run.weightAdjust !== 0 && ' / '}
+                        {run.weightAdjust !== 0 && `Wt ${run.weightAdjust > 0 ? '+' : ''}${run.weightAdjust}`}
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* Race Length */}
-          <div className="card" style={{ width: '130px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div className="card" style={{ width: '110px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Race Length</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>

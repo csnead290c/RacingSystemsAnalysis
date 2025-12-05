@@ -1,6 +1,48 @@
 import { useState } from 'react';
 import type { Env } from '../../domain/schemas/env.schema';
 
+/**
+ * Calculate Density Altitude from environmental conditions
+ * Formula: DA = PA + (120 * (OAT - ISA_temp))
+ * where PA = Pressure Altitude, OAT = Outside Air Temp, ISA_temp = standard temp at altitude
+ */
+function calculateDensityAltitude(env: Env): number {
+  // Pressure altitude: altitude where standard pressure equals actual pressure
+  // Standard pressure at sea level = 29.92 inHg
+  // Pressure drops ~1 inHg per 1000ft
+  const pressureAltitude = env.elevation + (29.92 - env.barometerInHg) * 1000;
+  
+  // ISA standard temperature at altitude (59°F at sea level, drops 3.5°F per 1000ft)
+  const isaTemp = 59 - (pressureAltitude / 1000) * 3.5;
+  
+  // Density altitude correction for temperature deviation
+  const tempDeviation = env.temperatureF - isaTemp;
+  const densityAltitude = pressureAltitude + (120 * tempDeviation);
+  
+  // Humidity correction (approximate - humidity reduces air density)
+  // Each 10% humidity adds ~100ft to DA at typical conditions
+  const humidityCorrection = (env.humidityPct / 10) * 100;
+  
+  return Math.round(densityAltitude + humidityCorrection);
+}
+
+// HP correction calculation available if needed in future
+// function calculateHPCorrection(env: Env): number {
+//   const da = calculateDensityAltitude(env);
+//   const correction = 1 - (da / 1000) * 0.03;
+//   return Math.max(0.5, Math.min(1.5, correction));
+// }
+
+/** Weather presets for common racing conditions */
+const WEATHER_PRESETS: { name: string; env: Partial<Env> }[] = [
+  { name: 'Standard', env: { elevation: 0, temperatureF: 59, barometerInHg: 29.92, humidityPct: 0 } },
+  { name: 'Hot Summer', env: { elevation: 0, temperatureF: 95, barometerInHg: 29.80, humidityPct: 65 } },
+  { name: 'Cool Evening', env: { elevation: 0, temperatureF: 65, barometerInHg: 30.10, humidityPct: 40 } },
+  { name: 'High Altitude', env: { elevation: 5000, temperatureF: 75, barometerInHg: 24.90, humidityPct: 20 } },
+  { name: 'Humid Gulf', env: { elevation: 50, temperatureF: 88, barometerInHg: 29.95, humidityPct: 85 } },
+  { name: 'Desert Dry', env: { elevation: 2500, temperatureF: 100, barometerInHg: 27.50, humidityPct: 10 } },
+];
+
 interface EnvironmentFormProps {
   value: Env;
   onChange: (next: Env) => void;
@@ -36,6 +78,14 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
     });
   };
 
+  // Apply a weather preset
+  const applyPreset = (presetName: string) => {
+    const preset = WEATHER_PRESETS.find(p => p.name === presetName);
+    if (preset) {
+      onChange({ ...value, ...preset.env });
+    }
+  };
+
   // Compact mode: inline layout without spinners, includes all fields
   if (compact) {
     const inputStyle: React.CSSProperties = {
@@ -64,6 +114,38 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
           }
         `}</style>
         <div className="env-compact" style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+          {/* Preset selector */}
+          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {WEATHER_PRESETS.map(preset => (
+              <button
+                key={preset.name}
+                onClick={() => applyPreset(preset.name)}
+                disabled={disabled}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '0.65rem',
+                  borderRadius: '10px',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--color-bg-secondary)',
+                  color: 'var(--color-text-muted)',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseOver={(e) => {
+                  if (!disabled) {
+                    e.currentTarget.style.backgroundColor = 'var(--color-primary)';
+                    e.currentTarget.style.color = 'white';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)';
+                  e.currentTarget.style.color = 'var(--color-text-muted)';
+                }}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
           {/* Row 1: Required fields */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
             <div style={groupStyle}>
@@ -100,6 +182,23 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
             <div style={groupStyle}>
               <label style={labelStyle}>Angle</label>
               <input type="number" style={optInputStyle} className="input" value={value.windAngleDeg ?? ''} onChange={(e) => handleOptionalChange('windAngleDeg', e.target.value)} placeholder="—" />
+            </div>
+            {/* DA Display */}
+            <div style={{ 
+              ...groupStyle, 
+              borderLeft: '1px solid var(--color-border)', 
+              paddingLeft: '12px',
+              minWidth: '70px',
+            }}>
+              <label style={labelStyle}>Density Alt</label>
+              <div style={{ 
+                fontSize: '0.9rem', 
+                fontWeight: 600, 
+                color: calculateDensityAltitude(value) > 3000 ? '#f59e0b' : 'var(--color-text)',
+                padding: '6px 0',
+              }}>
+                {calculateDensityAltitude(value).toLocaleString()} ft
+              </div>
             </div>
           </div>
         </div>

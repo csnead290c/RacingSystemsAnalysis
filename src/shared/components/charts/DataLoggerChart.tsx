@@ -179,6 +179,23 @@ function DataLoggerChart({
     })).filter(m => m.xValue !== undefined && !isNaN(m.xValue));
   }, [chartData, markerIndices]);
 
+  // Detect shift points (where gear changes)
+  const shiftPoints = useMemo(() => {
+    const shifts: { xValue: number; fromGear: number; toGear: number }[] = [];
+    for (let i = 1; i < chartData.length; i++) {
+      const prev = chartData[i - 1];
+      const curr = chartData[i];
+      if (prev.gear !== curr.gear && curr.gear > prev.gear) {
+        shifts.push({
+          xValue: curr.xValue,
+          fromGear: prev.gear,
+          toGear: curr.gear,
+        });
+      }
+    }
+    return shifts;
+  }, [chartData]);
+
   if (!data || data.length === 0) {
     return (
       <div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>
@@ -371,6 +388,25 @@ function DataLoggerChart({
                 fontSize: 10,
                 fontWeight: 700,
                 offset: 5,
+              }}
+            />
+          ))}
+
+          {/* Shift point markers */}
+          {shiftPoints.map((shift, idx) => (
+            <ReferenceLine
+              key={`shift-${idx}`}
+              x={shift.xValue}
+              yAxisId="rpm"
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              label={{ 
+                value: `${shift.fromGear}→${shift.toGear}`, 
+                position: 'insideBottomRight', 
+                fill: '#f59e0b', 
+                fontSize: 9,
+                fontWeight: 600,
               }}
             />
           ))}

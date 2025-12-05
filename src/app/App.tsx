@@ -5,6 +5,7 @@ import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
 import { AuthProvider } from '../domain/auth';
+import { RunHistoryProvider } from '../shared/state/runHistoryStore';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
@@ -213,6 +214,7 @@ function App() {
       <FlagsProvider>
         <AuthProvider>
           <VehicleProvider>
+            <RunHistoryProvider>
             <Vb6FixtureProvider>
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div
@@ -335,6 +337,7 @@ function App() {
       </div>
             </BrowserRouter>
             </Vb6FixtureProvider>
+            </RunHistoryProvider>
           </VehicleProvider>
         </AuthProvider>
       </FlagsProvider>
