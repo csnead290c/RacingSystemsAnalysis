@@ -3,4 +3,4 @@
  */
 
 export * from './types';
-export { AuthProvider, useAuth, useFeature, useProgramTier } from './authStore';
+export { AuthProvider, useAuth, useFeature, useProduct } from './authStore';

@@ -1,83 +1,258 @@
 /**
  * Authentication and User Management Types
  * 
- * Role Hierarchy (highest to lowest):
- * - owner: Full system access, can manage all users and settings
- * - admin: Can manage users, access all features, view analytics
- * - beta_tester: Early access to new features, can provide feedback
- * - subscriber_pro: Paid tier - full Quarter Pro features
- * - subscriber_basic: Paid tier - Quarter Jr features
- * - trial: Limited time trial access
- * - guest: View-only, no saving
- * 
- * Future subscription tiers can be added here.
+ * This system supports:
+ * - Configurable roles (can be added/edited/removed)
+ * - Configurable products/features (QuarterJr, QuarterPro, BonnevillePro, etc.)
+ * - Role-to-product access mapping
+ * - User accounts with subscription tracking
  */
 
 // ============================================================================
-// User Roles
+// Products / Features (the actual software modules)
 // ============================================================================
 
 /**
- * User roles in order of access level (highest to lowest)
+ * Product/Feature definition
+ * These are the actual software modules users can access
  */
-export const USER_ROLES = [
-  'owner',
-  'admin', 
-  'beta_tester',
-  'subscriber_pro',
-  'subscriber_basic',
-  'trial',
-  'guest',
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  color: string;
+  // Feature flags within this product
+  features: string[];
+  // Is this a premium/paid product?
+  isPremium: boolean;
+  // Sort order for display
+  sortOrder: number;
+}
+
+/**
+ * Default products matching the RSA product line
+ */
+export const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: 'quarter_jr',
+    name: 'Quarter Jr',
+    description: 'Basic drag racing simulation - peak HP/RPM, calculated parameters',
+    icon: '🏁',
+    color: '#65a30d',
+    features: ['basic_sim', 'save_vehicles', 'save_runs', 'export_csv'],
+    isPremium: false,
+    sortOrder: 1,
+  },
+  {
+    id: 'quarter_pro',
+    name: 'Quarter Pro',
+    description: 'Full drag racing simulation - complete HP curve, all parameters',
+    icon: '🏎️',
+    color: '#16a34a',
+    features: ['basic_sim', 'hp_curve_editor', 'advanced_settings', 'clutch_sim', 'save_vehicles', 'save_runs', 'export_csv', 'import_data'],
+    isPremium: true,
+    sortOrder: 2,
+  },
+  {
+    id: 'bonneville_pro',
+    name: 'Bonneville Pro',
+    description: 'Top speed / land speed racing simulation',
+    icon: '🚀',
+    color: '#2563eb',
+    features: ['basic_sim', 'hp_curve_editor', 'advanced_settings', 'bonneville_sim', 'save_vehicles', 'save_runs', 'export_csv', 'import_data'],
+    isPremium: true,
+    sortOrder: 3,
+  },
+  {
+    id: 'engine_pro',
+    name: 'Engine Pro',
+    description: 'Engine performance prediction and analysis',
+    icon: '⚙️',
+    color: '#dc2626',
+    features: ['engine_sim', 'dyno_charts', 'recommendations'],
+    isPremium: true,
+    sortOrder: 4,
+  },
+  {
+    id: 'fourlink',
+    name: 'Four Link',
+    description: 'Suspension geometry and four-link analysis',
+    icon: '🔧',
+    color: '#7c3aed',
+    features: ['fourlink_sim', 'geometry_calc', 'anti_squat'],
+    isPremium: true,
+    sortOrder: 5,
+  },
+  {
+    id: 'cam_analyzer',
+    name: 'Cam Analyzer',
+    description: 'Camshaft analysis and comparison',
+    icon: '📊',
+    color: '#0891b2',
+    features: ['cam_analysis', 'cam_comparison', 'valve_train'],
+    isPremium: true,
+    sortOrder: 6,
+  },
+];
+
+/**
+ * All possible feature flags
+ */
+export const ALL_FEATURES = [
+  // Core features
+  'basic_sim',
+  'hp_curve_editor',
+  'advanced_settings',
+  'save_vehicles',
+  'save_runs',
+  'export_csv',
+  'import_data',
+  
+  // Product-specific features
+  'clutch_sim',
+  'bonneville_sim',
+  'engine_sim',
+  'dyno_charts',
+  'recommendations',
+  'fourlink_sim',
+  'geometry_calc',
+  'anti_squat',
+  'cam_analysis',
+  'cam_comparison',
+  'valve_train',
+  
+  // Admin features
+  'dev_tools',
+  'user_management',
+  'role_management',
+  'system_settings',
+  'view_analytics',
+  'beta_features',
 ] as const;
 
-export type UserRole = typeof USER_ROLES[number];
+export type FeatureFlag = typeof ALL_FEATURES[number];
+
+// ============================================================================
+// Roles (configurable user groups)
+// ============================================================================
 
 /**
- * Role display names
+ * Role definition - configurable user groups
  */
-export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
-  owner: 'Owner',
-  admin: 'Administrator',
-  beta_tester: 'Beta Tester',
-  subscriber_pro: 'Pro Subscriber',
-  subscriber_basic: 'Basic Subscriber',
-  trial: 'Trial User',
-  guest: 'Guest',
-};
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  // Products this role has access to
+  products: string[];
+  // Additional feature flags beyond products
+  additionalFeatures: string[];
+  // Can this role manage other roles?
+  canManageRoles: boolean;
+  // Can this role manage users?
+  canManageUsers: boolean;
+  // Is this a system role (cannot be deleted)?
+  isSystem: boolean;
+  // Sort order (lower = higher privilege)
+  sortOrder: number;
+}
 
 /**
- * Role descriptions
+ * Default roles
  */
-export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  owner: 'Full system access - can manage all users, settings, and billing',
-  admin: 'Administrative access - can manage users and access all features',
-  beta_tester: 'Beta testing access - early access to new features with feedback capability',
-  subscriber_pro: 'Pro subscription - full Quarter Pro features and priority support',
-  subscriber_basic: 'Basic subscription - Quarter Jr features',
-  trial: 'Trial access - limited time full access',
-  guest: 'Guest access - view only, no saving or advanced features',
-};
-
-/**
- * Role badge colors for UI
- */
-export const ROLE_COLORS: Record<UserRole, { bg: string; text: string }> = {
-  owner: { bg: '#7c3aed', text: '#fff' },      // Purple
-  admin: { bg: '#dc2626', text: '#fff' },      // Red
-  beta_tester: { bg: '#2563eb', text: '#fff' }, // Blue
-  subscriber_pro: { bg: '#16a34a', text: '#fff' }, // Green
-  subscriber_basic: { bg: '#65a30d', text: '#fff' }, // Lime
-  trial: { bg: '#ca8a04', text: '#fff' },      // Yellow
-  guest: { bg: '#6b7280', text: '#fff' },      // Gray
-};
+export const DEFAULT_ROLES: Role[] = [
+  {
+    id: 'owner',
+    name: 'Owner',
+    description: 'Full system access - can manage all users, roles, settings, and billing',
+    color: '#7c3aed',
+    products: ['quarter_jr', 'quarter_pro', 'bonneville_pro', 'engine_pro', 'fourlink', 'cam_analyzer'],
+    additionalFeatures: ['dev_tools', 'user_management', 'role_management', 'system_settings', 'view_analytics', 'beta_features'],
+    canManageRoles: true,
+    canManageUsers: true,
+    isSystem: true,
+    sortOrder: 0,
+  },
+  {
+    id: 'admin',
+    name: 'Administrator',
+    description: 'Administrative access - can manage users and access all features',
+    color: '#dc2626',
+    products: ['quarter_jr', 'quarter_pro', 'bonneville_pro', 'engine_pro', 'fourlink', 'cam_analyzer'],
+    additionalFeatures: ['dev_tools', 'user_management', 'view_analytics', 'beta_features'],
+    canManageRoles: false,
+    canManageUsers: true,
+    isSystem: true,
+    sortOrder: 1,
+  },
+  {
+    id: 'beta_tester',
+    name: 'Beta Tester',
+    description: 'Beta testing access - early access to new features with feedback capability',
+    color: '#2563eb',
+    products: ['quarter_jr', 'quarter_pro', 'bonneville_pro', 'engine_pro'],
+    additionalFeatures: ['beta_features'],
+    canManageRoles: false,
+    canManageUsers: false,
+    isSystem: true,
+    sortOrder: 2,
+  },
+  {
+    id: 'subscriber_pro',
+    name: 'Pro Subscriber',
+    description: 'Pro subscription - full Quarter Pro and Bonneville Pro features',
+    color: '#16a34a',
+    products: ['quarter_jr', 'quarter_pro', 'bonneville_pro'],
+    additionalFeatures: [],
+    canManageRoles: false,
+    canManageUsers: false,
+    isSystem: false,
+    sortOrder: 3,
+  },
+  {
+    id: 'subscriber_basic',
+    name: 'Basic Subscriber',
+    description: 'Basic subscription - Quarter Jr features only',
+    color: '#65a30d',
+    products: ['quarter_jr'],
+    additionalFeatures: [],
+    canManageRoles: false,
+    canManageUsers: false,
+    isSystem: false,
+    sortOrder: 4,
+  },
+  {
+    id: 'trial',
+    name: 'Trial User',
+    description: 'Trial access - limited time full access to evaluate the software',
+    color: '#ca8a04',
+    products: ['quarter_jr', 'quarter_pro'],
+    additionalFeatures: [],
+    canManageRoles: false,
+    canManageUsers: false,
+    isSystem: false,
+    sortOrder: 5,
+  },
+  {
+    id: 'guest',
+    name: 'Guest',
+    description: 'Guest access - view only, no saving or advanced features',
+    color: '#6b7280',
+    products: [],
+    additionalFeatures: ['basic_sim'],
+    canManageRoles: false,
+    canManageUsers: false,
+    isSystem: true,
+    sortOrder: 99,
+  },
+];
 
 // ============================================================================
 // User Account
 // ============================================================================
 
-/**
- * User account status
- */
 export type AccountStatus = 'active' | 'suspended' | 'pending' | 'expired';
 
 /**
@@ -87,18 +262,21 @@ export interface User {
   id: string;
   email: string;
   displayName: string;
-  role: UserRole;
+  roleId: string;
   status: AccountStatus;
   
-  // Timestamps
-  createdAt: string;      // ISO date
-  lastLoginAt?: string;   // ISO date
+  // Auth (for local auth - will be replaced by OAuth later)
+  passwordHash?: string;
   
-  // Subscription info (for paid tiers)
+  // Timestamps
+  createdAt: string;
+  lastLoginAt?: string;
+  
+  // Subscription info
   subscription?: {
-    plan: 'basic' | 'pro' | 'enterprise';
+    plan: string;
     startDate: string;
-    endDate?: string;     // Undefined = lifetime/ongoing
+    endDate?: string;
     autoRenew: boolean;
   };
   
@@ -109,13 +287,6 @@ export interface User {
     extended: boolean;
   };
   
-  // Beta tester info
-  betaTester?: {
-    invitedBy: string;    // User ID who invited
-    invitedAt: string;
-    feedbackCount: number;
-  };
-  
   // Preferences
   preferences?: {
     theme?: 'light' | 'dark' | 'system';
@@ -123,125 +294,25 @@ export interface User {
     notifications?: boolean;
   };
   
-  // Notes (admin only)
+  // Admin notes
   adminNotes?: string;
 }
 
 /**
- * Minimal user info for display
+ * User summary for lists
  */
 export interface UserSummary {
   id: string;
   email: string;
   displayName: string;
-  role: UserRole;
+  roleId: string;
   status: AccountStatus;
-}
-
-// ============================================================================
-// Access Control
-// ============================================================================
-
-/**
- * Feature flags that can be controlled by role
- */
-export type Feature = 
-  | 'view_dashboard'
-  | 'run_simulation'
-  | 'save_vehicles'
-  | 'save_runs'
-  | 'export_data'
-  | 'import_data'
-  | 'hp_curve_editor'
-  | 'advanced_settings'
-  | 'dev_tools'
-  | 'user_management'
-  | 'system_settings'
-  | 'view_analytics'
-  | 'beta_features';
-
-/**
- * Feature access by role
- */
-export const ROLE_FEATURES: Record<UserRole, Feature[]> = {
-  owner: [
-    'view_dashboard', 'run_simulation', 'save_vehicles', 'save_runs',
-    'export_data', 'import_data', 'hp_curve_editor', 'advanced_settings',
-    'dev_tools', 'user_management', 'system_settings', 'view_analytics', 'beta_features',
-  ],
-  admin: [
-    'view_dashboard', 'run_simulation', 'save_vehicles', 'save_runs',
-    'export_data', 'import_data', 'hp_curve_editor', 'advanced_settings',
-    'dev_tools', 'user_management', 'view_analytics', 'beta_features',
-  ],
-  beta_tester: [
-    'view_dashboard', 'run_simulation', 'save_vehicles', 'save_runs',
-    'export_data', 'import_data', 'hp_curve_editor', 'advanced_settings',
-    'beta_features',
-  ],
-  subscriber_pro: [
-    'view_dashboard', 'run_simulation', 'save_vehicles', 'save_runs',
-    'export_data', 'import_data', 'hp_curve_editor', 'advanced_settings',
-  ],
-  subscriber_basic: [
-    'view_dashboard', 'run_simulation', 'save_vehicles', 'save_runs',
-    'export_data',
-  ],
-  trial: [
-    'view_dashboard', 'run_simulation', 'save_vehicles', 'save_runs',
-    'export_data', 'import_data', 'hp_curve_editor', 'advanced_settings',
-  ],
-  guest: [
-    'view_dashboard', 'run_simulation',
-  ],
-};
-
-/**
- * Check if a role has access to a feature
- */
-export function hasFeatureAccess(role: UserRole, feature: Feature): boolean {
-  return ROLE_FEATURES[role]?.includes(feature) ?? false;
-}
-
-/**
- * Check if a role can manage another role
- */
-export function canManageRole(managerRole: UserRole, targetRole: UserRole): boolean {
-  const managerIndex = USER_ROLES.indexOf(managerRole);
-  const targetIndex = USER_ROLES.indexOf(targetRole);
-  
-  // Can only manage roles below your own
-  // Owner can manage everyone, admin can manage beta_tester and below
-  return managerIndex < targetIndex;
-}
-
-/**
- * Get the program tier (userLevel) for a role
- * Maps auth roles to the existing userLevel system
- */
-export function getRoleProgramTier(role: UserRole): 'quarterJr' | 'quarterPro' | 'admin' {
-  switch (role) {
-    case 'owner':
-    case 'admin':
-      return 'admin';
-    case 'beta_tester':
-    case 'subscriber_pro':
-    case 'trial':
-      return 'quarterPro';
-    case 'subscriber_basic':
-    case 'guest':
-    default:
-      return 'quarterJr';
-  }
 }
 
 // ============================================================================
 // Auth State
 // ============================================================================
 
-/**
- * Authentication state
- */
 export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -249,12 +320,23 @@ export interface AuthState {
   error: string | null;
 }
 
-/**
- * Initial auth state
- */
 export const INITIAL_AUTH_STATE: AuthState = {
   isAuthenticated: false,
   isLoading: true,
   user: null,
   error: null,
+};
+
+// ============================================================================
+// Configuration State (roles + products)
+// ============================================================================
+
+export interface AuthConfig {
+  roles: Role[];
+  products: Product[];
+}
+
+export const DEFAULT_AUTH_CONFIG: AuthConfig = {
+  roles: DEFAULT_ROLES,
+  products: DEFAULT_PRODUCTS,
 };

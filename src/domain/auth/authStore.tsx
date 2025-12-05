@@ -1,13 +1,12 @@
 /**
  * Authentication Store
  * 
- * Provides authentication context and user management.
- * For now, uses localStorage for persistence (will migrate to backend later).
+ * Provides authentication context, user management, and role/product configuration.
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { User, UserRole, AuthState, Feature } from './types';
-import { INITIAL_AUTH_STATE, hasFeatureAccess, getRoleProgramTier } from './types';
+import type { User, Role, Product, AuthState, AuthConfig, FeatureFlag } from './types';
+import { INITIAL_AUTH_STATE, DEFAULT_ROLES, DEFAULT_PRODUCTS } from './types';
 
 // ============================================================================
 // Storage Keys
@@ -16,165 +15,173 @@ import { INITIAL_AUTH_STATE, hasFeatureAccess, getRoleProgramTier } from './type
 const STORAGE_KEYS = {
   CURRENT_USER: 'rsa.auth.currentUser',
   USERS_DB: 'rsa.auth.users',
-  SESSION_TOKEN: 'rsa.auth.session',
+  ROLES_DB: 'rsa.auth.roles',
+  PRODUCTS_DB: 'rsa.auth.products',
 };
-
-// ============================================================================
-// Context
-// ============================================================================
-
-interface AuthContextValue extends AuthState {
-  // Auth actions
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  
-  // User management (admin only)
-  getAllUsers: () => User[];
-  createUser: (user: Omit<User, 'id' | 'createdAt'>) => User;
-  updateUser: (id: string, updates: Partial<User>) => User | null;
-  deleteUser: (id: string) => boolean;
-  getUserById: (id: string) => User | null;
-  
-  // Access control helpers
-  hasFeature: (feature: Feature) => boolean;
-  canManageUsers: () => boolean;
-  getProgramTier: () => 'quarterJr' | 'quarterPro' | 'admin';
-  
-  // Dev helpers
-  impersonateUser: (userId: string) => void;
-  setDevUser: (role: UserRole) => void;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-function generateId(): string {
-  return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+function generateId(prefix: string = 'id'): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function loadUsersFromStorage(): User[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.USERS_DB);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error('Failed to load users from storage:', e);
+function simpleHash(str: string): string {
+  // Simple hash for demo - use bcrypt or similar in production
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
   }
-  return [];
+  return Math.abs(hash).toString(36);
 }
 
-function saveUsersToStorage(users: User[]): void {
+// Storage helpers
+function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    localStorage.setItem(STORAGE_KEYS.USERS_DB, JSON.stringify(users));
-  } catch (e) {
-    console.error('Failed to save users to storage:', e);
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : defaultValue;
+  } catch {
+    return defaultValue;
   }
 }
 
-function loadCurrentUserFromStorage(): User | null {
+function saveToStorage<T>(key: string, value: T): void {
   try {
-    const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (data) {
-      return JSON.parse(data);
-    }
+    localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
-    console.error('Failed to load current user from storage:', e);
-  }
-  return null;
-}
-
-function saveCurrentUserToStorage(user: User | null): void {
-  try {
-    if (user) {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-    }
-  } catch (e) {
-    console.error('Failed to save current user to storage:', e);
+    console.error(`Failed to save to ${key}:`, e);
   }
 }
 
 // ============================================================================
-// Default Users (seeded on first run)
+// Default Users
 // ============================================================================
 
 function getDefaultUsers(): User[] {
   const now = new Date().toISOString();
-  
   return [
     {
       id: 'owner_001',
       email: 'owner@rsa.local',
       displayName: 'System Owner',
-      role: 'owner',
+      roleId: 'owner',
       status: 'active',
+      passwordHash: simpleHash('owner'),
       createdAt: now,
-      adminNotes: 'Default system owner account',
     },
     {
       id: 'admin_001',
       email: 'admin@rsa.local',
       displayName: 'Administrator',
-      role: 'admin',
+      roleId: 'admin',
       status: 'active',
+      passwordHash: simpleHash('admin'),
       createdAt: now,
-      adminNotes: 'Default admin account',
     },
     {
       id: 'beta_001',
       email: 'beta@rsa.local',
       displayName: 'Beta Tester',
-      role: 'beta_tester',
+      roleId: 'beta_tester',
       status: 'active',
+      passwordHash: simpleHash('beta'),
       createdAt: now,
-      betaTester: {
-        invitedBy: 'owner_001',
-        invitedAt: now,
-        feedbackCount: 0,
-      },
-      adminNotes: 'Default beta tester account',
     },
   ];
 }
 
 // ============================================================================
-// Provider Component
+// Context Type
 // ============================================================================
 
-interface AuthProviderProps {
-  children: ReactNode;
+interface AuthContextValue extends AuthState {
+  // Config
+  config: AuthConfig;
+  
+  // Auth actions
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  
+  // User management
+  getAllUsers: () => User[];
+  createUser: (user: Omit<User, 'id' | 'createdAt'>, password?: string) => User;
+  updateUser: (id: string, updates: Partial<User>) => User | null;
+  deleteUser: (id: string) => boolean;
+  getUserById: (id: string) => User | null;
+  setUserPassword: (id: string, password: string) => boolean;
+  
+  // Role management
+  getAllRoles: () => Role[];
+  createRole: (role: Omit<Role, 'id'>) => Role;
+  updateRole: (id: string, updates: Partial<Role>) => Role | null;
+  deleteRole: (id: string) => boolean;
+  getRoleById: (id: string) => Role | null;
+  
+  // Product management
+  getAllProducts: () => Product[];
+  createProduct: (product: Omit<Product, 'id'>) => Product;
+  updateProduct: (id: string, updates: Partial<Product>) => Product | null;
+  deleteProduct: (id: string) => boolean;
+  getProductById: (id: string) => Product | null;
+  
+  // Access control
+  hasFeature: (feature: FeatureFlag) => boolean;
+  hasProduct: (productId: string) => boolean;
+  canManageUsers: () => boolean;
+  canManageRoles: () => boolean;
+  getUserRole: () => Role | null;
+  getUserProducts: () => Product[];
+  
+  // Dev helpers
+  impersonateUser: (userId: string) => void;
+  setDevRole: (roleId: string) => void;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+// ============================================================================
+// Provider
+// ============================================================================
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(INITIAL_AUTH_STATE);
   const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  // Initialize on mount
+  // Initialize
   useEffect(() => {
-    // Load users from storage
-    let storedUsers = loadUsersFromStorage();
+    // Load or seed roles
+    let storedRoles = loadFromStorage<Role[]>(STORAGE_KEYS.ROLES_DB, []);
+    if (storedRoles.length === 0) {
+      storedRoles = DEFAULT_ROLES;
+      saveToStorage(STORAGE_KEYS.ROLES_DB, storedRoles);
+    }
+    setRoles(storedRoles);
     
-    // Seed default users if none exist
+    // Load or seed products
+    let storedProducts = loadFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS_DB, []);
+    if (storedProducts.length === 0) {
+      storedProducts = DEFAULT_PRODUCTS;
+      saveToStorage(STORAGE_KEYS.PRODUCTS_DB, storedProducts);
+    }
+    setProducts(storedProducts);
+    
+    // Load or seed users
+    let storedUsers = loadFromStorage<User[]>(STORAGE_KEYS.USERS_DB, []);
     if (storedUsers.length === 0) {
       storedUsers = getDefaultUsers();
-      saveUsersToStorage(storedUsers);
+      saveToStorage(STORAGE_KEYS.USERS_DB, storedUsers);
     }
-    
     setUsers(storedUsers);
     
     // Check for existing session
-    const currentUser = loadCurrentUserFromStorage();
+    const currentUser = loadFromStorage<User | null>(STORAGE_KEYS.CURRENT_USER, null);
     if (currentUser) {
-      // Verify user still exists and is active
-      const userStillValid = storedUsers.find(
-        u => u.id === currentUser.id && u.status === 'active'
-      );
-      
+      const userStillValid = storedUsers.find(u => u.id === currentUser.id && u.status === 'active');
       if (userStillValid) {
         setState({
           isAuthenticated: true,
@@ -183,14 +190,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           error: null,
         });
       } else {
-        // User no longer valid, clear session
-        saveCurrentUserToStorage(null);
-        setState({
-          isAuthenticated: false,
-          isLoading: false,
-          user: null,
-          error: null,
-        });
+        saveToStorage(STORAGE_KEYS.CURRENT_USER, null);
+        setState({ ...INITIAL_AUTH_STATE, isLoading: false });
       }
     } else {
       setState(prev => ({ ...prev, isLoading: false }));
@@ -198,38 +199,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // Login
-  const login = useCallback(async (email: string, _password: string): Promise<boolean> => {
-    // For now, just match by email (no real password check)
-    // In production, this would call an auth API
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
     if (!user) {
-      setState(prev => ({
-        ...prev,
-        error: 'User not found',
-      }));
+      setState(prev => ({ ...prev, error: 'User not found' }));
+      return false;
+    }
+    
+    // Check password (simple hash for demo)
+    if (user.passwordHash && user.passwordHash !== simpleHash(password)) {
+      setState(prev => ({ ...prev, error: 'Invalid password' }));
       return false;
     }
     
     if (user.status !== 'active') {
-      setState(prev => ({
-        ...prev,
-        error: `Account is ${user.status}`,
-      }));
+      setState(prev => ({ ...prev, error: `Account is ${user.status}` }));
       return false;
     }
     
-    // Update last login
-    const updatedUser = {
-      ...user,
-      lastLoginAt: new Date().toISOString(),
-    };
-    
-    // Update in storage
+    const updatedUser = { ...user, lastLoginAt: new Date().toISOString() };
     const updatedUsers = users.map(u => u.id === user.id ? updatedUser : u);
     setUsers(updatedUsers);
-    saveUsersToStorage(updatedUsers);
-    saveCurrentUserToStorage(updatedUser);
+    saveToStorage(STORAGE_KEYS.USERS_DB, updatedUsers);
+    saveToStorage(STORAGE_KEYS.CURRENT_USER, updatedUser);
     
     setState({
       isAuthenticated: true,
@@ -243,7 +236,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Logout
   const logout = useCallback(() => {
-    saveCurrentUserToStorage(null);
+    saveToStorage(STORAGE_KEYS.CURRENT_USER, null);
     setState({
       isAuthenticated: false,
       isLoading: false,
@@ -252,88 +245,170 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
   }, []);
 
-  // Get all users
-  const getAllUsers = useCallback((): User[] => {
-    return users;
-  }, [users]);
-
-  // Create user
-  const createUser = useCallback((userData: Omit<User, 'id' | 'createdAt'>): User => {
+  // User CRUD
+  const getAllUsers = useCallback(() => users, [users]);
+  
+  const createUser = useCallback((userData: Omit<User, 'id' | 'createdAt'>, password?: string): User => {
     const newUser: User = {
       ...userData,
-      id: generateId(),
+      id: generateId('user'),
       createdAt: new Date().toISOString(),
+      passwordHash: password ? simpleHash(password) : undefined,
     };
-    
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    saveUsersToStorage(updatedUsers);
-    
+    const updated = [...users, newUser];
+    setUsers(updated);
+    saveToStorage(STORAGE_KEYS.USERS_DB, updated);
     return newUser;
   }, [users]);
-
-  // Update user
+  
   const updateUser = useCallback((id: string, updates: Partial<User>): User | null => {
-    const userIndex = users.findIndex(u => u.id === id);
-    if (userIndex === -1) return null;
+    const idx = users.findIndex(u => u.id === id);
+    if (idx === -1) return null;
     
-    const updatedUser = { ...users[userIndex], ...updates };
-    const updatedUsers = [...users];
-    updatedUsers[userIndex] = updatedUser;
+    const updated = { ...users[idx], ...updates };
+    const newUsers = [...users];
+    newUsers[idx] = updated;
+    setUsers(newUsers);
+    saveToStorage(STORAGE_KEYS.USERS_DB, newUsers);
     
-    setUsers(updatedUsers);
-    saveUsersToStorage(updatedUsers);
-    
-    // If updating current user, update session too
     if (state.user?.id === id) {
-      saveCurrentUserToStorage(updatedUser);
-      setState(prev => ({ ...prev, user: updatedUser }));
+      saveToStorage(STORAGE_KEYS.CURRENT_USER, updated);
+      setState(prev => ({ ...prev, user: updated }));
     }
-    
-    return updatedUser;
+    return updated;
   }, [users, state.user]);
-
-  // Delete user
+  
   const deleteUser = useCallback((id: string): boolean => {
-    // Can't delete yourself
     if (state.user?.id === id) return false;
-    
-    const updatedUsers = users.filter(u => u.id !== id);
-    if (updatedUsers.length === users.length) return false;
-    
-    setUsers(updatedUsers);
-    saveUsersToStorage(updatedUsers);
-    
+    const updated = users.filter(u => u.id !== id);
+    if (updated.length === users.length) return false;
+    setUsers(updated);
+    saveToStorage(STORAGE_KEYS.USERS_DB, updated);
     return true;
   }, [users, state.user]);
+  
+  const getUserById = useCallback((id: string) => users.find(u => u.id === id) ?? null, [users]);
+  
+  const setUserPassword = useCallback((id: string, password: string): boolean => {
+    const user = users.find(u => u.id === id);
+    if (!user) return false;
+    return updateUser(id, { passwordHash: simpleHash(password) }) !== null;
+  }, [users, updateUser]);
 
-  // Get user by ID
-  const getUserById = useCallback((id: string): User | null => {
-    return users.find(u => u.id === id) ?? null;
-  }, [users]);
+  // Role CRUD
+  const getAllRoles = useCallback(() => [...roles].sort((a, b) => a.sortOrder - b.sortOrder), [roles]);
+  
+  const createRole = useCallback((roleData: Omit<Role, 'id'>): Role => {
+    const newRole: Role = { ...roleData, id: generateId('role') };
+    const updated = [...roles, newRole];
+    setRoles(updated);
+    saveToStorage(STORAGE_KEYS.ROLES_DB, updated);
+    return newRole;
+  }, [roles]);
+  
+  const updateRole = useCallback((id: string, updates: Partial<Role>): Role | null => {
+    const idx = roles.findIndex(r => r.id === id);
+    if (idx === -1) return null;
+    const updated = { ...roles[idx], ...updates };
+    const newRoles = [...roles];
+    newRoles[idx] = updated;
+    setRoles(newRoles);
+    saveToStorage(STORAGE_KEYS.ROLES_DB, newRoles);
+    return updated;
+  }, [roles]);
+  
+  const deleteRole = useCallback((id: string): boolean => {
+    const role = roles.find(r => r.id === id);
+    if (!role || role.isSystem) return false;
+    // Check if any users have this role
+    if (users.some(u => u.roleId === id)) return false;
+    const updated = roles.filter(r => r.id !== id);
+    setRoles(updated);
+    saveToStorage(STORAGE_KEYS.ROLES_DB, updated);
+    return true;
+  }, [roles, users]);
+  
+  const getRoleById = useCallback((id: string) => roles.find(r => r.id === id) ?? null, [roles]);
 
-  // Check feature access
-  const hasFeature = useCallback((feature: Feature): boolean => {
-    if (!state.user) return false;
-    return hasFeatureAccess(state.user.role, feature);
-  }, [state.user]);
+  // Product CRUD
+  const getAllProducts = useCallback(() => [...products].sort((a, b) => a.sortOrder - b.sortOrder), [products]);
+  
+  const createProduct = useCallback((productData: Omit<Product, 'id'>): Product => {
+    const newProduct: Product = { ...productData, id: generateId('product') };
+    const updated = [...products, newProduct];
+    setProducts(updated);
+    saveToStorage(STORAGE_KEYS.PRODUCTS_DB, updated);
+    return newProduct;
+  }, [products]);
+  
+  const updateProduct = useCallback((id: string, updates: Partial<Product>): Product | null => {
+    const idx = products.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+    const updated = { ...products[idx], ...updates };
+    const newProducts = [...products];
+    newProducts[idx] = updated;
+    setProducts(newProducts);
+    saveToStorage(STORAGE_KEYS.PRODUCTS_DB, newProducts);
+    return updated;
+  }, [products]);
+  
+  const deleteProduct = useCallback((id: string): boolean => {
+    // Check if any roles reference this product
+    if (roles.some(r => r.products.includes(id))) return false;
+    const updated = products.filter(p => p.id !== id);
+    if (updated.length === products.length) return false;
+    setProducts(updated);
+    saveToStorage(STORAGE_KEYS.PRODUCTS_DB, updated);
+    return true;
+  }, [products, roles]);
+  
+  const getProductById = useCallback((id: string) => products.find(p => p.id === id) ?? null, [products]);
 
-  // Check if can manage users
+  // Access control
+  const getUserRole = useCallback((): Role | null => {
+    if (!state.user) return null;
+    return roles.find(r => r.id === state.user!.roleId) ?? null;
+  }, [state.user, roles]);
+  
+  const getUserProducts = useCallback((): Product[] => {
+    const role = getUserRole();
+    if (!role) return [];
+    return products.filter(p => role.products.includes(p.id));
+  }, [getUserRole, products]);
+  
+  const hasFeature = useCallback((feature: FeatureFlag): boolean => {
+    const role = getUserRole();
+    if (!role) return false;
+    
+    // Check additional features
+    if (role.additionalFeatures.includes(feature)) return true;
+    
+    // Check product features
+    const userProducts = products.filter(p => role.products.includes(p.id));
+    return userProducts.some(p => p.features.includes(feature));
+  }, [getUserRole, products]);
+  
+  const hasProduct = useCallback((productId: string): boolean => {
+    const role = getUserRole();
+    if (!role) return false;
+    return role.products.includes(productId);
+  }, [getUserRole]);
+  
   const canManageUsers = useCallback((): boolean => {
-    return hasFeature('user_management');
-  }, [hasFeature]);
+    const role = getUserRole();
+    return role?.canManageUsers ?? false;
+  }, [getUserRole]);
+  
+  const canManageRoles = useCallback((): boolean => {
+    const role = getUserRole();
+    return role?.canManageRoles ?? false;
+  }, [getUserRole]);
 
-  // Get program tier
-  const getProgramTier = useCallback((): 'quarterJr' | 'quarterPro' | 'admin' => {
-    if (!state.user) return 'quarterJr';
-    return getRoleProgramTier(state.user.role);
-  }, [state.user]);
-
-  // Dev: Impersonate user
+  // Dev helpers
   const impersonateUser = useCallback((userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
-      saveCurrentUserToStorage(user);
+      saveToStorage(STORAGE_KEYS.CURRENT_USER, user);
       setState({
         isAuthenticated: true,
         isLoading: false,
@@ -342,30 +417,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
     }
   }, [users]);
-
-  // Dev: Set user by role (creates temp user)
-  const setDevUser = useCallback((role: UserRole) => {
+  
+  const setDevRole = useCallback((roleId: string) => {
+    const role = roles.find(r => r.id === roleId);
+    if (!role) return;
+    
     const devUser: User = {
-      id: `dev_${role}`,
-      email: `dev-${role}@rsa.local`,
-      displayName: `Dev ${role}`,
-      role,
+      id: `dev_${roleId}`,
+      email: `dev-${roleId}@rsa.local`,
+      displayName: `Dev ${role.name}`,
+      roleId,
       status: 'active',
       createdAt: new Date().toISOString(),
-      adminNotes: 'Development user',
     };
     
-    saveCurrentUserToStorage(devUser);
+    saveToStorage(STORAGE_KEYS.CURRENT_USER, devUser);
     setState({
       isAuthenticated: true,
       isLoading: false,
       user: devUser,
       error: null,
     });
-  }, []);
+  }, [roles]);
 
   const value: AuthContextValue = {
     ...state,
+    config: { roles, products },
     login,
     logout,
     getAllUsers,
@@ -373,44 +450,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
     updateUser,
     deleteUser,
     getUserById,
+    setUserPassword,
+    getAllRoles,
+    createRole,
+    updateRole,
+    deleteRole,
+    getRoleById,
+    getAllProducts,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+    getProductById,
     hasFeature,
+    hasProduct,
     canManageUsers,
-    getProgramTier,
+    canManageRoles,
+    getUserRole,
+    getUserProducts,
     impersonateUser,
-    setDevUser,
+    setDevRole,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // ============================================================================
-// Hook
+// Hooks
 // ============================================================================
 
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 }
 
-/**
- * Hook to check if user has a specific feature
- */
-export function useFeature(feature: Feature): boolean {
+export function useFeature(feature: FeatureFlag): boolean {
   const { hasFeature } = useAuth();
   return hasFeature(feature);
 }
 
-/**
- * Hook to get current user's program tier
- */
-export function useProgramTier(): 'quarterJr' | 'quarterPro' | 'admin' {
-  const { getProgramTier } = useAuth();
-  return getProgramTier();
+export function useProduct(productId: string): boolean {
+  const { hasProduct } = useAuth();
+  return hasProduct(productId);
 }

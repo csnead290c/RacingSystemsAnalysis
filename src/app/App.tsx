@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { lazy } from 'react';
+import { lazy, useState } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
@@ -15,12 +15,114 @@ import Log from '../pages/Log';
 import History from '../pages/History';
 import Vehicles from '../pages/Vehicles';
 import About from '../pages/About';
+import Login from '../pages/Login';
+import Account from '../pages/Account';
 import ThemeToggle from '../shared/components/ThemeToggle';
+import { useAuth } from '../domain/auth';
 
 // DEV-only imports (lazy loaded)
 const DevPortal = import.meta.env.DEV
   ? lazy(() => import('../pages/DevPortal'))
   : null;
+
+function UserMenu() {
+  const { user, isAuthenticated, logout } = useAuth();
+  const [showMenu, setShowMenu] = useState(false);
+  
+  if (!isAuthenticated || !user) {
+    return (
+      <Link
+        to="/login"
+        style={{
+          color: 'var(--color-header-text)',
+          textDecoration: 'none',
+          padding: 'var(--space-2) var(--space-3)',
+          borderRadius: 'var(--radius-sm)',
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        }}
+      >
+        Sign In
+      </Link>
+    );
+  }
+  
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: 'var(--space-2) var(--space-3)',
+          borderRadius: 'var(--radius-sm)',
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          border: 'none',
+          color: 'var(--color-header-text)',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          backgroundColor: 'var(--color-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+        }}>
+          {user.displayName.charAt(0).toUpperCase()}
+        </span>
+        <span style={{ fontSize: '0.875rem' }}>{user.displayName}</span>
+      </button>
+      {showMenu && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: '0.5rem',
+            backgroundColor: 'var(--color-surface)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-lg)',
+            minWidth: '150px',
+            zIndex: 100,
+          }}
+        >
+          <Link
+            to="/account"
+            onClick={() => setShowMenu(false)}
+            style={{
+              display: 'block',
+              padding: '0.75rem 1rem',
+              color: 'var(--color-text)',
+              textDecoration: 'none',
+            }}
+          >
+            My Account
+          </Link>
+          <button
+            onClick={() => { logout(); setShowMenu(false); }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '0.75rem 1rem',
+              textAlign: 'left',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: '#dc2626',
+              cursor: 'pointer',
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Navigation() {
   const location = useLocation();
@@ -112,6 +214,7 @@ function App() {
           <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center' }}>
             <Navigation />
             <ThemeToggle />
+            <UserMenu />
           </div>
         </header>
 
@@ -128,6 +231,8 @@ function App() {
             <Route path="/log" element={<Log />} />
             <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/account" element={<Account />} />
             {/* DEV-only route */}
             {import.meta.env.DEV && DevPortal && (
               <Route path="/dev" element={<DevPortal />} />
