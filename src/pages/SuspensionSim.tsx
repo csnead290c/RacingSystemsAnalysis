@@ -14,8 +14,10 @@ import Page from '../shared/components/Page';
 import FourLinkDiagram from '../shared/components/charts/FourLinkDiagram';
 import {
   analyzeFourLink,
+  enumerateHoleCodes,
   type FourLinkInput,
   type FourLinkResult,
+  type HoleCodeDetails,
 } from '../domain/physics/models/fourLink';
 
 // Default input values based on FOURLINK manual
@@ -74,6 +76,28 @@ const defaultInput: FourLinkInput = {
 function SuspensionSim() {
   const [input, setInput] = useState<FourLinkInput>(defaultInput);
   const [activeTab, setActiveTab] = useState<'main' | 'details'>('main');
+  const [displayLimits, setDisplayLimits] = useState({
+    enabled: false,
+    separationMin: -3,
+    separationMax: 3,
+    antiSquatMin: 80,
+    antiSquatMax: 150,
+    lowerAngleMin: -5,
+    lowerAngleMax: 5,
+  });
+
+  // Enumerate all hole code combinations
+  const holeCodeResults: HoleCodeDetails[] = useMemo(() => {
+    const limits = displayLimits.enabled ? {
+      separationMin: displayLimits.separationMin,
+      separationMax: displayLimits.separationMax,
+      antiSquatMin: displayLimits.antiSquatMin,
+      antiSquatMax: displayLimits.antiSquatMax,
+      lowerAngleMin: displayLimits.lowerAngleMin,
+      lowerAngleMax: displayLimits.lowerAngleMax,
+    } : undefined;
+    return enumerateHoleCodes(input, limits);
+  }, [input, displayLimits]);
 
   // Calculate total weight and percentages
   const totalWeight = input.frontWeight + input.rearWeight;
@@ -246,6 +270,7 @@ function SuspensionSim() {
         </div>
       </div>
 
+      {activeTab === 'main' ? (
       <div className="susp-sim-layout">
         {/* INPUT PANEL */}
         <div className="susp-sim-inputs card" style={{ padding: 'var(--space-3)' }}>
@@ -702,6 +727,218 @@ function SuspensionSim() {
           </div>
         </div>
       </div>
+      ) : (
+      /* DETAILS TAB - Four Link Bar Geometry Details */
+      <div style={{ display: 'flex', gap: 'var(--space-4)', height: 'calc(100vh - 140px)' }}>
+        {/* Left: Geometry Input */}
+        <div className="card" style={{ width: '400px', flexShrink: 0, padding: 'var(--space-3)', overflow: 'auto' }}>
+          <div style={sectionTitleStyle}>Four Link Bar Geometry Data</div>
+          
+          {/* Upper Bar */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#f97316', marginBottom: 'var(--space-2)' }}>Upper Bar</div>
+            <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '4px' }}>Axle End</div>
+                <table style={{ fontSize: '0.75rem' }}>
+                  <thead>
+                    <tr><th style={{ padding: '2px 8px' }}>Hole</th><th style={{ padding: '2px 8px' }}>X</th><th style={{ padding: '2px 8px' }}>Y</th></tr>
+                  </thead>
+                  <tbody>
+                    {input.upperBar.axleEnd.map((h, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '2px 8px' }}>{i + 1}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.x.toFixed(1)}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.y.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '4px' }}>Chassis End</div>
+                <table style={{ fontSize: '0.75rem' }}>
+                  <thead>
+                    <tr><th style={{ padding: '2px 8px' }}>Hole</th><th style={{ padding: '2px 8px' }}>X</th><th style={{ padding: '2px 8px' }}>Y</th></tr>
+                  </thead>
+                  <tbody>
+                    {input.upperBar.chassisEnd.map((h, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '2px 8px' }}>{i + 1}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.x.toFixed(1)}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.y.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Lower Bar */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#3b82f6', marginBottom: 'var(--space-2)' }}>Lower Bar</div>
+            <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '4px' }}>Axle End</div>
+                <table style={{ fontSize: '0.75rem' }}>
+                  <thead>
+                    <tr><th style={{ padding: '2px 8px' }}>Hole</th><th style={{ padding: '2px 8px' }}>X</th><th style={{ padding: '2px 8px' }}>Y</th></tr>
+                  </thead>
+                  <tbody>
+                    {input.lowerBar.axleEnd.map((h, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '2px 8px' }}>{i + 1}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.x.toFixed(1)}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.y.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '4px' }}>Chassis End</div>
+                <table style={{ fontSize: '0.75rem' }}>
+                  <thead>
+                    <tr><th style={{ padding: '2px 8px' }}>Hole</th><th style={{ padding: '2px 8px' }}>X</th><th style={{ padding: '2px 8px' }}>Y</th></tr>
+                  </thead>
+                  <tbody>
+                    {input.lowerBar.chassisEnd.map((h, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '2px 8px' }}>{i + 1}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.x.toFixed(1)}</td>
+                        <td style={{ padding: '2px 8px' }}>{h.y.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Display Limits */}
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+              <div style={sectionTitleStyle}>Display Limits</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, enabled: e.target.checked }))}
+                />
+                Enabled
+              </label>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem', opacity: displayLimits.enabled ? 1 : 0.5 }}>
+              <div>
+                <label style={{ display: 'block', color: 'var(--color-muted)', marginBottom: '2px' }}>Separation Min</label>
+                <input type="number" className="input" style={{ width: '60px', padding: '2px 4px', fontSize: '0.75rem' }}
+                  value={displayLimits.separationMin} disabled={!displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, separationMin: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'var(--color-muted)', marginBottom: '2px' }}>Separation Max</label>
+                <input type="number" className="input" style={{ width: '60px', padding: '2px 4px', fontSize: '0.75rem' }}
+                  value={displayLimits.separationMax} disabled={!displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, separationMax: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'var(--color-muted)', marginBottom: '2px' }}>Anti-Squat Min %</label>
+                <input type="number" className="input" style={{ width: '60px', padding: '2px 4px', fontSize: '0.75rem' }}
+                  value={displayLimits.antiSquatMin} disabled={!displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, antiSquatMin: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'var(--color-muted)', marginBottom: '2px' }}>Anti-Squat Max %</label>
+                <input type="number" className="input" style={{ width: '60px', padding: '2px 4px', fontSize: '0.75rem' }}
+                  value={displayLimits.antiSquatMax} disabled={!displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, antiSquatMax: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'var(--color-muted)', marginBottom: '2px' }}>Lower Angle Min °</label>
+                <input type="number" className="input" style={{ width: '60px', padding: '2px 4px', fontSize: '0.75rem' }}
+                  value={displayLimits.lowerAngleMin} disabled={!displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, lowerAngleMin: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'var(--color-muted)', marginBottom: '2px' }}>Lower Angle Max °</label>
+                <input type="number" className="input" style={{ width: '60px', padding: '2px 4px', fontSize: '0.75rem' }}
+                  value={displayLimits.lowerAngleMax} disabled={!displayLimits.enabled}
+                  onChange={(e) => setDisplayLimits(prev => ({ ...prev, lowerAngleMax: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Hole Code Results */}
+        <div className="card" style={{ flex: 1, padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+            <div style={sectionTitleStyle}>Calculated Four Link Bar Details</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              {holeCodeResults.length} combinations {displayLimits.enabled ? '(filtered)' : ''}
+            </div>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+              <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface)' }}>
+                <tr>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid var(--color-border)' }}>Hole Code</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>IC X</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>IC Y</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>Anti-Squat %</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>Initial Hit</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>Separation</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '2px solid var(--color-border)' }}>Lower Angle</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holeCodeResults.map((hc, i) => (
+                  <tr 
+                    key={i} 
+                    style={{ 
+                      cursor: 'pointer',
+                      backgroundColor: hc.holeCode === input.holeCode ? 'var(--color-primary-bg)' : undefined,
+                    }}
+                    onClick={() => handleInputChange('holeCode', hc.holeCode)}
+                  >
+                    <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)', fontFamily: 'monospace', fontWeight: '600' }}>
+                      {hc.holeCode}
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>
+                      {hc.instantCenter.x.toFixed(1)}
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>
+                      {hc.instantCenter.y.toFixed(1)}
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>
+                      {hc.percentAntiSquat.toFixed(0)}%
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>
+                      {hc.initialRearTireHit.toFixed(0)}
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>
+                      {hc.shockSeparation.toFixed(2)}"
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', borderBottom: '1px solid var(--color-border)' }}>
+                      {hc.lowerBarAngle.toFixed(1)}°
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ 
+            borderTop: '1px solid var(--color-border)', 
+            paddingTop: 'var(--space-2)', 
+            marginTop: 'var(--space-2)',
+            fontSize: '0.75rem',
+            color: 'var(--color-muted)'
+          }}>
+            Click a row to select that hole code. Results sorted by Anti-Squat % (highest first).
+          </div>
+        </div>
+      </div>
+      )}
     </Page>
   );
 }
