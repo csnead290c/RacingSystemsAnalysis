@@ -1,112 +1,21 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from 'recharts';
 import Page from '../shared/components/Page';
-
-/**
- * Four-link suspension geometry hole location
- */
-interface HoleLocation {
-  x: number; // Horizontal distance from rear axle centerline (inches)
-  y: number; // Vertical distance from ground (inches)
-}
-
-/**
- * Four-link bar attachment points (up to 5 holes per location)
- */
-interface LinkBarGeometry {
-  axleEnd: HoleLocation[];   // Holes on axle housing
-  chassisEnd: HoleLocation[]; // Holes on chassis
-}
-
-/**
- * Complete four-link suspension input data
- */
-interface FourLinkInput {
-  // General data
-  note: string;
-  estimated60ft: number;      // seconds
-  maxAcceleration: number;    // g's
-  tireRollout: number;        // inches (or diameter if < 60)
-  
-  // Rear suspension data
-  shockMountLocation: number; // inches from rear axle (negative = behind)
-  rearSpringRate: number;     // lbs per inch (per spring)
-  shockRateCompression: number; // lbs per in/sec
-  shockRateExtension: number;   // lbs per in/sec
-  wheelieBarLength: number;   // inches behind rear axle
-  
-  // Four link geometry
-  upperBar: LinkBarGeometry;
-  lowerBar: LinkBarGeometry;
-  holeCode: string;           // 4-digit code (e.g., "1323")
-  
-  // Geometry adjustments
-  axleHeightAdj: number;      // inches
-  chassisHeightAdj: number;   // inches
-  pinionAngleAdj: number;     // degrees
-  
-  // Static weight data
-  frontWeight: number;        // lbs
-  rearWeight: number;         // lbs
-  
-  // Center of gravity data
-  wheelbase: number;          // inches
-  verticalCG: number;         // inches from ground
-  frontStrutLift: number;     // inches
-  frontTireLift: number;      // inches
-  rearAxleWeight: number;     // lbs (unsprung weight)
-}
-
-/**
- * Calculated instant center and anti-squat results
- */
-interface InstantCenterResult {
-  x: number;                  // Horizontal location (inches from rear axle)
-  y: number;                  // Vertical location (inches from ground)
-  percentAntiSquat: number;   // Percentage
-  initialRearTireHit: number; // lbs
-  shockSeparation: number;    // inches (positive = rise, negative = squat)
-}
-
-/**
- * Dynamic chassis analysis results at a time step
- */
-interface DynamicTimeStep {
-  time: number;               // seconds
-  separationDist: number;     // inches
-  separationVel: number;      // inches/sec
-  springForce: number;        // lbs
-  shockForce: number;         // lbs
-  massForce: number;          // lbs
-  rearTireForce: number;      // lbs
-  frontTireForce: number;     // lbs
-  wheelieBarForce: number;    // lbs
-}
-
-/**
- * Complete simulation results
- */
-interface FourLinkResult {
-  // Four link bar forces
-  upperBarForce: number;      // lbs (negative = tension)
-  lowerBarForce: number;      // lbs (positive = compression)
-  totalHorizontalForce: number;
-  totalVerticalForce: number;
-  
-  // Instant center
-  instantCenter: InstantCenterResult;
-  
-  // Dynamic weight transfer
-  dynamicFrontWeight: number;
-  dynamicRearWeight: number;
-  wheelieBarForce: number;
-  shockDampingRatio: number;
-  
-  // Dynamic analysis
-  timeSteps: DynamicTimeStep[];
-  avgRearTireForce: number;
-  rearTireForceVariation: number; // percentage
-}
+import {
+  analyzeFourLink,
+  type FourLinkInput,
+  type FourLinkResult,
+} from '../domain/physics/models/fourLink';
 
 // Default input values based on FOURLINK manual
 const defaultInput: FourLinkInput = {
@@ -175,30 +84,9 @@ function SuspensionSim() {
     ? (input.frontWeight / totalWeight) * input.wheelbase 
     : input.wheelbase / 2;
 
-  // Placeholder for actual calculations
-  const result: FourLinkResult | null = useMemo(() => {
-    // TODO: Implement actual four-link calculations
-    // For now, return placeholder data
-    return {
-      upperBarForce: -850,
-      lowerBarForce: 2100,
-      totalHorizontalForce: 3200,
-      totalVerticalForce: 450,
-      instantCenter: {
-        x: 48,
-        y: 12,
-        percentAntiSquat: 115,
-        initialRearTireHit: 2800,
-        shockSeparation: 0.8,
-      },
-      dynamicFrontWeight: 25,
-      dynamicRearWeight: 2975,
-      wheelieBarForce: 0,
-      shockDampingRatio: 1.85,
-      timeSteps: [],
-      avgRearTireForce: 2950,
-      rearTireForceVariation: 12,
-    };
+  // Run four-link analysis
+  const result: FourLinkResult = useMemo(() => {
+    return analyzeFourLink(input);
   }, [input]);
 
   const handleInputChange = (field: keyof FourLinkInput, value: number | string) => {
@@ -676,19 +564,79 @@ function SuspensionSim() {
 
           {/* Bottom: Dynamic Analysis / Rear Tire Force Graph */}
           <div className="susp-sim-dynamic card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column' }}>
-            <div style={sectionTitleStyle}>Rear Tire Force vs Time</div>
-            <div style={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              backgroundColor: 'var(--color-bg-secondary)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--color-muted)',
-              fontSize: '0.9rem'
-            }}>
-              {/* TODO: Line chart showing rear tire force over time (0-0.8s) */}
-              Dynamic analysis chart coming soon...
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+              <div style={sectionTitleStyle}>Rear Tire Force vs Time</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                Avg: <span style={{ color: 'var(--color-text)', fontWeight: '600' }}>{result.avgRearTireForce.toFixed(0)} lbs</span>
+                {' | '}
+                Var: <span style={{ color: 'var(--color-text)', fontWeight: '600' }}>{result.rearTireForceVariation.toFixed(0)}%</span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              {result.timeSteps.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={result.timeSteps} margin={{ top: 5, right: 20, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
+                    <XAxis
+                      dataKey="time"
+                      stroke="var(--color-text-muted)"
+                      tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+                      tickFormatter={(v) => v.toFixed(2)}
+                      label={{ value: 'Time (s)', position: 'insideBottom', offset: -10, fontSize: 11, fill: 'var(--color-text-muted)' }}
+                    />
+                    <YAxis
+                      stroke="var(--color-text-muted)"
+                      tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+                      tickFormatter={(v) => v.toFixed(0)}
+                      width={50}
+                      label={{ value: 'Force (lbs)', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'var(--color-text-muted)' }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'var(--color-bg)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.75rem',
+                      }}
+                      formatter={(value: number, name: string) => [
+                        `${value.toFixed(0)} lbs`,
+                        name === 'rearTireForce' ? 'Rear Tire' : name === 'frontTireForce' ? 'Front Tire' : name
+                      ]}
+                      labelFormatter={(label) => `Time: ${Number(label).toFixed(2)}s`}
+                    />
+                    <ReferenceLine y={result.avgRearTireForce} stroke="#22c55e" strokeDasharray="5 5" />
+                    <Line
+                      type="monotone"
+                      dataKey="rearTireForce"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Rear Tire"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="frontTireForce"
+                      stroke="#3b82f6"
+                      strokeWidth={1.5}
+                      dot={false}
+                      name="Front Tire"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ 
+                  height: '100%',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  backgroundColor: 'var(--color-bg-secondary)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--color-muted)',
+                  fontSize: '0.9rem'
+                }}>
+                  No simulation data
+                </div>
+              )}
             </div>
           </div>
         </div>
