@@ -34,37 +34,41 @@ const defaultInput: FourLinkInput = {
   wheelieBarLength: 68.0,
   
   // Upper bar: 5 holes each end (from VB6 test case image 2)
+  // Axle End: x=1.000 for all, y varies 20,19,18,17,16
+  // Chassis End: x=20.100 for all, y varies 14.250,13.250,12.250,11.250,10.250
   upperBar: {
     axleEnd: [
-      { x: 1.0, y: 20.0 },
-      { x: 1.0, y: 19.0 },
-      { x: 1.0, y: 18.0 },
-      { x: 1.0, y: 17.0 },
-      { x: 1.0, y: 16.0 },
+      { x: 1.0, y: 20.0 },    // Hole 1
+      { x: 1.0, y: 19.0 },    // Hole 2 <- used in test case
+      { x: 1.0, y: 18.0 },    // Hole 3
+      { x: 1.0, y: 17.0 },    // Hole 4
+      { x: 1.0, y: 16.0 },    // Hole 5
     ],
     chassisEnd: [
-      { x: 20.1, y: 14.25 },
-      { x: 20.1, y: 13.25 },
-      { x: 20.1, y: 12.25 },
-      { x: 20.1, y: 11.25 },
-      { x: 20.1, y: 10.25 },
+      { x: 20.1, y: 14.25 },  // Hole 1 <- used in test case
+      { x: 20.1, y: 13.25 },  // Hole 2
+      { x: 20.1, y: 12.25 },  // Hole 3
+      { x: 20.1, y: 11.25 },  // Hole 4
+      { x: 20.1, y: 10.25 },  // Hole 5
     ],
   },
   // Lower bar: 5 holes each end
+  // Axle End: x=0.500 for all, y varies 9,8,7,6,5
+  // Chassis End: x=20.500 for all, y varies 9,8,7,6,5
   lowerBar: {
     axleEnd: [
-      { x: 0.5, y: 9.0 },
-      { x: 0.5, y: 8.0 },
-      { x: 0.5, y: 7.0 },
-      { x: 0.5, y: 6.0 },
-      { x: 0.5, y: 5.0 },
+      { x: 0.5, y: 9.0 },     // Hole 1
+      { x: 0.5, y: 8.0 },     // Hole 2 <- used in test case
+      { x: 0.5, y: 7.0 },     // Hole 3
+      { x: 0.5, y: 6.0 },     // Hole 4
+      { x: 0.5, y: 5.0 },     // Hole 5
     ],
     chassisEnd: [
-      { x: 20.5, y: 9.0 },
-      { x: 20.5, y: 8.0 },
-      { x: 20.5, y: 7.0 },
-      { x: 20.5, y: 6.0 },
-      { x: 20.5, y: 5.0 },
+      { x: 20.5, y: 9.0 },    // Hole 1
+      { x: 20.5, y: 8.0 },    // Hole 2
+      { x: 20.5, y: 7.0 },    // Hole 3 <- used in test case
+      { x: 20.5, y: 6.0 },    // Hole 4
+      { x: 20.5, y: 5.0 },    // Hole 5
     ],
   },
   holeCode: '2123',  // Upper: hole 2 axle, hole 1 chassis; Lower: hole 2 axle, hole 3 chassis

@@ -1,0 +1,127 @@
+[Root]
+Most Recent Package=Setup Package for CD
+
+
+[Package|Setup Package for CD|CLUTCH Pro for Windows]
+Icon1=Clutch.exe
+Title1=CLUTCH Pro for Windows
+StartIn1=$(AppPath)
+Key1=Icon1
+
+[Package|Setup Package for CD|Root]
+SubWizProgID=PDWizard.SetupPkgSubWiz
+BuildFolder=C:\RSA\CPro3W\Package
+
+[Package|Setup Package for CD|Configure DAO ISAMs]
+Applicable=No
+
+[Package|Setup Package for CD|Configure DAO ODBC]
+JetWorkspace=
+ODBCDirect=
+
+[Package|Setup Package for CD|Files Found]
+
+[Package|Setup Package for CD|Files Released]
+
+[Package|Setup Package for CD|Missing Dependency Information]
+
+[Package|Setup Package for CD|Out-of-Date Dependency Information]
+
+[Package|Setup Package for CD|Files Added]
+
+[Package|Setup Package for CD|Files Removed]
+
+[Package|Setup Package for CD|Files In Project]
+C:\RSA\CPro3W\Clutch.exe=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEAUT32.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEPRO32.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\ASYCFILT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\STDOLE2.TLB=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\COMCAT.DLL=Yes
+C:\WINDOWS\SYSTEM32\threed32.ocx=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC40.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT40.DLL=Yes
+C:\WINDOWS\SYSTEM32\dbgrid32.ocx=Yes
+C:\WINDOWS\SYSTEM32\GRAPHS32.OCX=Yes
+C:\WINDOWS\SYSTEM32\GSW32.EXE=Yes
+C:\WINDOWS\SYSTEM32\GSWDLL32.DLL=Yes
+C:\WINDOWS\SYSTEM32\GSWAG32.DLL=Yes
+C:\WINDOWS\SYSTEM32\COMDLG32.OCX=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP.EXE=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP1.EXE=Yes
+C:\WINDOWS\SYSTEM32\VB6STKIT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\ST6UNST.EXE=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\REGSVR32.EXE=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\msvcirt.dll=Yes
+C:\WINDOWS\SYSTEM32\MSSTDFMT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVBVM60.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC42.DLL=Yes
+
+[Package|Setup Package for CD|Configure Registry Files]
+Applicable=No
+
+[Package|Setup Package for CD|Configure Remote Servers]
+Applicable=No
+
+[Package|Setup Package for CD|Install Locations]
+C:\RSA\CPro3W\Clutch.exe=$(AppPath)
+C:\WINDOWS\SYSTEM32\MSVBVM60.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEAUT32.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEPRO32.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\ASYCFILT.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\STDOLE2.TLB=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\COMCAT.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\threed32.ocx=$(WinSysPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC40.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT40.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\dbgrid32.ocx=$(WinSysPath)
+C:\WINDOWS\SYSTEM32\GRAPHS32.OCX=$(WinSysPath)
+C:\WINDOWS\SYSTEM32\GSW32.EXE=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\GSWDLL32.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\GSWAG32.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\REGSVR32.EXE=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\MFC42.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\MSVCRT.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\MSVCIRT.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\COMDLG32.OCX=$(WinSysPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP.EXE=$(AppPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP1.EXE=$(WinPath)
+C:\WINDOWS\SYSTEM32\VB6STKIT.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\ST6UNST.EXE=$(WinPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\REGSVR32.EXE=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\msvcirt.dll=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\MSSTDFMT.DLL=$(WinSysPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVBVM60.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC42.DLL=$(WinSysPathSysFile)
+
+[Package|Setup Package for CD|Configure Shared Files]
+Applicable=Yes
+C:\RSA\CPro3W\Clutch.exe=No
+
+[Package|Setup Package for CD|Distribution]
+Type=single
+Size=
+Title=CLUTCH Pro
+
+[Package|Setup Package for CD|IconGroups]
+Group0=$(Programs)
+PrivateGroup0=-1
+Parent0=
+
+[Package|Setup Package for CD|$(Programs)]
+Icon1=Clutch.exe
+Title1=CLUTCH Pro
+StartIn1=$(AppPath)
+Key1=Icon2
+
+[Package|Setup Package for CD|Package]
+PackageFolder=C:\RSA\CPro3W\Package
+ProjectFolder=C:\RSA\CPro3w
+ServerSideCab=
+File1=C:\RSA\CPro3W\Package\setup.exe
+File2=C:\RSA\CPro3W\Package\Setup.Lst
+File3=C:\RSA\CPro3W\Package\Clutch.CAB
+Handler1=PDWizard.FolderDplySubWiz
+Handler2=PDWizard.WebPostDplySubWiz

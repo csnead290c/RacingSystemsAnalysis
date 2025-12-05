@@ -1,0 +1,116 @@
+[Root]
+Most Recent Package=Standard Setup Package for CD
+
+
+[Package|Standard Setup Package for CD|Root]
+SubWizProgID=PDWizard.SetupPkgSubWiz
+BuildFolder=C:\RSA\Cjr3w\Package
+
+[Package|Standard Setup Package for CD|Configure DAO ISAMs]
+Applicable=No
+
+[Package|Standard Setup Package for CD|Configure DAO ODBC]
+JetWorkspace=
+ODBCDirect=
+
+[Package|Standard Setup Package for CD|Files Found]
+
+[Package|Standard Setup Package for CD|Files Released]
+
+[Package|Standard Setup Package for CD|Missing Dependency Information]
+
+[Package|Standard Setup Package for CD|Out-of-Date Dependency Information]
+
+[Package|Standard Setup Package for CD|Files Added]
+
+[Package|Standard Setup Package for CD|Files Removed]
+
+[Package|Standard Setup Package for CD|Files In Project]
+C:\RSA\Cjr3w\CLUTCHjr.exe=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVBVM60.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEAUT32.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEPRO32.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\ASYCFILT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\STDOLE2.TLB=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\COMCAT.DLL=Yes
+C:\WINDOWS\SYSTEM32\dbgrid32.ocx=Yes
+C:\WINDOWS\SYSTEM32\threed32.ocx=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC40.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT40.DLL=Yes
+C:\WINDOWS\SYSTEM32\GRAPHS32.OCX=Yes
+C:\WINDOWS\SYSTEM32\GSW32.EXE=Yes
+C:\WINDOWS\SYSTEM32\GSWDLL32.DLL=Yes
+C:\WINDOWS\SYSTEM32\GSWAG32.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\REGSVR32.EXE=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC42.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\msvcirt.dll=Yes
+C:\WINDOWS\SYSTEM32\COMDLG32.OCX=Yes
+C:\WINDOWS\SYSTEM32\MSSTDFMT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP.EXE=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP1.EXE=Yes
+C:\WINDOWS\SYSTEM32\VB6STKIT.DLL=Yes
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\ST6UNST.EXE=Yes
+
+[Package|Standard Setup Package for CD|Configure Registry Files]
+Applicable=No
+
+[Package|Standard Setup Package for CD|Configure Remote Servers]
+Applicable=No
+
+[Package|Standard Setup Package for CD|Install Locations]
+C:\RSA\Cjr3w\CLUTCHjr.exe=$(AppPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVBVM60.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEAUT32.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\OLEPRO32.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\ASYCFILT.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\STDOLE2.TLB=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\COMCAT.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\dbgrid32.ocx=$(WinSysPath)
+C:\WINDOWS\SYSTEM32\threed32.ocx=$(WinSysPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC40.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT40.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\GRAPHS32.OCX=$(WinSysPath)
+C:\WINDOWS\SYSTEM32\GSW32.EXE=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\GSWDLL32.DLL=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\GSWAG32.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\REGSVR32.EXE=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MFC42.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\MSVCRT.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\Redist\msvcirt.dll=$(WinSysPathSysFile)
+C:\WINDOWS\SYSTEM32\COMDLG32.OCX=$(WinSysPath)
+C:\WINDOWS\SYSTEM32\MSSTDFMT.DLL=$(WinSysPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP.EXE=$(AppPath)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\SETUP1.EXE=$(WinPath)
+C:\WINDOWS\SYSTEM32\VB6STKIT.DLL=$(WinSysPathSysFile)
+C:\Program Files\Microsoft Visual Studio\VB98\Wizards\PDWizard\ST6UNST.EXE=$(WinPath)
+
+[Package|Standard Setup Package for CD|Configure Shared Files]
+Applicable=Yes
+C:\RSA\Cjr3w\CLUTCHjr.exe=No
+
+[Package|Standard Setup Package for CD|Distribution]
+Type=single
+Size=
+Title=CLUTCHjr
+
+[Package|Standard Setup Package for CD|IconGroups]
+Group0=$(Programs)
+PrivateGroup0=-1
+Parent0=
+
+[Package|Standard Setup Package for CD|$(Programs)]
+Icon1=CLUTCHjr.exe
+Title1=CLUTCHjr
+StartIn1=$(AppPath)
+Key1=Icon3
+
+[Package|Standard Setup Package for CD|Package]
+PackageFolder=C:\RSA\Cjr3w\Package
+ProjectFolder=C:\RSA\Cjr3w
+ServerSideCab=
+File1=C:\RSA\Cjr3w\Package\setup.exe
+File2=C:\RSA\Cjr3w\Package\Setup.Lst
+File3=C:\RSA\Cjr3w\Package\CLUTCHjr.CAB
+Handler1=PDWizard.FolderDplySubWiz
+Handler2=PDWizard.WebPostDplySubWiz

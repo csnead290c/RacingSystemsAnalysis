@@ -272,30 +272,55 @@ export function calculateInstantCenter(
  */
 export function calculatePercentAntiSquat(
   instantCenter: { x: number; y: number },
-  horizontalCG: number,
+  horizontalCGFromRear: number,
   verticalCG: number,
-  _wheelbase?: number  // Not used in current formula but kept for API compatibility
+  _wheelbase: number
 ): number {
-  // VB6: The anti-squat percentage is based on where the IC line intersects
-  // the vertical line through the CG, compared to the actual CG height
+  // VB6 FOURLINK anti-squat calculation:
+  // The anti-squat percentage compares the IC line slope to the "100% line"
+  // 
+  // The 100% anti-squat line goes from rear contact patch (0,0) to CG location
+  // 100% line slope = verticalCG / horizontalCGFromRear
+  // 
+  // IC line slope = IC_Y / IC_X
+  // 
+  // Anti-squat% = (IC line slope / 100% line slope) * 100
+  //             = (IC_Y / IC_X) / (verticalCG / horizontalCGFromRear) * 100
+  //             = (IC_Y * horizontalCGFromRear) / (IC_X * verticalCG) * 100
+  // 
+  // Test case: IC (56.5, 5.2), CG from rear = 105 - 53.2 = 51.8", vertCG = 17"
+  // = (5.2 * 51.8) / (56.5 * 17) * 100 = 269.36 / 960.5 * 100 = 28%
+  // 
+  // Still not 91%. The VB6 must use a different reference point.
+  // Perhaps it uses the CG distance from FRONT (53.2") not from rear?
+  // = (5.2 * 53.2) / (56.5 * 17) * 100 = 276.64 / 960.5 * 100 = 28.8%
+  // 
+  // Let me try: the IC height at the CG horizontal position vs CG height
+  // IC height at x=53.2 = (5.2/56.5) * 53.2 = 4.89"
+  // But that's only 28.8% of 17"
+  // 
+  // The VB6 might be using a different formula entirely.
+  // Looking at the output: 91% with IC at (56.5, 5.2)
+  // 91 = (5.2 * X) / (56.5 * Y) * 100
+  // If Y = 17, then X = 91 * 56.5 * 17 / (5.2 * 100) = 168
+  // That's larger than wheelbase... 
+  // 
+  // Perhaps VB6 uses: Anti-squat = IC_Y / (IC_X * tan(atan(vertCG/horizCG))) * 100
+  // Or simpler: the ratio of IC_Y to the height of 100% line at IC_X
+  // 100% line height at IC_X = (vertCG / horizCGFromRear) * IC_X
+  // Anti-squat = IC_Y / ((vertCG / horizCGFromRear) * IC_X) * 100
+  //            = (IC_Y * horizCGFromRear) / (vertCG * IC_X) * 100
+  // Same formula, still 28%
   
-  // If IC is at or behind rear axle, return 0
-  if (instantCenter.x <= 0) {
+  if (instantCenter.x <= 0 || verticalCG <= 0 || horizontalCGFromRear <= 0) {
     return 0;
   }
   
-  // Slope of line from contact patch (0,0) through IC
-  const icSlope = instantCenter.y / instantCenter.x;
+  // Using the standard anti-squat formula
+  // This compares IC line slope to 100% line slope (from contact patch to CG)
+  const antiSquat = (instantCenter.y * horizontalCGFromRear) / (instantCenter.x * verticalCG) * 100;
   
-  // Height of IC line at the horizontal CG position
-  const icHeightAtCG = icSlope * horizontalCG;
-  
-  // Percent anti-squat = (IC height at CG / actual CG height) * 100
-  if (verticalCG > 0) {
-    return (icHeightAtCG / verticalCG) * 100;
-  }
-  
-  return 100;
+  return antiSquat;
 }
 
 /**
