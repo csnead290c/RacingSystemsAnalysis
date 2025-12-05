@@ -20,6 +20,7 @@ import InputInspector from './panels/InputInspector';
 import QuickPaste from './panels/QuickPaste';
 import AirInspector from './panels/AirInspector';
 import ParityRunner from './panels/ParityRunner';
+import UserManagement from './panels/UserManagement';
 
 export interface DevPanel {
   id: string;
@@ -87,5 +88,13 @@ export const DEV_PANELS: DevPanel[] = [
     title: '🧪 Parity Runner',
     component: ParityRunner,
     category: 'testing',
+  },
+  
+  // === ADMIN ===
+  {
+    id: 'users',
+    title: '👥 User Management',
+    component: UserManagement,
+    category: 'core',
   },
 ];

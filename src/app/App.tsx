@@ -4,6 +4,7 @@ import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
+import { AuthProvider } from '../domain/auth';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
@@ -81,8 +82,9 @@ function App() {
   return (
     <ThemeProvider>
       <FlagsProvider>
-        <VehicleProvider>
-          <Vb6FixtureProvider>
+        <AuthProvider>
+          <VehicleProvider>
+            <Vb6FixtureProvider>
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div
           style={{
@@ -147,8 +149,9 @@ function App() {
         </footer>
       </div>
             </BrowserRouter>
-          </Vb6FixtureProvider>
-        </VehicleProvider>
+            </Vb6FixtureProvider>
+          </VehicleProvider>
+        </AuthProvider>
       </FlagsProvider>
     </ThemeProvider>
   );
