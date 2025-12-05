@@ -138,6 +138,7 @@ interface AuthContextValue extends AuthState {
   // Dev helpers
   impersonateUser: (userId: string) => void;
   setDevRole: (roleId: string) => void;
+  resetAuthData: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -238,6 +239,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveToStorage(STORAGE_KEYS.USERS_DB, updatedUsers);
     saveToStorage(STORAGE_KEYS.CURRENT_USER, updatedUser);
     
+    // Debug logging
+    const userRole = roles.find(r => r.id === updatedUser.roleId);
+    console.log('Login successful:', {
+      user: updatedUser.email,
+      roleId: updatedUser.roleId,
+      role: userRole?.name,
+      products: userRole?.products,
+      features: userRole?.additionalFeatures,
+    });
+    
     setState({
       isAuthenticated: true,
       isLoading: false,
@@ -246,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     
     return true;
-  }, [users]);
+  }, [users, roles]);
 
   // Logout
   const logout = useCallback(() => {
@@ -454,6 +465,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [roles]);
 
+  // Reset all auth data to defaults
+  const resetAuthData = useCallback(() => {
+    // Clear all auth storage
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    localStorage.removeItem(STORAGE_KEYS.USERS_DB);
+    localStorage.removeItem(STORAGE_KEYS.ROLES_DB);
+    localStorage.removeItem(STORAGE_KEYS.PRODUCTS_DB);
+    
+    // Reset to defaults
+    const defaultUsers = getDefaultUsers();
+    saveToStorage(STORAGE_KEYS.USERS_DB, defaultUsers);
+    saveToStorage(STORAGE_KEYS.ROLES_DB, DEFAULT_ROLES);
+    saveToStorage(STORAGE_KEYS.PRODUCTS_DB, DEFAULT_PRODUCTS);
+    
+    setUsers(defaultUsers);
+    setRoles(DEFAULT_ROLES);
+    setProducts(DEFAULT_PRODUCTS);
+    setState({
+      isAuthenticated: false,
+      isLoading: false,
+      user: null,
+      error: null,
+    });
+    
+    console.log('Auth data reset to defaults');
+  }, []);
+
   const value: AuthContextValue = {
     ...state,
     config: { roles, products },
@@ -483,6 +521,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getUserProducts,
     impersonateUser,
     setDevRole,
+    resetAuthData,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

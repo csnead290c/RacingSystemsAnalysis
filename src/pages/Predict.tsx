@@ -320,7 +320,6 @@ function Predict() {
   const baseET = simResult.et_s;
   const baseMPH = simResult.mph;
   const timeslip = simResult.timeslip;
-  const modelName = simResult.meta.model;
 
   const handleRaceLengthChange = (newLength: RaceLength) => {
     setRaceLength(newLength);
@@ -355,42 +354,72 @@ function Predict() {
         }
         .et-slip {
           font-family: 'Courier New', monospace;
-          background: linear-gradient(180deg, #f8f8f0 0%, #e8e8d8 100%);
-          color: #1a1a1a;
-          padding: 10px 14px;
-          border-radius: 4px;
+          background: 
+            repeating-linear-gradient(
+              0deg,
+              transparent,
+              transparent 11px,
+              rgba(0,0,0,0.02) 11px,
+              rgba(0,0,0,0.02) 12px
+            ),
+            linear-gradient(180deg, #faf9f5 0%, #f0efe8 50%, #e8e7e0 100%);
+          color: #2a2a2a;
+          padding: 12px 16px;
+          border-radius: 2px;
           font-size: 11px;
-          line-height: 1.35;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-          width: 170px;
+          line-height: 1.4;
+          box-shadow: 
+            0 1px 3px rgba(0,0,0,0.12),
+            0 4px 8px rgba(0,0,0,0.08),
+            inset 0 0 0 1px rgba(0,0,0,0.05);
+          width: 175px;
           flex-shrink: 0;
           display: flex;
           flex-direction: column;
+          position: relative;
+        }
+        .et-slip::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+          opacity: 0.03;
+          pointer-events: none;
+          border-radius: 2px;
         }
         .et-slip-header {
           text-align: center;
-          border-bottom: 1px dashed #666;
-          padding-bottom: 4px;
-          margin-bottom: 6px;
+          border-bottom: 1px dashed #888;
+          padding-bottom: 6px;
+          margin-bottom: 8px;
+        }
+        .et-slip-header img {
+          filter: grayscale(100%) contrast(1.1);
         }
         .et-slip-row {
           display: flex;
           justify-content: space-between;
+          padding: 1px 0;
         }
         .et-slip-label {
-          color: #444;
+          color: #555;
         }
         .et-slip-value {
           font-weight: bold;
           text-align: right;
+          color: #1a1a1a;
         }
         .et-slip-vehicle {
-          border-top: 1px dashed #666;
-          margin-top: 6px;
-          padding-top: 4px;
+          border-top: 1px dashed #888;
+          margin-top: 8px;
+          padding-top: 6px;
           font-size: 9px;
           text-align: center;
-          color: #555;
+          color: #666;
+          letter-spacing: 0.3px;
         }
         /* Responsive: stack on smaller screens */
         @media (max-width: 900px) {
@@ -444,9 +473,12 @@ function Predict() {
           {/* ET Slip Style Results */}
           <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
             <div className="et-slip-header">
-              <div style={{ fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>RACING SYSTEMS ANALYSIS</div>
-              <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
-                {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Land Speed Sim' : 'ET Simulation'}
+              <img src="/rsa-icon.png" alt="RSA" style={{ height: '38px', marginBottom: '6px' }} />
+              <div style={{ fontWeight: 'bold', fontSize: '12px', letterSpacing: '0.5px' }}>
+                {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Bonneville Pro' : raceLength === 'QUARTER' ? 'Quarter Pro' : 'Quarter Jr'}
+              </div>
+              <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>
+                {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
             
@@ -515,8 +547,7 @@ function Predict() {
             
             {/* Vehicle info at bottom */}
             <div className="et-slip-vehicle">
-              {vehicle.name}<br/>
-              {RACE_LENGTH_INFO[raceLength]?.label ?? raceLength} • {modelName}
+              Vehicle: {vehicle.name}
             </div>
           </div>
 

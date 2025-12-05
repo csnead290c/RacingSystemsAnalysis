@@ -149,7 +149,7 @@ function Navigation() {
   const canAccessEngineSim = isAuthenticated && hasProduct('engine_pro');
   const canAccessLog = isAuthenticated && hasFeature('save_runs');
   const canAccessHistory = isAuthenticated && hasFeature('save_runs');
-  const canAccessDev = isAuthenticated && hasFeature('dev_tools');
+  // canAccessDev not needed - Dev link always visible in dev mode
 
   return (
     <nav style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -197,8 +197,8 @@ function Navigation() {
       <Link to="/about" style={navLinkStyle(isActive('/about'))}>
         About
       </Link>
-      {/* DEV-only link */}
-      {import.meta.env.DEV && canAccessDev && (
+      {/* DEV-only link - always visible in dev mode */}
+      {import.meta.env.DEV && (
         <Link to="/dev" style={navLinkStyle(isActive('/dev'))}>
           Dev
         </Link>
@@ -313,13 +313,9 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* DEV-only route */}
+            {/* DEV-only route - no auth required in dev mode */}
             {import.meta.env.DEV && DevPortal && (
-              <Route path="/dev" element={
-                <ProtectedRoute requireFeature="dev_tools">
-                  <DevPortal />
-                </ProtectedRoute>
-              } />
+              <Route path="/dev" element={<DevPortal />} />
             )}
           </Routes>
         </main>

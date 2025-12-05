@@ -430,6 +430,25 @@ export default function UserManagement() {
 
   return (
     <div style={styles.container}>
+      {/* Debug Info */}
+      <div style={{ 
+        marginBottom: '1rem', 
+        padding: '0.75rem', 
+        backgroundColor: '#fef3c7', 
+        borderRadius: 'var(--radius-sm)',
+        fontSize: '0.75rem',
+      }}>
+        <strong>Current User:</strong> {auth.user?.email} (Role: {auth.user?.roleId})<br/>
+        <strong>User Role Object:</strong> {auth.getUserRole()?.name || 'NOT FOUND'}<br/>
+        <strong>Products:</strong> {auth.getUserRole()?.products?.join(', ') || 'NONE'}<br/>
+        <button 
+          onClick={() => { auth.resetAuthData(); window.location.reload(); }}
+          style={{ ...styles.button, ...styles.dangerBtn, marginTop: '0.5rem' }}
+        >
+          🔄 Reset All Auth Data
+        </button>
+      </div>
+
       {/* Tabs */}
       <div style={styles.tabs}>
         {(['users', 'roles', 'products'] as TabId[]).map(tab => (

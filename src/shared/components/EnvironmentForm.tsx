@@ -63,40 +63,44 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
             -moz-appearance: textfield;
           }
         `}</style>
-        <div className="env-compact" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', rowGap: '10px', justifyContent: 'center', width: '100%' }}>
-          {/* Required fields */}
-          <div style={groupStyle}>
-            <label style={labelStyle}>Elev (ft)</label>
-            <input type="number" style={inputStyle} className="input" value={value.elevation} onChange={(e) => handleChange('elevation', e.target.value)} />
+        <div className="env-compact" style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+          {/* Row 1: Required fields */}
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Elev (ft)</label>
+              <input type="number" style={inputStyle} className="input" value={value.elevation} onChange={(e) => handleChange('elevation', e.target.value)} />
+            </div>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Temp (°F)</label>
+              <input type="number" style={inputStyle} className="input" value={value.temperatureF} onChange={(e) => handleChange('temperatureF', e.target.value)} />
+            </div>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Baro</label>
+              <input type="number" style={inputStyle} className="input" value={value.barometerInHg} onChange={(e) => handleChange('barometerInHg', e.target.value)} />
+            </div>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Humid %</label>
+              <input type="number" style={inputStyle} className="input" value={value.humidityPct} onChange={(e) => handleChange('humidityPct', e.target.value)} />
+            </div>
           </div>
-          <div style={groupStyle}>
-            <label style={labelStyle}>Temp (°F)</label>
-            <input type="number" style={inputStyle} className="input" value={value.temperatureF} onChange={(e) => handleChange('temperatureF', e.target.value)} />
-          </div>
-          <div style={groupStyle}>
-            <label style={labelStyle}>Baro</label>
-            <input type="number" style={inputStyle} className="input" value={value.barometerInHg} onChange={(e) => handleChange('barometerInHg', e.target.value)} />
-          </div>
-          <div style={groupStyle}>
-            <label style={labelStyle}>Humid %</label>
-            <input type="number" style={inputStyle} className="input" value={value.humidityPct} onChange={(e) => handleChange('humidityPct', e.target.value)} />
-          </div>
-          {/* Optional fields */}
-          <div style={{ ...groupStyle, borderLeft: '1px solid var(--color-border)', paddingLeft: '12px' }}>
-            <label style={labelStyle}>Track °F</label>
-            <input type="number" style={optInputStyle} className="input" value={value.trackTempF ?? ''} onChange={(e) => handleOptionalChange('trackTempF', e.target.value)} placeholder="—" />
-          </div>
-          <div style={groupStyle}>
-            <label style={labelStyle}>Grip</label>
-            <input type="number" style={optInputStyle} className="input" value={value.tractionIndex ?? ''} onChange={(e) => handleOptionalChange('tractionIndex', e.target.value)} placeholder="—" />
-          </div>
-          <div style={groupStyle}>
-            <label style={labelStyle}>Wind</label>
-            <input type="number" style={optInputStyle} className="input" value={value.windMph ?? ''} onChange={(e) => handleOptionalChange('windMph', e.target.value)} placeholder="—" />
-          </div>
-          <div style={groupStyle}>
-            <label style={labelStyle}>Angle</label>
-            <input type="number" style={optInputStyle} className="input" value={value.windAngleDeg ?? ''} onChange={(e) => handleOptionalChange('windAngleDeg', e.target.value)} placeholder="—" />
+          {/* Row 2: Optional fields */}
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Track °F</label>
+              <input type="number" style={optInputStyle} className="input" value={value.trackTempF ?? ''} onChange={(e) => handleOptionalChange('trackTempF', e.target.value)} placeholder="—" />
+            </div>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Grip</label>
+              <input type="number" style={optInputStyle} className="input" value={value.tractionIndex ?? ''} onChange={(e) => handleOptionalChange('tractionIndex', e.target.value)} placeholder="—" />
+            </div>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Wind</label>
+              <input type="number" style={optInputStyle} className="input" value={value.windMph ?? ''} onChange={(e) => handleOptionalChange('windMph', e.target.value)} placeholder="—" />
+            </div>
+            <div style={groupStyle}>
+              <label style={labelStyle}>Angle</label>
+              <input type="number" style={optInputStyle} className="input" value={value.windAngleDeg ?? ''} onChange={(e) => handleOptionalChange('windAngleDeg', e.target.value)} placeholder="—" />
+            </div>
           </div>
         </div>
       </div>

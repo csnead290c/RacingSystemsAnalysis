@@ -102,36 +102,30 @@ function RPMHistogram({ data, targetBins = 15, compact = false }: RPMHistogramPr
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={histogramData} margin={compact ? { top: 4, right: 8, left: 0, bottom: 4 } : { top: 5, right: 20, left: 0, bottom: 25 }}>
+      <BarChart data={histogramData} margin={compact ? { top: 4, right: 8, left: 35, bottom: 20 } : { top: 5, right: 20, left: 0, bottom: 25 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
-        {!compact && (
-          <XAxis
-            dataKey="rpmRange"
-            stroke="var(--color-text-muted)"
-            tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
-            interval={0}
-            angle={-45}
-            textAnchor="end"
-            height={50}
-            label={{ 
-              value: 'Engine RPM', 
-              position: 'insideBottom', 
-              offset: -5,
-              fontSize: 10,
-              fill: 'var(--color-text-muted)',
-            }}
-          />
-        )}
-        {compact && <XAxis dataKey="rpmRange" hide />}
-        {!compact && (
-          <YAxis
-            stroke="var(--color-text-muted)"
-            tick={{ fontSize: 9, fill: 'var(--color-text-muted)' }}
-            tickFormatter={(v) => `${v.toFixed(1)}s`}
-            width={40}
-          />
-        )}
-        {compact && <YAxis hide />}
+        <XAxis
+          dataKey="rpmRange"
+          stroke="var(--color-text-muted)"
+          tick={{ fontSize: compact ? 8 : 9, fill: 'var(--color-text-muted)' }}
+          interval={compact ? 'preserveStartEnd' : 0}
+          angle={compact ? 0 : -45}
+          textAnchor={compact ? 'middle' : 'end'}
+          height={compact ? 20 : 50}
+          label={compact ? undefined : { 
+            value: 'Engine RPM', 
+            position: 'insideBottom', 
+            offset: -5,
+            fontSize: 10,
+            fill: 'var(--color-text-muted)',
+          }}
+        />
+        <YAxis
+          stroke="var(--color-text-muted)"
+          tick={{ fontSize: compact ? 8 : 9, fill: 'var(--color-text-muted)' }}
+          tickFormatter={(v) => `${v.toFixed(1)}s`}
+          width={compact ? 32 : 40}
+        />
         <Tooltip
           contentStyle={{
             backgroundColor: 'var(--color-bg)',
