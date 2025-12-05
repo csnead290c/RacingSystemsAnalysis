@@ -6,6 +6,7 @@ import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
+import SuspensionSim from '../pages/SuspensionSim';
 import Log from '../pages/Log';
 import History from '../pages/History';
 import Vehicles from '../pages/Vehicles';
@@ -41,6 +42,9 @@ function Navigation() {
       </Link>
       <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))}>
         ET Sim
+      </Link>
+      <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))}>
+        Susp Sim
       </Link>
       <Link to="/log" style={navLinkStyle(isActive('/log'))}>
         Log
@@ -103,6 +107,7 @@ function App() {
             <Route path="/vehicles" element={<Vehicles />} />
             <Route path="/et-sim" element={<Predict />} />
             <Route path="/predict" element={<Predict />} /> {/* Legacy redirect */}
+            <Route path="/suspension-sim" element={<SuspensionSim />} />
             <Route path="/log" element={<Log />} />
             <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />
