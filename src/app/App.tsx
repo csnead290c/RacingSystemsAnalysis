@@ -226,20 +226,25 @@ function App() {
           style={{
             backgroundColor: 'var(--color-header-bg)',
             color: 'var(--color-header-text)',
-            padding: 'var(--space-4) var(--space-6)',
+            padding: '0.75rem 1.5rem',
             boxShadow: 'var(--shadow-md)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 'var(--space-4)',
-            flexWrap: 'wrap',
+            gap: '1rem',
           }}
         >
-          <h1 style={{ margin: 0, fontSize: '1.5rem' }}>
-            Racing Systems Analysis
-          </h1>
-          <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center' }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none' }}>
+            <img 
+              src="/rsa-logo.png" 
+              alt="RSA Logo" 
+              style={{ height: '40px', width: 'auto' }}
+            />
+          </Link>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <Navigation />
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <ThemeToggle />
             <UserMenu />
           </div>

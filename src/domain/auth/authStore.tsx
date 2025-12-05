@@ -154,21 +154,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize
   useEffect(() => {
-    // Load or seed roles
+    // Load or seed roles - always merge with defaults to ensure system roles exist
     let storedRoles = loadFromStorage<Role[]>(STORAGE_KEYS.ROLES_DB, []);
-    if (storedRoles.length === 0) {
-      storedRoles = DEFAULT_ROLES;
-      saveToStorage(STORAGE_KEYS.ROLES_DB, storedRoles);
+    // Merge: keep custom roles, but ensure all default system roles exist with correct products
+    const mergedRoles = [...DEFAULT_ROLES];
+    for (const stored of storedRoles) {
+      const defaultIdx = mergedRoles.findIndex(r => r.id === stored.id);
+      if (defaultIdx === -1) {
+        // Custom role, keep it
+        mergedRoles.push(stored);
+      } else if (!stored.isSystem) {
+        // Non-system role was customized, use stored version
+        mergedRoles[defaultIdx] = stored;
+      }
+      // System roles always use defaults to ensure correct products/features
     }
-    setRoles(storedRoles);
+    saveToStorage(STORAGE_KEYS.ROLES_DB, mergedRoles);
+    setRoles(mergedRoles);
     
-    // Load or seed products
+    // Load or seed products - always use defaults to ensure consistency
     let storedProducts = loadFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS_DB, []);
-    if (storedProducts.length === 0) {
-      storedProducts = DEFAULT_PRODUCTS;
-      saveToStorage(STORAGE_KEYS.PRODUCTS_DB, storedProducts);
+    // Merge: keep custom products, ensure defaults exist
+    const mergedProducts = [...DEFAULT_PRODUCTS];
+    for (const stored of storedProducts) {
+      if (!mergedProducts.find(p => p.id === stored.id)) {
+        mergedProducts.push(stored);
+      }
     }
-    setProducts(storedProducts);
+    saveToStorage(STORAGE_KEYS.PRODUCTS_DB, mergedProducts);
+    setProducts(mergedProducts);
     
     // Load or seed users
     let storedUsers = loadFromStorage<User[]>(STORAGE_KEYS.USERS_DB, []);

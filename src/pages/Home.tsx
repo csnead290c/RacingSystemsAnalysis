@@ -5,27 +5,34 @@ import PeekCard from '../shared/components/PeekCard';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { type RaceLength, RACE_LENGTH_INFO } from '../domain/config/raceLengths';
 import type { PhysicsModelId } from '../domain/physics';
+import { useAuth } from '../domain/auth';
+import type { Product } from '../domain/auth/types';
 
 function Home() {
+  const { isAuthenticated, user, getUserProducts } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
   const [selectedModel, setSelectedModel] = useState<PhysicsModelId>('VB6Exact');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  
+  const userProducts = isAuthenticated ? getUserProducts() : [];
 
   useEffect(() => {
     const loadData = async () => {
-      const data = await loadVehicles();
-      setVehicles(data);
-      if (data.length > 0) {
-        setSelectedVehicleId(data[0].id);
-        setRaceLength(data[0].defaultRaceLength);
+      if (isAuthenticated) {
+        const data = await loadVehicles();
+        setVehicles(data);
+        if (data.length > 0) {
+          setSelectedVehicleId(data[0].id);
+          setRaceLength(data[0].defaultRaceLength);
+        }
       }
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [isAuthenticated]);
 
   const handlePredict = () => {
     const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
@@ -61,19 +68,97 @@ function Home() {
     );
   }
 
-  if (vehicles.length === 0) {
+  // Welcome screen for non-authenticated users
+  if (!isAuthenticated) {
     return (
       <Page title="Racing Systems Analysis">
-        <div className="card text-center" style={{ maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: 'var(--space-4)', color: 'var(--color-text)' }}>
-            No Vehicles Yet
-          </h2>
-          <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-            Create your first vehicle to start making predictions.
+        <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
+          <img 
+            src="/rsa-logo.png" 
+            alt="RSA Logo" 
+            style={{ height: '80px', marginBottom: '1.5rem' }}
+          />
+          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem', color: 'var(--color-text)' }}>
+            Racing Systems Analysis
+          </h1>
+          <p style={{ fontSize: '1.125rem', color: 'var(--color-muted)', marginBottom: '2rem' }}>
+            Professional simulation software for drag racing and land speed racing
           </p>
-          <Link to="/vehicles" className="btn">
-            + Create Vehicle
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '1rem',
+            marginBottom: '2rem',
+          }}>
+            {[
+              { icon: '🏁', title: 'Quarter Pro', desc: 'Drag racing ET & MPH prediction' },
+              { icon: '🚀', title: 'Bonneville Pro', desc: 'Land speed top speed simulation' },
+              { icon: '⚙️', title: 'Engine Pro', desc: 'Engine performance analysis' },
+              { icon: '🔧', title: 'Four Link', desc: 'Suspension geometry calculator' },
+            ].map(product => (
+              <div 
+                key={product.title}
+                style={{
+                  padding: '1.5rem',
+                  backgroundColor: 'var(--color-surface)',
+                  borderRadius: 'var(--radius-lg)',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{product.icon}</div>
+                <h3 style={{ fontSize: '1rem', marginBottom: '0.25rem' }}>{product.title}</h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', margin: 0 }}>{product.desc}</p>
+              </div>
+            ))}
+          </div>
+          
+          <Link 
+            to="/login" 
+            style={{
+              display: 'inline-block',
+              padding: '0.75rem 2rem',
+              backgroundColor: 'var(--color-primary)',
+              color: 'white',
+              borderRadius: 'var(--radius-md)',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '1rem',
+            }}
+          >
+            Sign In to Get Started
           </Link>
+          
+          <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--color-muted)' }}>
+            Don't have an account? Contact us for beta access.
+          </p>
+        </div>
+      </Page>
+    );
+  }
+
+  if (vehicles.length === 0) {
+    return (
+      <Page title="Dashboard">
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+            Welcome, {user?.displayName || 'User'}!
+          </h2>
+          <p style={{ color: 'var(--color-muted)', marginBottom: '1.5rem' }}>
+            You have access to: {userProducts.map((p: Product) => p.name).join(', ') || 'No products yet'}
+          </p>
+          
+          <div className="card text-center">
+            <h3 style={{ fontSize: '1.25rem', marginBottom: 'var(--space-4)', color: 'var(--color-text)' }}>
+              No Vehicles Yet
+            </h3>
+            <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+              Create your first vehicle to start making predictions.
+            </p>
+            <Link to="/vehicles" className="btn">
+              + Create Vehicle
+            </Link>
+          </div>
         </div>
       </Page>
     );
