@@ -39,20 +39,20 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
   // Compact mode: inline layout without spinners, includes all fields
   if (compact) {
     const inputStyle: React.CSSProperties = {
-      width: '48px',
-      padding: '3px 4px',
-      fontSize: '0.75rem',
+      width: '55px',
+      padding: '6px 6px',
+      fontSize: '0.85rem',
       textAlign: 'center' as const,
     };
     const optInputStyle: React.CSSProperties = {
       ...inputStyle,
-      width: '44px',
+      width: '50px',
     };
-    const labelStyle: React.CSSProperties = { fontSize: '0.6rem', color: 'var(--color-muted)', marginBottom: '2px', whiteSpace: 'nowrap' };
+    const labelStyle: React.CSSProperties = { fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '4px', whiteSpace: 'nowrap' };
     const groupStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center' };
     
     return (
-      <div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
         <style>{`
           .env-compact input::-webkit-outer-spin-button,
           .env-compact input::-webkit-inner-spin-button {
@@ -63,7 +63,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
             -moz-appearance: textfield;
           }
         `}</style>
-        <div className="env-compact" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', rowGap: '8px' }}>
+        <div className="env-compact" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', rowGap: '10px', justifyContent: 'center', width: '100%' }}>
           {/* Required fields */}
           <div style={groupStyle}>
             <label style={labelStyle}>Elev (ft)</label>
@@ -82,7 +82,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
             <input type="number" style={inputStyle} className="input" value={value.humidityPct} onChange={(e) => handleChange('humidityPct', e.target.value)} />
           </div>
           {/* Optional fields */}
-          <div style={{ ...groupStyle, borderLeft: '1px solid var(--color-border)', paddingLeft: '6px' }}>
+          <div style={{ ...groupStyle, borderLeft: '1px solid var(--color-border)', paddingLeft: '12px' }}>
             <label style={labelStyle}>Track °F</label>
             <input type="number" style={optInputStyle} className="input" value={value.trackTempF ?? ''} onChange={(e) => handleOptionalChange('trackTempF', e.target.value)} placeholder="—" />
           </div>

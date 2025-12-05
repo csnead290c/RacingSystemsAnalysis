@@ -101,8 +101,8 @@ function RPMHistogram({ data, targetBins = 15, compact = false }: RPMHistogramPr
   };
 
   return (
-    <ResponsiveContainer width="100%" height={compact ? 80 : 200}>
-      <BarChart data={histogramData} margin={compact ? { top: 2, right: 5, left: 0, bottom: 2 } : { top: 5, right: 20, left: 0, bottom: 25 }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={histogramData} margin={compact ? { top: 4, right: 8, left: 0, bottom: 4 } : { top: 5, right: 20, left: 0, bottom: 25 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
         {!compact && (
           <XAxis

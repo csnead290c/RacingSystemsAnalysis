@@ -346,7 +346,7 @@ function Predict() {
           display: flex;
           gap: var(--space-3);
           flex: 3;
-          min-height: 120px;
+          min-height: 140px;
         }
         .et-sim-chart-area {
           flex: 1;
