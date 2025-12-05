@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<title>{% block title %}Weather Station{% endblock %}</title>
+  <h1>Weather Station</h1>
+  <p>Choose either altimeter or barometer pressure type, then enter your weather data in the fields below. Press the Calculate button to display the calculated weather parameters.</p>
+  <br/>
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="row">
+      <div class="col-lg-6">
+      <div class="form-group row">
+        {{ form.gc_PressType.label(class="col-sm-5 col-form-label ") }}
+        <div class="col-sm-7">
+          {{ form.gc_PressType(class="form-control") }}
+        </div>
+      </div>
+      <div class="form-group row">
+        {{ form.gc_Pressure.label(class="col-sm-5 col-form-label ") }}
+        <div class="col-sm-7">
+          {{ form.gc_Pressure(class="form-control") }}
+        </div>
+      </div>
+      </div>
+      <div class="col-lg-6">
+      <div class="form-group row">
+        {{ form.gc_Temperature.label(class="col-sm-5 col-form-label ") }}
+        <div class="col-sm-7">
+          {{ form.gc_Temperature(class="form-control") }}
+        </div>
+      </div>
+      <div class="form-group row">
+        {{ form.gc_Humidity.label(class="col-sm-5 col-form-label ") }}
+        <div class="col-sm-7">
+          {{ form.gc_Humidity(class="form-control") }}
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-12">
+        <div class="form-group row">
+          <div class="col-md-4"></div>
+          <div class="col-md-4">
+            {{ form.submit(class="btn btn-secondary btn-block") }}
+          </div>
+          <div class="col-md-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-6">
+
+        {% if HPC %}
+      <div class="form-group row">
+        <label class="col-sm-5 col-form-label " for="DALT">Density Altitude (ft)</label>
+        <div class="col-sm-7">
+          <input class="form-control" id="DALT" name="DALT" type="text" value="{{ DALT }}" readonly>
+        </div>
+      </div>
+        <div class="form-group row">
+        <label class="col-sm-5 col-form-label " for="DNDX">Air Density Index (%)</label>
+        <div class="col-sm-7">
+          <input class="form-control" id="DNDX" name="DNDX" type="text" value="{{ DNDX }}" readonly>
+        </div>
+      </div>
+        <div class="form-group row">
+        <label class="col-sm-5 col-form-label " for="HPC">HP Correction Factor</label>
+        <div class="col-sm-7">
+          <input class="form-control" id="HPC" name="HPC" type="text" value="{{ HPC }}" readonly>
+        
+          <small id="HPCHelpBlock" class="form-text text-muted">
+            HP Correction Factor is valid for naturally aspirated, gasoline engines only!
+          </small>
+        </div>
+      </div>
+        {% endif %}
+        
+      </div>
+      </div>
+    </div>
+  </form>
+
+
+{% endblock %}

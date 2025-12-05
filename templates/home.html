@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>RSA - Quarter Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
+  </head>
+  <body>
+    {% include 'header.html' %}
+    <content>
+    <div class="container">
+    <h1>Quarter Pro</h1>
+    <form method="post" id="QtrProForm">
+      <div class="row">
+      <div class="col-md-4 border p-3">
+    <!--  General Data  -->
+    <fieldset>
+      <legend>General Data</legend>
+    <div>
+      <div class="form-group row"> <!--Pressure Type-->
+        <label for="gc_PressType" class="col-6 col-form-label">Pressure Type</label>
+        <div class="col-6">
+          <select class="custom-select form-control" id="gc_PressType" name="gc_PressType">
+            <option value="1" selected>Std Altimeter (ft)</option>
+            <option value="2">Abs Barometer (inHg)</option>
+          </select>
+        </div>
+      </div>   
+
+      <div class="form-group row"> <!--Elevation-->
+        <label for="gc_Altimeter" class="col-6 col-form-label">Elevation (ft)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Altimeter" placeholder="0" value="{{gc_Altimeter}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Barometer-->
+        <label for="gc_Barometer" class="col-6 col-form-label">Barometer (inHg)</label>
+        <div class="col-6">
+          <input type="number" name="gc_Barometer" class="form-control" id="gc_Barometer" placeholder="29.92" step="0.01" value="{{gc_Barometer}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Temperature-->
+        <label for="gc_Temperature" class="col-6 col-form-label">Temperature (F)</label>
+        <div class="col-6">
+          <input type="number" name="gc_Temperature" class="form-control" id="gc_Temperature" placeholder="60" step="0.1" value="{{gc_Temperature}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Humidity-->
+        <label for="gc_Humidity" class="col-6 col-form-label">Humidity (%)</label>
+        <div class="col-6">
+          <input type="number" name="gc_Humidity" class="form-control" id="gc_Humidity" placeholder="0" step="0.1" value="{{gc_Humidity}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Wind Speed-->
+        <label for="gc_WindSpeed" class="col-6 col-form-label">Wind Velocity (MPH)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_WindSpeed" placeholder="0" value="{{gc_WindSpeed}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Wind Angle-->
+        <label for="gc_WindAngle" class="col-6 col-form-label">Wind Angle (deg)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_WindAngle" placeholder="0" value="{{gc_WindAngle}}">
+        </div>
+      </div>
+
+
+
+    <hr>
+
+      <div class="form-group row"> <!--Track Temp-->
+        <label for="gc_TrackTemp" class="col-6 col-form-label">Track Temp (F)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TrackTemp" placeholder="102" value="{{gc_TrackTemp}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Traction Index-->
+        <label for="gc_TractionIndex" class="col-6 col-form-label">Traction Index</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TractionIndex" placeholder="5" value="{{gc_TractionIndex}}">
+        </div>
+      </div>
+    
+    </fieldset>
+    <hr>
+    <!--  Vehicle Data  -->
+    <fieldset>
+      <legend>Vehicle Data</legend>
+
+      <div class="form-group row"> <!--Weight-->
+        <label for="gc_Weight" class="col-6 col-form-label">Weight (lbs)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Weight" placeholder="2000" value="{{gc_Weight}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Wheelbase-->
+        <label for="gc_Wheelbase" class="col-6 col-form-label">Wheelbase (in)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Wheelbase" placeholder="105" value="{{gc_Wheelbase}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Rollout-->
+        <label for="gc_Rollout" class="col-6 col-form-label">Rollout (in)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Rollout" placeholder="24" value="{{gc_Rollout}}">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Overhang-->
+        <label for="gc_Overhang" class="col-6 col-form-label">Overhang (in))</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Overhang" placeholder="35" value="{{gc_Overhang}}">
+        </div>
+      </div>
+
+    </fieldset>
+    <hr>
+    <!--  Final Drive Data  -->
+    <fieldset>
+      <legend>Final Drive Data</legend>
+
+      <div class="form-group row"> <!--Gear Ratio-->
+        <label for="gc_GearRatio" class="col-6 col-form-label">Gear Ratio</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_GearRatio" placeholder="5.00">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Efficiency-->
+        <label for="gc_Efficiency" class="col-6 col-form-label">Efficiency</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Efficiency" placeholder="0.95">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Tire Diameter-->
+        <label for="gc_TireDia" class="col-6 col-form-label">Tire Diameter (in)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TireDia" placeholder="33.5">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Tire Width-->
+        <label for="gc_TireWidth" class="col-6 col-form-label">Tire Width (in)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TireWidth" placeholder="17">
+        </div>
+      </div>
+
+
+    </fieldset>
+      </div>
+      <div class="col-md-4 border p-3">
+    <!--  Engine Dyno Data  -->
+    <fieldset>
+      <legend>Engine Dyno Data</legend>
+    <div> <!--Gear Ratio-->
+      <div class="form-group row">
+      <label for="" class="col-4 col-form-label"><b>RPM</b></label>
+        <label for="" class="col-4 col-form-label"><b>HP</b></label>
+        <label for="" class="col-4 col-form-label"><b>Torque</b></label>
+      </div>
+
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineRPM_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineHP_1" placeholder="">
+        </div>
+        <div class="col-4">
+        <input type="number" class="form-control" id="gc_EngineTQ_1" placeholder="">
+        </div>
+      </div>
+<hr>
+    
+    <div> <!--Fuel System-->
+      <label for="gc_FuelSystem">Fuel System:</label>
+      <select id="gc_FuelSystem" name="gc_FuelSystem" class="input" onchange="">
+          <option value="1">Gasoline Carburetor</option>
+          <option value="2">Gasoline Injector</option>
+          <option value="3">Methanol Carburetor</option>
+          <option value="4">Methanol Injector</option>
+          <option value="5">Nitromethane Injector</option>
+          <option value="6">Supercharged Gasoline</option>
+          <option value="7">Supercharged Methanol</option>
+          <option value="8">Supercharged Nitro</option>
+        </select>
+    </div>
+
+      <div class="form-group row"> <!--HP/Torque Multiplier-->
+        <label for="gc_HPTQMult" class="col-6 col-form-label">HP/Torque Multiplier</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_HPTQMult" placeholder="1">
+        </div>
+      </div>
+    
+    </div>
+    </fieldset>
+
+        <hr>
+    
+    <!--  Aero Data  -->
+    <fieldset>
+      <legend>Aerodynamic Data</legend>
+
+
+      <div class="form-group row"> <!--Frontal Area-->
+        <label for="gc_RefArea" class="col-6 col-form-label">Frontal Area (sqft)</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_RefArea" placeholder="24">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Drag Coefficient-->
+        <label for="gc_DragCoef" class="col-6 col-form-label">Drag Coefficient</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_DragCoef" placeholder="0.24">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Lift Coefficient-->
+        <label for="gc_LiftCoef" class="col-6 col-form-label">Lift Coefficient</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_LiftCoef" placeholder="0.24">
+        </div>
+      </div>
+    </fieldset>
+      </div>
+      <div class="col-md-4 border p-3">
+    
+    <!--  Transmission Data  -->
+    <fieldset>
+      <legend>Transmission Data</legend>
+    <div> <!--Converter/Clutch-->
+        <legend class="col-form-label col-sm-2 pt-0"></legend>
+        <div class="col-sm-10">
+            <div class="form-check input">
+                <input class="form-check-input input" type="radio" name="gc_TransType" id="gc_TransType1" value="92" checked>
+                <label class="form-check-label" for="gc_TransType1">
+                Torque Converter
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input input" type="radio" name="gc_TransType" id="gc_TransType2" value="100">
+                <label class="form-check-label" for="gc_TransType2">
+                or Clutch Type
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group row"> <!--Launch RPM-->
+        <label for="gc_LaunchRPM" class="col-6 col-form-label">Launch RPM</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_LaunchRPM" placeholder="3500">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Stall/Slip RPM-->
+        <label for="gc_SlipStallRPM" class="col-6 col-form-label">Stall/Slip RPM</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_SlipStallRPM" placeholder="4500">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Converter/Clutch Slippage-->
+        <label for="gc_Slippage" class="col-6 col-form-label">Slippage</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_Slippage" placeholder="4500">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Lock-up?-->
+        <label for="gc_LockUp" class="col-6 col-form-label">Lock-up option?</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_LockUp" placeholder="NO">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Torque Multi-->
+        <label for="gc_TorqueMult" class="col-6 col-form-label">Torque Multiplication</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TorqueMult" placeholder="1.6">
+        </div>
+      </div>
+    
+    
+    <hr>
+    
+    <!--  Trans Data Cont -->
+    <div> <!--Gear Ratios-->
+
+      <div> <!--Gear Ratios-->
+      <div class="form-group row">
+      <label for="" class="col-2 col-form-label"><b>Gear</b></label>
+        <label for="" class="col-3 col-form-label"><b>Ratio</b></label>
+        <label for="" class="col-3 col-form-label"><b>Efficiency</b></label>
+        <label for="" class="col-3 col-form-label"><b>Shift</b></label>
+      </div>
+
+      <div class="form-group row">
+        <label for="" class="col-2 col-form-label"><b>1st</b></label>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransGR_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransEff_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_ShiftRPM_1" placeholder="">
+        </div>
+      </div>
+        <div class="form-group row">
+        <label for="" class="col-2 col-form-label"><b>2nd</b></label>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransGR_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransEff_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_ShiftRPM_1" placeholder="">
+        </div>
+      </div>
+        <div class="form-group row">
+        <label for="" class="col-2 col-form-label"><b>3rd</b></label>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransGR_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransEff_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_ShiftRPM_1" placeholder="">
+        </div>
+      </div>
+        <div class="form-group row">
+        <label for="" class="col-2 col-form-label"><b>4th</b></label>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransGR_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransEff_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_ShiftRPM_1" placeholder="">
+        </div>
+      </div>
+        <div class="form-group row">
+        <label for="" class="col-2 col-form-label"><b>5th</b></label>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransGR_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransEff_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_ShiftRPM_1" placeholder="">
+        </div>
+      </div>
+        <div class="form-group row">
+        <label for="" class="col-2 col-form-label"><b>6th</b></label>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransGR_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_TransEff_1" placeholder="">
+        </div>
+        <div class="col-3">
+        <input type="number" class="form-control" id="gc_ShiftRPM_1" placeholder="">
+        </div>
+      </div>
+
+    
+    </div>
+    </fieldset>
+
+        <hr>
+    <!--  PMI Data  -->
+    <fieldset>
+      <legend>Polar Moments of Inertia (in-lbs sec*sec)</legend>
+
+
+      <div class="form-group row"> <!--Engine-->
+        <label for="gc_EnginePMI" class="col-6 col-form-label">Engine PMI</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_EnginePMI" placeholder="1">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Transmission-->
+        <label for="gc_TransPMI" class="col-6 col-form-label">Transmission PMI</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TransPMI" placeholder="1">
+        </div>
+      </div>
+
+      <div class="form-group row"> <!--Tires-->
+        <label for="gc_TiresPMI" class="col-6 col-form-label">Tires PMI</label>
+        <div class="col-6">
+          <input type="number" class="form-control" id="gc_TiresPMI" placeholder="1">
+        </div>
+      </div>
+
+    </fieldset>
+      </div>
+        </div>
+    
+    <hr><hr>
+    
+    <input type="submit" value="Submit">
+      
+    <hr><hr>
+
+    </form>
+    </div>
+    {% if calculation_success == True %}
+        <br/>
+        <p>DA = {{ resultDA }}</p>
+        <p>HPC = {{ resultHPC }}</p>
+        <p>ADI = {{ resultADI }}</p>
+    {% else %}
+      <br/>
+        <p>ERROR = {{ error }}</p>
+    {% endif %}
+    
+    {% include 'footer.html' %}
+
+
+</content>
+  </body>
+</html>
