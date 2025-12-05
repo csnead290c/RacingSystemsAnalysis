@@ -155,8 +155,9 @@ export interface VB6StepComputed {
   ChassisPMI: number;
   EngAccHP: number;
   ChasAccHP: number;
-  HPSave: number;
-  HP: number;
+  HPSave: number;       // Engine HP from curve (before clutch slip and drivetrain losses)
+  HPAtWheels: number;   // HP at wheels (after drivetrain losses, before drag subtraction)
+  HP: number;           // Net HP (HPAtWheels - DragHP)
   PQWT: number;
   iterations: number;
 }
@@ -552,6 +553,7 @@ export function vb6SimulationStep(
   // ========================================================================
   const TGEff_gear = vehicle.TGEff[iGear - 1] ?? 0.99;
   HP = HP * TGEff_gear * vehicle.Efficiency / TireSlip;
+  const HPAtWheels = HP;  // HP at wheels BEFORE subtracting drag (for plotting)
   HP = HP - DragHP;
   
   let PQWT = 550 * gc * HP / vehicle.Weight_lbf;
@@ -738,6 +740,7 @@ export function vb6SimulationStep(
     EngAccHP,
     ChasAccHP,
     HPSave,
+    HPAtWheels,
     HP,
     PQWT,
     iterations: k,

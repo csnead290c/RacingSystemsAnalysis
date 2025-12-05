@@ -75,8 +75,9 @@ interface TracePoint {
   gear: number;
   slip: boolean;
   tireSlip: number;      // Tire slip factor (>1 means wheel spin)
-  hp: number;            // Current HP
-  dragHp: number;        // Drag HP loss
+  hp: number;            // Engine HP at wheels (after drivetrain losses)
+  dragHp: number;        // Drag HP (power consumed by aerodynamic drag)
+  netHp: number;         // Net HP = hp - dragHp (can be negative at terminal velocity)
   wheelSpeed_mph: number; // Wheel surface speed (car speed × tire slip)
 }
 
@@ -717,8 +718,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       gear: state.Gear,
       slip: state.SLIP,
       tireSlip: tireSlipFactor,
-      hp: stepResult.HP,
-      dragHp: stepResult.DragHP,
+      // HPAtWheels is HP at the wheels (after drivetrain losses, before drag subtraction)
+      // HP is net HP (HPAtWheels - DragHP) - can be negative at terminal velocity
+      // For plotting, we want to show Engine HP and Drag HP separately
+      hp: stepResult.HPAtWheels,  // Engine HP at wheels (positive)
+      dragHp: stepResult.DragHP,  // Drag HP (positive)
+      netHp: stepResult.HP,       // Net HP = HPAtWheels - DragHP (can be negative)
       wheelSpeed_mph,
     });
     

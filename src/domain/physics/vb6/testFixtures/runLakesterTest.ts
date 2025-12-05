@@ -142,7 +142,8 @@ let lastHPPrintTime = -5;
 for (const trace of result.traces || []) {
   const t = trace as any;
   if (t.t_s - lastHPPrintTime >= 5 || t.t_s === 0) {
-    const netHP = (t.hp || 0) - (t.dragHp || 0);
+    // Use netHp from trace if available, otherwise calculate
+    const netHP = t.netHp ?? ((t.hp || 0) - (t.dragHp || 0));
     console.log(
       `${t.t_s.toFixed(2).padStart(7)}   ` +
       `${t.v_mph.toFixed(1).padStart(6)}   ` +
