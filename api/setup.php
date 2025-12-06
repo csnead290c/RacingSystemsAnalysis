@@ -5,9 +5,30 @@
  * Access via: https://racingsystemsanalysis.com/api/setup.php
  */
 
+// Enable error display for debugging
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+header('Content-Type: application/json');
+
+echo json_encode(['status' => 'Starting setup...']) . "\n";
+
+if (!file_exists('config.php')) {
+    echo json_encode(['error' => 'config.php not found! Please upload it to the api folder.']);
+    exit;
+}
+
 require_once 'config.php';
 
-$pdo = getDB();
+echo json_encode(['status' => 'Config loaded, connecting to database...']) . "\n";
+
+try {
+    $pdo = getDB();
+    echo json_encode(['status' => 'Database connected!']) . "\n";
+} catch (Exception $e) {
+    echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
+    exit;
+}
 
 // Create tables
 $sql = "
