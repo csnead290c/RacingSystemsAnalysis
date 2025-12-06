@@ -35,51 +35,55 @@ switch ($method) {
 }
 
 function handlePost($pdo, $auth) {
-    $input = rsa_getJsonInput();
-    
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    $name = $input['name'] ?? '';
-    $role = $input['role'] ?? 'user';
-    $products = $input['products'] ?? [];
-    
-    if (!$email || !$password || !$name) {
-        rsa_jsonResponse(['error' => 'Email, password, and name required'], 400);
+    try {
+        $input = rsa_getJsonInput();
+        
+        $email = $input['email'] ?? '';
+        $password = $input['password'] ?? '';
+        $name = $input['name'] ?? '';
+        $role = $input['role'] ?? 'user';
+        $products = $input['products'] ?? [];
+        
+        if (!$email || !$password || !$name) {
+            rsa_jsonResponse(['error' => 'Email, password, and name required'], 400);
+        }
+        
+        if (strlen($password) < 6) {
+            rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+        }
+        
+        // Only owner can create admin/owner users
+        if (in_array($role, ['owner', 'admin']) && $auth['role'] !== 'owner') {
+            $role = 'user';
+        }
+        
+        // Check if email exists
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            rsa_jsonResponse(['error' => 'Email already registered'], 400);
+        }
+        
+        // Create user
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare("INSERT INTO users (email, password_hash, name, role, products) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$email, $hash, $name, $role, json_encode($products)]);
+        
+        $userId = $pdo->lastInsertId();
+        
+        rsa_jsonResponse([
+            'success' => true,
+            'user' => [
+                'id' => $userId,
+                'email' => $email,
+                'name' => $name,
+                'role' => $role,
+                'products' => $products
+            ]
+        ], 201);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => 'Database error: ' . $e->getMessage()], 500);
     }
-    
-    if (strlen($password) < 6) {
-        rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
-    }
-    
-    // Only owner can create admin/owner users
-    if (in_array($role, ['owner', 'admin']) && $auth['role'] !== 'owner') {
-        $role = 'user';
-    }
-    
-    // Check if email exists
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->execute([$email]);
-    if ($stmt->fetch()) {
-        rsa_jsonResponse(['error' => 'Email already registered'], 400);
-    }
-    
-    // Create user
-    $hash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $pdo->prepare("INSERT INTO users (email, password_hash, name, role, products) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$email, $hash, $name, $role, json_encode($products)]);
-    
-    $userId = $pdo->lastInsertId();
-    
-    rsa_jsonResponse([
-        'success' => true,
-        'user' => [
-            'id' => $userId,
-            'email' => $email,
-            'name' => $name,
-            'role' => $role,
-            'products' => $products
-        ]
-    ], 201);
 }
 
 function handleGet($pdo, $auth) {

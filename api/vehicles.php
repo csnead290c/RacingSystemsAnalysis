@@ -75,44 +75,48 @@ function handlePost($pdo, $auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
-    $input = rsa_getJsonInput();
-    $name = $input['name'] ?? '';
-    $data = $input['data'] ?? [];
-    $isPublic = $input['is_public'] ?? false;
-    
-    if (!$name) {
-        rsa_jsonResponse(['error' => 'Vehicle name required'], 400);
+    try {
+        $input = rsa_getJsonInput();
+        $name = $input['name'] ?? '';
+        $data = $input['data'] ?? [];
+        $isPublic = $input['is_public'] ?? false;
+        
+        if (!$name) {
+            rsa_jsonResponse(['error' => 'Vehicle name required'], 400);
+        }
+        
+        // Only owner/admin can create public vehicles
+        if ($isPublic && !in_array($auth['role'], ['owner', 'admin'])) {
+            $isPublic = false;
+        }
+        
+        $uuid = generateUUID();
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $uuid,
+            $auth['user_id'],
+            $name,
+            $isPublic ? 1 : 0,
+            json_encode($data)
+        ]);
+        
+        rsa_jsonResponse([
+            'success' => true,
+            'vehicle' => [
+                'id' => $uuid,
+                'name' => $name,
+                'is_public' => $isPublic,
+                'is_owner' => true,
+                'data' => $data
+            ]
+        ], 201);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => 'Database error: ' . $e->getMessage()], 500);
     }
-    
-    // Only owner/admin can create public vehicles
-    if ($isPublic && !in_array($auth['role'], ['owner', 'admin'])) {
-        $isPublic = false;
-    }
-    
-    $uuid = generateUUID();
-    
-    $stmt = $pdo->prepare("
-        INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
-        VALUES (?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([
-        $uuid,
-        $auth['user_id'],
-        $name,
-        $isPublic ? 1 : 0,
-        json_encode($data)
-    ]);
-    
-    rsa_jsonResponse([
-        'success' => true,
-        'vehicle' => [
-            'id' => $uuid,
-            'name' => $name,
-            'is_public' => $isPublic,
-            'is_owner' => true,
-            'data' => $data
-        ]
-    ], 201);
 }
 
 function handlePut($pdo, $auth) {
@@ -120,41 +124,82 @@ function handlePut($pdo, $auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
-    $uuid = $_GET['id'] ?? null;
-    if (!$uuid) {
-        rsa_jsonResponse(['error' => 'Vehicle ID required'], 400);
+    try {
+        $uuid = $_GET['id'] ?? null;
+        if (!$uuid) {
+            rsa_jsonResponse(['error' => 'Vehicle ID required'], 400);
+        }
+        
+        // Check ownership
+        $stmt = $pdo->prepare("SELECT * FROM vehicles WHERE uuid = ?");
+        $stmt->execute([$uuid]);
+        $vehicle = $stmt->fetch();
+        
+        if (!$vehicle) {
+            // Vehicle doesn't exist, create it instead
+            $input = rsa_getJsonInput();
+            $name = $input['name'] ?? '';
+            $data = $input['data'] ?? [];
+            $isPublic = $input['is_public'] ?? false;
+            
+            if (!$name) {
+                rsa_jsonResponse(['error' => 'Vehicle name required'], 400);
+            }
+            
+            // Only owner/admin can create public vehicles
+            if ($isPublic && !in_array($auth['role'], ['owner', 'admin'])) {
+                $isPublic = false;
+            }
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $uuid,
+                $auth['user_id'],
+                $name,
+                $isPublic ? 1 : 0,
+                json_encode($data)
+            ]);
+            
+            rsa_jsonResponse([
+                'success' => true,
+                'vehicle' => [
+                    'id' => $uuid,
+                    'name' => $name,
+                    'is_public' => $isPublic,
+                    'is_owner' => true,
+                    'data' => $data
+                ]
+            ], 201);
+            return;
+        }
+        
+        // Only owner or admin can edit
+        if ($vehicle['user_id'] != $auth['user_id'] && !in_array($auth['role'], ['owner', 'admin'])) {
+            rsa_jsonResponse(['error' => 'Permission denied'], 403);
+        }
+        
+        $input = rsa_getJsonInput();
+        $name = $input['name'] ?? $vehicle['name'];
+        $data = $input['data'] ?? json_decode($vehicle['data'], true);
+        $isPublic = $input['is_public'] ?? $vehicle['is_public'];
+        
+        // Only owner/admin can make public
+        if ($isPublic && !in_array($auth['role'], ['owner', 'admin'])) {
+            $isPublic = $vehicle['is_public'];
+        }
+        
+        $stmt = $pdo->prepare("
+            UPDATE vehicles SET name = ?, is_public = ?, data = ? WHERE uuid = ?
+        ");
+        $stmt->execute([$name, $isPublic ? 1 : 0, json_encode($data), $uuid]);
+        
+        rsa_jsonResponse(['success' => true]);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => 'Database error: ' . $e->getMessage()], 500);
     }
-    
-    // Check ownership
-    $stmt = $pdo->prepare("SELECT * FROM vehicles WHERE uuid = ?");
-    $stmt->execute([$uuid]);
-    $vehicle = $stmt->fetch();
-    
-    if (!$vehicle) {
-        rsa_jsonResponse(['error' => 'Vehicle not found'], 404);
-    }
-    
-    // Only owner or admin can edit
-    if ($vehicle['user_id'] != $auth['user_id'] && !in_array($auth['role'], ['owner', 'admin'])) {
-        rsa_jsonResponse(['error' => 'Permission denied'], 403);
-    }
-    
-    $input = rsa_getJsonInput();
-    $name = $input['name'] ?? $vehicle['name'];
-    $data = $input['data'] ?? json_decode($vehicle['data'], true);
-    $isPublic = $input['is_public'] ?? $vehicle['is_public'];
-    
-    // Only owner/admin can make public
-    if ($isPublic && !in_array($auth['role'], ['owner', 'admin'])) {
-        $isPublic = $vehicle['is_public'];
-    }
-    
-    $stmt = $pdo->prepare("
-        UPDATE vehicles SET name = ?, is_public = ?, data = ? WHERE uuid = ?
-    ");
-    $stmt->execute([$name, $isPublic ? 1 : 0, json_encode($data), $uuid]);
-    
-    rsa_jsonResponse(['success' => true]);
 }
 
 function handleDelete($pdo, $auth) {
