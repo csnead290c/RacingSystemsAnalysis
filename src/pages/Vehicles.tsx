@@ -196,9 +196,11 @@ function Vehicles() {
   };
 
   const loadData = async () => {
+    console.log('Vehicles.loadData: Starting load...');
     setLoading(true);
     try {
       const data = await loadVehicles();
+      console.log('Vehicles.loadData: Got', data.length, 'vehicles:', data.map(v => v.name));
       setVehicles(data);
     } catch (error) {
       console.error('Failed to load vehicles:', error);
@@ -259,8 +261,11 @@ function Vehicles() {
       }
 
       // Save
+      console.log('Vehicles.handleSave: Saving vehicle...');
       await saveVehicle(result.data);
+      console.log('Vehicles.handleSave: Save complete, reloading...');
       await loadData();
+      console.log('Vehicles.handleSave: Reload complete');
       setShowForm(false);
       resetForm();
     } catch (error) {
