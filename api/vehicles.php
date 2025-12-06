@@ -152,6 +152,8 @@ function handlePut($pdo, $auth) {
             $data = $input['data'] ?? [];
             $isPublic = $input['is_public'] ?? false;
             
+            error_log("vehicles.php PUT upsert: Creating new vehicle uuid=$uuid, user_id=" . $auth['user_id'] . ", name=$name");
+            
             if (!$name) {
                 rsa_jsonResponse(['error' => 'Vehicle name required'], 400);
             }
@@ -161,17 +163,30 @@ function handlePut($pdo, $auth) {
                 $isPublic = false;
             }
             
-            $stmt = $pdo->prepare("
-                INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
-                VALUES (?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $uuid,
-                $auth['user_id'],
-                $name,
-                $isPublic ? 1 : 0,
-                json_encode($data)
-            ]);
+            try {
+                $stmt = $pdo->prepare("
+                    INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $result = $stmt->execute([
+                    $uuid,
+                    $auth['user_id'],
+                    $name,
+                    $isPublic ? 1 : 0,
+                    json_encode($data)
+                ]);
+                
+                error_log("vehicles.php PUT upsert: Insert result=" . ($result ? 'true' : 'false') . ", rowCount=" . $stmt->rowCount());
+                
+                if (!$result) {
+                    $errorInfo = $stmt->errorInfo();
+                    error_log("vehicles.php PUT upsert: Insert failed - " . json_encode($errorInfo));
+                    rsa_jsonResponse(['error' => 'Failed to create vehicle: ' . $errorInfo[2]], 500);
+                }
+            } catch (PDOException $e) {
+                error_log("vehicles.php PUT upsert: PDO Exception - " . $e->getMessage());
+                rsa_jsonResponse(['error' => 'Database error: ' . $e->getMessage()], 500);
+            }
             
             rsa_jsonResponse([
                 'success' => true,

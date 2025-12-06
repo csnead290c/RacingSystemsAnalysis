@@ -27,6 +27,8 @@ async function apiRequest<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
     ...(options.headers as Record<string, string>),
   };
 
@@ -34,9 +36,15 @@ async function apiRequest<T>(
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  // Add cache-busting query param for GET requests
+  const url = options.method && options.method !== 'GET' 
+    ? `${API_BASE}${endpoint}`
+    : `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+
+  const response = await fetch(url, {
     ...options,
     headers,
+    cache: 'no-store',
   });
 
   const data = await response.json();
