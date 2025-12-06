@@ -16,6 +16,8 @@ interface ProtectedRouteProps {
   requireFeature?: FeatureFlag;
   /** Require specific product */
   requireProduct?: string;
+  /** Require specific role(s) */
+  requireRole?: string | string[];
   /** Custom fallback (default: redirect to login or show access denied) */
   fallback?: React.ReactNode;
 }
@@ -25,10 +27,11 @@ export default function ProtectedRoute({
   requireAuth = true,
   requireFeature,
   requireProduct,
+  requireRole,
   fallback,
 }: ProtectedRouteProps) {
   const location = useLocation();
-  const { isAuthenticated, isLoading, hasFeature, hasProduct } = useAuth();
+  const { isAuthenticated, isLoading, hasFeature, hasProduct, user } = useAuth();
 
   // Still loading auth state
   if (isLoading) {
@@ -50,6 +53,16 @@ export default function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Check role access
+  if (requireRole) {
+    const roles = Array.isArray(requireRole) ? requireRole : [requireRole];
+    const userRole = user?.roleId;
+    if (!userRole || !roles.includes(userRole)) {
+      if (fallback) return <>{fallback}</>;
+      return <AccessDenied role={roles.join(' or ')} />;
+    }
+  }
+
   // Check feature access
   if (requireFeature && !hasFeature(requireFeature)) {
     if (fallback) return <>{fallback}</>;
@@ -68,7 +81,7 @@ export default function ProtectedRoute({
 /**
  * Access Denied Component
  */
-function AccessDenied({ feature, product }: { feature?: string; product?: string }) {
+function AccessDenied({ feature, product, role }: { feature?: string; product?: string; role?: string }) {
   return (
     <div style={{
       display: 'flex',
@@ -82,11 +95,13 @@ function AccessDenied({ feature, product }: { feature?: string; product?: string
       <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
       <h2 style={{ margin: '0 0 0.5rem 0' }}>Access Restricted</h2>
       <p style={{ color: 'var(--color-muted)', maxWidth: '400px' }}>
-        {product 
-          ? `This feature requires the ${product.replace(/_/g, ' ')} product.`
-          : feature
-            ? `You don't have access to the ${feature.replace(/_/g, ' ')} feature.`
-            : 'You don\'t have permission to access this page.'
+        {role
+          ? `This page requires ${role} access.`
+          : product 
+            ? `This feature requires the ${product.replace(/_/g, ' ')} product.`
+            : feature
+              ? `You don't have access to the ${feature.replace(/_/g, ' ')} feature.`
+              : 'You don\'t have permission to access this page.'
         }
       </p>
       <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem' }}>

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { lazy, useState } from 'react';
+import { lazy, useState, Suspense } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
@@ -22,10 +22,8 @@ import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
 
-// DEV-only imports (lazy loaded)
-const DevPortal = import.meta.env.DEV
-  ? lazy(() => import('../pages/DevPortal'))
-  : null;
+// DevPortal - available in dev mode or to owner/admin in production
+const DevPortal = lazy(() => import('../pages/DevPortal'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -198,13 +196,24 @@ function Navigation() {
       <Link to="/about" style={navLinkStyle(isActive('/about'))}>
         About
       </Link>
-      {/* DEV-only link - always visible in dev mode */}
-      {import.meta.env.DEV && (
-        <Link to="/dev" style={navLinkStyle(isActive('/dev'))}>
-          Dev
-        </Link>
-      )}
+      {/* Dev link - visible in dev mode or to owner/admin */}
+      <DevNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
     </nav>
+  );
+}
+
+function DevNavLink({ isActive, navLinkStyle }: { isActive: (path: string) => boolean; navLinkStyle: (active: boolean) => React.CSSProperties }) {
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.roleId === 'owner' || user?.roleId === 'admin';
+  
+  if (!import.meta.env.DEV && !isOwnerOrAdmin) {
+    return null;
+  }
+  
+  return (
+    <Link to="/dev" style={navLinkStyle(isActive('/dev'))}>
+      Dev
+    </Link>
   );
 }
 
@@ -315,10 +324,14 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* DEV-only route - no auth required in dev mode */}
-            {import.meta.env.DEV && DevPortal && (
-              <Route path="/dev" element={<DevPortal />} />
-            )}
+            {/* Dev Portal - available in dev mode or to owner/admin */}
+            <Route path="/dev" element={
+              <ProtectedRoute requireRole={['owner', 'admin']}>
+                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                  <DevPortal />
+                </Suspense>
+              </ProtectedRoute>
+            } />
           </Routes>
         </main>
 
