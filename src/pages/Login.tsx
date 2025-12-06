@@ -144,19 +144,18 @@ export default function Login() {
           </button>
         </form>
         
-        {/* Demo accounts info */}
+        {/* Contact info for access */}
         <div style={{
           marginTop: '2rem',
           padding: '1rem',
           backgroundColor: 'var(--color-background)',
           borderRadius: 'var(--radius-sm)',
-          fontSize: '0.75rem',
+          fontSize: '0.8rem',
           color: 'var(--color-muted)',
+          textAlign: 'center',
         }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Demo Accounts:</div>
-          <div>owner@rsa.local / owner</div>
-          <div>admin@rsa.local / admin</div>
-          <div>beta@rsa.local / beta</div>
+          <div>Don't have an account?</div>
+          <div style={{ marginTop: '0.5rem' }}>Contact us for access.</div>
         </div>
       </div>
     </Page>
