@@ -40,6 +40,11 @@ jobs:
           </IfModule>
           EOF
 
+      - name: Copy API files to dist
+        run: |
+          cp -r api dist/
+          rm -f dist/api/config.php
+
       - name: Deploy to SiteGround via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -49,3 +54,6 @@ jobs:
           local-dir: ./dist/
           server-dir: ./racingsystemsanalysis.com/public_html/
           dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/node_modules/**

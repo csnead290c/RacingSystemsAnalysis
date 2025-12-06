@@ -1,1 +1,4 @@
 node_modules
+
+# API config with credentials (never commit this)
+api/config.php
