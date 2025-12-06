@@ -222,18 +222,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.success && response.user) {
         // Map API user to local User type
         const apiUser = response.user;
-        const roleMap: Record<string, string> = {
-          'owner': 'owner',
-          'admin': 'admin',
-          'user': 'user',
-          'beta': 'beta_tester',
-        };
+        const apiProducts: string[] = apiUser.products || [];
+        
+        // Determine role based on API role and products
+        let roleId = 'guest';
+        if (apiUser.role === 'owner') {
+          roleId = 'owner';
+        } else if (apiUser.role === 'admin') {
+          roleId = 'admin';
+        } else if (apiUser.role === 'beta') {
+          roleId = 'beta_tester';
+        } else if (apiProducts.includes('quarter_pro') || apiProducts.includes('bonneville_pro')) {
+          roleId = 'subscriber_pro';
+        } else if (apiProducts.includes('quarter_jr')) {
+          roleId = 'subscriber_basic';
+        }
+        
+        // Store API products separately for direct access
+        const apiProductsKey = 'rsa.auth.apiProducts';
+        saveToStorage(apiProductsKey, apiProducts);
         
         const localUser: User = {
           id: `api_${apiUser.id}`,
           email: apiUser.email,
           displayName: apiUser.name,
-          roleId: roleMap[apiUser.role] || 'user',
+          roleId: roleId,
           status: 'active',
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
@@ -245,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: localUser.email,
           roleId: localUser.roleId,
           apiRole: apiUser.role,
+          apiProducts: apiProducts,
         });
         
         setState({
@@ -310,6 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setAuthToken(null); // Clear API token
     saveToStorage(STORAGE_KEYS.CURRENT_USER, null);
+    localStorage.removeItem('rsa.auth.apiProducts'); // Clear API products
     setState({
       isAuthenticated: false,
       isLoading: false,
@@ -444,12 +459,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.user, roles]);
   
   const getUserProducts = useCallback((): Product[] => {
+    // First check API products (for API-authenticated users)
+    const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
+    if (apiProducts.length > 0) {
+      return products.filter(p => apiProducts.includes(p.id));
+    }
+    
+    // Fall back to role-based products
     const role = getUserRole();
     if (!role) return [];
     return products.filter(p => role.products.includes(p.id));
   }, [getUserRole, products]);
   
   const hasFeature = useCallback((feature: FeatureFlag): boolean => {
+    // First check API products (for API-authenticated users)
+    const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
+    if (apiProducts.length > 0) {
+      const userProds = products.filter(p => apiProducts.includes(p.id));
+      if (userProds.some(p => p.features.includes(feature))) return true;
+    }
+    
     const role = getUserRole();
     if (!role) return false;
     
@@ -462,6 +491,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [getUserRole, products]);
   
   const hasProduct = useCallback((productId: string): boolean => {
+    // First check API products (for API-authenticated users)
+    const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
+    if (apiProducts.includes(productId)) return true;
+    
+    // Fall back to role-based products
     const role = getUserRole();
     if (!role) return false;
     return role.products.includes(productId);
