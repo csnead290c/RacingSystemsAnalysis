@@ -33,16 +33,6 @@ function calculateDensityAltitude(env: Env): number {
 //   return Math.max(0.5, Math.min(1.5, correction));
 // }
 
-/** Weather presets for common racing conditions */
-const WEATHER_PRESETS: { name: string; env: Partial<Env> }[] = [
-  { name: 'Standard', env: { elevation: 0, temperatureF: 59, barometerInHg: 29.92, humidityPct: 0 } },
-  { name: 'Hot Summer', env: { elevation: 0, temperatureF: 95, barometerInHg: 29.80, humidityPct: 65 } },
-  { name: 'Cool Evening', env: { elevation: 0, temperatureF: 65, barometerInHg: 30.10, humidityPct: 40 } },
-  { name: 'High Altitude', env: { elevation: 5000, temperatureF: 75, barometerInHg: 24.90, humidityPct: 20 } },
-  { name: 'Humid Gulf', env: { elevation: 50, temperatureF: 88, barometerInHg: 29.95, humidityPct: 85 } },
-  { name: 'Desert Dry', env: { elevation: 2500, temperatureF: 100, barometerInHg: 27.50, humidityPct: 10 } },
-];
-
 interface EnvironmentFormProps {
   value: Env;
   onChange: (next: Env) => void;
@@ -78,14 +68,6 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
     });
   };
 
-  // Apply a weather preset
-  const applyPreset = (presetName: string) => {
-    const preset = WEATHER_PRESETS.find(p => p.name === presetName);
-    if (preset) {
-      onChange({ ...value, ...preset.env });
-    }
-  };
-
   // Compact mode: inline layout without spinners, includes all fields
   if (compact) {
     const inputStyle: React.CSSProperties = {
@@ -114,51 +96,49 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
           }
         `}</style>
         <div className="env-compact" style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-          {/* Preset selector */}
-          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {WEATHER_PRESETS.map(preset => (
-              <button
-                key={preset.name}
-                onClick={() => applyPreset(preset.name)}
-                disabled={disabled}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '0.65rem',
-                  borderRadius: '10px',
-                  border: '1px solid var(--color-border)',
-                  backgroundColor: 'var(--color-bg-secondary)',
-                  color: 'var(--color-text-muted)',
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseOver={(e) => {
-                  if (!disabled) {
-                    e.currentTarget.style.backgroundColor = 'var(--color-primary)';
-                    e.currentTarget.style.color = 'white';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)';
-                  e.currentTarget.style.color = 'var(--color-text-muted)';
-                }}
-              >
-                {preset.name}
-              </button>
-            ))}
-          </div>
-          {/* Row 1: Required fields */}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+          {/* Row 1: Required fields - Elevation OR Baro (toggle), Temp, Humidity */}
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'flex-end' }}>
+            {/* Elevation/Baro toggle */}
             <div style={groupStyle}>
-              <label style={labelStyle}>Elev (ft)</label>
-              <input type="number" style={inputStyle} className="input" value={value.elevation} onChange={(e) => handleChange('elevation', e.target.value)} />
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                <button
+                  onClick={() => onChange({ ...value, elevation: value.elevation || 0, barometerInHg: 29.92 })}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: '0.6rem',
+                    borderRadius: '3px',
+                    border: 'none',
+                    backgroundColor: value.elevation !== undefined && value.elevation !== 0 ? 'var(--color-primary)' : 'var(--color-bg-tertiary)',
+                    color: value.elevation !== undefined && value.elevation !== 0 ? 'white' : 'var(--color-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Elev
+                </button>
+                <button
+                  onClick={() => onChange({ ...value, elevation: 0, barometerInHg: value.barometerInHg || 29.92 })}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: '0.6rem',
+                    borderRadius: '3px',
+                    border: 'none',
+                    backgroundColor: value.elevation === 0 || value.elevation === undefined ? 'var(--color-primary)' : 'var(--color-bg-tertiary)',
+                    color: value.elevation === 0 || value.elevation === undefined ? 'white' : 'var(--color-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Baro
+                </button>
+              </div>
+              {value.elevation !== 0 && value.elevation !== undefined ? (
+                <input type="number" style={inputStyle} className="input" value={value.elevation} onChange={(e) => handleChange('elevation', e.target.value)} placeholder="0" />
+              ) : (
+                <input type="number" step="0.01" style={inputStyle} className="input" value={value.barometerInHg} onChange={(e) => handleChange('barometerInHg', e.target.value)} placeholder="29.92" />
+              )}
             </div>
             <div style={groupStyle}>
               <label style={labelStyle}>Temp (°F)</label>
               <input type="number" style={inputStyle} className="input" value={value.temperatureF} onChange={(e) => handleChange('temperatureF', e.target.value)} />
-            </div>
-            <div style={groupStyle}>
-              <label style={labelStyle}>Baro</label>
-              <input type="number" style={inputStyle} className="input" value={value.barometerInHg} onChange={(e) => handleChange('barometerInHg', e.target.value)} />
             </div>
             <div style={groupStyle}>
               <label style={labelStyle}>Humid %</label>

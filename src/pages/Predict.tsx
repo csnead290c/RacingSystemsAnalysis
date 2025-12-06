@@ -643,12 +643,16 @@ function Predict() {
           {/* ET Slip Style Results */}
           <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
             <div className="et-slip-header">
-              <img src="/rsa-icon.png" alt="RSA" style={{ height: '38px', marginBottom: '6px' }} />
-              <div style={{ fontWeight: 'bold', fontSize: '12px', letterSpacing: '0.5px' }}>
-                {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Bonneville Pro' : raceLength === 'QUARTER' ? 'Quarter Pro' : 'Quarter Jr'}
+              <img src="/rsa-icon.png" alt="RSA" style={{ height: '48px', marginBottom: '4px' }} />
+              <div style={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: '1px' }}>RSA</div>
+              <div style={{ fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px', marginTop: '2px' }}>
+                {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Bonneville Pro' : strictMode ? 'Quarter Pro' : 'Quarter Jr'}
               </div>
-              <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>
+              <div style={{ fontSize: '8px', color: '#666', marginTop: '4px' }}>
                 {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div style={{ fontSize: '7px', color: '#888', marginTop: '2px' }}>
+                racingsystemsanalysis.com
               </div>
             </div>
             
@@ -706,7 +710,7 @@ function Predict() {
             )}
             
             {/* Final ET/MPH - inline with splits */}
-            <div className="et-slip-row" style={{ marginTop: '4px', borderTop: '1px solid #999', paddingTop: '4px' }}>
+            <div className="et-slip-row" style={{ marginTop: '6px', paddingTop: '6px' }}>
               <span className="et-slip-label">{RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Time' : 'ET'}</span>
               <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseET.toFixed(3)}</span>
             </div>
