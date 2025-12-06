@@ -474,20 +474,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasFeature = useCallback((feature: FeatureFlag): boolean => {
     // First check API products (for API-authenticated users)
     const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
+    
     if (apiProducts.length > 0) {
       const userProds = products.filter(p => apiProducts.includes(p.id));
-      if (userProds.some(p => p.features.includes(feature))) return true;
+      const hasIt = userProds.some(p => p.features.includes(feature));
+      console.log(`hasFeature(${feature}): apiProducts=${JSON.stringify(apiProducts)}, userProds=${userProds.map(p => p.id)}, has=${hasIt}`);
+      if (hasIt) return true;
     }
     
     const role = getUserRole();
-    if (!role) return false;
+    if (!role) {
+      console.log(`hasFeature(${feature}): no role, returning false`);
+      return false;
+    }
     
     // Check additional features
     if (role.additionalFeatures.includes(feature)) return true;
     
     // Check product features
     const userProducts = products.filter(p => role.products.includes(p.id));
-    return userProducts.some(p => p.features.includes(feature));
+    const hasIt = userProducts.some(p => p.features.includes(feature));
+    console.log(`hasFeature(${feature}): role=${role.id}, roleProducts=${role.products}, has=${hasIt}`);
+    return hasIt;
   }, [getUserRole, products]);
   
   const hasProduct = useCallback((productId: string): boolean => {

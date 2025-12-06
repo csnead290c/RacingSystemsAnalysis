@@ -41,9 +41,16 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load preferences from API on mount
+  // Load preferences from API on mount (only if authenticated)
   useEffect(() => {
     const loadFromApi = async () => {
+      // Check if we have an auth token before making API call
+      const token = localStorage.getItem('rsa_token');
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      
       try {
         const response = await authApi.getPreferences();
         const merged = { ...defaultPreferences, ...response.preferences };

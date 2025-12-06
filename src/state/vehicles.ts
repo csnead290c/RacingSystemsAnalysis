@@ -47,35 +47,44 @@ export async function loadVehicles(): Promise<VehicleLite[]> {
  * Save a vehicle (upsert by id).
  */
 export async function saveVehicle(vehicle: VehicleLite): Promise<void> {
+  // Extract metadata
+  const { id, name, is_public, is_owner, owner_name, ...data } = vehicle;
+  
+  // Try API first
   try {
-    // Extract metadata
-    const { id, name, is_public, is_owner, owner_name, ...data } = vehicle;
-    
-    // Check if vehicle exists in API
-    try {
-      await vehiclesApi.get(id);
-      // Update existing
-      await vehiclesApi.update(id, { name, data, is_public });
-    } catch {
-      // Create new
-      const response = await vehiclesApi.create({ name, data, is_public });
-      // Update local id if API assigned a new one
-      if (response.vehicle?.id && response.vehicle.id !== id) {
-        vehicle.id = response.vehicle.id;
+    // Try to update first (if vehicle exists)
+    await vehiclesApi.update(id, { name, data, is_public });
+    console.log('Vehicle updated via API:', id);
+    return;
+  } catch (updateError: any) {
+    // If 404, vehicle doesn't exist - create it
+    if (updateError.message?.includes('not found') || updateError.message?.includes('404')) {
+      try {
+        const response = await vehiclesApi.create({ name, data, is_public });
+        console.log('Vehicle created via API:', response.vehicle?.id);
+        // Update local id if API assigned a new one
+        if (response.vehicle?.id && response.vehicle.id !== id) {
+          vehicle.id = response.vehicle.id;
+        }
+        return;
+      } catch (createError) {
+        console.warn('API create failed:', createError);
       }
-    }
-  } catch (error) {
-    console.warn('API save failed, falling back to localStorage:', error);
-    // Fall back to localStorage
-    const vehicles = await loadVehiclesFromStorage();
-    const existingIndex = vehicles.findIndex((v) => v.id === vehicle.id);
-    if (existingIndex >= 0) {
-      vehicles[existingIndex] = vehicle;
     } else {
-      vehicles.push(vehicle);
+      console.warn('API update failed:', updateError);
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles));
   }
+  
+  // Fall back to localStorage
+  console.log('Falling back to localStorage for vehicle save');
+  const vehicles = await loadVehiclesFromStorage();
+  const existingIndex = vehicles.findIndex((v) => v.id === vehicle.id);
+  if (existingIndex >= 0) {
+    vehicles[existingIndex] = vehicle;
+  } else {
+    vehicles.push(vehicle);
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles));
 }
 
 /**
