@@ -169,6 +169,13 @@ export const usersApi = {
     return apiRequest<{ user: ApiUser }>(`/users.php?id=${id}`);
   },
 
+  async create(data: { email: string; password: string; name: string; role?: string; products?: string[] }) {
+    return apiRequest<{ success: boolean; user: ApiUser }>('/users.php', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   async update(id: number, data: { name?: string; role?: string; products?: string[] }) {
     return apiRequest<{ success: boolean }>(`/users.php?id=${id}`, {
       method: 'PUT',

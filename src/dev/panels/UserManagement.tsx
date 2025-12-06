@@ -2,11 +2,13 @@
  * User Management Panel
  * 
  * Admin panel for managing users, roles, and products.
+ * Users are stored in the database via API, roles/products in localStorage.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../domain/auth';
-import type { User, Role, Product, AccountStatus } from '../../domain/auth/types';
+import { usersApi, type ApiUser } from '../../services/api';
+import type { Role, Product } from '../../domain/auth/types';
 import { ALL_FEATURES } from '../../domain/auth/types';
 
 // ============================================================================
@@ -124,32 +126,47 @@ const styles = {
 type TabId = 'users' | 'roles' | 'products';
 
 // ============================================================================
-// User Edit Modal
+// User Edit Modal (for API users)
 // ============================================================================
+
+// Available products for user assignment
+const AVAILABLE_PRODUCTS = [
+  { id: 'quarter_jr', name: 'Quarter Jr' },
+  { id: 'quarter_pro', name: 'Quarter Pro' },
+  { id: 'bonneville_pro', name: 'Bonneville Pro' },
+  { id: 'engine_pro', name: 'Engine Pro' },
+  { id: 'fourlink', name: 'Four Link' },
+  { id: 'cam_analyzer', name: 'Cam Analyzer' },
+];
 
 function UserModal({ 
   user, 
-  roles, 
   onClose, 
   onSave, 
   onDelete 
 }: { 
-  user: User | null; 
-  roles: Role[];
+  user: ApiUser | null; 
   onClose: () => void; 
-  onSave: (data: Partial<User> & { password?: string }) => void;
+  onSave: (data: { email: string; name: string; password?: string; role: string; products: string[] }) => void;
   onDelete?: () => void;
 }) {
   const [email, setEmail] = useState(user?.email || '');
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [roleId, setRoleId] = useState(user?.roleId || roles[0]?.id || '');
-  const [status, setStatus] = useState<AccountStatus>(user?.status || 'active');
+  const [name, setName] = useState(user?.name || '');
+  const [role, setRole] = useState<string>(user?.role || 'user');
+  const [products, setProducts] = useState<string[]>(user?.products || []);
   const [password, setPassword] = useState('');
-  const [notes, setNotes] = useState(user?.adminNotes || '');
+
+  const toggleProduct = (productId: string) => {
+    setProducts(prev => 
+      prev.includes(productId) 
+        ? prev.filter(p => p !== productId) 
+        : [...prev, productId]
+    );
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ email, displayName, roleId, status, adminNotes: notes || undefined, ...(password ? { password } : {}) });
+    onSave({ email, name, role, products, ...(password ? { password } : {}) });
     onClose();
   };
 
@@ -160,34 +177,39 @@ function UserModal({
         <form onSubmit={handleSubmit}>
           <div style={styles.formGroup}>
             <label style={styles.label}>Email</label>
-            <input style={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            <input style={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!user} />
           </div>
           <div style={styles.formGroup}>
-            <label style={styles.label}>Display Name</label>
-            <input style={styles.input} type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} required />
+            <label style={styles.label}>Name</label>
+            <input style={styles.input} type="text" value={name} onChange={e => setName(e.target.value)} required />
           </div>
           <div style={styles.formGroup}>
             <label style={styles.label}>Role</label>
-            <select style={styles.input} value={roleId} onChange={e => setRoleId(e.target.value)}>
-              {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            <select style={styles.input} value={role} onChange={e => setRole(e.target.value)}>
+              <option value="user">User</option>
+              <option value="beta">Beta Tester</option>
+              <option value="admin">Admin</option>
+              <option value="owner">Owner</option>
             </select>
           </div>
           <div style={styles.formGroup}>
-            <label style={styles.label}>Status</label>
-            <select style={styles.input} value={status} onChange={e => setStatus(e.target.value as AccountStatus)}>
-              <option value="active">Active</option>
-              <option value="suspended">Suspended</option>
-              <option value="pending">Pending</option>
-              <option value="expired">Expired</option>
-            </select>
+            <label style={styles.label}>Products</label>
+            <div style={styles.checkboxGrid}>
+              {AVAILABLE_PRODUCTS.map(p => (
+                <label key={p.id} style={styles.checkbox}>
+                  <input 
+                    type="checkbox" 
+                    checked={products.includes(p.id)} 
+                    onChange={() => toggleProduct(p.id)} 
+                  />
+                  {p.name}
+                </label>
+              ))}
+            </div>
           </div>
           <div style={styles.formGroup}>
             <label style={styles.label}>{user ? 'New Password (leave blank to keep)' : 'Password'}</label>
-            <input style={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} {...(!user && { required: true })} />
-          </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Admin Notes</label>
-            <textarea style={{ ...styles.input, minHeight: '60px' }} value={notes} onChange={e => setNotes(e.target.value)} />
+            <input style={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} {...(!user && { required: true, minLength: 6 })} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
             {user && onDelete && (
@@ -420,13 +442,35 @@ function ProductModal({
 export default function UserManagement() {
   const auth = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('users');
-  const [editingUser, setEditingUser] = useState<User | null | 'new'>(null);
+  const [editingUser, setEditingUser] = useState<ApiUser | null | 'new'>(null);
   const [editingRole, setEditingRole] = useState<Role | null | 'new'>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null | 'new'>(null);
+  
+  // API users state
+  const [apiUsers, setApiUsers] = useState<ApiUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [userError, setUserError] = useState<string | null>(null);
 
-  const users = auth.getAllUsers();
   const roles = auth.getAllRoles();
   const products = auth.getAllProducts();
+  
+  // Load users from API
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    setUserError(null);
+    try {
+      const response = await usersApi.getAll();
+      setApiUsers(response.users);
+    } catch (err: any) {
+      setUserError(err.message || 'Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+  
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   return (
     <div style={styles.container}>
@@ -457,7 +501,7 @@ export default function UserManagement() {
             style={{ ...styles.tab, ...(activeTab === tab ? styles.tabActive : {}) }}
             onClick={() => setActiveTab(tab)}
           >
-            {tab === 'users' ? `👥 Users (${users.length})` : tab === 'roles' ? `🎭 Roles (${roles.length})` : `📦 Products (${products.length})`}
+            {tab === 'users' ? `👥 Users (${apiUsers.length})` : tab === 'roles' ? `🎭 Roles (${roles.length})` : `📦 Products (${products.length})`}
           </button>
         ))}
       </div>
@@ -466,26 +510,40 @@ export default function UserManagement() {
       {activeTab === 'users' && (
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
-            <span style={styles.sectionTitle}>All Users</span>
-            <button style={{ ...styles.button, ...styles.primaryBtn }} onClick={() => setEditingUser('new')}>+ Add User</button>
+            <span style={styles.sectionTitle}>Database Users (API)</span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button style={{ ...styles.button, ...styles.secondaryBtn }} onClick={loadUsers}>🔄 Refresh</button>
+              <button style={{ ...styles.button, ...styles.primaryBtn }} onClick={() => setEditingUser('new')}>+ Add User</button>
+            </div>
           </div>
-          <div style={styles.card}>
-            {users.map((user: User) => {
-              const role = roles.find((r: Role) => r.id === user.roleId);
-              return (
-                <div key={user.id} style={styles.row}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>{user.displayName}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{user.email}</div>
+          {userError && (
+            <div style={{ padding: '0.75rem', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem' }}>
+              {userError}
+            </div>
+          )}
+          {loadingUsers ? (
+            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-muted)' }}>Loading users...</div>
+          ) : (
+            <div style={styles.card}>
+              {apiUsers.map((user: ApiUser) => {
+                const roleColors: Record<string, string> = { owner: '#7c3aed', admin: '#dc2626', beta: '#2563eb', user: '#6b7280' };
+                return (
+                  <div key={user.id} style={styles.row}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{user.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{user.email}</div>
+                    </div>
+                    <span style={{ ...styles.badge, backgroundColor: roleColors[user.role] || '#6b7280', color: 'white' }}>{user.role}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{user.products?.join(', ') || 'no products'}</span>
+                    <button style={{ ...styles.button, ...styles.secondaryBtn, ...styles.smallBtn }} onClick={() => setEditingUser(user)}>Edit</button>
                   </div>
-                  <span style={{ ...styles.badge, backgroundColor: role?.color || '#6b7280', color: 'white' }}>{role?.name || user.roleId}</span>
-                  <span style={{ ...styles.badge, backgroundColor: user.status === 'active' ? '#dcfce7' : '#fee2e2', color: user.status === 'active' ? '#166534' : '#991b1b' }}>{user.status}</span>
-                  <button style={{ ...styles.button, ...styles.secondaryBtn, ...styles.smallBtn }} onClick={() => auth.impersonateUser(user.id)}>👤</button>
-                  <button style={{ ...styles.button, ...styles.secondaryBtn, ...styles.smallBtn }} onClick={() => setEditingUser(user)}>Edit</button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              {apiUsers.length === 0 && (
+                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-muted)' }}>No users found</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -540,17 +598,20 @@ export default function UserManagement() {
       {editingUser && (
         <UserModal
           user={editingUser === 'new' ? null : editingUser}
-          roles={roles}
           onClose={() => setEditingUser(null)}
-          onSave={(data) => {
-            if (editingUser === 'new') {
-              auth.createUser(data as Omit<User, 'id' | 'createdAt'>, data.password);
-            } else {
-              auth.updateUser(editingUser.id, data);
-              if (data.password) auth.setUserPassword(editingUser.id, data.password);
+          onSave={async (data) => {
+            try {
+              if (editingUser === 'new') {
+                await usersApi.create({ email: data.email, password: data.password!, name: data.name, role: data.role, products: data.products });
+              } else {
+                await usersApi.update(editingUser.id, { name: data.name, role: data.role, products: data.products });
+              }
+              loadUsers();
+            } catch (err: any) {
+              alert(err.message || 'Failed to save user');
             }
           }}
-          onDelete={editingUser !== 'new' ? () => auth.deleteUser(editingUser.id) : undefined}
+          onDelete={editingUser !== 'new' ? async () => { await usersApi.delete(editingUser.id); loadUsers(); } : undefined}
         />
       )}
       {editingRole && (

@@ -20,6 +20,9 @@ switch ($method) {
     case 'GET':
         handleGet($pdo, $auth);
         break;
+    case 'POST':
+        handlePost($pdo, $auth);
+        break;
     case 'PUT':
         handlePut($pdo, $auth);
         break;
@@ -28,6 +31,54 @@ switch ($method) {
         break;
     default:
         jsonResponse(['error' => 'Method not allowed'], 405);
+}
+
+function handlePost($pdo, $auth) {
+    $input = getJsonInput();
+    
+    $email = $input['email'] ?? '';
+    $password = $input['password'] ?? '';
+    $name = $input['name'] ?? '';
+    $role = $input['role'] ?? 'user';
+    $products = $input['products'] ?? [];
+    
+    if (!$email || !$password || !$name) {
+        jsonResponse(['error' => 'Email, password, and name required'], 400);
+    }
+    
+    if (strlen($password) < 6) {
+        jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+    }
+    
+    // Only owner can create admin/owner users
+    if (in_array($role, ['owner', 'admin']) && $auth['role'] !== 'owner') {
+        $role = 'user';
+    }
+    
+    // Check if email exists
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+    $stmt->execute([$email]);
+    if ($stmt->fetch()) {
+        jsonResponse(['error' => 'Email already registered'], 400);
+    }
+    
+    // Create user
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("INSERT INTO users (email, password_hash, name, role, products) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$email, $hash, $name, $role, json_encode($products)]);
+    
+    $userId = $pdo->lastInsertId();
+    
+    jsonResponse([
+        'success' => true,
+        'user' => [
+            'id' => $userId,
+            'email' => $email,
+            'name' => $name,
+            'role' => $role,
+            'products' => $products
+        ]
+    ], 201);
 }
 
 function handleGet($pdo, $auth) {
