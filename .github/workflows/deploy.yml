@@ -33,9 +33,15 @@ jobs:
           <IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
-            RewriteRule ^index\.html$ - [L]
+            
+            # Don't rewrite API requests - let PHP handle them
+            RewriteRule ^api/ - [L]
+            
+            # Don't rewrite existing files or directories
             RewriteCond %{REQUEST_FILENAME} !-f
             RewriteCond %{REQUEST_FILENAME} !-d
+            
+            # Rewrite everything else to index.html for SPA
             RewriteRule . /index.html [L]
           </IfModule>
           EOF
