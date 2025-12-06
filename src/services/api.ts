@@ -90,6 +90,17 @@ export const authApi = {
   logout() {
     setAuthToken(null);
   },
+
+  async getPreferences() {
+    return apiRequest<{ preferences: UserPreferences }>('/auth.php?action=preferences');
+  },
+
+  async updatePreferences(prefs: Partial<UserPreferences>) {
+    return apiRequest<{ success: boolean; preferences: UserPreferences }>('/auth.php?action=preferences', {
+      method: 'POST',
+      body: JSON.stringify(prefs),
+    });
+  },
 };
 
 // Vehicles API
@@ -191,6 +202,13 @@ export const usersApi = {
 };
 
 // Types
+export interface UserPreferences {
+  productMode?: 'pro' | 'jr';  // Pro users can choose to use Jr mode
+  theme?: 'light' | 'dark' | 'system';
+  units?: 'imperial' | 'metric';
+  defaultRaceLength?: 'EIGHTH' | 'QUARTER';
+}
+
 export interface ApiUser {
   id: number;
   email: string;

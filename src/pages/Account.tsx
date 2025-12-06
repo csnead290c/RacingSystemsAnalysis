@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../domain/auth';
+import { usePreferences } from '../shared/state/preferences';
 import type { Product } from '../domain/auth/types';
 import Page from '../shared/components/Page';
 
@@ -26,6 +27,10 @@ export default function Account() {
   
   const role = getUserRole();
   const products = getUserProducts();
+  const { productMode, setProductMode } = usePreferences();
+  
+  // Check if user has Pro access (can switch between Pro and Jr)
+  const hasProAccess = products.some((p: Product) => p.id === 'quarter_pro' || p.id === 'bonneville_pro');
 
   // Redirect if not logged in
   if (!isAuthenticated || !user) {
@@ -217,6 +222,59 @@ export default function Account() {
             <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 600 }}>
               Preferences
             </h3>
+            
+            {/* Product Mode Selector - only for Pro users */}
+            {hasProAccess && (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  marginBottom: '0.5rem',
+                }}>
+                  Interface Mode
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => setProductMode('pro')}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: productMode === 'pro' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      backgroundColor: productMode === 'pro' ? 'var(--color-primary-light, #e0f2fe)' : 'var(--color-background)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>🏎️ Pro Mode</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                      Full vehicle editor with HP curves, advanced settings
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setProductMode('jr')}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: productMode === 'jr' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      backgroundColor: productMode === 'jr' ? 'var(--color-primary-light, #e0f2fe)' : 'var(--color-background)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>🏁 Jr Mode</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                      Simplified interface, peak HP only
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div style={{ marginBottom: '1rem' }}>
               <label style={{
                 display: 'block',

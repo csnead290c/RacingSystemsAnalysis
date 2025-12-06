@@ -24,6 +24,9 @@ switch ($action) {
     case 'update':
         handleUpdate($pdo);
         break;
+    case 'preferences':
+        handlePreferences($pdo);
+        break;
     default:
         jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -157,4 +160,39 @@ function handleUpdate($pdo) {
     $stmt->execute($params);
     
     jsonResponse(['success' => true]);
+}
+
+function handlePreferences($pdo) {
+    $auth = requireAuth();
+    $method = $_SERVER['REQUEST_METHOD'];
+    
+    if ($method === 'GET') {
+        // Get preferences
+        $stmt = $pdo->prepare("SELECT preferences FROM users WHERE id = ?");
+        $stmt->execute([$auth['user_id']]);
+        $row = $stmt->fetch();
+        
+        $preferences = $row && $row['preferences'] ? json_decode($row['preferences'], true) : [];
+        jsonResponse(['preferences' => $preferences]);
+    } else if ($method === 'POST') {
+        // Update preferences
+        $input = getJsonInput();
+        
+        // Get current preferences
+        $stmt = $pdo->prepare("SELECT preferences FROM users WHERE id = ?");
+        $stmt->execute([$auth['user_id']]);
+        $row = $stmt->fetch();
+        $current = $row && $row['preferences'] ? json_decode($row['preferences'], true) : [];
+        
+        // Merge with new preferences
+        $updated = array_merge($current, $input);
+        
+        // Save
+        $stmt = $pdo->prepare("UPDATE users SET preferences = ? WHERE id = ?");
+        $stmt->execute([json_encode($updated), $auth['user_id']]);
+        
+        jsonResponse(['success' => true, 'preferences' => $updated]);
+    } else {
+        jsonResponse(['error' => 'Method not allowed'], 405);
+    }
 }

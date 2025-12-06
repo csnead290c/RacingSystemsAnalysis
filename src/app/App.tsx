@@ -6,6 +6,7 @@ import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
 import { AuthProvider } from '../domain/auth';
 import { RunHistoryProvider } from '../shared/state/runHistoryStore';
+import { PreferencesProvider } from '../shared/state/preferences';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
@@ -222,6 +223,7 @@ function App() {
     <ThemeProvider>
       <FlagsProvider>
         <AuthProvider>
+          <PreferencesProvider>
           <VehicleProvider>
             <RunHistoryProvider>
             <Vb6FixtureProvider>
@@ -352,6 +354,7 @@ function App() {
             </Vb6FixtureProvider>
             </RunHistoryProvider>
           </VehicleProvider>
+          </PreferencesProvider>
         </AuthProvider>
       </FlagsProvider>
     </ThemeProvider>

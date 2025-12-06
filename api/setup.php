@@ -39,6 +39,7 @@ try {
             name VARCHAR(255) NOT NULL,
             role ENUM('owner', 'admin', 'user', 'beta') DEFAULT 'user',
             products JSON,
+            preferences JSON,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
@@ -46,6 +47,19 @@ try {
     echo "   SUCCESS!\n\n";
 } catch (PDOException $e) {
     echo "   FAILED: " . $e->getMessage() . "\n\n";
+}
+
+// Add preferences column if it doesn't exist (for existing tables)
+echo "2b. Adding preferences column if needed...\n";
+try {
+    $pdo->exec("ALTER TABLE users ADD COLUMN preferences JSON");
+    echo "   SUCCESS! Added preferences column.\n\n";
+} catch (PDOException $e) {
+    if (strpos($e->getMessage(), 'Duplicate column') !== false) {
+        echo "   SKIPPED: Column already exists.\n\n";
+    } else {
+        echo "   FAILED: " . $e->getMessage() . "\n\n";
+    }
 }
 
 // Create vehicles table

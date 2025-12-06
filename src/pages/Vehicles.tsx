@@ -5,6 +5,7 @@ import { loadVehicles, saveVehicle, deleteVehicle, type VehicleLite } from '../s
 import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import { useAuth } from '../domain/auth';
+import { usePreferences } from '../shared/state/preferences';
 
 type TransType = 'clutch' | 'converter';
 
@@ -86,9 +87,15 @@ const defaultForm: Partial<Vehicle> = {
 };
 
 function Vehicles() {
-  const { hasFeature } = useAuth();
+  const { hasFeature, user } = useAuth();
+  const { productMode } = usePreferences();
+  
   // Pro features require hp_curve_editor or advanced_settings feature
-  const isPro = hasFeature('hp_curve_editor') || hasFeature('advanced_settings');
+  const hasProAccess = hasFeature('hp_curve_editor') || hasFeature('advanced_settings');
+  // Use Pro mode only if user has access AND hasn't chosen Jr mode
+  const isPro = hasProAccess && productMode === 'pro';
+  // Check if user can create public vehicles
+  const canMakePublic = user?.roleId === 'owner' || user?.roleId === 'admin';
   
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +105,7 @@ function Vehicles() {
   
   // Form state - single object
   const [form, setForm] = useState<Partial<Vehicle>>({ ...defaultForm });
+  const [isPublic, setIsPublic] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [hpMultiplier, setHpMultiplier] = useState(1.0);
@@ -205,6 +213,7 @@ function Vehicles() {
 
   const resetForm = () => {
     setForm({ ...defaultForm, id: crypto.randomUUID() });
+    setIsPublic(false);
     setFormError(null);
     setEditingId(null);
     setActiveTab('basic');
@@ -217,6 +226,7 @@ function Vehicles() {
 
   const handleEdit = (vehicle: VehicleLite) => {
     setForm({ ...defaultForm, ...vehicle });
+    setIsPublic(vehicle.is_public || false);
     setEditingId(vehicle.id);
     setActiveTab('basic');
     setShowForm(true);
@@ -232,10 +242,11 @@ function Vehicles() {
     setSaving(true);
 
     try {
-      // Build vehicle object with trimmed name
+      // Build vehicle object with trimmed name and public flag
       const vehicle = {
         ...form,
         name: form.name?.trim() || '',
+        is_public: canMakePublic ? isPublic : false,
       };
 
       // Validate with zod
@@ -905,6 +916,23 @@ function Vehicles() {
             </div>
           )}
 
+          {/* Make Public option for owner/admin */}
+          {canMakePublic && (
+            <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: 'var(--color-surface-alt)', borderRadius: 'var(--radius-sm)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={isPublic} 
+                  onChange={(e) => setIsPublic(e.target.checked)} 
+                />
+                <span style={{ fontWeight: 500 }}>Make Public (Sample Vehicle)</span>
+              </label>
+              <p style={{ margin: '0.25rem 0 0 1.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
+                Public vehicles are visible to all users as sample/starter data.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-4">
             <button onClick={handleSave} className="btn" disabled={saving}>
               {saving ? 'Saving...' : 'Save Vehicle'}
@@ -946,7 +974,31 @@ function Vehicles() {
             <tbody>
               {vehicles.map((vehicle) => (
                 <tr key={vehicle.id}>
-                  <td style={{ fontWeight: '500' }}>{vehicle.name}</td>
+                  <td style={{ fontWeight: '500' }}>
+                    {vehicle.name}
+                    {vehicle.is_public && (
+                      <span style={{ 
+                        marginLeft: '0.5rem', 
+                        padding: '0.125rem 0.375rem', 
+                        fontSize: '0.7rem', 
+                        backgroundColor: '#dbeafe', 
+                        color: '#1e40af',
+                        borderRadius: '9999px',
+                        fontWeight: 500,
+                      }}>
+                        Public
+                      </span>
+                    )}
+                    {vehicle.owner_name && !vehicle.is_owner && (
+                      <span style={{ 
+                        marginLeft: '0.5rem', 
+                        fontSize: '0.75rem', 
+                        color: 'var(--color-muted)',
+                      }}>
+                        by {vehicle.owner_name}
+                      </span>
+                    )}
+                  </td>
                   <td>{vehicle.defaultRaceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'}</td>
                   <td className="align-right mono">{vehicle.weightLb}</td>
                   <td className="align-right mono">{vehicle.powerHP}</td>
