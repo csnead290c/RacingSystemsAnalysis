@@ -7,6 +7,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Role, Product, AuthState, AuthConfig, FeatureFlag } from './types';
 import { INITIAL_AUTH_STATE, DEFAULT_ROLES, DEFAULT_PRODUCTS } from './types';
+import { authApi, setAuthToken } from '../../services/api';
 
 // ============================================================================
 // Storage Keys
@@ -213,8 +214,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Login
+  // Login - try API first, fall back to local for dev
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    // Try API login first
+    try {
+      const response = await authApi.login(email, password);
+      if (response.success && response.user) {
+        // Map API user to local User type
+        const apiUser = response.user;
+        const roleMap: Record<string, string> = {
+          'owner': 'owner',
+          'admin': 'admin',
+          'user': 'user',
+          'beta': 'beta_tester',
+        };
+        
+        const localUser: User = {
+          id: `api_${apiUser.id}`,
+          email: apiUser.email,
+          displayName: apiUser.name,
+          roleId: roleMap[apiUser.role] || 'user',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+        
+        saveToStorage(STORAGE_KEYS.CURRENT_USER, localUser);
+        
+        console.log('API Login successful:', {
+          user: localUser.email,
+          roleId: localUser.roleId,
+          apiRole: apiUser.role,
+        });
+        
+        setState({
+          isAuthenticated: true,
+          isLoading: false,
+          user: localUser,
+          error: null,
+        });
+        
+        return true;
+      }
+    } catch (apiError: any) {
+      console.log('API login failed, trying local:', apiError.message);
+      // If API fails, fall back to local auth for development
+    }
+    
+    // Fall back to local auth (for development/offline)
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
     if (!user) {
@@ -241,7 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Debug logging
     const userRole = roles.find(r => r.id === updatedUser.roleId);
-    console.log('Login successful:', {
+    console.log('Local login successful:', {
       user: updatedUser.email,
       roleId: updatedUser.roleId,
       role: userRole?.name,
@@ -261,6 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Logout
   const logout = useCallback(() => {
+    setAuthToken(null); // Clear API token
     saveToStorage(STORAGE_KEYS.CURRENT_USER, null);
     setState({
       isAuthenticated: false,
