@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import EnvironmentForm from '../shared/components/EnvironmentForm';
 import { simulate } from '../workerBridge';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import type { Vehicle } from '../domain/schemas/vehicle.schema';
-import { type RaceLength, RACE_LENGTH_INFO } from '../domain/config/raceLengths';
+import { type RaceLength, RACE_LENGTH_INFO, DISTANCES } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { SimResult } from '../domain/physics';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
@@ -14,6 +14,7 @@ import { useFlag, useFlagsStore } from '../domain/flags/store.tsx';
 import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
+import { loadVehicles, type VehicleLite } from '../state/vehicles';
 
 // Lazy load charts
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -26,7 +27,6 @@ interface LocationState {
 
 function Predict() {
   const location = useLocation();
-  const navigate = useNavigate();
   
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [env, setEnv] = useState<Env | null>(null);
@@ -58,21 +58,43 @@ function Predict() {
     }
   })();
   const { setFlag } = useFlagsStore();
+  
+  // Vehicle selection state (when no vehicle passed via location state)
+  const [availableVehicles, setAvailableVehicles] = useState<VehicleLite[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
 
-  // Initialize from location state
+  // Initialize from location state or show vehicle selector
   useEffect(() => {
     const state = location.state as LocationState | null;
 
-    // Redirect if no state
-    if (!state || !state.vehicle || !state.raceLength) {
-      navigate('/');
+    // If we have state, use it
+    if (state?.vehicle && state?.raceLength) {
+      setVehicle(state.vehicle);
+      setRaceLength(state.raceLength);
+      setEnv(DEFAULT_ENV);
+      setShowVehicleSelector(false);
+      setLoading(false);
       return;
     }
 
-    setVehicle(state.vehicle);
-    setRaceLength(state.raceLength);
-    setEnv(DEFAULT_ENV);
-  }, [location.state, navigate]);
+    // Otherwise, load vehicles and show selector
+    const loadAvailableVehicles = async () => {
+      try {
+        const vehicles = await loadVehicles();
+        setAvailableVehicles(vehicles);
+        if (vehicles.length > 0) {
+          setSelectedVehicleId(vehicles[0].id);
+        }
+        setShowVehicleSelector(true);
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to load vehicles:', error);
+        setLoading(false);
+      }
+    };
+    loadAvailableVehicles();
+  }, [location.state]);
 
   // Debounce timer ref
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -233,6 +255,101 @@ function Predict() {
         <Link to="/" className="btn">
           Back to Home
         </Link>
+      </Page>
+    );
+  }
+
+  // Show vehicle selector if no vehicle is loaded
+  if (showVehicleSelector || (!vehicle && !loading)) {
+    const handleStartSimulation = () => {
+      const selectedVehicle = availableVehicles.find(v => v.id === selectedVehicleId);
+      if (selectedVehicle) {
+        setVehicle(selectedVehicle as Vehicle);
+        setEnv(DEFAULT_ENV);
+        setShowVehicleSelector(false);
+      }
+    };
+
+    return (
+      <Page title="ET Simulator">
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <div className="card" style={{ padding: '2rem' }}>
+            <h2 style={{ marginBottom: '1.5rem' }}>Select Vehicle & Track</h2>
+            
+            {availableVehicles.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem' }}>
+                <p className="text-muted" style={{ marginBottom: '1rem' }}>
+                  No vehicles configured yet.
+                </p>
+                <Link to="/vehicles" className="btn">
+                  Create a Vehicle
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
+                    Vehicle
+                  </label>
+                  <select
+                    value={selectedVehicleId}
+                    onChange={(e) => setSelectedVehicleId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    {availableVehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({v.powerHP} HP, {v.weightLb} lb)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
+                    Race Length
+                  </label>
+                  <select
+                    value={raceLength}
+                    onChange={(e) => setRaceLength(e.target.value as RaceLength)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    {(Object.keys(DISTANCES) as RaceLength[])
+                      .filter(key => RACE_LENGTH_INFO[key].category === 'drag')
+                      .map(key => (
+                        <option key={key} value={key}>
+                          {RACE_LENGTH_INFO[key].label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleStartSimulation}
+                  className="btn"
+                  style={{ width: '100%', padding: '0.875rem', fontSize: '1rem' }}
+                >
+                  Run Simulation →
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </Page>
     );
   }
