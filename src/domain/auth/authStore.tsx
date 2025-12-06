@@ -501,6 +501,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasProduct = useCallback((productId: string): boolean => {
     // First check API products (for API-authenticated users)
     const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
+    console.log(`hasProduct(${productId}): apiProducts=${JSON.stringify(apiProducts)}, includes=${apiProducts.includes(productId)}`);
     if (apiProducts.includes(productId)) return true;
     
     // Fall back to role-based products

@@ -19,7 +19,9 @@ const STORAGE_KEY = 'rsa.vehicles.v1';
 export async function loadVehicles(): Promise<VehicleLite[]> {
   try {
     // Try API first
+    console.log('loadVehicles: Fetching from API...');
     const response = await vehiclesApi.getAll();
+    console.log('loadVehicles: API response:', response);
     const vehicles = response.vehicles.map(v => ({
       ...v.data,
       id: v.id,
@@ -28,9 +30,10 @@ export async function loadVehicles(): Promise<VehicleLite[]> {
       is_owner: v.is_owner,
       owner_name: v.owner_name,
     }));
+    console.log('loadVehicles: Mapped vehicles:', vehicles);
     return vehicles;
   } catch (error) {
-    console.warn('API failed, falling back to localStorage:', error);
+    console.warn('loadVehicles: API failed, falling back to localStorage:', error);
     // Fall back to localStorage for offline/dev
     try {
       const data = localStorage.getItem(STORAGE_KEY);
