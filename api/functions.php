@@ -86,7 +86,19 @@ if (!function_exists('verifyToken')) {
 
 if (!function_exists('getAuthUser')) {
     function getAuthUser() {
-        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        // Try multiple ways to get the Authorization header
+        // Some servers don't pass it through in HTTP_AUTHORIZATION
+        $header = '';
+        
+        if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $header = $_SERVER['HTTP_AUTHORIZATION'];
+        } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            $header = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+        } elseif (function_exists('apache_request_headers')) {
+            $headers = apache_request_headers();
+            $header = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        }
+        
         if (!preg_match('/Bearer\s+(.+)/', $header, $matches)) {
             return null;
         }
