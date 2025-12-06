@@ -4,7 +4,7 @@ import Page from '../shared/components/Page';
 import { loadVehicles, saveVehicle, deleteVehicle, type VehicleLite } from '../state/vehicles';
 import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
-import { useUserLevel, hasProAccess } from '../domain/flags/store';
+import { useAuth } from '../domain/auth';
 
 type TransType = 'clutch' | 'converter';
 
@@ -86,8 +86,9 @@ const defaultForm: Partial<Vehicle> = {
 };
 
 function Vehicles() {
-  const userLevel = useUserLevel();
-  const isPro = hasProAccess(userLevel);
+  const { hasFeature } = useAuth();
+  // Pro features require hp_curve_editor or advanced_settings feature
+  const isPro = hasFeature('hp_curve_editor') || hasFeature('advanced_settings');
   
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);

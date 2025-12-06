@@ -1,21 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
-import PeekCard from '../shared/components/PeekCard';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
-import { type RaceLength, RACE_LENGTH_INFO } from '../domain/config/raceLengths';
-import type { PhysicsModelId } from '../domain/physics';
 import { useAuth } from '../domain/auth';
 import type { Product } from '../domain/auth/types';
 
 function Home() {
-  const { isAuthenticated, user, getUserProducts } = useAuth();
+  const { isAuthenticated, user, getUserProducts, hasProduct, hasFeature } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
-  const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
-  const [selectedModel, setSelectedModel] = useState<PhysicsModelId>('VB6Exact');
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
   
   const userProducts = isAuthenticated ? getUserProducts() : [];
 
@@ -24,39 +17,11 @@ function Home() {
       if (isAuthenticated) {
         const data = await loadVehicles();
         setVehicles(data);
-        if (data.length > 0) {
-          setSelectedVehicleId(data[0].id);
-          setRaceLength(data[0].defaultRaceLength);
-        }
       }
       setLoading(false);
     };
     loadData();
   }, [isAuthenticated]);
-
-  const handlePredict = () => {
-    const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
-    if (!selectedVehicle) {
-      alert('Please select a vehicle');
-      return;
-    }
-
-    navigate('/et-sim', {
-      state: {
-        vehicle: selectedVehicle,
-        raceLength,
-        selectedModel,
-      },
-    });
-  };
-
-  const handleVehicleChange = (vehicleId: string) => {
-    setSelectedVehicleId(vehicleId);
-    const vehicle = vehicles.find((v) => v.id === vehicleId);
-    if (vehicle) {
-      setRaceLength(vehicle.defaultRaceLength);
-    }
-  };
 
   if (loading) {
     return (
@@ -129,178 +94,204 @@ function Home() {
     );
   }
 
-  if (vehicles.length === 0) {
-    return (
-      <Page title="Dashboard">
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+  // Dashboard for authenticated users
+  return (
+    <Page title="Dashboard">
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        {/* Welcome Header */}
+        <div style={{ marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
-            Welcome, {user?.displayName || 'User'}!
+            Welcome back, {user?.displayName || 'User'}!
           </h2>
-          <p style={{ color: 'var(--color-muted)', marginBottom: '1.5rem' }}>
-            You have access to: {userProducts.map((p: Product) => p.name).join(', ') || 'No products yet'}
+          <p style={{ color: 'var(--color-muted)' }}>
+            {userProducts.length > 0 
+              ? `Your products: ${userProducts.map((p: Product) => p.name).join(', ')}`
+              : 'No products assigned yet. Contact support for access.'}
           </p>
-          
-          <div className="card text-center">
-            <h3 style={{ fontSize: '1.25rem', marginBottom: 'var(--space-4)', color: 'var(--color-text)' }}>
-              No Vehicles Yet
-            </h3>
-            <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-              Create your first vehicle to start making predictions.
-            </p>
-            <Link to="/vehicles" className="btn">
-              + Create Vehicle
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
+            Quick Actions
+          </h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '1rem' 
+          }}>
+            {/* ET Sim - Quarter Jr or Pro */}
+            {(hasProduct('quarter_jr') || hasProduct('quarter_pro')) && (
+              <Link 
+                to="/et-sim" 
+                className="card"
+                style={{ 
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '1rem',
+                }}
+              >
+                <div style={{ fontSize: '2rem' }}>🏁</div>
+                <div>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>ET Simulator</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                    Predict ET & MPH
+                  </p>
+                </div>
+              </Link>
+            )}
+
+            {/* Vehicles */}
+            {hasFeature('save_vehicles') && (
+              <Link 
+                to="/vehicles" 
+                className="card"
+                style={{ 
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '1rem',
+                }}
+              >
+                <div style={{ fontSize: '2rem' }}>🚗</div>
+                <div>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Vehicles</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                    {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''} configured
+                  </p>
+                </div>
+              </Link>
+            )}
+
+            {/* Run Log */}
+            {hasFeature('save_runs') && (
+              <Link 
+                to="/log" 
+                className="card"
+                style={{ 
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '1rem',
+                }}
+              >
+                <div style={{ fontSize: '2rem' }}>📝</div>
+                <div>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Run Log</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                    Record actual runs
+                  </p>
+                </div>
+              </Link>
+            )}
+
+            {/* Calculators - always available */}
+            <Link 
+              to="/calculators" 
+              className="card"
+              style={{ 
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                padding: '1rem',
+              }}
+            >
+              <div style={{ fontSize: '2rem' }}>🔢</div>
+              <div>
+                <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Calculators</h4>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                  Racing math tools
+                </p>
+              </div>
             </Link>
           </div>
         </div>
-      </Page>
-    );
-  }
 
-  const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
-
-  return (
-    <Page title="Racing Systems Analysis">
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <div className="card mb-6">
-          <div className="mb-4">
-            <label className="label" htmlFor="vehicle">
-              Select Vehicle
-            </label>
-            <select
-              id="vehicle"
-              className="input"
-              value={selectedVehicleId}
-              onChange={(e) => handleVehicleChange(e.target.value)}
-              style={{ cursor: 'pointer' }}
-            >
-              {vehicles.map((vehicle) => (
-                <option key={vehicle.id} value={vehicle.id}>
-                  {vehicle.name}
-                </option>
+        {/* Your Products */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
+            Your Products
+          </h3>
+          
+          {userProducts.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
+              <p className="text-muted">No products assigned to your account yet.</p>
+              <p className="text-muted" style={{ fontSize: '0.875rem' }}>
+                Contact support to get started with RSA software.
+              </p>
+            </div>
+          ) : (
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+              gap: '1rem' 
+            }}>
+              {userProducts.map((product: Product) => (
+                <div 
+                  key={product.id}
+                  className="card"
+                  style={{ 
+                    borderLeft: `4px solid ${product.color}`,
+                    padding: '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>{product.icon}</span>
+                    <h4 style={{ margin: 0, color: 'var(--color-text)' }}>{product.name}</h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                    {product.description}
+                  </p>
+                </div>
               ))}
-            </select>
-          </div>
-
-          {selectedVehicle && (
-            <div className="text-muted" style={{ fontSize: '0.9rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                <div>Weight: <strong>{selectedVehicle.weightLb}</strong> lb</div>
-                <div>Power: <strong>{selectedVehicle.powerHP}</strong> HP</div>
-                <div>Tire: <strong>{selectedVehicle.tireDiaIn}</strong>" dia</div>
-                <div>Final Drive: <strong>{selectedVehicle.rearGear}</strong></div>
-                <div>Rollout: <strong>{selectedVehicle.rolloutIn}</strong>"</div>
-                <div>Trans: <strong>{(selectedVehicle as any).transmissionType === 'converter' ? 'Auto' : 'Manual'}</strong></div>
-              </div>
-              <div style={{ marginTop: '0.5rem' }}>
-                <Link to="/vehicles" style={{ fontSize: '0.8rem', color: 'var(--color-primary)' }}>
-                  Edit Vehicle →
-                </Link>
-              </div>
             </div>
           )}
         </div>
 
-        <div className="mb-6">
-          <h3 className="label">Track / Distance</h3>
-          <select
-            className="input"
-            value={raceLength}
-            onChange={(e) => setRaceLength(e.target.value as RaceLength)}
-            style={{ cursor: 'pointer' }}
-          >
-            <optgroup label="Drag Racing">
-              {Object.entries(RACE_LENGTH_INFO)
-                .filter(([, info]) => info.category === 'drag')
-                .map(([key, info]) => (
-                  <option key={key} value={key}>
-                    {info.label} ({info.lengthFt.toLocaleString()} ft)
-                  </option>
-                ))}
-            </optgroup>
-            <optgroup label="Land Speed Racing">
-              {Object.entries(RACE_LENGTH_INFO)
-                .filter(([, info]) => info.category === 'landspeed')
-                .map(([key, info]) => (
-                  <option key={key} value={key}>
-                    {info.label} ({info.lengthMiles} mi)
-                  </option>
-                ))}
-            </optgroup>
-          </select>
-          <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}>
-            {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' && 
-              '🏁 Land speed mode - simulation runs to terminal velocity'}
+        {/* Recent Vehicles */}
+        {vehicles.length > 0 && (
+          <div>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
+              Your Vehicles
+            </h3>
+            <div className="card">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ textAlign: 'left', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Name</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Weight</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Power</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Tire</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vehicles.slice(0, 5).map((v) => (
+                    <tr key={v.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.5rem' }}>
+                        <Link to="/vehicles" style={{ color: 'var(--color-primary)' }}>{v.name}</Link>
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{v.weightLb} lb</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{v.powerHP} HP</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{v.tireDiaIn}"</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {vehicles.length > 5 && (
+                <div style={{ padding: '0.5rem', textAlign: 'center' }}>
+                  <Link to="/vehicles" style={{ fontSize: '0.875rem', color: 'var(--color-primary)' }}>
+                    View all {vehicles.length} vehicles →
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-
-        <div className="mb-6">
-          <h3 className="label">Physics Model</h3>
-          <select
-            className="input"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value as PhysicsModelId)}
-            style={{ cursor: 'pointer' }}
-          >
-            <option value="SimpleV1">SimpleV1 (Basic)</option>
-            <option value="RSACLASSIC">RSACLASSIC (Advanced)</option>
-            <option value="VB6Exact">VB6 Exact (Bit-for-bit Parity)</option>
-            <option value="Blend">Blend (Learning)</option>
-          </select>
-          <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}>
-            {selectedModel === 'SimpleV1' && 'Simplified physics model'}
-            {selectedModel === 'RSACLASSIC' && 'Advanced physics with detailed modeling'}
-            {selectedModel === 'VB6Exact' && 'Exact VB6 TIMESLIP.FRM replication'}
-            {selectedModel === 'Blend' && 'RSACLASSIC + learned corrections'}
-          </div>
-        </div>
-
-        <button onClick={handlePredict} className="btn btn-full">
-          Run ET Sim
-        </button>
-      </div>
-
-      <div className="card mt-6" style={{ backgroundColor: 'var(--color-surface-alt)' }}>
-        <h3 style={{ fontSize: '1rem', marginBottom: 'var(--space-3)', color: 'var(--color-text)' }}>
-          💡 How It Works
-        </h3>
-        <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: 'var(--space-2)' }}>
-          <strong>ET Sim</strong> is baseline-only — it shows pure physics predictions based on vehicle specs and weather. 
-          No learning, no completion, just instant baseline ET and MPH.
-        </p>
-        <p className="text-muted" style={{ fontSize: '0.9rem', margin: 0 }}>
-          Use <strong>Log</strong> to save actual runs, complete partial runs from splits, and train adaptive learning 
-          models that improve predictions over time for each vehicle.
-        </p>
-      </div>
-
-      <div style={{ marginTop: 'var(--space-6)' }}>
-        <h2 style={{ fontSize: '1.5rem', marginBottom: 'var(--space-4)', color: 'var(--color-text)' }}>
-          More Tools
-        </h2>
-        <p className="text-muted mb-6" style={{ fontSize: '0.9rem' }}>
-          Unlock advanced features below to take your racing analysis to the next level.
-        </p>
-
-        <div className="grid grid-3 gap-4">
-          <PeekCard
-            title="Pro Vehicle Editor"
-            tier="PRO"
-            description="Advanced vehicle configuration with custom parameters, tire profiles, and gear ratios."
-            onLearnMore={() => alert('Pro Vehicle Editor - Coming soon!')}
-          />
-          <PeekCard
-            title="Advanced Charts"
-            tier="PRO"
-            description="G-force analysis, power curves, and comparative overlays across multiple runs."
-            onLearnMore={() => alert('Advanced Charts - Coming soon!')}
-          />
-          <PeekCard
-            title="Data Export"
-            tier="NITRO"
-            description="Export your runs and analysis to CSV, JSON, or PDF for external analysis and reporting."
-            onLearnMore={() => alert('Data Export - Coming soon!')}
-          />
-        </div>
+        )}
       </div>
     </Page>
   );
