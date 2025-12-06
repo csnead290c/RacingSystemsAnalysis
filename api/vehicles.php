@@ -4,13 +4,13 @@
  * CRUD operations for vehicles
  */
 
-require_once 'functions.php';
 require_once 'config.php';
-setCorsHeaders();
+require_once 'functions.php';
+rsa_setCorsHeaders();
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
-$auth = getAuthUser();
+$auth = rsa_getAuthUser();
 
 switch ($method) {
     case 'GET':
@@ -26,7 +26,7 @@ switch ($method) {
         handleDelete($pdo, $auth);
         break;
     default:
-        jsonResponse(['error' => 'Method not allowed'], 405);
+        rsa_jsonResponse(['error' => 'Method not allowed'], 405);
 }
 
 function handleGet($pdo, $auth) {
@@ -44,10 +44,10 @@ function handleGet($pdo, $auth) {
         $vehicle = $stmt->fetch();
         
         if (!$vehicle) {
-            jsonResponse(['error' => 'Vehicle not found'], 404);
+            rsa_jsonResponse(['error' => 'Vehicle not found'], 404);
         }
         
-        jsonResponse([
+        rsa_jsonResponse([
             'vehicle' => formatVehicle($vehicle)
         ]);
     } else {
@@ -64,7 +64,7 @@ function handleGet($pdo, $auth) {
         $stmt->execute([$userId]);
         $vehicles = $stmt->fetchAll();
         
-        jsonResponse([
+        rsa_jsonResponse([
             'vehicles' => array_map('formatVehicle', $vehicles)
         ]);
     }
@@ -72,16 +72,16 @@ function handleGet($pdo, $auth) {
 
 function handlePost($pdo, $auth) {
     if (!$auth) {
-        jsonResponse(['error' => 'Unauthorized'], 401);
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     $name = $input['name'] ?? '';
     $data = $input['data'] ?? [];
     $isPublic = $input['is_public'] ?? false;
     
     if (!$name) {
-        jsonResponse(['error' => 'Vehicle name required'], 400);
+        rsa_jsonResponse(['error' => 'Vehicle name required'], 400);
     }
     
     // Only owner/admin can create public vehicles
@@ -103,7 +103,7 @@ function handlePost($pdo, $auth) {
         json_encode($data)
     ]);
     
-    jsonResponse([
+    rsa_jsonResponse([
         'success' => true,
         'vehicle' => [
             'id' => $uuid,
@@ -117,12 +117,12 @@ function handlePost($pdo, $auth) {
 
 function handlePut($pdo, $auth) {
     if (!$auth) {
-        jsonResponse(['error' => 'Unauthorized'], 401);
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
     $uuid = $_GET['id'] ?? null;
     if (!$uuid) {
-        jsonResponse(['error' => 'Vehicle ID required'], 400);
+        rsa_jsonResponse(['error' => 'Vehicle ID required'], 400);
     }
     
     // Check ownership
@@ -131,15 +131,15 @@ function handlePut($pdo, $auth) {
     $vehicle = $stmt->fetch();
     
     if (!$vehicle) {
-        jsonResponse(['error' => 'Vehicle not found'], 404);
+        rsa_jsonResponse(['error' => 'Vehicle not found'], 404);
     }
     
     // Only owner or admin can edit
     if ($vehicle['user_id'] != $auth['user_id'] && !in_array($auth['role'], ['owner', 'admin'])) {
-        jsonResponse(['error' => 'Permission denied'], 403);
+        rsa_jsonResponse(['error' => 'Permission denied'], 403);
     }
     
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     $name = $input['name'] ?? $vehicle['name'];
     $data = $input['data'] ?? json_decode($vehicle['data'], true);
     $isPublic = $input['is_public'] ?? $vehicle['is_public'];
@@ -154,17 +154,17 @@ function handlePut($pdo, $auth) {
     ");
     $stmt->execute([$name, $isPublic ? 1 : 0, json_encode($data), $uuid]);
     
-    jsonResponse(['success' => true]);
+    rsa_jsonResponse(['success' => true]);
 }
 
 function handleDelete($pdo, $auth) {
     if (!$auth) {
-        jsonResponse(['error' => 'Unauthorized'], 401);
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
     $uuid = $_GET['id'] ?? null;
     if (!$uuid) {
-        jsonResponse(['error' => 'Vehicle ID required'], 400);
+        rsa_jsonResponse(['error' => 'Vehicle ID required'], 400);
     }
     
     // Check ownership
@@ -173,18 +173,18 @@ function handleDelete($pdo, $auth) {
     $vehicle = $stmt->fetch();
     
     if (!$vehicle) {
-        jsonResponse(['error' => 'Vehicle not found'], 404);
+        rsa_jsonResponse(['error' => 'Vehicle not found'], 404);
     }
     
     // Only owner or admin can delete
     if ($vehicle['user_id'] != $auth['user_id'] && !in_array($auth['role'], ['owner', 'admin'])) {
-        jsonResponse(['error' => 'Permission denied'], 403);
+        rsa_jsonResponse(['error' => 'Permission denied'], 403);
     }
     
     $stmt = $pdo->prepare("DELETE FROM vehicles WHERE uuid = ?");
     $stmt->execute([$uuid]);
     
-    jsonResponse(['success' => true]);
+    rsa_jsonResponse(['success' => true]);
 }
 
 function formatVehicle($row) {

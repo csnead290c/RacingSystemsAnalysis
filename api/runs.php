@@ -4,13 +4,13 @@
  * CRUD operations for saved simulation runs
  */
 
-require_once 'functions.php';
 require_once 'config.php';
-setCorsHeaders();
+require_once 'functions.php';
+rsa_setCorsHeaders();
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
-$auth = getAuthUser();
+$auth = rsa_getAuthUser();
 
 switch ($method) {
     case 'GET':
@@ -23,12 +23,12 @@ switch ($method) {
         handleDelete($pdo, $auth);
         break;
     default:
-        jsonResponse(['error' => 'Method not allowed'], 405);
+        rsa_jsonResponse(['error' => 'Method not allowed'], 405);
 }
 
 function handleGet($pdo, $auth) {
     if (!$auth) {
-        jsonResponse(['error' => 'Unauthorized'], 401);
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
     $limit = min((int)($_GET['limit'] ?? 50), 100);
@@ -42,17 +42,17 @@ function handleGet($pdo, $auth) {
     $stmt->execute([$auth['user_id'], $limit]);
     $runs = $stmt->fetchAll();
     
-    jsonResponse([
+    rsa_jsonResponse([
         'runs' => array_map('formatRun', $runs)
     ]);
 }
 
 function handlePost($pdo, $auth) {
     if (!$auth) {
-        jsonResponse(['error' => 'Unauthorized'], 401);
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     
     $vehicleUuid = $input['vehicle_id'] ?? '';
     $vehicleName = $input['vehicle_name'] ?? '';
@@ -65,7 +65,7 @@ function handlePost($pdo, $auth) {
     $notes = $input['notes'] ?? '';
     
     if (!$vehicleName || !$raceLength) {
-        jsonResponse(['error' => 'Vehicle name and race length required'], 400);
+        rsa_jsonResponse(['error' => 'Vehicle name and race length required'], 400);
     }
     
     $uuid = generateUUID();
@@ -89,7 +89,7 @@ function handlePost($pdo, $auth) {
         $notes
     ]);
     
-    jsonResponse([
+    rsa_jsonResponse([
         'success' => true,
         'run' => [
             'id' => $uuid,
@@ -106,7 +106,7 @@ function handlePost($pdo, $auth) {
 
 function handleDelete($pdo, $auth) {
     if (!$auth) {
-        jsonResponse(['error' => 'Unauthorized'], 401);
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
     $uuid = $_GET['id'] ?? null;
@@ -121,7 +121,7 @@ function handleDelete($pdo, $auth) {
         $stmt->execute([$auth['user_id']]);
     }
     
-    jsonResponse(['success' => true]);
+    rsa_jsonResponse(['success' => true]);
 }
 
 function formatRun($row) {

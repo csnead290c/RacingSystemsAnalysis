@@ -4,17 +4,17 @@
  * Manage users, roles, and products
  */
 
-require_once 'functions.php';
 require_once 'config.php';
-setCorsHeaders();
+require_once 'functions.php';
+rsa_setCorsHeaders();
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
-$auth = requireAuth();
+$auth = rsa_requireAuth();
 
 // Only owner and admin can access this API
 if (!in_array($auth['role'], ['owner', 'admin'])) {
-    jsonResponse(['error' => 'Permission denied'], 403);
+    rsa_jsonResponse(['error' => 'Permission denied'], 403);
 }
 
 switch ($method) {
@@ -31,11 +31,11 @@ switch ($method) {
         handleDelete($pdo, $auth);
         break;
     default:
-        jsonResponse(['error' => 'Method not allowed'], 405);
+        rsa_jsonResponse(['error' => 'Method not allowed'], 405);
 }
 
 function handlePost($pdo, $auth) {
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     
     $email = $input['email'] ?? '';
     $password = $input['password'] ?? '';
@@ -44,11 +44,11 @@ function handlePost($pdo, $auth) {
     $products = $input['products'] ?? [];
     
     if (!$email || !$password || !$name) {
-        jsonResponse(['error' => 'Email, password, and name required'], 400);
+        rsa_jsonResponse(['error' => 'Email, password, and name required'], 400);
     }
     
     if (strlen($password) < 6) {
-        jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+        rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
     }
     
     // Only owner can create admin/owner users
@@ -60,7 +60,7 @@ function handlePost($pdo, $auth) {
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->execute([$email]);
     if ($stmt->fetch()) {
-        jsonResponse(['error' => 'Email already registered'], 400);
+        rsa_jsonResponse(['error' => 'Email already registered'], 400);
     }
     
     // Create user
@@ -70,7 +70,7 @@ function handlePost($pdo, $auth) {
     
     $userId = $pdo->lastInsertId();
     
-    jsonResponse([
+    rsa_jsonResponse([
         'success' => true,
         'user' => [
             'id' => $userId,
@@ -91,11 +91,11 @@ function handleGet($pdo, $auth) {
         $user = $stmt->fetch();
         
         if (!$user) {
-            jsonResponse(['error' => 'User not found'], 404);
+            rsa_jsonResponse(['error' => 'User not found'], 404);
         }
         
         $user['products'] = json_decode($user['products'], true);
-        jsonResponse(['user' => $user]);
+        rsa_jsonResponse(['user' => $user]);
     } else {
         $stmt = $pdo->query("SELECT id, email, name, role, products, created_at FROM users ORDER BY created_at DESC");
         $users = $stmt->fetchAll();
@@ -104,17 +104,17 @@ function handleGet($pdo, $auth) {
             $user['products'] = json_decode($user['products'], true);
         }
         
-        jsonResponse(['users' => $users]);
+        rsa_jsonResponse(['users' => $users]);
     }
 }
 
 function handlePut($pdo, $auth) {
     $userId = $_GET['id'] ?? null;
     if (!$userId) {
-        jsonResponse(['error' => 'User ID required'], 400);
+        rsa_jsonResponse(['error' => 'User ID required'], 400);
     }
     
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     
     // Get current user
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
@@ -122,7 +122,7 @@ function handlePut($pdo, $auth) {
     $user = $stmt->fetch();
     
     if (!$user) {
-        jsonResponse(['error' => 'User not found'], 404);
+        rsa_jsonResponse(['error' => 'User not found'], 404);
     }
     
     // Only owner can change roles
@@ -133,7 +133,7 @@ function handlePut($pdo, $auth) {
     
     // Prevent demoting owner
     if ($user['role'] === 'owner' && $role !== 'owner') {
-        jsonResponse(['error' => 'Cannot demote owner'], 400);
+        rsa_jsonResponse(['error' => 'Cannot demote owner'], 400);
     }
     
     $name = $input['name'] ?? $user['name'];
@@ -142,23 +142,23 @@ function handlePut($pdo, $auth) {
     $stmt = $pdo->prepare("UPDATE users SET name = ?, role = ?, products = ? WHERE id = ?");
     $stmt->execute([$name, $role, json_encode($products), $userId]);
     
-    jsonResponse(['success' => true]);
+    rsa_jsonResponse(['success' => true]);
 }
 
 function handleDelete($pdo, $auth) {
     // Only owner can delete users
     if ($auth['role'] !== 'owner') {
-        jsonResponse(['error' => 'Only owner can delete users'], 403);
+        rsa_jsonResponse(['error' => 'Only owner can delete users'], 403);
     }
     
     $userId = $_GET['id'] ?? null;
     if (!$userId) {
-        jsonResponse(['error' => 'User ID required'], 400);
+        rsa_jsonResponse(['error' => 'User ID required'], 400);
     }
     
     // Prevent self-deletion
     if ($userId == $auth['user_id']) {
-        jsonResponse(['error' => 'Cannot delete yourself'], 400);
+        rsa_jsonResponse(['error' => 'Cannot delete yourself'], 400);
     }
     
     // Check if user exists and is not owner
@@ -167,15 +167,15 @@ function handleDelete($pdo, $auth) {
     $user = $stmt->fetch();
     
     if (!$user) {
-        jsonResponse(['error' => 'User not found'], 404);
+        rsa_jsonResponse(['error' => 'User not found'], 404);
     }
     
     if ($user['role'] === 'owner') {
-        jsonResponse(['error' => 'Cannot delete owner'], 400);
+        rsa_jsonResponse(['error' => 'Cannot delete owner'], 400);
     }
     
     $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
     $stmt->execute([$userId]);
     
-    jsonResponse(['success' => true]);
+    rsa_jsonResponse(['success' => true]);
 }

@@ -4,9 +4,9 @@
  * Endpoints: login, register, me
  */
 
-require_once 'functions.php';
 require_once 'config.php';
-setCorsHeaders();
+require_once 'functions.php';
+rsa_setCorsHeaders();
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
@@ -29,16 +29,16 @@ switch ($action) {
         handlePreferences($pdo);
         break;
     default:
-        jsonResponse(['error' => 'Invalid action'], 400);
+        rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
 
 function handleLogin($pdo) {
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     $email = $input['email'] ?? '';
     $password = $input['password'] ?? '';
     
     if (!$email || !$password) {
-        jsonResponse(['error' => 'Email and password required'], 400);
+        rsa_jsonResponse(['error' => 'Email and password required'], 400);
     }
     
     $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
@@ -46,12 +46,12 @@ function handleLogin($pdo) {
     $user = $stmt->fetch();
     
     if (!$user || !password_verify($password, $user['password_hash'])) {
-        jsonResponse(['error' => 'Invalid email or password'], 401);
+        rsa_jsonResponse(['error' => 'Invalid email or password'], 401);
     }
     
-    $token = createToken($user['id'], $user['email'], $user['role']);
+    $token = rsa_generateToken($user['id'], $user['email'], $user['role']);
     
-    jsonResponse([
+    rsa_jsonResponse([
         'success' => true,
         'token' => $token,
         'user' => [
@@ -65,24 +65,24 @@ function handleLogin($pdo) {
 }
 
 function handleRegister($pdo) {
-    $input = getJsonInput();
+    $input = rsa_getJsonInput();
     $email = $input['email'] ?? '';
     $password = $input['password'] ?? '';
     $name = $input['name'] ?? '';
     
     if (!$email || !$password || !$name) {
-        jsonResponse(['error' => 'Email, password, and name required'], 400);
+        rsa_jsonResponse(['error' => 'Email, password, and name required'], 400);
     }
     
     if (strlen($password) < 6) {
-        jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+        rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
     }
     
     // Check if email exists
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->execute([$email]);
     if ($stmt->fetch()) {
-        jsonResponse(['error' => 'Email already registered'], 400);
+        rsa_jsonResponse(['error' => 'Email already registered'], 400);
     }
     
     // Create user
@@ -91,9 +91,9 @@ function handleRegister($pdo) {
     $stmt->execute([$email, $hash, $name]);
     
     $userId = $pdo->lastInsertId();
-    $token = createToken($userId, $email, 'user');
+    $token = rsa_generateToken($userId, $email, 'user');
     
-    jsonResponse([
+    rsa_jsonResponse([
         'success' => true,
         'token' => $token,
         'user' => [
@@ -107,17 +107,17 @@ function handleRegister($pdo) {
 }
 
 function handleMe($pdo) {
-    $auth = requireAuth();
+    $auth = rsa_requireAuth();
     
     $stmt = $pdo->prepare("SELECT id, email, name, role, products FROM users WHERE id = ?");
     $stmt->execute([$auth['user_id']]);
     $user = $stmt->fetch();
     
     if (!$user) {
-        jsonResponse(['error' => 'User not found'], 404);
+        rsa_jsonResponse(['error' => 'User not found'], 404);
     }
     
-    jsonResponse([
+    rsa_jsonResponse([
         'user' => [
             'id' => $user['id'],
             'email' => $user['email'],
@@ -129,8 +129,8 @@ function handleMe($pdo) {
 }
 
 function handleUpdate($pdo) {
-    $auth = requireAuth();
-    $input = getJsonInput();
+    $auth = rsa_requireAuth();
+    $input = rsa_getJsonInput();
     
     $name = $input['name'] ?? null;
     $password = $input['password'] ?? null;
@@ -145,14 +145,14 @@ function handleUpdate($pdo) {
     
     if ($password) {
         if (strlen($password) < 6) {
-            jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+            rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
         }
         $updates[] = "password_hash = ?";
         $params[] = password_hash($password, PASSWORD_DEFAULT);
     }
     
     if (empty($updates)) {
-        jsonResponse(['error' => 'Nothing to update'], 400);
+        rsa_jsonResponse(['error' => 'Nothing to update'], 400);
     }
     
     $params[] = $auth['user_id'];
@@ -160,11 +160,11 @@ function handleUpdate($pdo) {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     
-    jsonResponse(['success' => true]);
+    rsa_jsonResponse(['success' => true]);
 }
 
 function handlePreferences($pdo) {
-    $auth = requireAuth();
+    $auth = rsa_requireAuth();
     $method = $_SERVER['REQUEST_METHOD'];
     
     if ($method === 'GET') {
@@ -174,10 +174,10 @@ function handlePreferences($pdo) {
         $row = $stmt->fetch();
         
         $preferences = $row && $row['preferences'] ? json_decode($row['preferences'], true) : [];
-        jsonResponse(['preferences' => $preferences]);
+        rsa_jsonResponse(['preferences' => $preferences]);
     } else if ($method === 'POST') {
         // Update preferences
-        $input = getJsonInput();
+        $input = rsa_getJsonInput();
         
         // Get current preferences
         $stmt = $pdo->prepare("SELECT preferences FROM users WHERE id = ?");
@@ -192,8 +192,8 @@ function handlePreferences($pdo) {
         $stmt = $pdo->prepare("UPDATE users SET preferences = ? WHERE id = ?");
         $stmt->execute([json_encode($updated), $auth['user_id']]);
         
-        jsonResponse(['success' => true, 'preferences' => $updated]);
+        rsa_jsonResponse(['success' => true, 'preferences' => $updated]);
     } else {
-        jsonResponse(['error' => 'Method not allowed'], 405);
+        rsa_jsonResponse(['error' => 'Method not allowed'], 405);
     }
 }
