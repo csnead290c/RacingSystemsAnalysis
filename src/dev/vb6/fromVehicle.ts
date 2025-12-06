@@ -397,7 +397,7 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
         wind_mph: env.wind_mph ?? 0,
         wind_angle_deg: env.wind_angle_deg ?? env.wind_dir_deg ?? 0,
         trackTemp_F: env.trackTemp_F ?? 100,
-        tractionIndex: env.tractionIndex ?? 3,
+        tractionIndex: env.tractionIndex ?? 5,
       },
       vehicle: {
         weight_lb: weightLb,
@@ -497,7 +497,7 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
       wind_mph: env.wind_mph ?? 0,
       wind_angle_deg: env.wind_angle_deg ?? env.wind_dir_deg ?? 0,
       trackTemp_F: env.trackTemp_F ?? 100,
-      tractionIndex: env.tractionIndex ?? 3,
+      tractionIndex: env.tractionIndex ?? 5,
     },
     vehicle: {
       weight_lb: weightLb,

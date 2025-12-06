@@ -262,7 +262,7 @@ export function createEmptyFixture(): Partial<Vb6VehicleFixture> {
       wind_mph: 0,
       wind_angle_deg: 0,
       trackTemp_F: 100,
-      tractionIndex: 3,
+      tractionIndex: 5,
     },
     vehicle: {
       weight_lb: 0,

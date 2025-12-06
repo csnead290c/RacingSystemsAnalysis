@@ -203,6 +203,7 @@ function Predict() {
         const vb6Fixture = fromVehicleToVB6Fixture(adjustedVehicle as any);
         const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
         // Override with UI environment settings
+        // Note: tractionIndex defaults to 5 to match VB6 QuarterJr default
         simInputs.env = {
           elevation: currentEnv.elevation ?? 0,
           barometerInHg: currentEnv.barometerInHg ?? 29.92,
@@ -211,7 +212,7 @@ function Predict() {
           windMph: currentEnv.windMph ?? 0,
           windAngleDeg: currentEnv.windAngleDeg ?? 0,
           trackTempF: currentEnv.trackTempF ?? 100,
-          tractionIndex: currentEnv.tractionIndex ?? 3,
+          tractionIndex: currentEnv.tractionIndex ?? 5,
         };
         console.log('[Predict] VB6Exact - converted vehicle to fixture', simInputs);
         
