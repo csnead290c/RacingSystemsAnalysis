@@ -23,6 +23,10 @@ function rsa_setCorsHeaders() {
 
 function rsa_jsonResponse($data, $code = 200) {
     http_response_code($code);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Pragma: no-cache');
+    header('Expires: 0');
     echo json_encode($data);
     exit;
 }

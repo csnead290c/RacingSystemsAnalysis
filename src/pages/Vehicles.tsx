@@ -263,7 +263,10 @@ function Vehicles() {
       // Save
       console.log('Vehicles.handleSave: Saving vehicle...');
       await saveVehicle(result.data);
-      console.log('Vehicles.handleSave: Save complete, reloading...');
+      console.log('Vehicles.handleSave: Save complete, waiting for DB commit...');
+      // Small delay to ensure database commit before reload
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log('Vehicles.handleSave: Reloading...');
       await loadData();
       console.log('Vehicles.handleSave: Reload complete');
       setShowForm(false);
