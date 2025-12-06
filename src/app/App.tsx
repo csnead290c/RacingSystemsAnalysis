@@ -283,12 +283,12 @@ function App() {
               </ProtectedRoute>
             } />
             <Route path="/et-sim" element={
-              <ProtectedRoute requireProduct="quarter_jr">
+              <ProtectedRoute requireFeature="basic_sim">
                 <Predict />
               </ProtectedRoute>
             } />
             <Route path="/predict" element={
-              <ProtectedRoute requireProduct="quarter_jr">
+              <ProtectedRoute requireFeature="basic_sim">
                 <Predict />
               </ProtectedRoute>
             } />

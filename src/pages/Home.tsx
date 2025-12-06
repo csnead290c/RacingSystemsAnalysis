@@ -6,7 +6,7 @@ import { useAuth } from '../domain/auth';
 import type { Product } from '../domain/auth/types';
 
 function Home() {
-  const { isAuthenticated, user, getUserProducts, hasProduct, hasFeature } = useAuth();
+  const { isAuthenticated, user, getUserProducts, hasFeature } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -120,8 +120,8 @@ function Home() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
             gap: '1rem' 
           }}>
-            {/* ET Sim - Quarter Jr or Pro */}
-            {(hasProduct('quarter_jr') || hasProduct('quarter_pro')) && (
+            {/* ET Sim - requires basic_sim feature */}
+            {hasFeature('basic_sim') && (
               <Link 
                 to="/et-sim" 
                 className="card"
