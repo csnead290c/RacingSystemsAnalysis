@@ -17,6 +17,7 @@ if (!file_exists('config.php')) {
 }
 
 require_once 'config.php';
+require_once 'functions.php';
 
 echo "1. Connecting to database...\n";
 

@@ -2,6 +2,8 @@
 /**
  * Database Configuration Template
  * Copy this to config.php and fill in your credentials
+ * 
+ * NOTE: All helper functions are now in functions.php
  */
 
 define('DB_HOST', 'localhost');
@@ -18,5 +20,3 @@ define('ALLOWED_ORIGIN', '*'); // Change to your domain in production
 // Error reporting (disable in production)
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
-
-// ... rest of the file is the same as config.php
