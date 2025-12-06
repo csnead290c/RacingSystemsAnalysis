@@ -64,9 +64,13 @@ export default function ProtectedRoute({
   }
 
   // Check feature access
-  if (requireFeature && !hasFeature(requireFeature)) {
-    if (fallback) return <>{fallback}</>;
-    return <AccessDenied feature={requireFeature} />;
+  if (requireFeature) {
+    const hasIt = hasFeature(requireFeature);
+    console.log(`ProtectedRoute: requireFeature=${requireFeature}, hasFeature=${hasIt}`);
+    if (!hasIt) {
+      if (fallback) return <>{fallback}</>;
+      return <AccessDenied feature={requireFeature} />;
+    }
   }
 
   // Check product access

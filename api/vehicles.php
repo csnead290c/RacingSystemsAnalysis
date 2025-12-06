@@ -54,6 +54,9 @@ function handleGet($pdo, $auth) {
         // Get all vehicles (user's + public)
         $userId = $auth['user_id'] ?? 0;
         
+        // Debug: log what we're querying
+        error_log("vehicles.php GET: auth=" . json_encode($auth) . ", userId=" . $userId);
+        
         $stmt = $pdo->prepare("
             SELECT v.*, u.name as owner_name 
             FROM vehicles v 
@@ -64,8 +67,15 @@ function handleGet($pdo, $auth) {
         $stmt->execute([$userId]);
         $vehicles = $stmt->fetchAll();
         
+        // Debug: log how many vehicles found
+        error_log("vehicles.php GET: found " . count($vehicles) . " vehicles");
+        
         rsa_jsonResponse([
-            'vehicles' => array_map('formatVehicle', $vehicles)
+            'vehicles' => array_map('formatVehicle', $vehicles),
+            '_debug' => [
+                'user_id' => $userId,
+                'count' => count($vehicles)
+            ]
         ]);
     }
 }
