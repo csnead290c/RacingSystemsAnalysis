@@ -24,6 +24,7 @@ import Opponents from '../pages/Opponents';
 import RaceDay from '../pages/RaceDay';
 import DataImport from '../pages/DataImport';
 import TechCard from '../pages/TechCard';
+import Ladder from '../pages/Ladder';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -336,6 +337,12 @@ function App() {
             <Route path="/tech-card" element={
               <ProtectedRoute requireFeature="basic_sim">
                 <TechCard />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/ladder" element={
+              <ProtectedRoute requireFeature="basic_sim">
+                <Ladder />
               </ProtectedRoute>
             } />
             

@@ -51,7 +51,7 @@
 | **ET Prediction** | HIGH | ✅ Complete | Core simulation |
 | **Throttle Stop Calculator** | MEDIUM | ✅ Complete | Integrated into physics model + UI |
 | **Opponent Statistics** | MEDIUM | ✅ Complete | Full opponent tracker with predictive analytics |
-| **Competition Ladders** | LOW | ❌ Missing | Tournament bracket view |
+| **Competition Ladders** | LOW | ✅ Complete | Full bracket view with MOV |
 | **Margin of Victory Calculator** | MEDIUM | ✅ Complete | Built into opponent tracker |
 | **Run Completion** | HIGH | ✅ Complete | Predict finish from partial data |
 | **Combination/Database Management** | HIGH | ⚠️ Partial | Vehicle grouping added |
@@ -114,33 +114,41 @@
    - Print-ready output
    - Save cards per vehicle
 
-7. **Vehicle Management**
+7. **Competition Ladder (NEW)**
+   - Tournament bracket visualization
+   - Standard seeding (1v16, 2v15, etc.)
+   - Automatic bye assignment
+   - Round-by-round progression
+   - Margin of victory calculation
+   - Win reason tracking (faster, breakout, redlight, DQ)
+
+8. **Vehicle Management**
    - Create/edit/delete vehicles
    - Vehicle grouping/categories
    - Duplicate vehicles
    - Public/private vehicles
    - Full physics parameters
 
-8. **Run Log**
+9. **Run Log**
    - Record actual runs
    - Date, time, round, lane tracking
    - Reaction time, dial-in
    - Compute baseline prediction
    - Learning model for corrections
 
-9. **Environment/Weather**
+10. **Environment/Weather**
    - Live weather from Open-Meteo API
    - Track database with coordinates
    - Track angle for wind correction
    - Elevation/barometer toggle
    - Density altitude calculation
 
-10. **User System**
+11. **User System**
    - Authentication (login/register)
    - Role-based access (owner, admin, user, beta)
    - Product entitlements
 
-11. **Mobile Support**
+12. **Mobile Support**
    - Responsive layout
    - Charts working on iOS Safari
    - Touch-friendly controls
