@@ -13,7 +13,7 @@ import { hasFeature, getEntitlements, CURRENT_TIER } from '../domain/config/enti
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import { parseCsv, mapWeatherRow, csvToObjects } from '../shared/utils/csvImport';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
-import type { RunRecordV1 } from '../domain/schemas/run.schema';
+import { RoundTypes, type RunRecordV1 } from '../domain/schemas/run.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { PredictResult, PredictRequest } from '../domain/quarter/types';
@@ -62,6 +62,14 @@ function Log() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  
+  // Run context fields (like Crew Chief)
+  const [runDate, setRunDate] = useState(new Date().toISOString().split('T')[0]);
+  const [runTime, setRunTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [round, setRound] = useState('T1');
+  const [lane, setLane] = useState<'left' | 'right'>('left');
+  const [reactionTime, setReactionTime] = useState('');
+  const [dialIn, setDialIn] = useState('');
 
   const handleImportWeatherCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -208,6 +216,19 @@ function Log() {
         vehicleId: selectedVehicleId,
         raceLength,
         env,
+        // Run context
+        runDate,
+        runTime,
+        round,
+        lane,
+        reactionTime: reactionTime ? parseFloat(reactionTime) : undefined,
+        dialIn: dialIn ? parseFloat(dialIn) : undefined,
+        // Timing data from actual results
+        quarterMileET: raceLength === 'QUARTER' ? actualETValue : undefined,
+        quarterMileMPH: raceLength === 'QUARTER' ? actualMPHValue : undefined,
+        eighthMileET: raceLength === 'EIGHTH' ? actualETValue : undefined,
+        eighthMileMPH: raceLength === 'EIGHTH' ? actualMPHValue : undefined,
+        // Prediction
         prediction: {
           et_s: baselineResult.baseET_s,
           mph: baselineResult.baseMPH,
@@ -317,6 +338,78 @@ function Log() {
                 <span>1/4 Mile</span>
               </label>
             </div>
+          </div>
+        </div>
+
+        {/* Run Details (like Crew Chief) */}
+        <div className="grid grid-2 gap-4 mb-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          <div>
+            <label className="label">Date</label>
+            <input
+              type="date"
+              className="input"
+              value={runDate}
+              onChange={(e) => setRunDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">Time</label>
+            <input
+              type="time"
+              className="input"
+              value={runTime}
+              onChange={(e) => setRunTime(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">Round</label>
+            <select
+              className="input"
+              value={round}
+              onChange={(e) => setRound(e.target.value)}
+            >
+              {RoundTypes.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Lane</label>
+            <div className="radio-group" style={{ marginTop: '0.5rem' }}>
+              <label className="radio-label">
+                <input type="radio" name="lane" value="left" checked={lane === 'left'} onChange={() => setLane('left')} />
+                <span>L</span>
+              </label>
+              <label className="radio-label">
+                <input type="radio" name="lane" value="right" checked={lane === 'right'} onChange={() => setLane('right')} />
+                <span>R</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-2 gap-4 mb-4">
+          <div>
+            <label className="label">Reaction Time</label>
+            <input
+              type="number"
+              step="0.001"
+              className="input"
+              value={reactionTime}
+              onChange={(e) => setReactionTime(e.target.value)}
+              placeholder="0.015"
+            />
+          </div>
+          <div>
+            <label className="label">Dial-In (for bracket)</label>
+            <input
+              type="number"
+              step="0.001"
+              className="input"
+              value={dialIn}
+              onChange={(e) => setDialIn(e.target.value)}
+              placeholder="9.500"
+            />
           </div>
         </div>
 

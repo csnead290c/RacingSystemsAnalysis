@@ -803,24 +803,40 @@ function Predict() {
               </select>
             </div>
             
-            {/* Save Run Button */}
-            <button
-              onClick={handleSaveRun}
-              style={{
-                marginTop: '8px',
-                padding: '6px 12px',
-                fontSize: '0.7rem',
-                borderRadius: '4px',
-                border: 'none',
-                backgroundColor: showSaveConfirm ? '#22c55e' : '#333',
-                color: 'white',
-                cursor: 'pointer',
-                width: '100%',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              {showSaveConfirm ? '✓ Saved!' : 'Save Run'}
-            </button>
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+              <button
+                onClick={handleSaveRun}
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  fontSize: '0.7rem',
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: showSaveConfirm ? '#22c55e' : '#333',
+                  color: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {showSaveConfirm ? '✓ Saved!' : 'Save'}
+              </button>
+              <button
+                onClick={() => window.print()}
+                style={{
+                  padding: '6px 8px',
+                  fontSize: '0.7rem',
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: '#333',
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+                title="Print timeslip"
+              >
+                🖨️
+              </button>
+            </div>
             
             {/* Comparison indicator */}
             {comparisonRun && (
