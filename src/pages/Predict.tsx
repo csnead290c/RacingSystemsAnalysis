@@ -15,6 +15,8 @@ import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
+import { TRACKS, type Track } from '../domain/config/tracks';
+import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 
 // Lazy load charts
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -63,6 +65,12 @@ function Predict() {
   const [availableVehicles, setAvailableVehicles] = useState<VehicleLite[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const [showVehicleSelector, setShowVehicleSelector] = useState(false);
+  
+  // Track and weather state
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [lastWeatherUpdate, setLastWeatherUpdate] = useState<Date | null>(null);
 
   // Initialize from location state or show vehicle selector
   useEffect(() => {
@@ -243,6 +251,26 @@ function Predict() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust]);
+
+  // Fetch weather from track or current location
+  const handleFetchWeather = async (track?: Track) => {
+    setWeatherLoading(true);
+    setWeatherError(null);
+    try {
+      const weather = track 
+        ? await fetchTrackWeather(track)
+        : await fetchCurrentLocationWeather();
+      
+      const envUpdate = weatherToEnv(weather);
+      setEnv(prev => prev ? { ...prev, ...envUpdate } : { ...DEFAULT_ENV, ...envUpdate });
+      setLastWeatherUpdate(new Date());
+      if (track) setSelectedTrack(track);
+    } catch (err) {
+      setWeatherError(err instanceof Error ? err.message : 'Failed to fetch weather');
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
 
   // Show loading state only on initial load (no results yet)
   // Once we have results, show them while recalculating
@@ -903,7 +931,62 @@ function Predict() {
 
           {/* Environment */}
           <div className="card" style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '400px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Environment</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Environment</span>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <select
+                  value={selectedTrack?.id || ''}
+                  onChange={(e) => {
+                    const track = TRACKS.find(t => t.id === e.target.value);
+                    if (track) handleFetchWeather(track);
+                  }}
+                  style={{
+                    padding: '3px 6px',
+                    fontSize: '0.65rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    maxWidth: '140px',
+                  }}
+                  disabled={weatherLoading}
+                >
+                  <option value="">Select Track...</option>
+                  {TRACKS.map(track => (
+                    <option key={track.id} value={track.id}>
+                      {track.name.length > 20 ? track.name.slice(0, 18) + '...' : track.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleFetchWeather()}
+                  disabled={weatherLoading}
+                  style={{
+                    padding: '3px 6px',
+                    fontSize: '0.65rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text)',
+                    cursor: weatherLoading ? 'wait' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title="Get weather for your current location"
+                >
+                  {weatherLoading ? '...' : '📍 My Location'}
+                </button>
+              </div>
+            </div>
+            {weatherError && (
+              <div style={{ fontSize: '0.65rem', color: '#ef4444', marginBottom: '4px' }}>{weatherError}</div>
+            )}
+            {lastWeatherUpdate && !weatherError && (
+              <div style={{ fontSize: '0.6rem', color: 'var(--color-muted)', marginBottom: '4px' }}>
+                Weather updated {lastWeatherUpdate.toLocaleTimeString()}
+                {selectedTrack && ` • ${selectedTrack.city}, ${selectedTrack.state}`}
+              </div>
+            )}
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
 
