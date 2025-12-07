@@ -46,6 +46,12 @@ function Predict() {
   const [weightAdjust, setWeightAdjust] = useState(0); // Weight delta (+/- from base)
   const strictMode = useFlag('vb6StrictMode');
   
+  // Throttle stop configuration (for bracket racing)
+  const [throttleStopEnabled, setThrottleStopEnabled] = useState(false);
+  const [throttleStopActivate, setThrottleStopActivate] = useState(1.0); // seconds after launch
+  const [throttleStopDuration, setThrottleStopDuration] = useState(1.5); // seconds
+  const [throttleStopPct, setThrottleStopPct] = useState(30); // throttle percentage when active
+  
   // Run history
   const { saveRun, getRecentRuns } = useRunHistory();
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
@@ -182,6 +188,16 @@ function Predict() {
             trackTempF: currentEnv.trackTempF ?? 100,
             tractionIndex: currentEnv.tractionIndex ?? 3,
           };
+          
+          // Add throttle stop config if enabled
+          if (throttleStopEnabled) {
+            simInputs.throttleStop = {
+              enabled: true,
+              activateTime_s: throttleStopActivate,
+              duration_s: throttleStopDuration,
+              throttlePct: throttleStopPct,
+            };
+          }
           console.log('[Predict] VB6 Strict Mode - using fixture vehicle + UI env', simInputs);
           
           simulate('VB6Exact', simInputs)
@@ -235,6 +251,16 @@ function Predict() {
           tractionIndex: currentEnv.tractionIndex ?? 5,
         };
         
+        // Add throttle stop config if enabled
+        if (throttleStopEnabled) {
+          simInputs.throttleStop = {
+            enabled: true,
+            activateTime_s: throttleStopActivate,
+            duration_s: throttleStopDuration,
+            throttlePct: throttleStopPct,
+          };
+        }
+        
         simulate('VB6Exact', simInputs)
           .then((result) => {
             setSimResult(result);
@@ -251,7 +277,7 @@ function Predict() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust]);
+  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust, throttleStopEnabled, throttleStopActivate, throttleStopDuration, throttleStopPct]);
 
   // Fetch weather from track or current location
   const handleFetchWeather = async (track?: Track) => {
@@ -1122,6 +1148,77 @@ racingsystemsanalysis.com`;
                 >
                   Reset
                 </button>
+              )}
+            </div>
+          </div>
+
+          {/* Throttle Stop - for bracket racing */}
+          <div className="card" style={{ width: '200px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Throttle Stop</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={throttleStopEnabled}
+                  onChange={(e) => setThrottleStopEnabled(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>On</span>
+              </label>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.7rem', opacity: throttleStopEnabled ? 1 : 0.5 }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Activate (s)</span>
+                  <span style={{ fontWeight: 600 }}>{throttleStopActivate.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="5"
+                  step="0.1"
+                  value={throttleStopActivate}
+                  onChange={(e) => setThrottleStopActivate(Number(e.target.value))}
+                  disabled={!throttleStopEnabled}
+                  style={{ width: '100%', cursor: throttleStopEnabled ? 'pointer' : 'not-allowed' }}
+                />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Duration (s)</span>
+                  <span style={{ fontWeight: 600 }}>{throttleStopDuration.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="5"
+                  step="0.1"
+                  value={throttleStopDuration}
+                  onChange={(e) => setThrottleStopDuration(Number(e.target.value))}
+                  disabled={!throttleStopEnabled}
+                  style={{ width: '100%', cursor: throttleStopEnabled ? 'pointer' : 'not-allowed' }}
+                />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Throttle %</span>
+                  <span style={{ fontWeight: 600, color: throttleStopEnabled ? '#f59e0b' : 'inherit' }}>{throttleStopPct}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={throttleStopPct}
+                  onChange={(e) => setThrottleStopPct(Number(e.target.value))}
+                  disabled={!throttleStopEnabled}
+                  style={{ width: '100%', cursor: throttleStopEnabled ? 'pointer' : 'not-allowed' }}
+                />
+              </div>
+              {throttleStopEnabled && (
+                <div style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                  Stop active: {throttleStopActivate.toFixed(1)}s - {(throttleStopActivate + throttleStopDuration).toFixed(1)}s
+                </div>
               )}
             </div>
           </div>
