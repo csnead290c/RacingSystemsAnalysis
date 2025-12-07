@@ -154,7 +154,9 @@ export default function TrackEditor() {
   };
 
   const isBuiltIn = (trackId: string) => TRACKS.some(t => t.id === trackId);
-  const isApiTrack = (trackId: string) => apiTracks.some(t => t.id === trackId);
+  // Check if track is from API (not built-in)
+  const _isApiTrack = (trackId: string) => apiTracks.some(t => t.id === trackId);
+  void _isApiTrack; // Suppress unused warning - will be used for edit permissions
 
   return (
     <div>
