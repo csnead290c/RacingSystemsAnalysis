@@ -57,8 +57,8 @@
 | **Combination/Database Management** | HIGH | ⚠️ Partial | Vehicle grouping added |
 | **Video Integration** | LOW | ❌ Missing | Attach video to runs |
 | **Paging Weather Stations** | LOW | ❌ N/A | Hardware integration |
-| **Data Acquisition Integration** | MEDIUM | ❌ Missing | Import from data loggers |
-| **Tech Cards Printing** | MEDIUM | ❌ Missing | Print tech inspection cards |
+| **Data Acquisition Integration** | MEDIUM | ✅ Complete | CSV import with auto-detection |
+| **Tech Cards Printing** | MEDIUM | ✅ Complete | Full tech card generator with print |
 | **Accounting/Expense Tracking** | LOW | ❌ Missing | Track racing expenses |
 
 ---
@@ -100,33 +100,47 @@
    - Quick run logging
    - Session statistics
 
-5. **Vehicle Management**
+5. **Data Import (NEW)**
+   - CSV/TSV file import
+   - Auto-detect column mappings
+   - Support for RacePak, Holley, MSD, FuelTech exports
+   - Import to Run Log or Opponent Tracker
+   - Drag & drop file upload
+
+6. **Tech Card Generator (NEW)**
+   - Complete tech inspection card
+   - Driver & vehicle safety equipment
+   - Engine specifications
+   - Print-ready output
+   - Save cards per vehicle
+
+7. **Vehicle Management**
    - Create/edit/delete vehicles
    - Vehicle grouping/categories
    - Duplicate vehicles
    - Public/private vehicles
    - Full physics parameters
 
-6. **Run Log**
+8. **Run Log**
    - Record actual runs
    - Date, time, round, lane tracking
    - Reaction time, dial-in
    - Compute baseline prediction
    - Learning model for corrections
 
-7. **Environment/Weather**
+9. **Environment/Weather**
    - Live weather from Open-Meteo API
    - Track database with coordinates
    - Track angle for wind correction
    - Elevation/barometer toggle
    - Density altitude calculation
 
-8. **User System**
+10. **User System**
    - Authentication (login/register)
    - Role-based access (owner, admin, user, beta)
    - Product entitlements
 
-9. **Mobile Support**
+11. **Mobile Support**
    - Responsive layout
    - Charts working on iOS Safari
    - Touch-friendly controls

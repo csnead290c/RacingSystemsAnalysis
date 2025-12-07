@@ -22,6 +22,8 @@ import Account from '../pages/Account';
 import DialIn from '../pages/DialIn';
 import Opponents from '../pages/Opponents';
 import RaceDay from '../pages/RaceDay';
+import DataImport from '../pages/DataImport';
+import TechCard from '../pages/TechCard';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -322,6 +324,18 @@ function App() {
             <Route path="/race-day" element={
               <ProtectedRoute requireFeature="basic_sim">
                 <RaceDay />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/import" element={
+              <ProtectedRoute requireFeature="basic_sim">
+                <DataImport />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/tech-card" element={
+              <ProtectedRoute requireFeature="basic_sim">
+                <TechCard />
               </ProtectedRoute>
             } />
             
