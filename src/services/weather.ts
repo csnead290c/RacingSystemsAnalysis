@@ -76,16 +76,47 @@ export async function fetchTrackWeather(track: Track): Promise<WeatherData> {
 }
 
 /**
- * Convert weather data to Env format for simulation
+ * Calculate effective wind angle relative to track direction
+ * @param windDirection - Meteorological wind direction (where wind comes FROM)
+ * @param trackAngle - Track heading (direction cars travel, 0=N, 90=E, etc.)
+ * @returns Effective wind angle for simulation (0=headwind, 180=tailwind)
  */
-export function weatherToEnv(weather: WeatherData): Partial<Env> {
+export function calculateEffectiveWindAngle(windDirection: number, trackAngle?: number): number {
+  if (trackAngle === undefined) {
+    // No track angle set, return raw wind direction
+    return windDirection;
+  }
+  
+  // Wind direction is where wind comes FROM (meteorological convention)
+  // Track angle is where cars GO
+  // For headwind: wind should come from the direction cars are going
+  // Effective angle: 0 = pure headwind, 180 = pure tailwind
+  
+  // Calculate relative angle
+  let relativeAngle = windDirection - trackAngle;
+  
+  // Normalize to 0-360
+  while (relativeAngle < 0) relativeAngle += 360;
+  while (relativeAngle >= 360) relativeAngle -= 360;
+  
+  return Math.round(relativeAngle);
+}
+
+/**
+ * Convert weather data to Env format for simulation
+ * @param weather - Weather data from API
+ * @param trackAngle - Optional track heading for wind angle correction
+ */
+export function weatherToEnv(weather: WeatherData, trackAngle?: number): Partial<Env> {
+  const effectiveWindAngle = calculateEffectiveWindAngle(weather.wind_direction_deg, trackAngle);
+  
   return {
     elevation: weather.elevation_ft,
     temperatureF: Math.round(weather.temperature_F),
     barometerInHg: weather.pressure_inHg,
     humidityPct: Math.round(weather.humidity_pct),
     windMph: Math.round(weather.wind_mph),
-    windAngleDeg: Math.round(weather.wind_direction_deg),
+    windAngleDeg: effectiveWindAngle,
   };
 }
 

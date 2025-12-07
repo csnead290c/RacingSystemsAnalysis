@@ -14,6 +14,8 @@ export interface Track {
   elevation_ft: number;
   length: '1/8' | '1/4' | 'both';
   sanctioning?: string[];
+  /** Track heading in degrees (0=N, 90=E, 180=S, 270=W) - direction cars travel */
+  trackAngle?: number;
 }
 
 /**
@@ -240,18 +242,40 @@ export const TRACKS: Track[] = [
   },
 ];
 
+// Custom tracks stored in localStorage
+const CUSTOM_TRACKS_KEY = 'rsa_custom_tracks';
+
+/**
+ * Load custom tracks from localStorage
+ */
+export function loadCustomTracks(): Track[] {
+  try {
+    const stored = localStorage.getItem(CUSTOM_TRACKS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get all tracks (built-in + custom)
+ */
+export function getAllTracks(): Track[] {
+  return [...TRACKS, ...loadCustomTracks()];
+}
+
 /**
  * Get track by ID
  */
 export function getTrackById(id: string): Track | undefined {
-  return TRACKS.find(t => t.id === id);
+  return getAllTracks().find(t => t.id === id);
 }
 
 /**
  * Get tracks by state
  */
 export function getTracksByState(state: string): Track[] {
-  return TRACKS.filter(t => t.state.toUpperCase() === state.toUpperCase());
+  return getAllTracks().filter(t => t.state.toUpperCase() === state.toUpperCase());
 }
 
 /**
@@ -259,7 +283,7 @@ export function getTracksByState(state: string): Track[] {
  */
 export function searchTracks(query: string): Track[] {
   const q = query.toLowerCase();
-  return TRACKS.filter(t => 
+  return getAllTracks().filter(t => 
     t.name.toLowerCase().includes(q) ||
     t.city.toLowerCase().includes(q) ||
     t.state.toLowerCase().includes(q)

@@ -15,7 +15,7 @@ import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
-import { TRACKS, type Track } from '../domain/config/tracks';
+import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 
 // Lazy load charts
@@ -261,7 +261,8 @@ function Predict() {
         ? await fetchTrackWeather(track)
         : await fetchCurrentLocationWeather();
       
-      const envUpdate = weatherToEnv(weather);
+      // Pass track angle for wind direction correction
+      const envUpdate = weatherToEnv(weather, track?.trackAngle);
       setEnv(prev => prev ? { ...prev, ...envUpdate } : { ...DEFAULT_ENV, ...envUpdate });
       setLastWeatherUpdate(new Date());
       if (track) setSelectedTrack(track);
@@ -631,10 +632,12 @@ function Predict() {
           .et-sim-dashboard {
             height: auto;
             min-height: auto;
+            overflow: visible;
           }
           .et-sim-top-row {
             flex-direction: column;
             min-height: auto;
+            flex: none;
           }
           .et-slip {
             width: 100%;
@@ -659,16 +662,20 @@ function Predict() {
             margin-top: 0;
           }
           .et-sim-chart-area {
-            min-height: 250px;
-            max-height: 350px;
+            /* CRITICAL: iOS Safari needs explicit height, not flex */
+            height: 320px !important;
+            min-height: 320px !important;
+            flex: none !important;
           }
           .et-sim-bottom-row {
             flex-direction: column;
             height: auto;
+            flex: none;
             gap: var(--space-2);
           }
           .et-sim-bottom-row > * {
             width: 100% !important;
+            min-width: 0 !important;
           }
         }
         /* Mobile phones */
@@ -681,19 +688,38 @@ function Predict() {
             height: 36px !important;
           }
           .et-sim-chart-area {
-            min-height: 200px;
-            max-height: 280px;
+            /* Smaller height for phones */
+            height: 280px !important;
+            min-height: 280px !important;
           }
           .et-sim-bottom-row {
             padding: var(--space-2);
           }
+          .et-sim-bottom-row .card {
+            padding: 10px !important;
+          }
           .env-compact {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
           }
           .env-compact input {
-            width: 45px !important;
+            width: 50px !important;
             padding: 4px !important;
-            font-size: 0.75rem !important;
+            font-size: 0.7rem !important;
+          }
+          /* Hide RPM histogram on very small screens to save space */
+          .et-sim-bottom-row > .card:first-child {
+            display: none;
+          }
+        }
+        /* Very small phones (iPhone SE, etc) */
+        @media (max-width: 400px) {
+          .et-sim-chart-area {
+            height: 240px !important;
+            min-height: 240px !important;
+          }
+          .et-slip {
+            font-size: 10px;
+            padding: 8px;
           }
         }
         /* Print styles */
@@ -936,9 +962,13 @@ racingsystemsanalysis.com`;
               </div>
             )}
             <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-4)' }}>Loading chart...</div>}>
-              {simResult?.traces && simResult.traces.length > 0 && (
-                <div style={{ flex: 1, minHeight: 0 }}>
+              {simResult?.traces && simResult.traces.length > 0 ? (
+                <div style={{ flex: 1, minHeight: '200px', height: '100%' }}>
                   <DataLoggerChart data={simResult.traces as any} raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320} />
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
+                  No simulation data
                 </div>
               )}
             </Suspense>
@@ -967,7 +997,7 @@ racingsystemsanalysis.com`;
                 <select
                   value={selectedTrack?.id || ''}
                   onChange={(e) => {
-                    const track = TRACKS.find(t => t.id === e.target.value);
+                    const track = getAllTracks().find(t => t.id === e.target.value);
                     if (track) handleFetchWeather(track);
                   }}
                   style={{
@@ -983,7 +1013,7 @@ racingsystemsanalysis.com`;
                   disabled={weatherLoading}
                 >
                   <option value="">Select Track...</option>
-                  {TRACKS.map(track => (
+                  {getAllTracks().map(track => (
                     <option key={track.id} value={track.id}>
                       {track.name.length > 20 ? track.name.slice(0, 18) + '...' : track.name}
                     </option>
@@ -1083,48 +1113,6 @@ racingsystemsanalysis.com`;
                 >
                   Reset
                 </button>
-              )}
-              {/* Dial-in helper for bracket racing */}
-              {RACE_LENGTH_INFO[raceLength]?.category === 'drag' && (
-                <div style={{ 
-                  marginTop: '12px', 
-                  paddingTop: '10px', 
-                  borderTop: '1px solid var(--color-border)',
-                }}>
-                  <div style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }}>Dial-In Helper</div>
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {[0, 0.01, 0.02, 0.03, 0.05].map(offset => (
-                      <button
-                        key={offset}
-                        onClick={() => {
-                          const dialIn = (baseET + offset).toFixed(2);
-                          navigator.clipboard.writeText(dialIn);
-                          alert(`Dial-in ${dialIn} copied!`);
-                        }}
-                        style={{
-                          padding: '3px 6px',
-                          fontSize: '0.65rem',
-                          borderRadius: '3px',
-                          border: '1px solid var(--color-border)',
-                          backgroundColor: 'var(--color-bg-tertiary)',
-                          color: 'var(--color-text)',
-                          cursor: 'pointer',
-                        }}
-                        title={`Copy ${(baseET + offset).toFixed(2)} to clipboard`}
-                      >
-                        +{offset.toFixed(2)}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ 
-                    marginTop: '6px', 
-                    fontSize: '0.9rem', 
-                    fontWeight: 600,
-                    color: 'var(--color-primary)',
-                  }}>
-                    {baseET.toFixed(2)}
-                  </div>
-                </div>
               )}
             </div>
           </div>

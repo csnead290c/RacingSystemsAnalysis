@@ -21,6 +21,7 @@ import QuickPaste from './panels/QuickPaste';
 import AirInspector from './panels/AirInspector';
 import ParityRunner from './panels/ParityRunner';
 import UserManagement from './panels/UserManagement';
+import TrackEditor from './panels/TrackEditor';
 
 export interface DevPanel {
   id: string;
@@ -96,5 +97,13 @@ export const DEV_PANELS: DevPanel[] = [
     title: '👥 User Management',
     component: UserManagement,
     category: 'core',
+  },
+  
+  // === TRACKS ===
+  {
+    id: 'tracks',
+    title: '🏁 Track Editor',
+    component: TrackEditor,
+    category: 'data',
   },
 ];
