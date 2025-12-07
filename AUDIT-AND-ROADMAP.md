@@ -39,9 +39,11 @@
 
 ---
 
-## 2. COMPETITOR ANALYSIS: CREW CHIEF PRO
+## 2. COMPETITOR ANALYSIS
 
-### Features They Have That We Should Consider
+### 2A. CREW CHIEF PRO (Bracket Racing Focus)
+
+#### Features They Have That We Should Consider
 
 | Feature | Priority | Status | Notes |
 |---------|----------|--------|-------|
@@ -60,6 +62,34 @@
 | **Data Acquisition Integration** | MEDIUM | ✅ Complete | CSV import with auto-detection |
 | **Tech Cards Printing** | MEDIUM | ✅ Complete | Full tech card generator with print |
 | **Accounting/Expense Tracking** | LOW | ❌ Missing | Track racing expenses |
+
+### 2B. PERFORMANCE TRENDS (Engine Building Focus)
+
+**Products**: Drag Racing Analyzer, Engine Analyzer Pro, Circle Track Analyzer, Cam Analyzer, Port Flow Analyzer
+
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| **Drag Racing Analyzer** | HIGH | ✅ Matched | Our VB6 physics is equivalent |
+| **Optimize Gear Ratio** | HIGH | ❌ Missing | One-click find best final drive |
+| **Optimize Converter** | HIGH | ❌ Missing | One-click find best stall speed |
+| **InstantCalc Mode** | HIGH | ❌ Missing | Real-time ET/MPH as specs change |
+| **Match My Times** | HIGH | ❌ Missing | Auto-tune specs to match actual runs |
+| **Adjustment Factor** | MEDIUM | ❌ Missing | Throttle stop calibration from 2 runs |
+| **Engine Analyzer Pro** | MEDIUM | ⚠️ Partial | We have basic engine sim |
+| **Circle Track Analyzer** | LOW | ❌ Missing | Oval racing simulation |
+| **Cam Analyzer** | LOW | ❌ Missing | Camshaft measurement/analysis |
+| **Port Flow Analyzer** | LOW | ❌ Missing | Flow bench data management |
+| **Rotating Inertia Detail** | MEDIUM | ❌ Missing | Flywheel/wheel weight effects |
+
+#### RSA Advantages Over Performance Trends:
+- ✅ **Web-based** - They are desktop-only Windows
+- ✅ **Live Weather** - They require manual entry
+- ✅ **AI Opponent Prediction** - They have nothing like this
+- ✅ **Race Day Dashboard** - Unique to RSA
+- ✅ **Competition Ladder** - Unique to RSA
+- ✅ **Mobile Access** - They have none
+- ✅ **Cloud Sync** - They have none
+- ✅ **Modern UI** - Their UI is 1990s Windows
 
 ---
 
