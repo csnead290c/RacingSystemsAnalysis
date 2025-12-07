@@ -50,9 +50,9 @@
 | **Track Database** | HIGH | ✅ Complete | Built-in + custom tracks |
 | **ET Prediction** | HIGH | ✅ Complete | Core simulation |
 | **Throttle Stop Calculator** | MEDIUM | ✅ Complete | Integrated into physics model + UI |
-| **Opponent Statistics** | MEDIUM | ❌ Missing | Track opponent performance |
+| **Opponent Statistics** | MEDIUM | ✅ Complete | Full opponent tracker with predictive analytics |
 | **Competition Ladders** | LOW | ❌ Missing | Tournament bracket view |
-| **Margin of Victory Calculator** | MEDIUM | ❌ Missing | Calculate win margin |
+| **Margin of Victory Calculator** | MEDIUM | ✅ Complete | Built into opponent tracker |
 | **Run Completion** | HIGH | ✅ Complete | Predict finish from partial data |
 | **Combination/Database Management** | HIGH | ⚠️ Partial | Vehicle grouping added |
 | **Video Integration** | LOW | ❌ Missing | Attach video to runs |
@@ -85,33 +85,48 @@
    - Safety margin adjustments
    - History tracking
 
-3. **Vehicle Management**
+3. **Opponent Tracker (NEW)**
+   - Track competitor performance
+   - Predictive analytics (predict next ET)
+   - Head-to-head statistics
+   - Trend analysis (improving/declining)
+   - Confidence levels on predictions
+
+4. **Race Day Dashboard (NEW)**
+   - Live dial-in calculation
+   - Real-time weather updates
+   - Round-by-round tracking
+   - Density altitude & air correction
+   - Quick run logging
+   - Session statistics
+
+5. **Vehicle Management**
    - Create/edit/delete vehicles
    - Vehicle grouping/categories
    - Duplicate vehicles
    - Public/private vehicles
    - Full physics parameters
 
-4. **Run Log**
+6. **Run Log**
    - Record actual runs
    - Date, time, round, lane tracking
    - Reaction time, dial-in
    - Compute baseline prediction
    - Learning model for corrections
 
-5. **Environment/Weather**
+7. **Environment/Weather**
    - Live weather from Open-Meteo API
    - Track database with coordinates
    - Track angle for wind correction
    - Elevation/barometer toggle
    - Density altitude calculation
 
-6. **User System**
+8. **User System**
    - Authentication (login/register)
    - Role-based access (owner, admin, user, beta)
    - Product entitlements
 
-7. **Mobile Support**
+9. **Mobile Support**
    - Responsive layout
    - Charts working on iOS Safari
    - Touch-friendly controls
