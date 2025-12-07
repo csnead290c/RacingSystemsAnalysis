@@ -358,18 +358,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const rho_lbm_ft3 = airResult.rho_slug_per_ft3 * gc;
   const hpc = airResult.hpc;
   
-  console.log('[VB6Exact] Air density calc:', {
-    elevation: env.elevation,
-    temp_F: env.temperatureF,
-    baro: env.barometerInHg,
-    humidity: env.humidityPct,
-    fuelSystem: fuelSystemType,
-    rho_lbm_ft3,
-    hpc,
-    delta: airResult.delta,
-    theta: airResult.theta,
-  });
-  
   // ========================================================================
   // Build VB6 vehicle params
   // ========================================================================
@@ -610,25 +598,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     WindAngle_deg: env.windAngleDeg ?? 0,
     isLandSpeed,  // Use Bonneville Pro constants for land speed runs
   };
-  
-  console.log('[VB6Exact] Vehicle params:', {
-    Weight_lbf: vb6Vehicle.Weight_lbf,
-    TireDia_in: vb6Vehicle.TireDia_in,
-    TireWidth_in: vb6Vehicle.TireWidth_in,
-    RefArea_ft2: vb6Vehicle.RefArea_ft2,
-    DragCoef: vb6Vehicle.DragCoef,
-    LiftCoef: vb6Vehicle.LiftCoef,
-    GearRatio: vb6Vehicle.GearRatio,
-    TGR: vb6Vehicle.TGR,
-    Stall: vb6Vehicle.Stall,
-    TorqueMult: vb6Vehicle.TorqueMult,
-    Slippage: vb6Vehicle.Slippage,
-    EnginePMI: vb6Vehicle.EnginePMI,
-    TiresPMI: vb6Vehicle.TiresPMI,
-    TransPMI: vb6Vehicle.TransPMI,
-    Efficiency: vb6Vehicle.Efficiency,
-  });
-  console.log('[VB6Exact] Env params:', vb6Env);
   
   // ========================================================================
   // Initialize simulation

@@ -211,9 +211,7 @@ function Predict() {
         
         // Convert standard vehicle to VB6 fixture format
         // This will use synthetic HP curve if no full curve is available (QuarterJr mode)
-        console.log('[Predict] Input vehicle frontalAreaFt2:', adjustedVehicle.frontalAreaFt2);
         const vb6Fixture = fromVehicleToVB6Fixture(adjustedVehicle as any);
-        console.log('[Predict] VB6 fixture aero:', vb6Fixture.aero);
         const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
         // Override with UI environment settings
         // Note: tractionIndex defaults to 5 to match VB6 QuarterJr default
@@ -227,8 +225,6 @@ function Predict() {
           trackTempF: currentEnv.trackTempF ?? 100,
           tractionIndex: currentEnv.tractionIndex ?? 5,
         };
-        console.log('[Predict] VB6Exact - simInputs.vehicle.frontalAreaFt2:', simInputs.vehicle?.frontalAreaFt2);
-        console.log('[Predict] VB6Exact - full simInputs:', simInputs);
         
         simulate('VB6Exact', simInputs)
           .then((result) => {
