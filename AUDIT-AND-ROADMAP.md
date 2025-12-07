@@ -1,6 +1,6 @@
 # RSA Web Application - Comprehensive Audit & Roadmap
 
-## Date: December 7, 2024
+## Date: December 7, 2024 (Updated)
 
 ---
 
@@ -14,7 +14,7 @@
 | **Timeslip Output** | ✅ Complete | 60', 330', 1/8, 1000', 1/4 splits |
 | **Vehicle Performance Graphs** | ✅ Complete | RPM, MPH, Acceleration vs Time/Distance |
 | **RPM Histogram** | ✅ Complete | Shows time spent in each RPM range |
-| **Detailed Parameters** | ⚠️ Partial | Need to add detailed output panel |
+| **Detailed Parameters** | ✅ Complete | Collapsible table with key events |
 | **Save/Load Vehicle Data** | ✅ Complete | Database-backed with user accounts |
 | **Print Timeslip** | ✅ Complete | Print button added |
 | **Worksheets (Frontal Area, etc.)** | ❌ Missing | Need calculation worksheets |
@@ -49,7 +49,7 @@
 | **Weather Integration** | HIGH | ✅ Complete | Live weather from tracks |
 | **Track Database** | HIGH | ✅ Complete | Built-in + custom tracks |
 | **ET Prediction** | HIGH | ✅ Complete | Core simulation |
-| **Throttle Stop Calculator** | MEDIUM | ❌ Missing | For bracket racing |
+| **Throttle Stop Calculator** | MEDIUM | ✅ Complete | Integrated into physics model + UI |
 | **Opponent Statistics** | MEDIUM | ❌ Missing | Track opponent performance |
 | **Competition Ladders** | LOW | ❌ Missing | Tournament bracket view |
 | **Margin of Victory Calculator** | MEDIUM | ❌ Missing | Calculate win margin |
@@ -76,34 +76,42 @@
    - Save/compare runs
    - Print timeslip
    - Copy timeslip to clipboard
+   - **NEW: Detailed Parameters panel** (collapsible table of key events)
+   - **NEW: Throttle Stop simulation** (for bracket racing)
 
-2. **Vehicle Management**
+2. **Dial-In Calculator (NEW)**
+   - Dedicated bracket racing tool
+   - Weather-adjusted predictions
+   - Safety margin adjustments
+   - History tracking
+
+3. **Vehicle Management**
    - Create/edit/delete vehicles
    - Vehicle grouping/categories
    - Duplicate vehicles
    - Public/private vehicles
    - Full physics parameters
 
-3. **Run Log**
+4. **Run Log**
    - Record actual runs
    - Date, time, round, lane tracking
    - Reaction time, dial-in
    - Compute baseline prediction
    - Learning model for corrections
 
-4. **Environment/Weather**
+5. **Environment/Weather**
    - Live weather from Open-Meteo API
    - Track database with coordinates
    - Track angle for wind correction
    - Elevation/barometer toggle
    - Density altitude calculation
 
-5. **User System**
+6. **User System**
    - Authentication (login/register)
    - Role-based access (owner, admin, user, beta)
    - Product entitlements
 
-6. **Mobile Support**
+7. **Mobile Support**
    - Responsive layout
    - Charts working on iOS Safari
    - Touch-friendly controls
