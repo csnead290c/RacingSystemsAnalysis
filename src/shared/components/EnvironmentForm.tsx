@@ -42,6 +42,7 @@ interface EnvironmentFormProps {
 
 function EnvironmentForm({ value, onChange, compact = false, disabled = false }: EnvironmentFormProps) {
   const [showOptional, setShowOptional] = useState(true); // Show track conditions by default
+  const [useElevation, setUseElevation] = useState(true); // Toggle between elevation and barometer input
 
   const handleChange = (field: keyof Env, inputValue: string) => {
     const numValue = parseFloat(inputValue) || 0;
@@ -102,35 +103,35 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
             <div style={groupStyle}>
               <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                 <button
-                  onClick={() => onChange({ ...value, elevation: value.elevation || 0, barometerInHg: 29.92 })}
+                  onClick={() => { setUseElevation(true); onChange({ ...value, barometerInHg: 29.92 }); }}
                   style={{
                     padding: '2px 6px',
                     fontSize: '0.6rem',
                     borderRadius: '3px',
                     border: 'none',
-                    backgroundColor: value.elevation !== undefined && value.elevation !== 0 ? 'var(--color-primary)' : 'var(--color-bg-tertiary)',
-                    color: value.elevation !== undefined && value.elevation !== 0 ? 'white' : 'var(--color-muted)',
+                    backgroundColor: useElevation ? 'var(--color-primary)' : 'var(--color-bg-tertiary)',
+                    color: useElevation ? 'white' : 'var(--color-muted)',
                     cursor: 'pointer',
                   }}
                 >
                   Elev
                 </button>
                 <button
-                  onClick={() => onChange({ ...value, elevation: 0, barometerInHg: value.barometerInHg || 29.92 })}
+                  onClick={() => { setUseElevation(false); onChange({ ...value, elevation: 0 }); }}
                   style={{
                     padding: '2px 6px',
                     fontSize: '0.6rem',
                     borderRadius: '3px',
                     border: 'none',
-                    backgroundColor: value.elevation === 0 || value.elevation === undefined ? 'var(--color-primary)' : 'var(--color-bg-tertiary)',
-                    color: value.elevation === 0 || value.elevation === undefined ? 'white' : 'var(--color-muted)',
+                    backgroundColor: !useElevation ? 'var(--color-primary)' : 'var(--color-bg-tertiary)',
+                    color: !useElevation ? 'white' : 'var(--color-muted)',
                     cursor: 'pointer',
                   }}
                 >
                   Baro
                 </button>
               </div>
-              {value.elevation !== 0 && value.elevation !== undefined ? (
+              {useElevation ? (
                 <input type="number" style={inputStyle} className="input" value={value.elevation} onChange={(e) => handleChange('elevation', e.target.value)} placeholder="0" />
               ) : (
                 <input type="number" step="0.01" style={inputStyle} className="input" value={value.barometerInHg} onChange={(e) => handleChange('barometerInHg', e.target.value)} placeholder="29.92" />
