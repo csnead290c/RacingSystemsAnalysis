@@ -84,6 +84,9 @@ const defaultForm: Partial<Vehicle> = {
   fuelSystem: 'Gas+Carb',
   // N2O option
   n2oEnabled: false,
+  // Organization
+  group: '',
+  notes: '',
 };
 
 function Vehicles() {
@@ -102,6 +105,15 @@ function Vehicles() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('basic');
+  const [filterGroup, setFilterGroup] = useState<string>(''); // Group filter
+  
+  // Get unique groups from vehicles
+  const vehicleGroups = [...new Set(vehicles.map(v => v.group).filter(Boolean))] as string[];
+  
+  // Filter vehicles by group
+  const filteredVehicles = filterGroup 
+    ? vehicles.filter(v => v.group === filterGroup)
+    : vehicles;
   
   // Form state - single object
   const [form, setForm] = useState<Partial<Vehicle>>({ ...defaultForm });
@@ -354,25 +366,42 @@ function Vehicles() {
 
           {/* Basic Tab - Just identity info */}
           {activeTab === 'basic' && (
-            <div className="grid grid-2 gap-4 mb-4">
-              <div>
-                <label className="label" htmlFor="name">Vehicle Name *</label>
-                <input id="name" type="text" className="input" value={form.name ?? ''} onChange={(e) => updateForm('name', e.target.value)} placeholder="My Mustang" />
-              </div>
-              <div>
-                <label className="label">Default Race Length *</label>
-                <div className="radio-group">
-                  <label className="radio-label">
-                    <input type="radio" name="defaultRaceLength" value="EIGHTH" checked={form.defaultRaceLength === 'EIGHTH'} onChange={(e) => updateForm('defaultRaceLength', e.target.value as RaceLength)} />
-                    <span>1/8 Mile</span>
-                  </label>
-                  <label className="radio-label">
-                    <input type="radio" name="defaultRaceLength" value="QUARTER" checked={form.defaultRaceLength === 'QUARTER'} onChange={(e) => updateForm('defaultRaceLength', e.target.value as RaceLength)} />
-                    <span>1/4 Mile</span>
-                  </label>
+            <>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label" htmlFor="name">Vehicle Name *</label>
+                  <input id="name" type="text" className="input" value={form.name ?? ''} onChange={(e) => updateForm('name', e.target.value)} placeholder="My Mustang" />
+                </div>
+                <div>
+                  <label className="label">Group / Category</label>
+                  <input type="text" className="input" value={form.group ?? ''} onChange={(e) => updateForm('group', e.target.value)} placeholder="e.g., Bracket, Super Comp, Test" list="vehicle-groups" />
+                  <datalist id="vehicle-groups">
+                    {[...new Set(vehicles.map(v => v.group).filter(Boolean))].map(g => (
+                      <option key={g} value={g} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
-            </div>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div>
+                  <label className="label">Default Race Length *</label>
+                  <div className="radio-group">
+                    <label className="radio-label">
+                      <input type="radio" name="defaultRaceLength" value="EIGHTH" checked={form.defaultRaceLength === 'EIGHTH'} onChange={(e) => updateForm('defaultRaceLength', e.target.value as RaceLength)} />
+                      <span>1/8 Mile</span>
+                    </label>
+                    <label className="radio-label">
+                      <input type="radio" name="defaultRaceLength" value="QUARTER" checked={form.defaultRaceLength === 'QUARTER'} onChange={(e) => updateForm('defaultRaceLength', e.target.value as RaceLength)} />
+                      <span>1/4 Mile</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Notes</label>
+                  <textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => updateForm('notes', e.target.value)} placeholder="Optional notes about this vehicle..." style={{ resize: 'vertical' }} />
+                </div>
+              </div>
+            </>
           )}
 
           {/* ============================================== */}
@@ -980,21 +1009,57 @@ function Vehicles() {
           </button>
         </div>
       ) : !showForm ? (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Default Race</th>
-                <th className="align-right">Weight (lb)</th>
-                <th className="align-right">Power (HP)</th>
-                <th className="align-right">Tire Dia (in)</th>
-                <th className="align-right">Rear Gear</th>
-                <th className="align-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vehicles.map((vehicle) => (
+        <div>
+          {/* Group filter */}
+          {vehicleGroups.length > 0 && (
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>Filter:</span>
+              <button
+                onClick={() => setFilterGroup('')}
+                className={`btn btn-secondary ${!filterGroup ? 'btn-active' : ''}`}
+                style={{ 
+                  padding: '0.25rem 0.75rem', 
+                  fontSize: '0.8rem',
+                  backgroundColor: !filterGroup ? 'var(--color-primary)' : undefined,
+                  color: !filterGroup ? 'white' : undefined,
+                }}
+              >
+                All ({vehicles.length})
+              </button>
+              {vehicleGroups.map(group => (
+                <button
+                  key={group}
+                  onClick={() => setFilterGroup(group)}
+                  className={`btn btn-secondary ${filterGroup === group ? 'btn-active' : ''}`}
+                  style={{ 
+                    padding: '0.25rem 0.75rem', 
+                    fontSize: '0.8rem',
+                    backgroundColor: filterGroup === group ? 'var(--color-primary)' : undefined,
+                    color: filterGroup === group ? 'white' : undefined,
+                  }}
+                >
+                  {group} ({vehicles.filter(v => v.group === group).length})
+                </button>
+              ))}
+            </div>
+          )}
+          
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Group</th>
+                  <th>Default Race</th>
+                  <th className="align-right">Weight (lb)</th>
+                  <th className="align-right">Power (HP)</th>
+                  <th className="align-right">Tire Dia (in)</th>
+                  <th className="align-right">Rear Gear</th>
+                  <th className="align-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredVehicles.map((vehicle) => (
                 <tr key={vehicle.id}>
                   <td style={{ fontWeight: '500' }}>
                     {vehicle.name}
@@ -1020,6 +1085,9 @@ function Vehicles() {
                         by {vehicle.owner_name}
                       </span>
                     )}
+                  </td>
+                  <td style={{ color: vehicle.group ? 'var(--color-text)' : 'var(--color-muted)', fontSize: '0.85rem' }}>
+                    {vehicle.group || '—'}
                   </td>
                   <td>{vehicle.defaultRaceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'}</td>
                   <td className="align-right mono">{vehicle.weightLb}</td>
@@ -1065,6 +1133,7 @@ function Vehicles() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       ) : null}
 

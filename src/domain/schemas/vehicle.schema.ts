@@ -80,6 +80,10 @@ export const VehicleSchema = z.object({
   
   // N2O Option (QuarterJr)
   n2oEnabled: z.boolean().optional(),          // gc_N2O
+  
+  // Organization
+  group: z.string().optional(),                // Vehicle group/category for organization
+  notes: z.string().optional(),                // User notes about the vehicle
 });
 
 export type Vehicle = z.infer<typeof VehicleSchema>;

@@ -635,7 +635,8 @@ function Predict() {
             margin-top: 0;
           }
           .et-sim-chart-area {
-            min-height: 300px;
+            min-height: 250px;
+            max-height: 350px;
           }
           .et-sim-bottom-row {
             flex-direction: column;
@@ -644,6 +645,46 @@ function Predict() {
           }
           .et-sim-bottom-row > * {
             width: 100% !important;
+          }
+        }
+        /* Mobile phones */
+        @media (max-width: 600px) {
+          .et-slip {
+            padding: 10px;
+            font-size: 11px;
+          }
+          .et-slip-header img {
+            height: 36px !important;
+          }
+          .et-sim-chart-area {
+            min-height: 200px;
+            max-height: 280px;
+          }
+          .et-sim-bottom-row {
+            padding: var(--space-2);
+          }
+          .env-compact {
+            font-size: 0.75rem;
+          }
+          .env-compact input {
+            width: 45px !important;
+            padding: 4px !important;
+            font-size: 0.75rem !important;
+          }
+        }
+        /* Print styles */
+        @media print {
+          .et-sim-dashboard {
+            background: white !important;
+          }
+          .et-slip {
+            box-shadow: none !important;
+            border: 2px solid #000 !important;
+          }
+          .et-sim-chart-area,
+          .et-sim-bottom-row,
+          button {
+            display: none !important;
           }
         }
       `}</style>
