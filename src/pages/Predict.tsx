@@ -846,6 +846,36 @@ function Predict() {
                 {showSaveConfirm ? '✓ Saved!' : 'Save'}
               </button>
               <button
+                onClick={() => {
+                  const text = `RSA ${strictMode ? 'Quarter Pro' : 'Quarter Jr'} Prediction
+${vehicle.name}
+${new Date().toLocaleDateString()}
+
+ET: ${baseET.toFixed(3)}
+MPH: ${baseMPH.toFixed(2)}
+
+60': ${(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}
+330': ${(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(3)}
+${raceLength === 'QUARTER' ? `1/8: ${(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(3)} @ ${(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(1)} mph` : ''}
+
+racingsystemsanalysis.com`;
+                  navigator.clipboard.writeText(text);
+                  alert('Timeslip copied to clipboard!');
+                }}
+                style={{
+                  padding: '6px 8px',
+                  fontSize: '0.7rem',
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: '#333',
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+                title="Copy timeslip to clipboard"
+              >
+                📋
+              </button>
+              <button
                 onClick={() => window.print()}
                 style={{
                   padding: '6px 8px',
