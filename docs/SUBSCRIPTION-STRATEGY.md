@@ -8,34 +8,45 @@ This document outlines the subscription tiers, feature packaging, and upgrade/do
 
 ## Tier Structure
 
-### Tier 1: FREE (Hobbyist)
+### Tier 1: FREE (Demo Mode)
 **Price**: $0/month
-**Target**: Casual racers, beginners, tire-kickers
+**Target**: Evaluators, curious visitors, students
 
 #### Included Features:
-- **Basic Calculators** (always free)
-  - ET/MPH calculators
+- **Calculators Page Only**
+  - ET/MPH calculator
   - Gear ratio calculator
   - Weight transfer calculator
   - Air density calculator
   - Corrected altitude calculator
   
-- **Limited ET Simulator**
-  - 3 simulations per day
-  - Basic timeslip output
-  - No save/export
-  - No weather integration
+- **Sample Vehicle Demo**
+  - View ONE pre-configured sample vehicle (read-only)
+  - Run simulation with sample vehicle
+  - See how the ET Simulator works
+  - Cannot modify any vehicle specs
+  - Cannot save or export anything
   
 - **Read-only Track Database**
-  - View track info
-  - No custom tracks
+  - View track info only
+  - Cannot select tracks for simulation
 
-#### Limitations:
-- No vehicle storage
-- No run history
-- No charts/graphs
+#### Strict Limitations:
+- ❌ NO vehicle creation or editing
+- ❌ NO saving runs or vehicles
+- ❌ NO weather integration
+- ❌ NO charts/graphs (just basic timeslip)
+- ❌ NO dial-in calculator
+- ❌ NO opponent tracking
+- ❌ NO data import
+- ❌ NO printing/exporting
 - Watermarked outputs
-- Ads displayed
+- "Upgrade to unlock" prompts throughout
+- Session expires after 30 minutes (must refresh)
+
+#### Purpose:
+The FREE tier exists solely to let users **see** what RSA can do, not to **use** it. 
+It's a demo, not a usable product. This drives conversions to RACER tier.
 
 ---
 
@@ -227,14 +238,17 @@ Everything in TEAM, plus:
 
 ## Feature Matrix
 
-| Feature | FREE | RACER | PRO | TEAM |
-|---------|------|-------|-----|------|
+| Feature | FREE (Demo) | RACER | PRO | TEAM |
+|---------|-------------|-------|-----|------|
 | Basic Calculators | ✅ | ✅ | ✅ | ✅ |
-| ET Simulator | 3/day | ✅ Jr | ✅ Pro | ✅ Pro |
+| ET Simulator | Demo only | ✅ Jr | ✅ Pro | ✅ Pro |
+| Create/Edit Vehicles | ❌ | ✅ (5) | ✅ (∞) | ✅ Shared |
+| Save Runs | ❌ | ✅ | ✅ | ✅ |
+| Charts/Graphs | ❌ | ✅ | ✅ | ✅ |
 | Full HP Curve | ❌ | ❌ | ✅ | ✅ |
-| Vehicles | 0 | 5 | ∞ | ∞ Shared |
 | Weather Integration | ❌ | ✅ | ✅ | ✅ |
 | Dial-In Calculator | ❌ | ✅ | ✅ | ✅ |
+| Print/Export | ❌ | ✅ | ✅ | ✅ |
 | Throttle Stop | ❌ | ❌ | ✅ | ✅ |
 | Optimizer | ❌ | ❌ | ✅ | ✅ |
 | Opponent Tracker | ❌ | ❌ | ✅ | ✅ |

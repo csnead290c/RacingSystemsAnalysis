@@ -22,7 +22,7 @@ import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '..
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
 const DetailedParameters = lazy(() => import('../shared/components/DetailedParameters'));
-const Optimizer = lazy(() => import('../shared/components/Optimizer'));
+const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
 
 interface LocationState {
   vehicle: Vehicle;
@@ -79,6 +79,9 @@ function Predict() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [lastWeatherUpdate, setLastWeatherUpdate] = useState<Date | null>(null);
+  
+  // Optimizer modal state
+  const [showOptimizer, setShowOptimizer] = useState(false);
 
   // Initialize from location state or show vehicle selector
   useEffect(() => {
@@ -1280,21 +1283,32 @@ racingsystemsanalysis.com`;
             </div>
           </div>
 
-          {/* Optimizer */}
-          <Suspense fallback={null}>
-            {vehicle && env && (
-              <Optimizer
-                vehicle={vehicle}
-                env={env}
-                raceLength={raceLength}
-                onOptimized={(optimizedVehicle, result) => {
-                  setVehicle(optimizedVehicle);
-                  // Show a toast or notification
-                  console.log(`Optimized! New ET: ${result.et.toFixed(3)}s @ ${result.mph.toFixed(1)} mph`);
-                }}
-              />
-            )}
-          </Suspense>
+          {/* Optimizer Button */}
+          <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '100px' }}>
+            <button
+              onClick={() => setShowOptimizer(true)}
+              style={{
+                padding: '10px 16px',
+                fontSize: '0.8rem',
+                borderRadius: '6px',
+                border: '2px solid var(--color-accent)',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                color: 'var(--color-accent)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+              title="Open Performance Optimizer"
+            >
+              <span style={{ fontSize: '1.1rem' }}>⚡</span>
+              <span>Optimize</span>
+            </button>
+            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '6px', textAlign: 'center' }}>
+              Find best gear/converter
+            </div>
+          </div>
         </div>
       </div>
       
@@ -1343,6 +1357,22 @@ racingsystemsanalysis.com`;
           }}
         />
       )}
+      
+      {/* Optimizer Modal */}
+      <Suspense fallback={null}>
+        {vehicle && env && (
+          <OptimizerModal
+            vehicle={vehicle}
+            env={env}
+            raceLength={raceLength}
+            isOpen={showOptimizer}
+            onClose={() => setShowOptimizer(false)}
+            onApplyToSession={(optimizedVehicle: Vehicle) => {
+              setVehicle(optimizedVehicle);
+            }}
+          />
+        )}
+      </Suspense>
     </Page>
   );
 }
