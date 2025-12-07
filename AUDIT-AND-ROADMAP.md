@@ -70,8 +70,8 @@
 | Feature | Priority | Status | Notes |
 |---------|----------|--------|-------|
 | **Drag Racing Analyzer** | HIGH | ✅ Matched | Our VB6 physics is equivalent |
-| **Optimize Gear Ratio** | HIGH | ❌ Missing | One-click find best final drive |
-| **Optimize Converter** | HIGH | ❌ Missing | One-click find best stall speed |
+| **Optimize Gear Ratio** | HIGH | ✅ Complete | One-click find best final drive |
+| **Optimize Converter** | HIGH | ✅ Complete | One-click find best stall speed |
 | **InstantCalc Mode** | HIGH | ❌ Missing | Real-time ET/MPH as specs change |
 | **Match My Times** | HIGH | ❌ Missing | Auto-tune specs to match actual runs |
 | **Adjustment Factor** | MEDIUM | ❌ Missing | Throttle stop calibration from 2 runs |

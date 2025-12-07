@@ -22,6 +22,7 @@ import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '..
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
 const DetailedParameters = lazy(() => import('../shared/components/DetailedParameters'));
+const Optimizer = lazy(() => import('../shared/components/Optimizer'));
 
 interface LocationState {
   vehicle: Vehicle;
@@ -1278,6 +1279,22 @@ racingsystemsanalysis.com`;
               </label>
             </div>
           </div>
+
+          {/* Optimizer */}
+          <Suspense fallback={null}>
+            {vehicle && env && (
+              <Optimizer
+                vehicle={vehicle}
+                env={env}
+                raceLength={raceLength}
+                onOptimized={(optimizedVehicle, result) => {
+                  setVehicle(optimizedVehicle);
+                  // Show a toast or notification
+                  console.log(`Optimized! New ET: ${result.et.toFixed(3)}s @ ${result.mph.toFixed(1)} mph`);
+                }}
+              />
+            )}
+          </Suspense>
         </div>
       </div>
       
