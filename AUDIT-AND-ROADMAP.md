@@ -81,15 +81,56 @@
 | **Port Flow Analyzer** | LOW | ❌ Missing | Flow bench data management |
 | **Rotating Inertia Detail** | MEDIUM | ❌ Missing | Flywheel/wheel weight effects |
 
-#### RSA Advantages Over Performance Trends:
-- ✅ **Web-based** - They are desktop-only Windows
-- ✅ **Live Weather** - They require manual entry
-- ✅ **AI Opponent Prediction** - They have nothing like this
+### 2C. COMPUTECH (RaceAir + RaceBase)
+
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| **Weather Station Integration** | HIGH | ⚠️ Partial | Have API weather, need RaceAir connector |
+| **DA/RAD/Correction Factors** | HIGH | ✅ Complete | Built into weather system |
+| **Prediction Report Card** | HIGH | ❌ Missing | Grade which formula works best per car |
+| **Multi-formula Support** | MEDIUM | ❌ Missing | Let users choose/compare formulas |
+
+### 2D. GODEADON (Mobile Logbook)
+
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| **Mobile-first Logging** | HIGH | ⚠️ Partial | Responsive web, need native app |
+| **Quick Run Entry** | HIGH | ⚠️ Partial | Could be faster |
+| **Social/Community Features** | LOW | ❌ Missing | Share stats, leaderboards |
+
+### 2E. TIME SLIP SIMULATOR (Finish Line Coaching)
+
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| **Finish Line Scenarios** | MEDIUM | ❌ Missing | "What if I lifted here?" |
+| **Driver Coaching Reports** | MEDIUM | ❌ Missing | "You lifted X ms early" |
+| **Race Replay/Visualization** | LOW | ❌ Missing | 2D graphical replay |
+
+### 2F. COMPETITIVE DIFFERENTIATION MATRIX
+
+| Capability | CrewChief | Perf Trends | GoDeadOn | Computech | RSA |
+|------------|-----------|-------------|----------|-----------|-----|
+| Modern UX | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Mobile | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Cloud Sync | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Physics Sim | ✅ | ✅ | ❌ | ✅ | ✅ |
+| ML Prediction | ❌ | ❌ | ❌ | ❌ | 🔜 |
+| Transparent Formulas | ❌ | ⚠️ | ❌ | ⚠️ | ✅ |
+| Hardware Agnostic | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Opponent AI | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Driver Coaching | ❌ | ❌ | ❌ | ❌ | 🔜 |
+
+#### RSA Advantages Over ALL Competitors:
+- ✅ **Web-based** - Access from any device, anywhere
+- ✅ **Live Weather** - Auto-fetch, no manual entry
+- ✅ **AI Opponent Prediction** - No competitor has this
 - ✅ **Race Day Dashboard** - Unique to RSA
 - ✅ **Competition Ladder** - Unique to RSA
-- ✅ **Mobile Access** - They have none
-- ✅ **Cloud Sync** - They have none
-- ✅ **Modern UI** - Their UI is 1990s Windows
+- ✅ **Mobile Access** - Responsive design
+- ✅ **Cloud Sync** - Data follows you
+- ✅ **Modern UI** - Clean, intuitive interface
+- ✅ **Transparent Formulas** - "Why did my ET change?"
+- ✅ **Hardware Agnostic** - Works with any weather source
 
 ---
 
