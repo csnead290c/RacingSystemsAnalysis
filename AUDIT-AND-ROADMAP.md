@@ -1,0 +1,232 @@
+# RSA Web Application - Comprehensive Audit & Roadmap
+
+## Date: December 7, 2024
+
+---
+
+## 1. ORIGINAL PROGRAM FEATURE PARITY
+
+### Quarter Pro (VB6) - CORE FEATURES
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Physics Simulation** | ✅ Complete | VB6Exact model with full parity |
+| **Timeslip Output** | ✅ Complete | 60', 330', 1/8, 1000', 1/4 splits |
+| **Vehicle Performance Graphs** | ✅ Complete | RPM, MPH, Acceleration vs Time/Distance |
+| **RPM Histogram** | ✅ Complete | Shows time spent in each RPM range |
+| **Detailed Parameters** | ⚠️ Partial | Need to add detailed output panel |
+| **Save/Load Vehicle Data** | ✅ Complete | Database-backed with user accounts |
+| **Print Timeslip** | ✅ Complete | Print button added |
+| **Worksheets (Frontal Area, etc.)** | ❌ Missing | Need calculation worksheets |
+| **Traction Index Help** | ⚠️ Partial | Need visual help screens |
+| **Preferences** | ⚠️ Partial | Basic preferences, need more options |
+
+### Quarter Jr (VB6) - SIMPLIFIED VERSION
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Peak HP/RPM Mode** | ✅ Complete | Synthetic HP curve generation |
+| **Simplified Inputs** | ✅ Complete | Fewer required fields |
+| **Basic Timeslip** | ✅ Complete | Same output as Pro |
+
+### Bonneville Pro - LAND SPEED
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Mile/Multi-mile Runs** | ✅ Complete | 1-5 mile race lengths |
+| **Speed at Distance** | ✅ Complete | Shows speed at each mile marker |
+| **Bonneville Constants** | ✅ Complete | Altitude-specific physics |
+
+---
+
+## 2. COMPETITOR ANALYSIS: CREW CHIEF PRO
+
+### Features They Have That We Should Consider
+
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| **Run Log Book** | HIGH | ✅ Complete | Date, time, round, lane, dial-in |
+| **Weather Integration** | HIGH | ✅ Complete | Live weather from tracks |
+| **Track Database** | HIGH | ✅ Complete | Built-in + custom tracks |
+| **ET Prediction** | HIGH | ✅ Complete | Core simulation |
+| **Throttle Stop Calculator** | MEDIUM | ❌ Missing | For bracket racing |
+| **Opponent Statistics** | MEDIUM | ❌ Missing | Track opponent performance |
+| **Competition Ladders** | LOW | ❌ Missing | Tournament bracket view |
+| **Margin of Victory Calculator** | MEDIUM | ❌ Missing | Calculate win margin |
+| **Run Completion** | HIGH | ✅ Complete | Predict finish from partial data |
+| **Combination/Database Management** | HIGH | ⚠️ Partial | Vehicle grouping added |
+| **Video Integration** | LOW | ❌ Missing | Attach video to runs |
+| **Paging Weather Stations** | LOW | ❌ N/A | Hardware integration |
+| **Data Acquisition Integration** | MEDIUM | ❌ Missing | Import from data loggers |
+| **Tech Cards Printing** | MEDIUM | ❌ Missing | Print tech inspection cards |
+| **Accounting/Expense Tracking** | LOW | ❌ Missing | Track racing expenses |
+
+---
+
+## 3. CURRENT WEB APP FEATURES
+
+### ✅ Completed Features
+
+1. **ET Simulator (Predict Page)**
+   - VB6-exact physics simulation
+   - Real-time what-if adjustments (HP, weight)
+   - Data logger charts (RPM, Speed, Acceleration, HP)
+   - Timeslip display with splits
+   - Vehicle selector dropdown
+   - Save/compare runs
+   - Print timeslip
+   - Copy timeslip to clipboard
+
+2. **Vehicle Management**
+   - Create/edit/delete vehicles
+   - Vehicle grouping/categories
+   - Duplicate vehicles
+   - Public/private vehicles
+   - Full physics parameters
+
+3. **Run Log**
+   - Record actual runs
+   - Date, time, round, lane tracking
+   - Reaction time, dial-in
+   - Compute baseline prediction
+   - Learning model for corrections
+
+4. **Environment/Weather**
+   - Live weather from Open-Meteo API
+   - Track database with coordinates
+   - Track angle for wind correction
+   - Elevation/barometer toggle
+   - Density altitude calculation
+
+5. **User System**
+   - Authentication (login/register)
+   - Role-based access (owner, admin, user, beta)
+   - Product entitlements
+
+6. **Mobile Support**
+   - Responsive layout
+   - Charts working on iOS Safari
+   - Touch-friendly controls
+
+---
+
+## 4. PRIORITY ROADMAP
+
+### Phase 1: Complete Original Program Parity (HIGH PRIORITY)
+
+1. **Detailed Parameters Panel**
+   - Add expandable panel showing all calculated values
+   - Match VB6 "Detailed Parameters" output
+
+2. **Calculation Worksheets**
+   - Frontal Area Calculator
+   - Polar Moment of Inertia Calculator
+   - Tire Width Calculator
+   - Motorcycle Final Drive Calculator
+
+3. **Help Screens**
+   - Traction Index visual guide
+   - Input field tooltips/help
+
+### Phase 2: Exceed Competition (MEDIUM PRIORITY)
+
+1. **Dial-In Calculator Page**
+   - Dedicated bracket racing tool
+   - Weather-adjusted dial-in suggestions
+   - Historical dial-in tracking
+
+2. **Throttle Stop Calculator**
+   - For bracket racers with throttle stops
+   - Predict timer settings
+
+3. **Opponent Tracking**
+   - Log opponent runs
+   - Calculate margin of victory
+   - Head-to-head statistics
+
+4. **Data Import**
+   - Import from CSV/Excel
+   - Import from data acquisition systems
+   - Weather station integration
+
+### Phase 3: New Innovations (FUTURE)
+
+1. **Converter Sim**
+   - Expand Clutch Sim to torque converters
+   - K-factor modeling
+   - Stall speed prediction
+
+2. **Component Integration**
+   - Use Engine Sim engines in vehicles
+   - Use Clutch Sim clutches in vehicles
+   - Suspension Sim integration
+
+3. **AI/ML Predictions**
+   - Learn from user's actual runs
+   - Personalized correction factors
+   - Track-specific adjustments
+
+4. **Social Features**
+   - Share vehicles/setups
+   - Leaderboards
+   - Racing team collaboration
+
+---
+
+## 5. TECHNICAL DEBT & IMPROVEMENTS
+
+### Code Quality
+- [ ] Remove remaining debug console.log statements
+- [ ] Add comprehensive error boundaries
+- [ ] Improve TypeScript strictness
+- [ ] Add unit tests for physics models
+
+### Performance
+- [ ] Lazy load more components
+- [ ] Optimize chart rendering
+- [ ] Cache API responses
+
+### Security
+- [ ] Address GitHub Dependabot alerts (50 vulnerabilities)
+- [ ] Implement rate limiting
+- [ ] Add CSRF protection
+
+### Mobile
+- [x] Fix iOS Safari chart rendering
+- [x] Improve timeslip layout
+- [ ] Add PWA support for offline use
+- [ ] Touch gesture improvements
+
+---
+
+## 6. SUCCESS METRICS
+
+### Must Be Better Than Original VB6 Programs
+- ✅ Same physics accuracy
+- ✅ Modern web interface
+- ✅ Cloud-based (access anywhere)
+- ✅ Real-time calculations
+- ✅ Live weather integration
+- ⚠️ Need all worksheets/calculators
+
+### Must Be Competitive With Crew Chief Pro
+- ✅ Run logging with full context
+- ✅ Track database
+- ✅ Weather integration
+- ❌ Need throttle stop calculator
+- ❌ Need opponent tracking
+- ❌ Need data acquisition import
+
+---
+
+## 7. IMMEDIATE NEXT STEPS
+
+1. **Run database setup.php** to create tracks table
+2. **Test Log page** compute baseline with VB6 physics
+3. **Add Detailed Parameters panel** to ET Sim
+4. **Create Dial-In Calculator** as separate page
+5. **Add Throttle Stop Calculator** for bracket racing
+
+---
+
+*This document should be updated regularly as features are completed.*
