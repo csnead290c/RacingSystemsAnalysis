@@ -3,40 +3,40 @@
  * 
  * Manage drag racing tracks with coordinates, elevation, and track angle.
  * Tracks are used for weather lookup and wind angle correction.
+ * Tracks are stored in the database and shared across all users.
+ * Only admins/owners can add/edit/delete tracks.
  */
 
 import { useState, useEffect } from 'react';
-import { TRACKS, type Track } from '../../domain/config/tracks';
-
-// Custom tracks stored in localStorage
-const CUSTOM_TRACKS_KEY = 'rsa_custom_tracks';
-
-function loadCustomTracks(): Track[] {
-  try {
-    const stored = localStorage.getItem(CUSTOM_TRACKS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomTracks(tracks: Track[]): void {
-  localStorage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(tracks));
-}
+import { 
+  TRACKS, 
+  type Track, 
+  loadTracksFromAPI, 
+  saveTrackToAPI, 
+  updateTrackInAPI, 
+  deleteTrackFromAPI 
+} from '../../domain/config/tracks';
+import { useAuth } from '../../domain/auth/authStore';
 
 export default function TrackEditor() {
-  const [customTracks, setCustomTracks] = useState<Track[]>([]);
+  const { user } = useAuth();
+  const [apiTracks, setApiTracks] = useState<Track[]>([]);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
-  // Load custom tracks on mount
+  const isAdmin = user?.roleId === 'admin' || user?.roleId === 'owner';
+  const isOwner = user?.roleId === 'owner';
+
+  // Load API tracks on mount
   useEffect(() => {
-    setCustomTracks(loadCustomTracks());
+    loadTracksFromAPI().then(setApiTracks);
   }, []);
 
-  // All tracks combined
-  const allTracks = [...TRACKS, ...customTracks];
+  // All tracks combined (built-in + API)
+  const allTracks = [...TRACKS, ...apiTracks.filter(t => !TRACKS.some(bt => bt.id === t.id))];
   
   // Filtered tracks
   const filteredTracks = searchQuery
@@ -48,6 +48,10 @@ export default function TrackEditor() {
     : allTracks;
 
   const handleNewTrack = () => {
+    if (!isAdmin) {
+      setMessage({ type: 'error', text: 'Only admins can add tracks' });
+      return;
+    }
     setEditingTrack({
       id: `custom_${Date.now()}`,
       name: '',
@@ -63,9 +67,13 @@ export default function TrackEditor() {
   };
 
   const handleEditTrack = (track: Track) => {
-    // Only allow editing custom tracks
+    if (!isAdmin) {
+      setMessage({ type: 'error', text: 'Only admins can edit tracks' });
+      return;
+    }
+    // Only allow editing API tracks (not built-in)
     if (TRACKS.some(t => t.id === track.id)) {
-      alert('Built-in tracks cannot be edited. Create a copy instead.');
+      setMessage({ type: 'error', text: 'Built-in tracks cannot be edited. Create a copy instead.' });
       return;
     }
     setEditingTrack({ ...track });
@@ -73,6 +81,10 @@ export default function TrackEditor() {
   };
 
   const handleCopyTrack = (track: Track) => {
+    if (!isAdmin) {
+      setMessage({ type: 'error', text: 'Only admins can add tracks' });
+      return;
+    }
     setEditingTrack({
       ...track,
       id: `custom_${Date.now()}`,
@@ -81,45 +93,90 @@ export default function TrackEditor() {
     setIsNew(true);
   };
 
-  const handleSaveTrack = () => {
+  const handleSaveTrack = async () => {
     if (!editingTrack) return;
     
     if (!editingTrack.name.trim()) {
-      alert('Track name is required');
+      setMessage({ type: 'error', text: 'Track name is required' });
       return;
     }
 
-    const updated = isNew
-      ? [...customTracks, editingTrack]
-      : customTracks.map(t => t.id === editingTrack.id ? editingTrack : t);
-    
-    setCustomTracks(updated);
-    saveCustomTracks(updated);
-    setEditingTrack(null);
-    setIsNew(false);
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      if (isNew) {
+        const result = await saveTrackToAPI(editingTrack);
+        if (!result.success) {
+          setMessage({ type: 'error', text: result.error || 'Failed to save track' });
+          return;
+        }
+      } else {
+        const result = await updateTrackInAPI(editingTrack.id, editingTrack);
+        if (!result.success) {
+          setMessage({ type: 'error', text: result.error || 'Failed to update track' });
+          return;
+        }
+      }
+      
+      // Reload tracks
+      const tracks = await loadTracksFromAPI();
+      setApiTracks(tracks);
+      setEditingTrack(null);
+      setIsNew(false);
+      setMessage({ type: 'success', text: isNew ? 'Track added successfully' : 'Track updated successfully' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteTrack = (trackId: string) => {
+  const handleDeleteTrack = async (trackId: string) => {
+    if (!isOwner) {
+      setMessage({ type: 'error', text: 'Only owners can delete tracks' });
+      return;
+    }
     if (TRACKS.some(t => t.id === trackId)) {
-      alert('Built-in tracks cannot be deleted.');
+      setMessage({ type: 'error', text: 'Built-in tracks cannot be deleted.' });
       return;
     }
     if (!confirm('Delete this track?')) return;
     
-    const updated = customTracks.filter(t => t.id !== trackId);
-    setCustomTracks(updated);
-    saveCustomTracks(updated);
+    setLoading(true);
+    const result = await deleteTrackFromAPI(trackId);
+    if (result.success) {
+      const tracks = await loadTracksFromAPI();
+      setApiTracks(tracks);
+      setMessage({ type: 'success', text: 'Track deleted' });
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to delete track' });
+    }
+    setLoading(false);
   };
 
   const isBuiltIn = (trackId: string) => TRACKS.some(t => t.id === trackId);
+  const isApiTrack = (trackId: string) => apiTracks.some(t => t.id === trackId);
 
   return (
     <div>
+      {message && (
+        <div style={{ 
+          padding: '10px 16px', 
+          marginBottom: '1rem', 
+          borderRadius: '6px',
+          backgroundColor: message.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+          color: message.type === 'error' ? '#ef4444' : '#22c55e',
+          border: `1px solid ${message.type === 'error' ? '#ef4444' : '#22c55e'}`,
+        }}>
+          {message.text}
+        </div>
+      )}
+      
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           onClick={handleNewTrack}
           className="btn"
-          style={{ backgroundColor: 'var(--color-primary)' }}
+          style={{ backgroundColor: isAdmin ? 'var(--color-primary)' : 'var(--color-muted)' }}
+          disabled={!isAdmin || loading}
         >
           + Add Track
         </button>
@@ -132,8 +189,13 @@ export default function TrackEditor() {
           style={{ width: '200px' }}
         />
         <span style={{ color: 'var(--color-muted)', fontSize: '0.85rem' }}>
-          {filteredTracks.length} tracks ({customTracks.length} custom)
+          {filteredTracks.length} tracks ({apiTracks.length} custom)
         </span>
+        {!isAdmin && (
+          <span style={{ color: 'var(--color-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+            (Admin access required to edit)
+          </span>
+        )}
       </div>
 
       {/* Track Editor Form */}

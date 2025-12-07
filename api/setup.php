@@ -113,8 +113,38 @@ try {
     echo "   FAILED: " . $e->getMessage() . "\n\n";
 }
 
+// Create tracks table
+echo "5. Creating tracks table...\n";
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS tracks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            track_id VARCHAR(100) UNIQUE NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            city VARCHAR(255) NOT NULL,
+            state VARCHAR(10) NOT NULL,
+            country VARCHAR(100) DEFAULT 'USA',
+            lat DECIMAL(10,6) NOT NULL,
+            lon DECIMAL(10,6) NOT NULL,
+            elevation_ft INT NOT NULL,
+            track_length ENUM('1/8', '1/4', 'both') DEFAULT '1/4',
+            track_angle INT DEFAULT NULL,
+            sanctioning JSON,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_by INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_state (state),
+            INDEX idx_is_active (is_active)
+        )
+    ");
+    echo "   SUCCESS!\n\n";
+} catch (PDOException $e) {
+    echo "   FAILED: " . $e->getMessage() . "\n\n";
+}
+
 // Create owner account
-echo "5. Creating owner account...\n";
+echo "6. Creating owner account...\n";
 try {
     $ownerEmail = 'owner@racingsystemsanalysis.com';
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");

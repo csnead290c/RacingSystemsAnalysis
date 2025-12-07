@@ -641,25 +641,8 @@ function Predict() {
           }
           .et-slip {
             width: 100%;
-            flex-direction: row;
-            flex-wrap: wrap;
-            gap: 8px;
-          }
-          .et-slip-header {
-            width: 100%;
-            border-bottom: 1px dashed #666;
-          }
-          .et-slip-final {
-            margin-top: 0;
-            border-top: none;
-            border-left: 1px solid #333;
-            padding-left: 12px;
-            padding-top: 0;
-          }
-          .et-slip-vehicle {
-            width: 100%;
-            border-top: 1px dashed #666;
-            margin-top: 0;
+            /* Keep vertical layout on mobile - same as desktop */
+            flex-direction: column;
           }
           .et-sim-chart-area {
             /* CRITICAL: iOS Safari needs explicit height, not flex */
@@ -681,16 +664,29 @@ function Predict() {
         /* Mobile phones */
         @media (max-width: 600px) {
           .et-slip {
-            padding: 10px;
-            font-size: 11px;
+            padding: 12px 16px;
+            font-size: 12px;
+            width: 100%;
+            max-width: 280px;
+            margin: 0 auto;
           }
           .et-slip-header img {
-            height: 36px !important;
+            height: 40px !important;
+          }
+          .et-slip-row {
+            padding: 2px 0;
+          }
+          .et-slip-final {
+            margin-top: 8px;
+            padding-top: 8px;
+          }
+          .et-slip-final .et-slip-value {
+            font-size: 14px !important;
           }
           .et-sim-chart-area {
-            /* Smaller height for phones */
-            height: 280px !important;
-            min-height: 280px !important;
+            /* Larger chart for phones - make it usable */
+            height: 350px !important;
+            min-height: 350px !important;
           }
           .et-sim-bottom-row {
             padding: var(--space-2);
@@ -714,12 +710,13 @@ function Predict() {
         /* Very small phones (iPhone SE, etc) */
         @media (max-width: 400px) {
           .et-sim-chart-area {
-            height: 240px !important;
-            min-height: 240px !important;
+            height: 300px !important;
+            min-height: 300px !important;
           }
           .et-slip {
-            font-size: 10px;
-            padding: 8px;
+            font-size: 11px;
+            padding: 10px 12px;
+            max-width: 240px;
           }
         }
         /* Print styles */

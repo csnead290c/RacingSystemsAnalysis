@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import EnvironmentForm from '../shared/components/EnvironmentForm';
-import { calculate } from '../workerBridge';
+import { simulate } from '../workerBridge';
 import { completeRun, type CompletionResult } from '../domain/quarter/completion';
 import { createModel, update } from '../domain/learning/model';
 import { extractFeatures } from '../domain/learning/features';
@@ -17,6 +17,8 @@ import { RoundTypes, type RunRecordV1 } from '../domain/schemas/run.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { PredictResult, PredictRequest } from '../domain/quarter/types';
+import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
+import { fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
 
 function Log() {
   const navigate = useNavigate();
@@ -121,9 +123,38 @@ function Log() {
       // Use the selected vehicle for baseline calculation
       const vehicle = selectedVehicle;
 
-      const req: PredictRequest = { vehicle, env, raceLength };
-      const result = await calculate(req);
+      // Convert vehicle to VB6 fixture format and run simulation
+      // This uses the same VB6Exact physics as the ET Sim
+      const vb6Fixture = fromVehicleToVB6Fixture(vehicle as any);
+      const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
       
+      // Override with current environment
+      simInputs.env = {
+        elevation: env.elevation ?? 0,
+        barometerInHg: env.barometerInHg ?? 29.92,
+        temperatureF: env.temperatureF ?? 75,
+        humidityPct: env.humidityPct ?? 50,
+        windMph: env.windMph ?? 0,
+        windAngleDeg: env.windAngleDeg ?? 0,
+        trackTempF: env.trackTempF ?? 100,
+        tractionIndex: env.tractionIndex ?? 5,
+      };
+      
+      const simResult = await simulate('VB6Exact', simInputs);
+      
+      // Convert sim result to PredictResult format for compatibility
+      const result: PredictResult = {
+        baseET_s: simResult.et_s,
+        baseMPH: simResult.mph,
+        timeslip: simResult.traces?.map((t: any) => ({
+          d_ft: t.s_ft,
+          t_s: t.t_s,
+          v_mph: t.v_mph,
+        })) || [],
+        factors: [],
+      };
+      
+      const req: PredictRequest = { vehicle, env, raceLength };
       setBaselineRequest(req);
       setBaselineResult(result);
 

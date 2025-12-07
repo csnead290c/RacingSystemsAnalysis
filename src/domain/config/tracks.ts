@@ -242,26 +242,152 @@ export const TRACKS: Track[] = [
   },
 ];
 
-// Custom tracks stored in localStorage
-const CUSTOM_TRACKS_KEY = 'rsa_custom_tracks';
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+// Cache for API tracks
+let apiTracksCache: Track[] | null = null;
+let apiTracksCacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Load custom tracks from localStorage
+ * Load tracks from API (database)
  */
-export function loadCustomTracks(): Track[] {
+export async function loadTracksFromAPI(): Promise<Track[]> {
+  // Check cache
+  if (apiTracksCache && Date.now() - apiTracksCacheTime < CACHE_TTL) {
+    return apiTracksCache;
+  }
+  
   try {
-    const stored = localStorage.getItem(CUSTOM_TRACKS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
+    const response = await fetch(`${API_BASE}/tracks.php`);
+    if (!response.ok) {
+      console.warn('Failed to load tracks from API, using built-in only');
+      return [];
+    }
+    const data = await response.json();
+    const tracks = data.tracks || [];
+    apiTracksCache = tracks;
+    apiTracksCacheTime = Date.now();
+    return tracks;
+  } catch (error) {
+    console.warn('Error loading tracks from API:', error);
     return [];
   }
 }
 
 /**
- * Get all tracks (built-in + custom)
+ * Get all tracks (built-in + API)
+ * Synchronous version uses cache, async version fetches fresh
  */
 export function getAllTracks(): Track[] {
-  return [...TRACKS, ...loadCustomTracks()];
+  // Return built-in + cached API tracks
+  return [...TRACKS, ...(apiTracksCache || [])];
+}
+
+/**
+ * Get all tracks async (fetches from API)
+ */
+export async function getAllTracksAsync(): Promise<Track[]> {
+  const apiTracks = await loadTracksFromAPI();
+  // Merge, avoiding duplicates by ID
+  const builtInIds = new Set(TRACKS.map(t => t.id));
+  const uniqueApiTracks = apiTracks.filter(t => !builtInIds.has(t.id));
+  return [...TRACKS, ...uniqueApiTracks];
+}
+
+/**
+ * Save track to API (admin only)
+ */
+export async function saveTrackToAPI(track: Omit<Track, 'id'> & { id?: string }): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = localStorage.getItem('rsa_token');
+    const response = await fetch(`${API_BASE}/tracks.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        track_id: track.id,
+        name: track.name,
+        city: track.city,
+        state: track.state,
+        country: track.country,
+        lat: track.lat,
+        lon: track.lon,
+        elevation_ft: track.elevation_ft,
+        length: track.length,
+        trackAngle: track.trackAngle,
+        sanctioning: track.sanctioning,
+      }),
+    });
+    
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error || 'Failed to save track' };
+    }
+    
+    // Invalidate cache
+    apiTracksCache = null;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+  }
+}
+
+/**
+ * Update track in API (admin only)
+ */
+export async function updateTrackInAPI(trackId: string, updates: Partial<Track>): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = localStorage.getItem('rsa_token');
+    const response = await fetch(`${API_BASE}/tracks.php?id=${trackId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(updates),
+    });
+    
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error || 'Failed to update track' };
+    }
+    
+    // Invalidate cache
+    apiTracksCache = null;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+  }
+}
+
+/**
+ * Delete track from API (owner only)
+ */
+export async function deleteTrackFromAPI(trackId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = localStorage.getItem('rsa_token');
+    const response = await fetch(`${API_BASE}/tracks.php?id=${trackId}`, {
+      method: 'DELETE',
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+    
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error || 'Failed to delete track' };
+    }
+    
+    // Invalidate cache
+    apiTracksCache = null;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+  }
 }
 
 /**
