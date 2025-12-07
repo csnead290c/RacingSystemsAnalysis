@@ -261,6 +261,55 @@ export function calcAX(isLandSpeed?: boolean): number {
 // ============================================================================
 
 /**
+ * Throttle stop configuration for bracket racing.
+ * Applied during simulation to reduce HP during specified time window.
+ */
+export interface ThrottleStopParams {
+  enabled: boolean;
+  activateTime_s: number;    // When stop activates (seconds after rollout)
+  duration_s: number;        // How long stop is active
+  throttlePct: number;       // Throttle percentage when active (0-100)
+  rampTime_s?: number;       // Time to ramp (default: instant)
+}
+
+/**
+ * Calculate throttle stop HP multiplier based on current time.
+ * Returns 1.0 for full power, or reduced value when stop is active.
+ */
+function calcThrottleStopMultiplier(
+  currentTime_s: number,
+  throttleStop?: ThrottleStopParams
+): number {
+  if (!throttleStop?.enabled) return 1.0;
+  
+  const { activateTime_s, duration_s, throttlePct, rampTime_s = 0 } = throttleStop;
+  const deactivateTime_s = activateTime_s + duration_s;
+  
+  // Before activation - full power
+  if (currentTime_s < activateTime_s) return 1.0;
+  
+  // After deactivation - full power
+  if (currentTime_s >= deactivateTime_s) return 1.0;
+  
+  // During activation - reduced power
+  const targetMult = throttlePct / 100;
+  
+  // Handle ramp-in
+  if (rampTime_s > 0 && currentTime_s < activateTime_s + rampTime_s) {
+    const rampProgress = (currentTime_s - activateTime_s) / rampTime_s;
+    return 1.0 - (1.0 - targetMult) * rampProgress;
+  }
+  
+  // Handle ramp-out
+  if (rampTime_s > 0 && currentTime_s > deactivateTime_s - rampTime_s) {
+    const rampProgress = (deactivateTime_s - currentTime_s) / rampTime_s;
+    return 1.0 - (1.0 - targetMult) * rampProgress;
+  }
+  
+  return targetMult;
+}
+
+/**
  * Execute one VB6 simulation step with full iteration loop.
  * 
  * This is an EXACT port of TIMESLIP.FRM lines 1078-1280.
@@ -269,13 +318,15 @@ export function calcAX(isLandSpeed?: boolean): number {
  * @param vehicle Vehicle parameters
  * @param env Environment parameters
  * @param TSMax Maximum timestep (from initialization)
+ * @param throttleStop Optional throttle stop configuration
  * @returns Computed values for this step
  */
 export function vb6SimulationStep(
   state: VB6SimState,
   vehicle: VB6VehicleParams,
   env: VB6EnvParams,
-  TSMax: number
+  TSMax: number,
+  throttleStop?: ThrottleStopParams
 ): VB6StepComputed {
   const iGear = state.Gear;
   
@@ -475,6 +526,12 @@ export function vb6SimulationStep(
   // ========================================================================
   let HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
   HP = vehicle.HPTQMult * HP / env.hpc;
+  
+  // Apply throttle stop if configured (bracket racing feature)
+  // This reduces HP during the specified time window
+  const throttleStopMult = calcThrottleStopMultiplier(state.time_s, throttleStop);
+  HP = HP * throttleStopMult;
+  
   const HPSave = HP;
   HP = HP * ClutchSlip;
   

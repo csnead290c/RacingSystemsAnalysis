@@ -19,6 +19,7 @@ import {
   TABY,
   type VB6VehicleParams,
   type VB6EnvParams,
+  type ThrottleStopParams,
 } from '../vb6/vb6SimulationStep';
 import { airDensityVB6, type FuelSystemType } from '../vb6/air';
 import { gc, FPS_TO_MPH } from '../vb6/constants';
@@ -79,6 +80,7 @@ interface TracePoint {
   dragHp: number;        // Drag HP (power consumed by aerodynamic drag)
   netHp: number;         // Net HP = hp - dragHp (can be negative at terminal velocity)
   wheelSpeed_mph: number; // Wheel surface speed (car speed × tire slip)
+  throttleStopActive?: boolean; // True when throttle stop is reducing power
 }
 
 // ============================================================================
@@ -329,6 +331,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const converter = drivetrain?.converter ?? (input as any).converter ?? (vehicle as any).converter;
   const engine = (input as any).engine ?? (vehicle as any).engine;
   const pmi = (input as any).pmi ?? (vehicle as any).pmi;
+  
+  // Extract throttle stop configuration (for bracket racing)
+  const throttleStopConfig = input.throttleStop;
+  const throttleStopParams: ThrottleStopParams | undefined = throttleStopConfig?.enabled ? {
+    enabled: true,
+    activateTime_s: throttleStopConfig.activateTime_s,
+    duration_s: throttleStopConfig.duration_s,
+    throttlePct: throttleStopConfig.throttlePct,
+    rampTime_s: throttleStopConfig.rampTime_s,
+  } : undefined;
   
   // Determine transmission type
   // Check transmissionType field first (set by fixtureToSimInputs), then fall back to object detection
@@ -660,8 +672,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       break;
     }
     
-    // Run one VB6 step
-    const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax);
+    // Run one VB6 step (pass throttle stop params for bracket racing)
+    const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
     // Track convergence
     convergenceHistory.iterations.push(stepResult.iterations);
@@ -706,6 +718,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const tireSlipFactor = stepResult.TireSlip;
     const wheelSpeed_mph = state.Vel_ftps * tireSlipFactor * FPS_TO_MPH;
     
+    // Check if throttle stop is active at this time
+    const throttleStopActive = throttleStopParams?.enabled && 
+      trackTime_s >= throttleStopParams.activateTime_s && 
+      trackTime_s < (throttleStopParams.activateTime_s + throttleStopParams.duration_s);
+    
     trace.push({
       t_s: trackTime_s,
       s_ft: trackDist_ft,
@@ -725,6 +742,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       dragHp: stepResult.DragHP,  // Drag HP (positive)
       netHp: stepResult.HP,       // Net HP = HPAtWheels - DragHP (can be negative)
       wheelSpeed_mph,
+      throttleStopActive,
     });
     
     // VB6 trap speed: capture time at 66ft before finish lines

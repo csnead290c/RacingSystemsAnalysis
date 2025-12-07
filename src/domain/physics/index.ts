@@ -82,12 +82,46 @@ export interface ExtendedVehicle extends Vehicle {
 }
 
 /**
+ * Throttle stop configuration for bracket racing.
+ * 
+ * A throttle stop temporarily reduces engine power to slow the car
+ * and hit a specific dial-in time. Common types:
+ * - Solenoid: Opens a bypass valve, reducing vacuum/boost
+ * - Butterfly: Partially closes throttle blade
+ * - Plate: Blocks airflow with a plate
+ * 
+ * The stop activates at `activateTime_s` after launch and stays
+ * active for `duration_s` seconds, reducing power by `throttlePct`.
+ */
+export interface ThrottleStopConfig {
+  enabled: boolean;
+  
+  // Timing (in seconds after launch/rollout)
+  activateTime_s: number;    // When stop activates (e.g., 0.5 = half second after launch)
+  duration_s: number;        // How long stop is active (e.g., 1.5 seconds)
+  
+  // Power reduction
+  throttlePct: number;       // Throttle percentage when stop is active (0-100)
+                             // 0 = idle, 50 = half throttle, 100 = full throttle (no effect)
+  
+  // Optional: RPM-based activation (alternative to time-based)
+  activateRPM?: number;      // Activate when RPM drops below this (after initial launch)
+  deactivateRPM?: number;    // Deactivate when RPM rises above this
+  
+  // Stop characteristics (for advanced modeling)
+  rampTime_s?: number;       // Time to ramp from full to reduced throttle (default: instant)
+}
+
+/**
  * Simulation inputs for physics models.
  */
 export interface SimInputs {
   vehicle: ExtendedVehicle;
   env: Env;
   raceLength: RaceLength;
+  
+  // Optional throttle stop for bracket racing
+  throttleStop?: ThrottleStopConfig;
 }
 
 /**
