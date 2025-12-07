@@ -291,6 +291,20 @@ function Vehicles() {
     }
   };
 
+  const handleDuplicate = async (vehicle: Vehicle) => {
+    try {
+      const duplicated: Vehicle = {
+        ...vehicle,
+        id: crypto.randomUUID(),
+        name: `${vehicle.name} (Copy)`,
+      };
+      await saveVehicle(duplicated);
+      await loadData();
+    } catch (error) {
+      alert('Failed to duplicate vehicle');
+    }
+  };
+
   return (
     <Page
       title="Vehicle Manager"
@@ -1023,6 +1037,17 @@ function Vehicles() {
                         }}
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => handleDuplicate(vehicle)}
+                        className="btn btn-secondary"
+                        style={{
+                          padding: 'var(--space-2) var(--space-3)',
+                          fontSize: '0.875rem',
+                        }}
+                        title="Duplicate vehicle"
+                      >
+                        Copy
                       </button>
                       <button
                         onClick={() => handleDelete(vehicle.id, vehicle.name)}

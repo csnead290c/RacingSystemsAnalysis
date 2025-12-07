@@ -68,6 +68,17 @@ function Predict() {
   useEffect(() => {
     const state = location.state as LocationState | null;
 
+    // Always load available vehicles for the dropdown
+    const loadAvailableVehiclesForDropdown = async () => {
+      try {
+        const vehicles = await loadVehicles();
+        setAvailableVehicles(vehicles);
+      } catch (error) {
+        console.error('Failed to load vehicles for dropdown:', error);
+      }
+    };
+    loadAvailableVehiclesForDropdown();
+
     // If we have state, use it
     if (state?.vehicle && state?.raceLength) {
       setVehicle(state.vehicle);
@@ -719,9 +730,36 @@ function Predict() {
               <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(2)}</span>
             </div>
             
-            {/* Vehicle info at bottom */}
-            <div className="et-slip-vehicle">
-              Vehicle: {vehicle.name}
+            {/* Vehicle selector dropdown */}
+            <div className="et-slip-vehicle" style={{ marginTop: '6px' }}>
+              <select
+                value={vehicle.id}
+                onChange={async (e) => {
+                  const selected = availableVehicles.find(v => v.id === e.target.value);
+                  if (selected) {
+                    // Load full vehicle data
+                    const vehicles = await loadVehicles();
+                    const fullVehicle = vehicles.find(v => v.id === selected.id);
+                    if (fullVehicle) {
+                      setVehicle(fullVehicle as Vehicle);
+                    }
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '4px 6px',
+                  fontSize: '0.7rem',
+                  backgroundColor: '#222',
+                  color: 'white',
+                  border: '1px solid #444',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                {availableVehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
             </div>
             
             {/* Save Run Button */}
