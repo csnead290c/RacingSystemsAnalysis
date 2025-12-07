@@ -20,6 +20,7 @@ import About from '../pages/About';
 import Login from '../pages/Login';
 import Account from '../pages/Account';
 import DialIn from '../pages/DialIn';
+import Opponents from '../pages/Opponents';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -308,6 +309,12 @@ function App() {
             <Route path="/dial-in" element={
               <ProtectedRoute requireFeature="basic_sim">
                 <DialIn />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/opponents" element={
+              <ProtectedRoute requireFeature="basic_sim">
+                <Opponents />
               </ProtectedRoute>
             } />
             

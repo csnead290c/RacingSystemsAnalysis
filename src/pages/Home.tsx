@@ -212,6 +212,29 @@ function Home() {
               </Link>
             )}
 
+            {/* Opponent Tracker */}
+            {hasFeature('basic_sim') && (
+              <Link 
+                to="/opponents" 
+                className="card"
+                style={{ 
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '1rem',
+                }}
+              >
+                <div style={{ fontSize: '2rem' }}>👥</div>
+                <div>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Opponent Tracker</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                    Track competitors & predict runs
+                  </p>
+                </div>
+              </Link>
+            )}
+
             {/* Calculators - always available */}
             <Link 
               to="/calculators" 
