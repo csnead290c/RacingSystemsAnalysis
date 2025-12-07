@@ -1084,6 +1084,48 @@ racingsystemsanalysis.com`;
                   Reset
                 </button>
               )}
+              {/* Dial-in helper for bracket racing */}
+              {RACE_LENGTH_INFO[raceLength]?.category === 'drag' && (
+                <div style={{ 
+                  marginTop: '12px', 
+                  paddingTop: '10px', 
+                  borderTop: '1px solid var(--color-border)',
+                }}>
+                  <div style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }}>Dial-In Helper</div>
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {[0, 0.01, 0.02, 0.03, 0.05].map(offset => (
+                      <button
+                        key={offset}
+                        onClick={() => {
+                          const dialIn = (baseET + offset).toFixed(2);
+                          navigator.clipboard.writeText(dialIn);
+                          alert(`Dial-in ${dialIn} copied!`);
+                        }}
+                        style={{
+                          padding: '3px 6px',
+                          fontSize: '0.65rem',
+                          borderRadius: '3px',
+                          border: '1px solid var(--color-border)',
+                          backgroundColor: 'var(--color-bg-tertiary)',
+                          color: 'var(--color-text)',
+                          cursor: 'pointer',
+                        }}
+                        title={`Copy ${(baseET + offset).toFixed(2)} to clipboard`}
+                      >
+                        +{offset.toFixed(2)}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ 
+                    marginTop: '6px', 
+                    fontSize: '0.9rem', 
+                    fontWeight: 600,
+                    color: 'var(--color-primary)',
+                  }}>
+                    {baseET.toFixed(2)}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
