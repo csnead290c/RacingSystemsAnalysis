@@ -19,6 +19,7 @@ import Vehicles from '../pages/Vehicles';
 import About from '../pages/About';
 import Login from '../pages/Login';
 import Account from '../pages/Account';
+import DialIn from '../pages/DialIn';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -302,6 +303,11 @@ function App() {
             <Route path="/history" element={
               <ProtectedRoute requireFeature="save_runs">
                 <History />
+              </ProtectedRoute>
+            } />
+            <Route path="/dial-in" element={
+              <ProtectedRoute requireFeature="basic_sim">
+                <DialIn />
               </ProtectedRoute>
             } />
             

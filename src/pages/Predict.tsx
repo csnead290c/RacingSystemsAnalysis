@@ -18,9 +18,10 @@ import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 
-// Lazy load charts
+// Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
+const DetailedParameters = lazy(() => import('../shared/components/DetailedParameters'));
 
 interface LocationState {
   vehicle: Vehicle;
@@ -971,6 +972,17 @@ racingsystemsanalysis.com`;
             </Suspense>
           </div>
         </div>
+
+        {/* DETAILED PARAMETERS - Collapsible table of key events */}
+        <Suspense fallback={null}>
+          {simResult?.traces && simResult.traces.length > 0 && (
+            <DetailedParameters 
+              traces={simResult.traces as any} 
+              raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
+              collapsed={true}
+            />
+          )}
+        </Suspense>
 
         {/* BOTTOM ROW: RPM Histogram + Environment + Race Length */}
         <div className="et-sim-bottom-row">
