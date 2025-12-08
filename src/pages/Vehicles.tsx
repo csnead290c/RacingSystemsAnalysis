@@ -31,7 +31,19 @@ const FUEL_SYSTEMS = [
 ] as const;
 
 // Legacy fuel type options (for Pro mode)
-const FUEL_TYPES = ['Gasoline', 'Methanol', 'Ethanol', 'Nitromethane', 'E85', 'Diesel'] as const;
+// VB6 fuel system types: 1=Gas+Carb, 2=Gas+Inject, 3=Methanol+Carb, 4=Methanol+Inject,
+// 5=Nitro+Inject, 6=Supercharged Gas, 7=Supercharged Methanol, 8=Supercharged Nitro, 9=Electric
+const FUEL_TYPES = [
+  'Gasoline',
+  'Methanol', 
+  'Ethanol',
+  'Nitromethane',
+  'E85',
+  'Diesel',
+  'Supercharged Gasoline',
+  'Supercharged Methanol',
+  'Supercharged Nitro',
+] as const;
 
 // Calculate torque from HP: TQ = HP × 5252 / RPM
 const hpToTorque = (hp: number, rpm: number): number => {
