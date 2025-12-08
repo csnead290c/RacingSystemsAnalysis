@@ -257,20 +257,37 @@ function mapFuelSystemToNumber(fuelSystem: string | number | undefined): number 
   if (!fuelSystem) return 1;
   
   const fs = fuelSystem.toUpperCase();
-  if (fs === 'GAS+CARB' || fs.includes('GASOLINE') && fs.includes('CARB')) return 1;
-  if (fs === 'GAS+INJECT' || fs.includes('GASOLINE') && fs.includes('INJECT')) return 2;
-  if (fs === 'METHANOL+CARB' || fs.includes('METHANOL') && fs.includes('CARB')) return 3;
-  if (fs === 'METHANOL+INJECT' || fs.includes('METHANOL') && fs.includes('INJECT')) return 4;
-  if (fs === 'NITRO+INJECT' || fs.includes('NITRO') && fs.includes('INJECT')) return 5;
-  if (fs === 'GAS+SUPERCHARGED' || fs.includes('GASOLINE') && fs.includes('SUPERCHARG')) return 6;
-  if (fs === 'METHANOL+SUPERCHARGED' || fs.includes('METHANOL') && fs.includes('SUPERCHARG')) return 7;
-  if (fs === 'NITRO+SUPERCHARGED' || fs.includes('NITRO') && fs.includes('SUPERCHARG')) return 8;
+  
+  // Handle unified fuel type values (new format)
+  if (fs === 'GASOLINE') return 1;
+  if (fs === 'GASOLINE EFI') return 2;
+  if (fs === 'METHANOL') return 3;
+  if (fs === 'METHANOL EFI') return 4;
+  if (fs === 'NITROMETHANE') return 5;
+  if (fs === 'SUPERCHARGED GASOLINE') return 6;
+  if (fs === 'SUPERCHARGED METHANOL') return 7;
+  if (fs === 'SUPERCHARGED NITRO') return 8;
+  if (fs === 'E85' || fs === 'DIESEL') return 1;
+  
+  // Handle VB6-style fuel system strings (legacy format)
+  if (fs === 'GAS+CARB' || (fs.includes('GASOLINE') && fs.includes('CARB'))) return 1;
+  if (fs === 'GAS+INJECT' || (fs.includes('GASOLINE') && fs.includes('INJECT'))) return 2;
+  if (fs === 'METHANOL+CARB' || (fs.includes('METHANOL') && fs.includes('CARB'))) return 3;
+  if (fs === 'METHANOL+INJECT' || (fs.includes('METHANOL') && fs.includes('INJECT'))) return 4;
+  if (fs === 'NITRO+INJECT' || (fs.includes('NITRO') && fs.includes('INJECT'))) return 5;
+  if (fs === 'GAS+SUPERCHARGED' || (fs.includes('GASOLINE') && fs.includes('SUPERCHARG'))) return 6;
+  if (fs === 'METHANOL+SUPERCHARGED' || (fs.includes('METHANOL') && fs.includes('SUPERCHARG'))) return 7;
+  if (fs === 'NITRO+SUPERCHARGED' || (fs.includes('NITRO') && fs.includes('SUPERCHARG'))) return 8;
   if (fs === 'ELECTRIC') return 9;
   
-  // Legacy simple fuel types
+  // Legacy simple fuel types (fallback)
+  if (fs.includes('SUPERCHARG') || fs.includes('BLOWN')) {
+    if (fs.includes('NITRO')) return 8;
+    if (fs.includes('METHANOL') || fs.includes('ALCOHOL')) return 7;
+    return 6;
+  }
   if (fs.includes('NITRO')) return 5;
   if (fs.includes('METHANOL') || fs.includes('ALCOHOL')) return 3;
-  if (fs.includes('SUPERCHARG') || fs.includes('BLOWN')) return 6;
   
   return 1; // Default: Gas + Carb
 }
@@ -308,8 +325,8 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   const env = v.env ?? {};
   const temperature_F = env.temperature_F ?? env.dryBulb_F ?? 75;
   
-  // Fuel system
-  const fuelSystem = vAny.fuelSystem ?? vAny.fuel?.type ?? v.fuel?.type ?? 'Gas+Carb';
+  // Fuel system - prioritize fuelType (modern) over fuelSystem (legacy)
+  const fuelSystem = vAny.fuelType ?? vAny.fuelSystem ?? vAny.fuel?.type ?? v.fuel?.type ?? 'Gasoline';
   const fuelSystemNum = mapFuelSystemToNumber(fuelSystem);
   
   // Check if we're in QuarterJr mode
@@ -463,8 +480,15 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   // PMI defaults (typical values)
   const pmi = v.pmi ?? {};
 
-  // Fuel
+  // Fuel - prioritize flat fuelType field over nested fuel.type
   const fuel = v.fuel ?? {};
+  const fuelTypeValue = vAny.fuelType ?? fuel.type ?? 'Gasoline';
+  
+  console.log('[fromVehicleToVB6Fixture] Fuel type resolution:', {
+    'vAny.fuelType': vAny.fuelType,
+    'fuel.type': fuel.type,
+    'resolved': fuelTypeValue,
+  });
 
   // Build clutch/converter - handle both nested and flat Vehicle schema fields
   let clutch: Vb6VehicleFixture['drivetrain']['clutch'] | undefined;
@@ -533,8 +557,8 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     },
     engineHP,
     fuel: {
-      type: fuel.type ?? 'Gasoline',
-      hpTorqueMultiplier: fuel.hpTorqueMultiplier ?? 1.0,
+      type: fuelTypeValue,
+      hpTorqueMultiplier: fuel.hpTorqueMultiplier ?? vAny.hpTorqueMultiplier ?? 1.0,
     },
   };
 
