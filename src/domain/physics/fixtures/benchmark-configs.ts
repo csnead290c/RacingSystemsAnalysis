@@ -55,6 +55,7 @@ export interface ExtendedVehicleConfig {
       launchRPM?: number;
       stallRPM?: number;
       slipRatio?: number; // e.g. 1.06
+      slippageFactor?: number; // VB6's gc_Slippage.Value
       torqueMult?: number; // e.g. 1.70
       lockup?: boolean;
       diameterIn?: number;
@@ -64,6 +65,7 @@ export interface ExtendedVehicleConfig {
       launchRPM?: number;
       slipRPM?: number;
       slipRatio?: number;
+      slippageFactor?: number; // VB6's gc_Slippage.Value (typically 1.002-1.01)
       lockup?: boolean;
     };
 
@@ -280,7 +282,7 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
       gearEff: [1.0],
       shiftRPM: [100], // direct
 
-      clutch: { launchRPM: 6400, slipRPM: 6800, slipRatio: 1.0, lockup: false },
+      clutch: { launchRPM: 6400, slipRPM: 6800, slippageFactor: 1.0068, lockup: false },
 
       // PMI from VB6 printout (funnycar.dat)
       pmi: {

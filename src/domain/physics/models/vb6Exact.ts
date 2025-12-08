@@ -551,9 +551,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const converterStallRPM = converter?.stallRPM ?? (vehicle as any).converterStallRPM ?? 5500;
     stallRPM = isClutch ? clutchSlipRPM : converterStallRPM;
     
-    // Get slippage factor
-    const clutchSlippage = clutch?.slippageFactor ?? clutch?.slippage ?? clutch?.slipRatio ?? (vehicle as any).clutchSlippage ?? 1.0025;
-    const converterSlippage = converter?.slippageFactor ?? converter?.slippage ?? converter?.slipRatio ?? (vehicle as any).converterSlippage ?? 1.06;
+    // Get slippage factor (VB6's gc_Slippage.Value)
+    // Note: slipRatio is NOT the same as slippageFactor - don't use it here
+    const clutchSlippage = clutch?.slippageFactor ?? clutch?.slippage ?? (vehicle as any).clutchSlippage ?? 1.0025;
+    const converterSlippage = converter?.slippageFactor ?? converter?.slippage ?? (vehicle as any).converterSlippage ?? 1.06;
     slippage = isClutch ? clutchSlippage : converterSlippage;
     
     // Get torque multiplier
