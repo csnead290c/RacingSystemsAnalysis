@@ -21,10 +21,7 @@ import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '..
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
-const DetailedParameters = lazy(() => import('../shared/components/DetailedParameters'));
 const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
-const ExplainRun = lazy(() => import('../shared/components/ExplainRun'));
-const MatchMyTimes = lazy(() => import('../shared/components/MatchMyTimes'));
 
 interface LocationState {
   vehicle: Vehicle;
@@ -85,12 +82,7 @@ function Predict() {
   // Optimizer modal state
   const [showOptimizer, setShowOptimizer] = useState(false);
   
-  // Match My Times modal state
-  const [showMatchMyTimes, setShowMatchMyTimes] = useState(false);
   
-  // InstantCalc mode - real-time ET/MPH updates without debounce
-  const [instantCalcEnabled, setInstantCalcEnabled] = useState(false);
-
   // Initialize from location state or show vehicle selector
   useEffect(() => {
     const state = location.state as LocationState | null;
@@ -154,19 +146,12 @@ function Predict() {
       clearTimeout(debounceTimerRef.current);
     }
     
-    // Show debouncing indicator
-    // InstantCalc mode: no debounce, run immediately
-    if (instantCalcEnabled) {
+    // Show debouncing indicator - debounce by 400ms
+    setIsDebouncing(true);
+    debounceTimerRef.current = setTimeout(() => {
       setIsDebouncing(false);
       runSimulation();
-    } else {
-      // Normal mode: debounce by 400ms
-      setIsDebouncing(true);
-      debounceTimerRef.current = setTimeout(() => {
-        setIsDebouncing(false);
-        runSimulation();
-      }, 400);
-    }
+    }, 400);
     
     // Cleanup on unmount or when deps change
     return () => {
@@ -294,7 +279,7 @@ function Predict() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust, throttleStopEnabled, throttleStopActivate, throttleStopDuration, throttleStopPct, instantCalcEnabled]);
+  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust, throttleStopEnabled, throttleStopActivate, throttleStopDuration, throttleStopPct]);
 
   // Fetch weather from track or current location
   const handleFetchWeather = async (track?: Track) => {
@@ -1017,29 +1002,6 @@ racingsystemsanalysis.com`;
           </div>
         </div>
 
-        {/* DETAILED PARAMETERS - Collapsible table of key events */}
-        <Suspense fallback={null}>
-          {simResult?.traces && simResult.traces.length > 0 && (
-            <DetailedParameters 
-              traces={simResult.traces as any} 
-              raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
-              collapsed={true}
-            />
-          )}
-        </Suspense>
-
-        {/* EXPLAIN THIS RUN - Transparent prediction breakdown */}
-        <Suspense fallback={null}>
-          {simResult && vehicle && env && (
-            <ExplainRun 
-              simResult={simResult}
-              vehicle={vehicle}
-              env={env}
-              baselineResult={comparisonRun?.result}
-            />
-          )}
-        </Suspense>
-
         {/* BOTTOM ROW: Simplified - Environment + Race Length + Quick Tools */}
         <div className="et-sim-bottom-row" style={{ flexWrap: 'wrap' }}>
           {/* Environment - Combined with Race Length */}
@@ -1199,18 +1161,6 @@ racingsystemsanalysis.com`;
                   backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
                 ⚡ Optimize
               </button>
-              <button onClick={() => setShowMatchMyTimes(true)} title="Match My Times"
-                style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #f59e0b',
-                  backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', cursor: 'pointer', fontWeight: 600 }}>
-                🎯 Match
-              </button>
-              <button onClick={() => setInstantCalcEnabled(!instantCalcEnabled)} title="Toggle InstantCalc"
-                style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', 
-                  border: instantCalcEnabled ? '1px solid #22c55e' : '1px solid var(--color-border)',
-                  backgroundColor: instantCalcEnabled ? 'rgba(34, 197, 94, 0.1)' : 'var(--color-bg-secondary)', 
-                  color: instantCalcEnabled ? '#22c55e' : 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 600 }}>
-                ⚡ {instantCalcEnabled ? 'Instant ON' : 'Instant'}
-              </button>
             </div>
             {/* Throttle Stop - expandable */}
             <div style={{ fontSize: '0.75rem' }}>
@@ -1335,23 +1285,6 @@ racingsystemsanalysis.com`;
             onClose={() => setShowOptimizer(false)}
             onApplyToSession={(optimizedVehicle: Vehicle) => {
               setVehicle(optimizedVehicle);
-            }}
-          />
-        )}
-      </Suspense>
-      
-      {/* Match My Times Modal */}
-      <Suspense fallback={null}>
-        {vehicle && env && (
-          <MatchMyTimes
-            vehicle={vehicle}
-            env={env}
-            raceLength={raceLength}
-            isOpen={showMatchMyTimes}
-            onClose={() => setShowMatchMyTimes(false)}
-            onApply={(adjustedVehicle: Vehicle, _calibrationFactor: number) => {
-              setVehicle(adjustedVehicle);
-              // Could store calibration factor for future predictions
             }}
           />
         )}
