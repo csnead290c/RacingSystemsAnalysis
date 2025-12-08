@@ -6,6 +6,14 @@ import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import { useAuth } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
+import { 
+  WorksheetButton, 
+  FrontalAreaWorksheet, 
+  TireWidthWorksheet, 
+  GearRatioWorksheet,
+  RolloutWorksheet,
+} from '../shared/components/WorksheetModal';
+import { TOOLTIPS } from '../domain/config/tooltips';
 
 type TransType = 'clutch' | 'converter';
 
@@ -126,6 +134,12 @@ function Vehicles() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [hpMultiplier, setHpMultiplier] = useState(1.0);
+  
+  // Worksheet modal states
+  const [showFrontalAreaWorksheet, setShowFrontalAreaWorksheet] = useState(false);
+  const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
+  const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
+  const [showRolloutWorksheet, setShowRolloutWorksheet] = useState(false);
   
   // Derive transType from form
   const transType: TransType = (form.transmissionType as TransType) ?? 'clutch';
@@ -417,9 +431,12 @@ function Vehicles() {
                   <input type="number" step="1" className="input" value={form.weightLb ?? ''} onChange={(e) => updateForm('weightLb', parseFloat(e.target.value))} />
                 </div>
                 <div>
-                  <label className="label">Staging Rollout (in) *</label>
+                  <label className="label">
+                    Staging Rollout (in) *
+                    <WorksheetButton onClick={() => setShowRolloutWorksheet(true)} tooltip={TOOLTIPS.btnRollout} />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.rolloutIn ?? ''} onChange={(e) => updateForm('rolloutIn', parseFloat(e.target.value))} />
-                  <small style={{ color: 'var(--color-muted)' }}>Distance from staging beam to start</small>
+                  <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.rollout}</small>
                 </div>
               </div>
               <div className="grid grid-2 gap-4 mb-4">
@@ -443,9 +460,12 @@ function Vehicles() {
               </div>
               <div className="grid grid-2 gap-4">
                 <div>
-                  <label className="label">Frontal Area (ft²)</label>
+                  <label className="label">
+                    Frontal Area (ft²)
+                    <WorksheetButton onClick={() => setShowFrontalAreaWorksheet(true)} tooltip={TOOLTIPS.btnFrontalArea} />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.frontalAreaFt2 ?? 22} onChange={(e) => updateForm('frontalAreaFt2', parseFloat(e.target.value))} />
-                  <small style={{ color: 'var(--color-muted)' }}>Cross-sectional area facing wind</small>
+                  <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.frontalArea}</small>
                 </div>
               </div>
             </div>
@@ -602,9 +622,12 @@ function Vehicles() {
             <div className="mb-4">
               <div className="grid grid-3 gap-4">
                 <div>
-                  <label className="label">Final Drive Ratio *</label>
+                  <label className="label">
+                    Final Drive Ratio *
+                    <WorksheetButton onClick={() => setShowGearRatioWorksheet(true)} tooltip={TOOLTIPS.btnGearRatio} />
+                  </label>
                   <input type="number" step="0.01" className="input" value={form.rearGear ?? ''} onChange={(e) => updateForm('rearGear', parseFloat(e.target.value))} />
-                  <small style={{ color: 'var(--color-muted)' }}>Ring & pinion ratio</small>
+                  <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.rearGear}</small>
                 </div>
                 <div>
                   <label className="label">Tire Diameter (in) *</label>
@@ -1205,6 +1228,29 @@ function Vehicles() {
           </Link>
         </div>
       )}
+
+      {/* Worksheet Modals */}
+      <FrontalAreaWorksheet
+        isOpen={showFrontalAreaWorksheet}
+        onClose={() => setShowFrontalAreaWorksheet(false)}
+        onApply={(value) => updateForm('frontalAreaFt2', value)}
+      />
+      <TireWidthWorksheet
+        isOpen={showTireWidthWorksheet}
+        onClose={() => setShowTireWidthWorksheet(false)}
+        onApply={(value) => updateForm('tireWidthIn', value)}
+      />
+      <GearRatioWorksheet
+        isOpen={showGearRatioWorksheet}
+        onClose={() => setShowGearRatioWorksheet(false)}
+        onApply={(value) => updateForm('rearGear', value)}
+      />
+      <RolloutWorksheet
+        isOpen={showRolloutWorksheet}
+        onClose={() => setShowRolloutWorksheet(false)}
+        onApply={(value) => updateForm('rolloutIn', value)}
+        tireDiameter={form.tireDiaIn}
+      />
     </Page>
   );
 }
