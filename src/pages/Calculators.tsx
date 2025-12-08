@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
+
+const WeatherCorrectionCalc = lazy(() => import('../shared/components/WeatherCorrectionCalc'));
 import {
   calculateWeather,
   defaultWeatherInput,
@@ -20,7 +22,7 @@ import {
   type TransmissionType,
 } from '../domain/physics/models/dragDyno';
 
-type CalculatorTab = 'weather' | 'converter' | 'dragdyno' | 'worksheets';
+type CalculatorTab = 'weather' | 'converter' | 'dragdyno' | 'correction' | 'worksheets';
 
 // Worksheet calculator interfaces
 interface GearRatioInput {
@@ -173,6 +175,12 @@ function Calculators() {
             onClick={() => setActiveTab('dragdyno')}
           >
             Drag Dyno
+          </button>
+          <button
+            className={`btn ${activeTab === 'correction' ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab('correction')}
+          >
+            ET Correction
           </button>
           <button
             className={`btn ${activeTab === 'worksheets' ? 'btn-primary' : ''}`}
@@ -509,6 +517,13 @@ function Calculators() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ET CORRECTION CALCULATOR */}
+      {activeTab === 'correction' && (
+        <Suspense fallback={<div className="card" style={{ padding: 'var(--space-4)' }}>Loading...</div>}>
+          <WeatherCorrectionCalc baseET={10.0} />
+        </Suspense>
       )}
 
       {/* WORKSHEETS */}

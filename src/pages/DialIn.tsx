@@ -190,6 +190,13 @@ export default function DialIn() {
                   1/8 Mile
                 </button>
                 <button
+                  className={`btn ${raceLength === 'THOUSAND' ? 'btn-primary' : ''}`}
+                  onClick={() => setRaceLength('THOUSAND')}
+                  style={{ flex: 1 }}
+                >
+                  1000'
+                </button>
+                <button
                   className={`btn ${raceLength === 'QUARTER' ? 'btn-primary' : ''}`}
                   onClick={() => setRaceLength('QUARTER')}
                   style={{ flex: 1 }}
