@@ -30,6 +30,10 @@ interface TraceData {
 
 interface DataLoggerChartProps {
   data: TraceData[];
+  /** Comparison data for overlay (optional) */
+  comparisonData?: TraceData[];
+  /** Label for comparison data */
+  comparisonLabel?: string;
   /** Distance markers to show (e.g., [60, 330, 660, 1000, 1320]) */
   distanceMarkers?: number[];
   /** Race length in feet (660 or 1320) */
@@ -100,6 +104,8 @@ type SeriesKey = keyof typeof SERIES_CONFIG;
  */
 function DataLoggerChart({ 
   data, 
+  comparisonData,
+  comparisonLabel = 'Comparison',
   distanceMarkers = [60, 330, 660, 1000, 1320],
   raceLengthFt = 1320,
 }: DataLoggerChartProps) {
@@ -133,6 +139,9 @@ function DataLoggerChart({
     return axes;
   }, [enabledSeries]);
 
+  // State for showing comparison overlay
+  const [showComparison, setShowComparison] = useState(true);
+
   // Filter data and add xValue based on mode, also inject marker points
   const { chartData, markerIndices } = useMemo(() => {
     let startIdx = 0;
@@ -163,13 +172,43 @@ function DataLoggerChart({
       }
     }
     
-    const mapped = filtered.map(d => ({
-      ...d,
-      xValue: xAxisMode === 'time' ? d.t_s : d.s_ft,
-    }));
+    // Map primary data with comparison data merged by xValue
+    const mapped = filtered.map((d) => {
+      const xValue = xAxisMode === 'time' ? d.t_s : d.s_ft;
+      const result: TraceData & { xValue: number; comp_rpm?: number; comp_v_mph?: number; comp_a_g?: number; comp_hp?: number } = {
+        ...d,
+        xValue,
+      };
+      
+      // Add comparison data if available
+      if (comparisonData && showComparison) {
+        // Find closest comparison point by xValue
+        const compXValue = xAxisMode === 'time' ? 't_s' : 's_ft';
+        let bestComp: TraceData | null = null;
+        let bestDiff = Infinity;
+        for (const comp of comparisonData) {
+          const diff = Math.abs((comp as any)[compXValue] - xValue);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestComp = comp;
+          }
+        }
+        if (bestComp && bestDiff < (xAxisMode === 'time' ? 0.05 : 10)) {
+          result.comp_rpm = bestComp.rpm;
+          result.comp_v_mph = bestComp.v_mph;
+          result.comp_a_g = bestComp.a_g;
+          result.comp_hp = bestComp.hp;
+        }
+      }
+      
+      return result;
+    });
     
     return { chartData: mapped, markerIndices: indices };
-  }, [data, xAxisMode, distanceMarkers, raceLengthFt]);
+  }, [data, comparisonData, showComparison, xAxisMode, distanceMarkers, raceLengthFt]);
+  
+  // Suppress unused warning for comparisonLabel (used in tooltip)
+  void comparisonLabel;
 
   // Get marker x values from the actual data points
   const markerXValues = useMemo(() => {
@@ -218,7 +257,7 @@ function DataLoggerChart({
         flexShrink: 0,
       }}>
         {/* X-axis mode toggle - segmented control style */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>X-Axis</span>
           <div style={{
             display: 'inline-flex',
@@ -259,6 +298,28 @@ function DataLoggerChart({
               Distance (ft)
             </button>
           </div>
+          
+          {/* Comparison toggle (only show if comparison data exists) */}
+          {comparisonData && comparisonData.length > 0 && (
+            <label style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              fontSize: '0.8rem',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              marginLeft: 'auto',
+            }}>
+              <input 
+                type="checkbox" 
+                checked={showComparison} 
+                onChange={(e) => setShowComparison(e.target.checked)}
+              />
+              <span style={{ color: showComparison ? '#f59e0b' : 'var(--color-text-muted)' }}>
+                Show Comparison
+              </span>
+            </label>
+          )}
         </div>
 
         {/* Series toggles - compact pills */}
@@ -456,6 +517,24 @@ function DataLoggerChart({
           )}
           {enabledSeries.has('gear') && (
             <Line type="stepAfter" dataKey="gear" stroke={SERIES_CONFIG.gear.color} strokeWidth={2} dot={false} name={SERIES_CONFIG.gear.name} yAxisId="gear" />
+          )}
+          
+          {/* Comparison overlay lines (dashed, semi-transparent) */}
+          {showComparison && comparisonData && comparisonData.length > 0 && (
+            <>
+              {enabledSeries.has('rpm') && (
+                <Line type="monotone" dataKey="comp_rpm" stroke={SERIES_CONFIG.rpm.color} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.5} dot={false} name="Comp RPM" yAxisId="rpm" />
+              )}
+              {enabledSeries.has('v_mph') && (
+                <Line type="monotone" dataKey="comp_v_mph" stroke={SERIES_CONFIG.v_mph.color} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.5} dot={false} name="Comp Speed" yAxisId="speed" />
+              )}
+              {enabledSeries.has('a_g') && (
+                <Line type="monotone" dataKey="comp_a_g" stroke={SERIES_CONFIG.a_g.color} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.5} dot={false} name="Comp Accel" yAxisId="accel" />
+              )}
+              {enabledSeries.has('hp') && (
+                <Line type="monotone" dataKey="comp_hp" stroke={SERIES_CONFIG.hp.color} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.5} dot={false} name="Comp HP" yAxisId="hp" />
+              )}
+            </>
           )}
         </ComposedChart>
         </ResponsiveContainer>
