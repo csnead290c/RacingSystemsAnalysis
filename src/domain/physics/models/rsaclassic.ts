@@ -155,6 +155,16 @@ function resolveEngineParams(input: any): { powerHP: PowerPt[] } {
     }
   }
   
+  // 5) vehicle.hpCurve (UI schema format - array of {rpm, hp})
+  const hpc = input?.vehicle?.hpCurve;
+  if (Array.isArray(hpc)) {
+    sources.push(`vehicle.hpCurve(${hpc.length})`);
+    if (hpc.length >= 2) {
+      const powerHP = asPowerPtsFromTuple(hpc, mult);
+      if (powerHP.length >= 2) return { powerHP };
+    }
+  }
+  
   // Fail with context showing all sources found
   throw new Error(
     `RSACLASSIC: missing power curve. Sources found: [${sources.join(', ') || 'none'}]. ` +

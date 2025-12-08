@@ -163,6 +163,16 @@ function extractHPCurve(input: SimInputs): {
                   (vehicle as any).hpCurve ?? 
                   [];
   
+  // Debug: Log HP curve sources
+  console.log('[VB6Exact] extractHPCurve sources:', {
+    'engine?.hpCurve': engine?.hpCurve?.length,
+    'engine?.torqueCurve': engine?.torqueCurve?.length,
+    'vehicle.torqueCurve': (vehicle as any).torqueCurve?.length,
+    'vehicle.hpCurve': (vehicle as any).hpCurve?.length,
+    'resolved hpCurve length': hpCurve.length,
+    'first 2 points': hpCurve.slice(0, 2),
+  });
+  
   const xrpm: number[] = [];
   const yhp: number[] = [];
   
@@ -184,6 +194,13 @@ function extractHPCurve(input: SimInputs): {
   
   // If we have a valid HP curve, use it (QuarterPro mode)
   if (xrpm.length >= 2) {
+    console.log('[VB6Exact] Using QuarterPro HP curve:', {
+      NHP: xrpm.length,
+      rpmRange: `${Math.min(...xrpm)} - ${Math.max(...xrpm)}`,
+      hpRange: `${Math.min(...yhp)} - ${Math.max(...yhp)}`,
+      peakHP: Math.max(...yhp),
+      curve: xrpm.map((r, i) => `${r}:${yhp[i]}`).join(', '),
+    });
     return { xrpm, yhp, NHP: xrpm.length, isQuarterJr: false };
   }
   
