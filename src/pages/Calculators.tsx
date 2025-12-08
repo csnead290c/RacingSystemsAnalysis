@@ -43,6 +43,17 @@ interface TireWidthInput {
   grooveWidth: number;   // inches
 }
 
+interface PMIInput {
+  componentType: 'engine' | 'tire' | 'transmission';
+  weight: number;        // lbs
+  radius: number;        // inches
+}
+
+interface RolloutInput {
+  tireDiameter: number;  // inches
+  stageDistance: number; // inches (typically 7-12")
+}
+
 function Calculators() {
   const [activeTab, setActiveTab] = useState<CalculatorTab>('weather');
   
@@ -77,6 +88,17 @@ function Calculators() {
     grooveWidth: 0.25,
   });
 
+  const [pmiInput, setPmiInput] = useState<PMIInput>({
+    componentType: 'engine',
+    weight: 50,
+    radius: 6,
+  });
+
+  const [rolloutInput, setRolloutInput] = useState<RolloutInput>({
+    tireDiameter: 28,
+    stageDistance: 7,
+  });
+
   // Worksheet calculations
   const gearRatio = useMemo(() => {
     if (gearInput.countershaftTeeth === 0) return 0;
@@ -92,6 +114,32 @@ function Calculators() {
     const width = tireInput.treadWidth - tireInput.numGrooves * tireInput.grooveWidth;
     return Math.max(0, Math.round(width * 100) / 100);
   }, [tireInput]);
+
+  // PMI calculation: I = (1/2) * m * r^2 for solid cylinder
+  // Convert weight to mass (lbs to slugs: divide by 32.174)
+  // Convert radius from inches to feet
+  const pmiResult = useMemo(() => {
+    const mass = pmiInput.weight / 32.174; // slugs
+    const radiusFt = pmiInput.radius / 12; // feet
+    // PMI = 0.5 * m * r^2 (for solid cylinder approximation)
+    // Multiply by factor based on component type
+    const factor = pmiInput.componentType === 'engine' ? 0.4 : 
+                   pmiInput.componentType === 'tire' ? 0.9 : 0.3;
+    const pmi = factor * mass * radiusFt * radiusFt;
+    return Math.round(pmi * 1000) / 1000; // lb-ft²
+  }, [pmiInput]);
+
+  // Rollout calculation: distance tire travels before breaking beam
+  const rolloutResult = useMemo(() => {
+    const circumference = Math.PI * rolloutInput.tireDiameter;
+    const rollout = rolloutInput.stageDistance;
+    const degreesRotation = (rollout / circumference) * 360;
+    return {
+      rolloutInches: rollout,
+      circumference: Math.round(circumference * 100) / 100,
+      degreesRotation: Math.round(degreesRotation * 10) / 10,
+    };
+  }, [rolloutInput]);
 
   const cardStyle: React.CSSProperties = {
     padding: 'var(--space-4)',
@@ -671,6 +719,105 @@ function Calculators() {
               <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Effective Tire Width</div>
               <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
                 {effectiveTireWidth.toFixed(2)} in
+              </div>
+            </div>
+          </div>
+
+          {/* PMI Calculator */}
+          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
+            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Polar Moment of Inertia</h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
+              Rotational inertia for drivetrain components
+            </p>
+            
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Component Type</label>
+              <select
+                className="input"
+                style={inputStyle}
+                value={pmiInput.componentType}
+                onChange={(e) => setPmiInput(prev => ({ ...prev, componentType: e.target.value as PMIInput['componentType'] }))}
+              >
+                <option value="engine">Engine/Flywheel</option>
+                <option value="tire">Tire/Wheel</option>
+                <option value="transmission">Trans/Driveshaft</option>
+              </select>
+            </div>
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Weight (lbs)</label>
+              <input
+                type="number"
+                className="input"
+                style={inputStyle}
+                value={pmiInput.weight}
+                onChange={(e) => setPmiInput(prev => ({ ...prev, weight: parseFloat(e.target.value) || 0 }))}
+                step="1"
+              />
+            </div>
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Effective Radius (inches)</label>
+              <input
+                type="number"
+                className="input"
+                style={inputStyle}
+                value={pmiInput.radius}
+                onChange={(e) => setPmiInput(prev => ({ ...prev, radius: parseFloat(e.target.value) || 0 }))}
+                step="0.5"
+              />
+            </div>
+            
+            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>PMI (lb-ft²)</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                {pmiResult.toFixed(3)}
+              </div>
+            </div>
+          </div>
+
+          {/* Rollout Calculator */}
+          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
+            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Tire Rollout</h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
+              Staging rollout distance
+            </p>
+            
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Tire Diameter (inches)</label>
+              <input
+                type="number"
+                className="input"
+                style={inputStyle}
+                value={rolloutInput.tireDiameter}
+                onChange={(e) => setRolloutInput(prev => ({ ...prev, tireDiameter: parseFloat(e.target.value) || 0 }))}
+                step="0.5"
+              />
+            </div>
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Stage Distance (inches)</label>
+              <input
+                type="number"
+                className="input"
+                style={inputStyle}
+                value={rolloutInput.stageDistance}
+                onChange={(e) => setRolloutInput(prev => ({ ...prev, stageDistance: parseFloat(e.target.value) || 0 }))}
+                step="0.5"
+              />
+            </div>
+            
+            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Circumference</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{rolloutResult.circumference}" </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Rotation</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{rolloutResult.degreesRotation}°</span>
+              </div>
+              <div style={{ textAlign: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Rollout</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                  {rolloutResult.rolloutInches.toFixed(1)}"
+                </div>
               </div>
             </div>
           </div>
