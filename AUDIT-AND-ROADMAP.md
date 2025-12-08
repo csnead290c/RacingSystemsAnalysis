@@ -355,12 +355,16 @@
 
 ### Phase 3: New Innovations (IN PROGRESS)
 
-1. ✅ **Converter Sim**
-   - Torque converter simulation page
-   - K-factor modeling
-   - Stall speed prediction (flash & foot-brake)
-   - Efficiency and slip curves
-   - Torque multiplication visualization
+1. ✅ **Converter Sim** (Full Physics Model)
+   - Characteristic curve-based physics (TR vs SR, K vs SR)
+   - K-factor stall speed prediction: N = K × √Torque
+   - Flash stall and foot-brake stall calculations
+   - Efficiency curves: η = TR × SR
+   - Torque ratio visualization
+   - Multiple converter presets (Street, Race, Tight)
+   - Custom curve support
+   - Stall speed vs engine torque charts
+   - 26 unit tests for physics model
 
 2. ✅ **Vehicle Grouping**
    - Organize vehicles into groups/folders
