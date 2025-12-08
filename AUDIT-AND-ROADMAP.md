@@ -224,6 +224,43 @@
    - Charts working on iOS Safari
    - Touch-friendly controls
 
+13. **Optimizer Tools (NEW)**
+   - One-click gear ratio optimization
+   - One-click converter stall optimization
+   - Modal popup interface
+   - Apply to session or save to vehicle
+   - Visual results with mini charts
+
+14. **InstantCalc Mode (NEW)**
+   - Real-time ET/MPH updates as specs change
+   - Toggle on/off in ET Simulator
+   - Zero-delay feedback for tuning
+
+15. **Explain This Run (NEW)**
+   - Transparent prediction breakdown
+   - Contributing factors analysis
+   - Color-coded impact indicators
+   - Quick tips based on conditions
+   - Comparison to baseline runs
+
+16. **Public Landing Page (NEW)**
+   - Compelling value proposition
+   - Feature highlights
+   - Social proof / testimonials
+   - Clear CTAs for registration
+
+17. **Pricing Page (NEW)**
+   - Tier comparison (Racer, Pro, Team)
+   - Monthly/annual toggle
+   - FAQ section
+   - Clear feature matrix
+
+18. **Registration Flow (NEW)**
+   - Tier selection step
+   - Account creation
+   - Welcome/onboarding screen
+   - Quick start guide
+
 ---
 
 ## 4. PRIORITY ROADMAP
