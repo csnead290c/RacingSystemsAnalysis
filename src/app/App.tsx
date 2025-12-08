@@ -11,6 +11,7 @@ import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
 import ClutchSim from '../pages/ClutchSim';
+import ConverterSim from '../pages/ConverterSim';
 import EngineSim from '../pages/EngineProSim';
 import Calculators from '../pages/Calculators';
 import Log from '../pages/Log';
@@ -184,6 +185,11 @@ function Navigation() {
           Clutch Sim
         </Link>
       )}
+      {canAccessClutchSim && (
+        <Link to="/converter-sim" style={navLinkStyle(isActive('/converter-sim'))}>
+          Conv Sim
+        </Link>
+      )}
       {canAccessEngineSim && (
         <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))}>
           Engine Sim
@@ -355,6 +361,12 @@ function App() {
             <Route path="/clutch-sim" element={
               <ProtectedRoute requireFeature="clutch_sim">
                 <ClutchSim />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/converter-sim" element={
+              <ProtectedRoute requireFeature="clutch_sim">
+                <ConverterSim />
               </ProtectedRoute>
             } />
             
