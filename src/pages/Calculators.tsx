@@ -576,7 +576,30 @@ function Calculators() {
 
       {/* WORKSHEETS */}
       {activeTab === 'worksheets' && (
-        <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <div>
+          {/* Info banner */}
+          <div 
+            style={{ 
+              backgroundColor: 'var(--color-bg)', 
+              border: '1px solid var(--color-border)',
+              borderRadius: '8px',
+              padding: 'var(--space-3)',
+              marginBottom: 'var(--space-4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+            }}
+          >
+            <span style={{ fontSize: '1.5rem' }}>💡</span>
+            <div>
+              <strong>Tip:</strong> These worksheets are also available as popup calculators in the{' '}
+              <Link to="/vehicles" style={{ color: 'var(--color-primary)' }}>Vehicle Builder</Link>.
+              Look for the <code style={{ backgroundColor: 'var(--color-bg-secondary)', padding: '2px 6px', borderRadius: '4px' }}>...</code> buttons 
+              next to input fields like Frontal Area, Tire Width, and Gear Ratio.
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
           {/* Gear Ratio Calculator */}
           <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
             <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Gear Ratio</h3>
@@ -820,6 +843,7 @@ function Calculators() {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         </div>
       )}
