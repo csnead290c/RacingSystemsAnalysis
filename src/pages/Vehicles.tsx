@@ -213,12 +213,11 @@ function Vehicles() {
   };
 
   const loadData = async () => {
-    console.log('Vehicles.loadData: Starting load...');
+    // Debug logging removed
     setLoading(true);
     try {
       const data = await loadVehicles();
-      console.log('Vehicles.loadData: Got', data.length, 'vehicles:', data.map(v => v.name));
-      setVehicles(data);
+            setVehicles(data);
     } catch (error) {
       console.error('Failed to load vehicles:', error);
     } finally {
@@ -278,15 +277,11 @@ function Vehicles() {
       }
 
       // Save
-      console.log('Vehicles.handleSave: Saving vehicle...');
-      await saveVehicle(result.data);
-      console.log('Vehicles.handleSave: Save complete, waiting for DB commit...');
-      // Small delay to ensure database commit before reload
+            await saveVehicle(result.data);
+            // Small delay to ensure database commit before reload
       await new Promise(resolve => setTimeout(resolve, 500));
-      console.log('Vehicles.handleSave: Reloading...');
-      await loadData();
-      console.log('Vehicles.handleSave: Reload complete');
-      setShowForm(false);
+            await loadData();
+            setShowForm(false);
       resetForm();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Failed to save vehicle');

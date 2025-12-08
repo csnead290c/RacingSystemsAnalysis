@@ -215,7 +215,7 @@ function Predict() {
               throttlePct: throttleStopPct,
             };
           }
-          console.log('[Predict] VB6 Strict Mode - using fixture vehicle + UI env', simInputs);
+          // VB6 Strict Mode simulation
           
           simulate('VB6Exact', simInputs)
             .then((result) => {
