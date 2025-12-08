@@ -370,10 +370,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Calculate air density and hpc
   // ========================================================================
   // Extract fuel type - could be a string or an object with fuelType/fuelSystem property
+  // Priority: fuelType (modern) > fuelSystem (legacy VB6 format)
   const rawFuel = (input as any).fuel;
   const fuelString: string | undefined = typeof rawFuel === 'string' 
     ? rawFuel 
-    : (rawFuel?.fuelType ?? rawFuel?.fuelSystem ?? rawFuel?.type ?? (input as any).fuelType ?? (input as any).fuelSystem ?? (vehicle as any).fuelSystem ?? (vehicle as any).fuelType);
+    : (rawFuel?.fuelType ?? rawFuel?.fuelSystem ?? rawFuel?.type ?? (input as any).fuelType ?? (vehicle as any).fuelType ?? (input as any).fuelSystem ?? (vehicle as any).fuelSystem);
   const fuelSystemType = getFuelSystemType(fuelString);
   
   console.log('[VB6Exact] Fuel system detection:', {
