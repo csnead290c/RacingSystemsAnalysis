@@ -105,6 +105,17 @@ function getFuelSystemType(fuel: string | undefined): FuelSystemType {
   if (!fuel) return 1;
   const f = fuel.toUpperCase();
   
+  // Handle unified fuel type values (new format)
+  if (f === 'GASOLINE') return 1;
+  if (f === 'GASOLINE EFI') return 2;
+  if (f === 'METHANOL') return 3;
+  if (f === 'METHANOL EFI') return 4;
+  if (f === 'NITROMETHANE') return 5;
+  if (f === 'SUPERCHARGED GASOLINE') return 6;
+  if (f === 'SUPERCHARGED METHANOL') return 7;
+  if (f === 'SUPERCHARGED NITRO') return 8;
+  if (f === 'E85' || f === 'DIESEL') return 1; // Treat as gasoline for now
+  
   // Handle VB6-style fuel system strings (e.g., "Gas+Carb", "Methanol+Inject")
   if (f === 'GAS+CARB' || f === 'GASOLINE+CARBURETOR') return 1;
   if (f === 'GAS+INJECT' || f === 'GASOLINE+FUEL INJECTION') return 2;
@@ -116,7 +127,7 @@ function getFuelSystemType(fuel: string | undefined): FuelSystemType {
   if (f === 'NITRO+SUPERCHARGED' || f === 'NITROMETHANE+SUPERCHARGED') return 8;
   if (f === 'ELECTRIC') return 9;
   
-  // Handle legacy/descriptive strings
+  // Handle legacy/descriptive strings (fallback)
   if (f.includes('SUPERCHARG') || f.includes('BLOWN')) {
     if (f.includes('NITRO')) return 8;
     if (f.includes('METHANOL') || f.includes('ALCOHOL')) return 7;

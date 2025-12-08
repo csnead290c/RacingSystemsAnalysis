@@ -18,31 +18,20 @@ import { TOOLTIPS } from '../domain/config/tooltips';
 
 type TransType = 'clutch' | 'converter';
 
-// Fuel system options (matches VB6 TIMESLIP.FRM)
-const FUEL_SYSTEMS = [
-  { value: 'Gas+Carb', label: 'Gasoline + Carburetor' },
-  { value: 'Gas+Inject', label: 'Gasoline + Fuel Injection' },
-  { value: 'Methanol+Carb', label: 'Methanol + Carburetor' },
-  { value: 'Methanol+Inject', label: 'Methanol + Fuel Injection' },
-  { value: 'Nitro+Inject', label: 'Nitromethane + Fuel Injection' },
-  { value: 'Gas+Supercharged', label: 'Gasoline + Supercharged' },
-  { value: 'Methanol+Supercharged', label: 'Methanol + Supercharged' },
-  { value: 'Nitro+Supercharged', label: 'Nitromethane + Supercharged' },
-] as const;
-
-// Legacy fuel type options (for Pro mode)
-// VB6 fuel system types: 1=Gas+Carb, 2=Gas+Inject, 3=Methanol+Carb, 4=Methanol+Inject,
+// Unified fuel type options - used for both QuarterJr and QuarterPro
+// Maps to VB6 fuel system types: 1=Gas+Carb, 2=Gas+Inject, 3=Methanol+Carb, 4=Methanol+Inject,
 // 5=Nitro+Inject, 6=Supercharged Gas, 7=Supercharged Methanol, 8=Supercharged Nitro, 9=Electric
 const FUEL_TYPES = [
-  'Gasoline',
-  'Methanol', 
-  'Ethanol',
-  'Nitromethane',
-  'E85',
-  'Diesel',
-  'Supercharged Gasoline',
-  'Supercharged Methanol',
-  'Supercharged Nitro',
+  { value: 'Gasoline', label: 'Gasoline (Carbureted)', vb6Type: 1 },
+  { value: 'Gasoline EFI', label: 'Gasoline (Fuel Injection)', vb6Type: 2 },
+  { value: 'Methanol', label: 'Methanol (Carbureted)', vb6Type: 3 },
+  { value: 'Methanol EFI', label: 'Methanol (Fuel Injection)', vb6Type: 4 },
+  { value: 'Nitromethane', label: 'Nitromethane (Fuel Injection)', vb6Type: 5 },
+  { value: 'Supercharged Gasoline', label: 'Supercharged Gasoline', vb6Type: 6 },
+  { value: 'Supercharged Methanol', label: 'Supercharged Methanol', vb6Type: 7 },
+  { value: 'Supercharged Nitro', label: 'Supercharged Nitro', vb6Type: 8 },
+  { value: 'E85', label: 'E85 (Ethanol Blend)', vb6Type: 1 },
+  { value: 'Diesel', label: 'Diesel', vb6Type: 1 },
 ] as const;
 
 // Calculate torque from HP: TQ = HP × 5252 / RPM
@@ -490,9 +479,9 @@ function Vehicles() {
             <div className="mb-4">
               <div className="grid grid-2 gap-4 mb-4">
                 <div>
-                  <label className="label">Fuel System *</label>
-                  <select className="input" value={form.fuelSystem ?? 'Gas+Carb'} onChange={(e) => updateForm('fuelSystem', e.target.value)}>
-                    {FUEL_SYSTEMS.map(fs => <option key={fs.value} value={fs.value}>{fs.label}</option>)}
+                  <label className="label">Fuel Type *</label>
+                  <select className="input" value={form.fuelType ?? 'Gasoline'} onChange={(e) => updateForm('fuelType', e.target.value)}>
+                    {FUEL_TYPES.map(ft => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -961,7 +950,7 @@ function Vehicles() {
                     <div>
                       <label className="label">Fuel Type</label>
                       <select className="input" value={form.fuelType ?? 'Gasoline'} onChange={(e) => updateForm('fuelType', e.target.value)}>
-                        {FUEL_TYPES.map(fuel => <option key={fuel} value={fuel}>{fuel}</option>)}
+                        {FUEL_TYPES.map(ft => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
                       </select>
                     </div>
                     <div>
