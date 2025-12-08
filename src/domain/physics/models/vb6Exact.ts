@@ -957,6 +957,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       tractionIndex: vb6Env.TractionIndex,
       trackTempEffect,
       pmi: { engine: enginePMI, trans: transPMI, tires: tiresPMI },
+      aero: { 
+        frontalArea: vb6Vehicle.RefArea_ft2, 
+        cd: vb6Vehicle.DragCoef, 
+        cl: vb6Vehicle.LiftCoef 
+      },
+      launchRPM: vb6Vehicle.LaunchRPM,
     },
     result: {
       et: et_s,

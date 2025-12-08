@@ -37,6 +37,12 @@ export interface DebugData {
       trans: number;
       tires: number;
     };
+    aero?: {
+      frontalArea: number;
+      cd: number;
+      cl: number;
+    };
+    launchRPM?: number;
   };
   airCalc?: {
     rho_lbm_ft3: number;
@@ -142,10 +148,20 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
           {/* Drivetrain */}
           {data.simParams && (
             <Section title="Drivetrain">
+              <Row label="Launch RPM" value={data.simParams.launchRPM ?? 'N/A'} />
               <Row label="Stall RPM" value={data.simParams.stallRPM} />
               <Row label="Slippage" value={data.simParams.slippage.toFixed(4)} 
                    warn={data.simParams.slippage === 1} />
               <Row label="Clutch" value={data.simParams.isClutch ? 'Yes' : 'Converter'} />
+            </Section>
+          )}
+
+          {/* Aero */}
+          {data.simParams?.aero && (
+            <Section title="Aero">
+              <Row label="Frontal Area" value={`${data.simParams.aero.frontalArea.toFixed(1)} ft²`} />
+              <Row label="Cd" value={data.simParams.aero.cd.toFixed(3)} />
+              <Row label="Cl" value={data.simParams.aero.cl.toFixed(3)} />
             </Section>
           )}
 
