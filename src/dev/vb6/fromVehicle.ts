@@ -477,8 +477,11 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   // Engine
   const engineHP = buildEngineHP(v);
 
-  // PMI defaults (typical values)
+  // PMI - check both nested pmi object and flat vehicle properties
   const pmi = v.pmi ?? {};
+  const enginePMI = pmi.engine_flywheel_clutch ?? vAny.enginePMI ?? 3.5;
+  const transPMI = pmi.transmission_driveshaft ?? vAny.transPMI ?? 0.25;
+  const tiresPMI = pmi.tires_wheels_ringgear ?? vAny.tiresPMI ?? 50;
 
   // Fuel - prioritize flat fuelType field over nested fuel.type
   const fuel = v.fuel ?? {};
@@ -545,9 +548,9 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
       ...(converter ? { converter } : {}),
     },
     pmi: {
-      engine_flywheel_clutch: pmi.engine_flywheel_clutch ?? 3.5,
-      transmission_driveshaft: pmi.transmission_driveshaft ?? 0.25,
-      tires_wheels_ringgear: pmi.tires_wheels_ringgear ?? 50,
+      engine_flywheel_clutch: enginePMI,
+      transmission_driveshaft: transPMI,
+      tires_wheels_ringgear: tiresPMI,
     },
     engineHP,
     fuel: {
