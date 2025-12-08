@@ -72,8 +72,8 @@
 | **Drag Racing Analyzer** | HIGH | ✅ Matched | Our VB6 physics is equivalent |
 | **Optimize Gear Ratio** | HIGH | ✅ Complete | One-click find best final drive |
 | **Optimize Converter** | HIGH | ✅ Complete | One-click find best stall speed |
-| **InstantCalc Mode** | HIGH | ❌ Missing | Real-time ET/MPH as specs change |
-| **Match My Times** | HIGH | ❌ Missing | Auto-tune specs to match actual runs |
+| **InstantCalc Mode** | HIGH | ✅ Complete | Real-time ET/MPH as specs change |
+| **Match My Times** | HIGH | ✅ Complete | Auto-tune specs to match actual runs |
 | **Adjustment Factor** | MEDIUM | ❌ Missing | Throttle stop calibration from 2 runs |
 | **Engine Analyzer Pro** | MEDIUM | ⚠️ Partial | We have basic engine sim |
 | **Circle Track Analyzer** | LOW | ❌ Missing | Oval racing simulation |
