@@ -26,6 +26,7 @@ import DataImport from '../pages/DataImport';
 import TechCard from '../pages/TechCard';
 import Ladder from '../pages/Ladder';
 import Pricing from '../pages/Pricing';
+import Register from '../pages/Register';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -276,6 +277,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/calculators" element={<Calculators />} />
             <Route path="/calcs" element={<Calculators />} />

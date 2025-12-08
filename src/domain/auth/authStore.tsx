@@ -105,6 +105,7 @@ interface AuthContextValue extends AuthState {
   // Auth actions
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  register: (email: string, password: string, displayName: string, tier?: string) => Promise<boolean>;
   
   // User management
   getAllUsers: () => User[];
@@ -332,6 +333,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error: null,
     });
   }, []);
+
+  // Register new user
+  const register = useCallback(async (email: string, password: string, displayName: string, tier?: string): Promise<boolean> => {
+    // Check if email already exists
+    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (existingUser) {
+      setState(prev => ({ ...prev, error: 'Email already registered' }));
+      return false;
+    }
+
+    // Map tier to role
+    let roleId = 'beta_tester'; // Default role
+    if (tier === 'racer') roleId = 'beta_tester';
+    if (tier === 'pro') roleId = 'beta_tester';
+    if (tier === 'team') roleId = 'beta_tester';
+    // In production, this would create a subscription and assign proper role
+
+    // Create new user
+    const newUser: User = {
+      id: generateId('user'),
+      email,
+      displayName,
+      roleId,
+      status: 'active',
+      passwordHash: simpleHash(password),
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+    saveToStorage(STORAGE_KEYS.USERS_DB, updatedUsers);
+    saveToStorage(STORAGE_KEYS.CURRENT_USER, newUser);
+
+    // Auto-login after registration
+    setState({
+      isAuthenticated: true,
+      isLoading: false,
+      user: newUser,
+      error: null,
+    });
+
+    console.log('User registered:', { email, displayName, tier, roleId });
+    return true;
+  }, [users]);
 
   // User CRUD
   const getAllUsers = useCallback(() => users, [users]);
@@ -588,6 +633,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     config: { roles, products },
     login,
     logout,
+    register,
     getAllUsers,
     createUser,
     updateUser,
