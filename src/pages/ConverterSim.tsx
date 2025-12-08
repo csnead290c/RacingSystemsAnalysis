@@ -477,18 +477,22 @@ export default function ConverterSim() {
                       labelFormatter={(sr) => `Speed Ratio: ${(sr * 100).toFixed(0)}%`}
                     />
                     <Legend />
-                    <ReferenceLine 
-                      x={result.couplingSpeedRatio} 
-                      stroke="#f59e0b" 
-                      strokeDasharray="5 5" 
-                      label={{ value: 'Coupling', fill: '#f59e0b', fontSize: 12 }}
-                    />
-                    <ReferenceLine 
-                      x={result.peakEfficiencySR} 
-                      stroke="#22c55e" 
-                      strokeDasharray="5 5" 
-                      label={{ value: 'Peak η', fill: '#22c55e', fontSize: 12 }}
-                    />
+                    {result.couplingSpeedRatio > 0 && result.couplingSpeedRatio <= 1 && (
+                      <ReferenceLine 
+                        x={result.couplingSpeedRatio} 
+                        stroke="#f59e0b" 
+                        strokeDasharray="5 5" 
+                        label={{ value: 'Coupling', fill: '#f59e0b', fontSize: 12 }}
+                      />
+                    )}
+                    {result.peakEfficiencySR > 0 && result.peakEfficiencySR <= 1 && (
+                      <ReferenceLine 
+                        x={result.peakEfficiencySR} 
+                        stroke="#22c55e" 
+                        strokeDasharray="5 5" 
+                        label={{ value: 'Peak η', fill: '#22c55e', fontSize: 12 }}
+                      />
+                    )}
                     <Area 
                       yAxisId="eff"
                       type="monotone" 
@@ -539,12 +543,14 @@ export default function ConverterSim() {
                       formatter={(value: number) => [`${Math.round(value)} RPM`, 'Stall Speed']}
                       labelFormatter={(torque) => `${torque} ft-lb`}
                     />
-                    <ReferenceLine 
-                      x={input.peakTorque} 
-                      stroke="#3b82f6" 
-                      strokeDasharray="5 5"
-                      label={{ value: 'Your Engine', fill: '#3b82f6', fontSize: 12 }}
-                    />
+                    {input.peakTorque >= 200 && input.peakTorque <= 800 && (
+                      <ReferenceLine 
+                        x={input.peakTorque} 
+                        stroke="#3b82f6" 
+                        strokeDasharray="5 5"
+                        label={{ value: 'Your Engine', fill: '#3b82f6', fontSize: 12 }}
+                      />
+                    )}
                     <Line 
                       type="monotone" 
                       dataKey="stallRPM" 
