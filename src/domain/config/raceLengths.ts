@@ -17,6 +17,7 @@
 export const DISTANCES = {
   // Drag racing
   EIGHTH: [60, 330, 660] as const,
+  THOUSAND: [60, 330, 660, 1000] as const,
   QUARTER: [60, 330, 660, 1000, 1320] as const,
   
   // Land speed racing - checkpoints at 1/4 mile intervals + terminal
@@ -47,6 +48,13 @@ export const RACE_LENGTH_INFO: Record<RaceLength, {
     category: 'drag',
     lengthFt: 660,
     lengthMiles: 0.125,
+  },
+  THOUSAND: { 
+    label: '1000 Foot', 
+    shortLabel: '1000\'',
+    category: 'drag',
+    lengthFt: 1000,
+    lengthMiles: 0.189,
   },
   QUARTER: { 
     label: '1/4 Mile', 

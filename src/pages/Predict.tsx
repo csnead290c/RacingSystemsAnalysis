@@ -746,8 +746,9 @@ function Predict() {
             padding: 4px !important;
             font-size: 0.7rem !important;
           }
-          /* Hide RPM histogram on very small screens to save space */
-          .et-sim-bottom-row > .card:first-child {
+          /* Hide RPM histogram and Recent Runs on very small screens to save space */
+          .et-sim-bottom-row > .card:last-child,
+          .et-sim-bottom-row > .card:nth-last-child(2) {
             display: none;
           }
         }
@@ -1039,25 +1040,67 @@ racingsystemsanalysis.com`;
           )}
         </Suspense>
 
-        {/* BOTTOM ROW: RPM Histogram + Environment + Race Length */}
-        <div className="et-sim-bottom-row">
-          {/* RPM Histogram */}
-          <div className="card" style={{ flex: 2, padding: '12px 16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '6px' }}>RPM Distribution</div>
-            <Suspense fallback={<div className="text-muted" style={{ fontSize: '0.8rem' }}>Loading...</div>}>
-              {simResult?.traces && simResult.traces.length > 0 && (
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <RPMHistogram data={simResult.traces as any} compact />
-                </div>
-              )}
-            </Suspense>
-          </div>
-
-          {/* Environment */}
-          <div className="card" style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '400px' }}>
+        {/* BOTTOM ROW: Simplified - Environment + Race Length + Quick Tools */}
+        <div className="et-sim-bottom-row" style={{ flexWrap: 'wrap' }}>
+          {/* Environment - Combined with Race Length */}
+          <div className="card" style={{ flex: '1 1 300px', padding: '12px 16px', display: 'flex', flexDirection: 'column', minWidth: '280px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Environment</span>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {/* Race Length Toggle - inline */}
+                <div style={{ 
+                  display: 'flex', 
+                  backgroundColor: 'var(--color-bg-secondary)', 
+                  borderRadius: '4px', 
+                  padding: '2px',
+                  marginRight: '8px',
+                }}>
+                  <button
+                    onClick={() => handleRaceLengthChange('EIGHTH')}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '0.65rem',
+                      borderRadius: '3px',
+                      border: 'none',
+                      backgroundColor: raceLength === 'EIGHTH' ? 'var(--color-accent)' : 'transparent',
+                      color: raceLength === 'EIGHTH' ? 'white' : 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    1/8
+                  </button>
+                  <button
+                    onClick={() => handleRaceLengthChange('THOUSAND')}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '0.65rem',
+                      borderRadius: '3px',
+                      border: 'none',
+                      backgroundColor: raceLength === 'THOUSAND' ? 'var(--color-accent)' : 'transparent',
+                      color: raceLength === 'THOUSAND' ? 'white' : 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    1000'
+                  </button>
+                  <button
+                    onClick={() => handleRaceLengthChange('QUARTER')}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '0.65rem',
+                      borderRadius: '3px',
+                      border: 'none',
+                      backgroundColor: raceLength === 'QUARTER' ? 'var(--color-accent)' : 'transparent',
+                      color: raceLength === 'QUARTER' ? 'white' : 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    1/4
+                  </button>
+                </div>
                 <select
                   value={selectedTrack?.id || ''}
                   onChange={(e) => {
@@ -1072,14 +1115,14 @@ racingsystemsanalysis.com`;
                     backgroundColor: 'var(--color-bg-secondary)',
                     color: 'var(--color-text)',
                     cursor: 'pointer',
-                    maxWidth: '140px',
+                    maxWidth: '120px',
                   }}
                   disabled={weatherLoading}
                 >
-                  <option value="">Select Track...</option>
+                  <option value="">Track...</option>
                   {getAllTracks().map(track => (
                     <option key={track.id} value={track.id}>
-                      {track.name.length > 20 ? track.name.slice(0, 18) + '...' : track.name}
+                      {track.name.length > 18 ? track.name.slice(0, 16) + '...' : track.name}
                     </option>
                   ))}
                 </select>
@@ -1087,18 +1130,17 @@ racingsystemsanalysis.com`;
                   onClick={() => handleFetchWeather()}
                   disabled={weatherLoading}
                   style={{
-                    padding: '3px 6px',
+                    padding: '3px 8px',
                     fontSize: '0.65rem',
                     borderRadius: '4px',
                     border: '1px solid var(--color-border)',
                     backgroundColor: 'var(--color-bg-secondary)',
                     color: 'var(--color-text)',
                     cursor: weatherLoading ? 'wait' : 'pointer',
-                    whiteSpace: 'nowrap',
                   }}
                   title="Get weather for your current location"
                 >
-                  {weatherLoading ? '...' : '📍 My Location'}
+                  📍
                 </button>
               </div>
             </div>
@@ -1107,301 +1149,131 @@ racingsystemsanalysis.com`;
             )}
             {lastWeatherUpdate && !weatherError && (
               <div style={{ fontSize: '0.6rem', color: 'var(--color-muted)', marginBottom: '4px' }}>
-                Weather updated {lastWeatherUpdate.toLocaleTimeString()}
-                {selectedTrack && ` • ${selectedTrack.city}, ${selectedTrack.state}`}
+                Updated {lastWeatherUpdate.toLocaleTimeString()}
+                {selectedTrack && ` • ${selectedTrack.city}`}
               </div>
             )}
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
 
-          {/* What-If Adjustments */}
-          <div className="card" style={{ width: '200px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column' }}>
+          {/* What-If Adjustments - Compact */}
+          <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', minWidth: '160px' }}>
             <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>What-If</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.75rem' }}>
-              {/* HP Adjustment */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.75rem' }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
                   <span style={{ color: 'var(--color-text-muted)' }}>HP</span>
-                  <span style={{ 
-                    fontWeight: 600, 
-                    color: hpAdjust > 0 ? '#22c55e' : hpAdjust < 0 ? '#ef4444' : 'var(--color-text)' 
-                  }}>
+                  <span style={{ fontWeight: 600, color: hpAdjust !== 0 ? (hpAdjust > 0 ? '#22c55e' : '#ef4444') : 'var(--color-text)' }}>
                     {hpAdjust >= 0 ? '+' : ''}{hpAdjust}
                   </span>
                 </div>
-                <input
-                  type="range"
-                  min="-200"
-                  max="200"
-                  step="10"
-                  value={hpAdjust}
-                  onChange={(e) => setHpAdjust(Number(e.target.value))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
+                <input type="range" min="-200" max="200" step="10" value={hpAdjust}
+                  onChange={(e) => setHpAdjust(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
               </div>
-              {/* Weight Adjustment */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Weight (lbs)</span>
-                  <span style={{ 
-                    fontWeight: 600, 
-                    color: weightAdjust < 0 ? '#22c55e' : weightAdjust > 0 ? '#ef4444' : 'var(--color-text)' 
-                  }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Weight</span>
+                  <span style={{ fontWeight: 600, color: weightAdjust !== 0 ? (weightAdjust < 0 ? '#22c55e' : '#ef4444') : 'var(--color-text)' }}>
                     {weightAdjust >= 0 ? '+' : ''}{weightAdjust}
                   </span>
                 </div>
-                <input
-                  type="range"
-                  min="-500"
-                  max="500"
-                  step="25"
-                  value={weightAdjust}
-                  onChange={(e) => setWeightAdjust(Number(e.target.value))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
+                <input type="range" min="-500" max="500" step="25" value={weightAdjust}
+                  onChange={(e) => setWeightAdjust(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
               </div>
-              {/* Reset button */}
               {(hpAdjust !== 0 || weightAdjust !== 0) && (
-                <button
-                  onClick={() => { setHpAdjust(0); setWeightAdjust(0); }}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '0.7rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-bg-secondary)',
-                    color: 'var(--color-text-muted)',
-                    cursor: 'pointer',
-                    marginTop: '4px',
-                  }}
-                >
+                <button onClick={() => { setHpAdjust(0); setWeightAdjust(0); }}
+                  style={{ padding: '3px 6px', fontSize: '0.65rem', borderRadius: '4px', border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
                   Reset
                 </button>
               )}
             </div>
           </div>
 
-          {/* Throttle Stop - for bracket racing */}
-          <div className="card" style={{ width: '200px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Throttle Stop</span>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={throttleStopEnabled}
-                  onChange={(e) => setThrottleStopEnabled(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>On</span>
-              </label>
+          {/* Quick Tools - Compact buttons */}
+          <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Tools</div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
+                style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-accent)',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
+                ⚡ Optimize
+              </button>
+              <button onClick={() => setShowMatchMyTimes(true)} title="Match My Times"
+                style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #f59e0b',
+                  backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', cursor: 'pointer', fontWeight: 600 }}>
+                🎯 Match
+              </button>
+              <button onClick={() => setInstantCalcEnabled(!instantCalcEnabled)} title="Toggle InstantCalc"
+                style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', 
+                  border: instantCalcEnabled ? '1px solid #22c55e' : '1px solid var(--color-border)',
+                  backgroundColor: instantCalcEnabled ? 'rgba(34, 197, 94, 0.1)' : 'var(--color-bg-secondary)', 
+                  color: instantCalcEnabled ? '#22c55e' : 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 600 }}>
+                ⚡ {instantCalcEnabled ? 'Instant ON' : 'Instant'}
+              </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.7rem', opacity: throttleStopEnabled ? 1 : 0.5 }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Activate (s)</span>
-                  <span style={{ fontWeight: 600 }}>{throttleStopActivate.toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="5"
-                  step="0.1"
-                  value={throttleStopActivate}
-                  onChange={(e) => setThrottleStopActivate(Number(e.target.value))}
-                  disabled={!throttleStopEnabled}
-                  style={{ width: '100%', cursor: throttleStopEnabled ? 'pointer' : 'not-allowed' }}
-                />
-              </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Duration (s)</span>
-                  <span style={{ fontWeight: 600 }}>{throttleStopDuration.toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="5"
-                  step="0.1"
-                  value={throttleStopDuration}
-                  onChange={(e) => setThrottleStopDuration(Number(e.target.value))}
-                  disabled={!throttleStopEnabled}
-                  style={{ width: '100%', cursor: throttleStopEnabled ? 'pointer' : 'not-allowed' }}
-                />
-              </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Throttle %</span>
-                  <span style={{ fontWeight: 600, color: throttleStopEnabled ? '#f59e0b' : 'inherit' }}>{throttleStopPct}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={throttleStopPct}
-                  onChange={(e) => setThrottleStopPct(Number(e.target.value))}
-                  disabled={!throttleStopEnabled}
-                  style={{ width: '100%', cursor: throttleStopEnabled ? 'pointer' : 'not-allowed' }}
-                />
-              </div>
+            {/* Throttle Stop - expandable */}
+            <div style={{ fontSize: '0.75rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={throttleStopEnabled} onChange={(e) => setThrottleStopEnabled(e.target.checked)} />
+                <span style={{ color: throttleStopEnabled ? '#f59e0b' : 'var(--color-text-muted)' }}>Throttle Stop</span>
+              </label>
               {throttleStopEnabled && (
-                <div style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                  Stop active: {throttleStopActivate.toFixed(1)}s - {(throttleStopActivate + throttleStopDuration).toFixed(1)}s
+                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: 'var(--color-text-muted)', width: '50px' }}>At</span>
+                    <input type="range" min="0.1" max="5" step="0.1" value={throttleStopActivate}
+                      onChange={(e) => setThrottleStopActivate(Number(e.target.value))} style={{ flex: 1 }} />
+                    <span style={{ width: '40px', textAlign: 'right' }}>{throttleStopActivate.toFixed(1)}s</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: 'var(--color-text-muted)', width: '50px' }}>For</span>
+                    <input type="range" min="0.1" max="5" step="0.1" value={throttleStopDuration}
+                      onChange={(e) => setThrottleStopDuration(Number(e.target.value))} style={{ flex: 1 }} />
+                    <span style={{ width: '40px', textAlign: 'right' }}>{throttleStopDuration.toFixed(1)}s</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: 'var(--color-text-muted)', width: '50px' }}>%</span>
+                    <input type="range" min="0" max="100" step="5" value={throttleStopPct}
+                      onChange={(e) => setThrottleStopPct(Number(e.target.value))} style={{ flex: 1 }} />
+                    <span style={{ width: '40px', textAlign: 'right', color: '#f59e0b' }}>{throttleStopPct}%</span>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Recent Runs - for comparison */}
-          <div className="card" style={{ width: '180px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Recent Runs</div>
-            <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.7rem' }}>
-              {getRecentRuns(5).length === 0 ? (
-                <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No saved runs yet</div>
+          {/* Recent Runs - Compact */}
+          <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', minWidth: '140px', maxWidth: '180px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Recent</div>
+            <div style={{ fontSize: '0.7rem', maxHeight: '100px', overflowY: 'auto' }}>
+              {getRecentRuns(3).length === 0 ? (
+                <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No saved runs</div>
               ) : (
-                getRecentRuns(5).map(run => (
-                  <button
-                    key={run.id}
-                    onClick={() => handleLoadComparison(run)}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '6px 8px',
-                      marginBottom: '4px',
-                      borderRadius: '4px',
-                      border: comparisonRun?.id === run.id ? '1px solid #3b82f6' : '1px solid var(--color-border)',
+                getRecentRuns(3).map(run => (
+                  <button key={run.id} onClick={() => handleLoadComparison(run)}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 6px', marginBottom: '3px',
+                      borderRadius: '3px', border: comparisonRun?.id === run.id ? '1px solid #3b82f6' : '1px solid var(--color-border)',
                       backgroundColor: comparisonRun?.id === run.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-bg-secondary)',
-                      color: 'var(--color-text)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, fontSize: '0.7rem', marginBottom: '2px' }}>{run.vehicleName}</div>
-                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.65rem' }}>
-                      {run.result.et_s.toFixed(3)}s @ {run.result.mph.toFixed(1)} mph
-                    </div>
-                    {(run.hpAdjust !== 0 || run.weightAdjust !== 0) && (
-                      <div style={{ color: '#f59e0b', fontSize: '0.6rem' }}>
-                        {run.hpAdjust !== 0 && `HP ${run.hpAdjust > 0 ? '+' : ''}${run.hpAdjust}`}
-                        {run.hpAdjust !== 0 && run.weightAdjust !== 0 && ' / '}
-                        {run.weightAdjust !== 0 && `Wt ${run.weightAdjust > 0 ? '+' : ''}${run.weightAdjust}`}
-                      </div>
-                    )}
+                      color: 'var(--color-text)', cursor: 'pointer', fontSize: '0.65rem' }}>
+                    <div style={{ fontWeight: 600 }}>{run.result.et_s.toFixed(3)}s</div>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{run.result.mph.toFixed(1)} mph</div>
                   </button>
                 ))
               )}
             </div>
           </div>
 
-          {/* Race Length */}
-          <div className="card" style={{ width: '110px', flexShrink: 0, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Race Length</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="radio" name="raceLength" value="EIGHTH" checked={raceLength === 'EIGHTH'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
-                <span>1/8 Mile</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
-                <span>1/4 Mile</span>
-              </label>
-            </div>
-          </div>
-
-          {/* InstantCalc Toggle */}
-          <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '110px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--color-text)', fontSize: '0.8rem' }}>InstantCalc</div>
-            <label style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px', 
-              cursor: 'pointer',
-            }}>
-              <div 
-                onClick={() => setInstantCalcEnabled(!instantCalcEnabled)}
-                style={{
-                  width: '44px',
-                  height: '24px',
-                  borderRadius: '12px',
-                  backgroundColor: instantCalcEnabled ? '#22c55e' : 'var(--color-border)',
-                  position: 'relative',
-                  transition: 'background-color 0.2s',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{
-                  position: 'absolute',
-                  top: '2px',
-                  left: instantCalcEnabled ? '22px' : '2px',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  backgroundColor: 'white',
-                  transition: 'left 0.2s',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }} />
-              </div>
-              <span style={{ fontSize: '0.8rem', color: instantCalcEnabled ? '#22c55e' : 'var(--color-text-muted)' }}>
-                {instantCalcEnabled ? 'ON' : 'OFF'}
-              </span>
-            </label>
-            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
-              Real-time updates
-            </div>
-          </div>
-
-          {/* Optimizer Button */}
-          <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '100px' }}>
-            <button
-              onClick={() => setShowOptimizer(true)}
-              style={{
-                padding: '10px 16px',
-                fontSize: '0.8rem',
-                borderRadius: '6px',
-                border: '2px solid var(--color-accent)',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                color: 'var(--color-accent)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-              title="Open Performance Optimizer"
-            >
-              <span style={{ fontSize: '1.1rem' }}>⚡</span>
-              <span>Optimize</span>
-            </button>
-            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '6px', textAlign: 'center' }}>
-              Find best gear/converter
-            </div>
-          </div>
-
-          {/* Match My Times Button */}
-          <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '100px' }}>
-            <button
-              onClick={() => setShowMatchMyTimes(true)}
-              style={{
-                padding: '10px 16px',
-                fontSize: '0.8rem',
-                borderRadius: '6px',
-                border: '2px solid #f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                color: '#f59e0b',
-                cursor: 'pointer',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-              title="Match My Times - Auto-tune vehicle specs"
-            >
-              <span style={{ fontSize: '1.1rem' }}>🎯</span>
-              <span>Match</span>
-            </button>
-            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '6px', textAlign: 'center' }}>
-              Tune to actual runs
-            </div>
+          {/* RPM Distribution - Compact */}
+          <div className="card" style={{ flex: '1 1 200px', padding: '12px 16px', minWidth: '180px', maxWidth: '300px' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '6px' }}>RPM</div>
+            <Suspense fallback={null}>
+              {simResult?.traces && simResult.traces.length > 0 && (
+                <div style={{ height: '80px' }}>
+                  <RPMHistogram data={simResult.traces as any} compact />
+                </div>
+              )}
+            </Suspense>
           </div>
         </div>
       </div>
