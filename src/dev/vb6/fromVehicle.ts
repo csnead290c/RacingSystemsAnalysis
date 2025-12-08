@@ -483,12 +483,6 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   // Fuel - prioritize flat fuelType field over nested fuel.type
   const fuel = v.fuel ?? {};
   const fuelTypeValue = vAny.fuelType ?? fuel.type ?? 'Gasoline';
-  
-  console.log('[fromVehicleToVB6Fixture] Fuel type resolution:', {
-    'vAny.fuelType': vAny.fuelType,
-    'fuel.type': fuel.type,
-    'resolved': fuelTypeValue,
-  });
 
   // Build clutch/converter - handle both nested and flat Vehicle schema fields
   let clutch: Vb6VehicleFixture['drivetrain']['clutch'] | undefined;

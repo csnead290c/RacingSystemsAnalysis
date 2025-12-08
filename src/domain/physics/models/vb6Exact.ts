@@ -174,16 +174,6 @@ function extractHPCurve(input: SimInputs): {
                   (vehicle as any).hpCurve ?? 
                   [];
   
-  // Debug: Log HP curve sources
-  console.log('[VB6Exact] extractHPCurve sources:', {
-    'engine?.hpCurve': engine?.hpCurve?.length,
-    'engine?.torqueCurve': engine?.torqueCurve?.length,
-    'vehicle.torqueCurve': (vehicle as any).torqueCurve?.length,
-    'vehicle.hpCurve': (vehicle as any).hpCurve?.length,
-    'resolved hpCurve length': hpCurve.length,
-    'first 2 points': hpCurve.slice(0, 2),
-  });
-  
   const xrpm: number[] = [];
   const yhp: number[] = [];
   
@@ -205,13 +195,6 @@ function extractHPCurve(input: SimInputs): {
   
   // If we have a valid HP curve, use it (QuarterPro mode)
   if (xrpm.length >= 2) {
-    console.log('[VB6Exact] Using QuarterPro HP curve:', {
-      NHP: xrpm.length,
-      rpmRange: `${Math.min(...xrpm)} - ${Math.max(...xrpm)}`,
-      hpRange: `${Math.min(...yhp)} - ${Math.max(...yhp)}`,
-      peakHP: Math.max(...yhp),
-      curve: xrpm.map((r, i) => `${r}:${yhp[i]}`).join(', '),
-    });
     return { xrpm, yhp, NHP: xrpm.length, isQuarterJr: false };
   }
   
@@ -293,6 +276,41 @@ export interface VB6ExactResult extends SimResult {
       PQWT: number;
       AGS_g: number;
     }>;
+  };
+  debugData?: {
+    fuelType: {
+      resolved: string;
+      fuelSystemType: number;
+      vehicleFuelType?: string;
+      vehicleFuelSystem?: string;
+    };
+    hpCurve: {
+      length: number;
+      peakHP: number;
+      rpmRange: string;
+    };
+    airCalc: {
+      rho_lbm_ft3: number;
+      hpc: number;
+    };
+    simParams: {
+      weight: number;
+      tireDia: number;
+      wheelbase: number;
+      finalDrive: number;
+      NGR: number;
+      peakHP: number;
+      stallRPM: number;
+      slippage: number;
+      isClutch: boolean;
+      tractionIndex: number;
+      trackTempEffect: number;
+      pmi: { engine: number; trans: number; tires: number };
+    };
+    result: {
+      et: number;
+      mph: number;
+    };
   };
 }
 
@@ -388,13 +406,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     : (rawFuel?.fuelType ?? rawFuel?.fuelSystem ?? rawFuel?.type ?? (input as any).fuelType ?? (vehicle as any).fuelType ?? (input as any).fuelSystem ?? (vehicle as any).fuelSystem);
   const fuelSystemType = getFuelSystemType(fuelString);
   
-  console.log('[VB6Exact] Fuel system detection:', {
-    rawFuel,
-    fuelString,
-    fuelSystemType,
-    'vehicle.fuelType': (vehicle as any).fuelType,
-    'vehicle.fuelSystem': (vehicle as any).fuelSystem,
-  });
   const airResult = airDensityVB6({
     barometer_inHg: env.barometerInHg ?? 29.92,
     temperature_F: env.temperatureF ?? 59,
@@ -406,12 +417,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6 uses rho in lbm/ft³ (multiply slugs by gc)
   const rho_lbm_ft3 = airResult.rho_slug_per_ft3 * gc;
   const hpc = airResult.hpc;
-  
-  console.log('[VB6Exact] Air/HPC calculation:', {
-    rho_lbm_ft3: rho_lbm_ft3.toFixed(4),
-    hpc: hpc.toFixed(4),
-    fuelSystemType,
-  });
   
   // ========================================================================
   // Build VB6 vehicle params
@@ -661,22 +666,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     WindAngle_deg: env.windAngleDeg ?? 0,
     isLandSpeed,  // Use Bonneville Pro constants for land speed runs
   };
-  
-  // Debug: Log key simulation parameters
-  console.log('[VB6Exact] Simulation parameters:', {
-    weight: vehicle.weightLb,
-    tireDia: tireDiaIn,
-    wheelbase: vehicle.wheelbaseIn,
-    finalDrive,
-    NGR,
-    peakHP: Math.max(...yhp),
-    stallRPM,
-    slippage,
-    isClutch,
-    tractionIndex: vb6Env.TractionIndex,
-    trackTempEffect,
-    pmi: { engine: enginePMI, trans: transPMI, tires: tiresPMI },
-  });
   
   // ========================================================================
   // Initialize simulation
@@ -938,6 +927,43 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     wheelSpeed_mph: t.wheelSpeed_mph,
   }));
   
+  // Build debug data for UI display
+  const debugData = {
+    fuelType: {
+      resolved: fuelString ?? 'unknown',
+      fuelSystemType,
+      vehicleFuelType: (vehicle as any).fuelType,
+      vehicleFuelSystem: (vehicle as any).fuelSystem,
+    },
+    hpCurve: {
+      length: NHP,
+      peakHP: Math.max(...yhp),
+      rpmRange: `${Math.min(...xrpm)} - ${Math.max(...xrpm)}`,
+    },
+    airCalc: {
+      rho_lbm_ft3,
+      hpc,
+    },
+    simParams: {
+      weight: vehicle.weightLb,
+      tireDia: tireDiaIn,
+      wheelbase: vehicle.wheelbaseIn ?? 100,
+      finalDrive,
+      NGR,
+      peakHP: Math.max(...yhp),
+      stallRPM,
+      slippage,
+      isClutch,
+      tractionIndex: vb6Env.TractionIndex,
+      trackTempEffect,
+      pmi: { engine: enginePMI, trans: transPMI, tires: tiresPMI },
+    },
+    result: {
+      et: et_s,
+      mph,
+    },
+  };
+  
   return {
     et_s,
     mph,
@@ -949,6 +975,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       warnings,
     },
     vb6Diagnostics: convergenceHistory,
+    debugData,
   };
 }
 

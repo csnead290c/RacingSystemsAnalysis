@@ -22,6 +22,7 @@ import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '..
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
 const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
+import { DebugPanel, type DebugData } from '../shared/components/DebugPanel';
 
 interface LocationState {
   vehicle: Vehicle;
@@ -36,6 +37,7 @@ function Predict() {
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
   // Always use VB6Exact - works for both QuarterPro (full HP curve) and QuarterJr (peak HP/RPM)
   const [simResult, setSimResult] = useState<SimResult | null>(null);
+  const [debugData, setDebugData] = useState<DebugData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showVb6Panel, setShowVb6Panel] = useState(false);
@@ -205,6 +207,7 @@ function Predict() {
           simulate('VB6Exact', simInputs)
             .then((result) => {
               setSimResult(result);
+              setDebugData((result as any).debugData ?? null);
               setLoading(false);
             })
             .catch((err) => {
@@ -266,6 +269,7 @@ function Predict() {
         simulate('VB6Exact', simInputs)
           .then((result) => {
             setSimResult(result);
+            setDebugData((result as any).debugData ?? null);
             setLoading(false);
           })
           .catch((err) => {
@@ -1226,6 +1230,9 @@ racingsystemsanalysis.com`;
             </Suspense>
           </div>
         </div>
+        
+        {/* Debug Panel - Only visible to owners/admins */}
+        <DebugPanel data={debugData} title="Simulation Debug Info" />
       </div>
       
       {/* VB6 Inputs Side Panel */}
