@@ -24,6 +24,7 @@ const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram
 const DetailedParameters = lazy(() => import('../shared/components/DetailedParameters'));
 const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
 const ExplainRun = lazy(() => import('../shared/components/ExplainRun'));
+const MatchMyTimes = lazy(() => import('../shared/components/MatchMyTimes'));
 
 interface LocationState {
   vehicle: Vehicle;
@@ -83,6 +84,9 @@ function Predict() {
   
   // Optimizer modal state
   const [showOptimizer, setShowOptimizer] = useState(false);
+  
+  // Match My Times modal state
+  const [showMatchMyTimes, setShowMatchMyTimes] = useState(false);
   
   // InstantCalc mode - real-time ET/MPH updates without debounce
   const [instantCalcEnabled, setInstantCalcEnabled] = useState(false);
@@ -1372,6 +1376,33 @@ racingsystemsanalysis.com`;
               Find best gear/converter
             </div>
           </div>
+
+          {/* Match My Times Button */}
+          <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '100px' }}>
+            <button
+              onClick={() => setShowMatchMyTimes(true)}
+              style={{
+                padding: '10px 16px',
+                fontSize: '0.8rem',
+                borderRadius: '6px',
+                border: '2px solid #f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                color: '#f59e0b',
+                cursor: 'pointer',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+              title="Match My Times - Auto-tune vehicle specs"
+            >
+              <span style={{ fontSize: '1.1rem' }}>🎯</span>
+              <span>Match</span>
+            </button>
+            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '6px', textAlign: 'center' }}>
+              Tune to actual runs
+            </div>
+          </div>
         </div>
       </div>
       
@@ -1432,6 +1463,23 @@ racingsystemsanalysis.com`;
             onClose={() => setShowOptimizer(false)}
             onApplyToSession={(optimizedVehicle: Vehicle) => {
               setVehicle(optimizedVehicle);
+            }}
+          />
+        )}
+      </Suspense>
+      
+      {/* Match My Times Modal */}
+      <Suspense fallback={null}>
+        {vehicle && env && (
+          <MatchMyTimes
+            vehicle={vehicle}
+            env={env}
+            raceLength={raceLength}
+            isOpen={showMatchMyTimes}
+            onClose={() => setShowMatchMyTimes(false)}
+            onApply={(adjustedVehicle: Vehicle, _calibrationFactor: number) => {
+              setVehicle(adjustedVehicle);
+              // Could store calibration factor for future predictions
             }}
           />
         )}
