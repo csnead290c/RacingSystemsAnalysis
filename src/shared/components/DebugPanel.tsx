@@ -152,6 +152,12 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
               <Row label="Stall RPM" value={data.simParams.stallRPM} />
               <Row label="Slippage" value={data.simParams.slippage.toFixed(4)} 
                    warn={data.simParams.slippage === 1} />
+              {(data.simParams as any).slippageSource && (
+                <Row label="Slip Source" value={(data.simParams as any).slippageSource} />
+              )}
+              {(data.simParams as any).vehicleClutchSlippage !== undefined && (
+                <Row label="v.clutchSlippage" value={String((data.simParams as any).vehicleClutchSlippage)} />
+              )}
               <Row label="Clutch" value={data.simParams.isClutch ? 'Yes' : 'Converter'} />
             </Section>
           )}

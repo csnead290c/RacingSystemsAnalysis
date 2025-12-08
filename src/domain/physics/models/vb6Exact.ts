@@ -953,6 +953,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       peakHP: Math.max(...yhp),
       stallRPM,
       slippage,
+      slippageSource: clutch?.slippageFactor !== undefined ? 'clutch.slippageFactor' :
+                      clutch?.slippage !== undefined ? 'clutch.slippage' :
+                      (vehicle as any).clutchSlippage !== undefined ? 'vehicle.clutchSlippage' : 'default',
+      vehicleClutchSlippage: (vehicle as any).clutchSlippage,
       isClutch,
       tractionIndex: vb6Env.TractionIndex,
       trackTempEffect,
