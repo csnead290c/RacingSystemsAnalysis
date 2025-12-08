@@ -282,17 +282,26 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
 
       clutch: { launchRPM: 6400, slipRPM: 6800, slipRatio: 1.0, lockup: false },
 
-      // Full nitro HP curve from Quarter Pro printout
+      // PMI from VB6 printout (funnycar.dat)
+      pmi: {
+        engine_flywheel_clutch: 6.03,
+        transmission_driveshaft: 0.107,
+        tires_wheels_ringgear: 75.4,
+      },
+
+      // HP curve from VB6 printout (funnycar.dat) - peaks at 6800 RPM then drops
       torqueCurve: [
-        { rpm: 6400, hp: 6000 },
-        { rpm: 6600, hp: 6200 },
-        { rpm: 6800, hp: 6380 },
-        { rpm: 7000, hp: 6540 },
-        { rpm: 7200, hp: 6680 },
-        { rpm: 7400, hp: 6800 },
-        { rpm: 7600, hp: 6900 },
-        { rpm: 7800, hp: 6980 },
-        { rpm: 8000, hp: 7040 },
+        { rpm: 6400, hp: 6116 },
+        { rpm: 6600, hp: 6276 },
+        { rpm: 6800, hp: 6306 },  // Peak HP
+        { rpm: 7000, hp: 6139 },
+        { rpm: 7200, hp: 5829 },
+        { rpm: 7400, hp: 5344 },
+        { rpm: 7600, hp: 4732 },
+        { rpm: 7800, hp: 3993 },
+        { rpm: 9000, hp: 1297 },
+        { rpm: 9250, hp: 1269 },
+        { rpm: 9500, hp: 1222 },
       ],
     },
   },
