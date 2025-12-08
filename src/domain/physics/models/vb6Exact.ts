@@ -373,8 +373,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const rawFuel = (input as any).fuel;
   const fuelString: string | undefined = typeof rawFuel === 'string' 
     ? rawFuel 
-    : (rawFuel?.fuelType ?? rawFuel?.fuelSystem ?? rawFuel?.type ?? (input as any).fuelType ?? (input as any).fuelSystem ?? (vehicle as any).fuelSystem);
+    : (rawFuel?.fuelType ?? rawFuel?.fuelSystem ?? rawFuel?.type ?? (input as any).fuelType ?? (input as any).fuelSystem ?? (vehicle as any).fuelSystem ?? (vehicle as any).fuelType);
   const fuelSystemType = getFuelSystemType(fuelString);
+  
+  console.log('[VB6Exact] Fuel system detection:', {
+    rawFuel,
+    fuelString,
+    fuelSystemType,
+    'vehicle.fuelType': (vehicle as any).fuelType,
+    'vehicle.fuelSystem': (vehicle as any).fuelSystem,
+  });
   const airResult = airDensityVB6({
     barometer_inHg: env.barometerInHg ?? 29.92,
     temperature_F: env.temperatureF ?? 59,
@@ -386,6 +394,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6 uses rho in lbm/ft³ (multiply slugs by gc)
   const rho_lbm_ft3 = airResult.rho_slug_per_ft3 * gc;
   const hpc = airResult.hpc;
+  
+  console.log('[VB6Exact] Air/HPC calculation:', {
+    rho_lbm_ft3: rho_lbm_ft3.toFixed(4),
+    hpc: hpc.toFixed(4),
+    fuelSystemType,
+  });
   
   // ========================================================================
   // Build VB6 vehicle params
