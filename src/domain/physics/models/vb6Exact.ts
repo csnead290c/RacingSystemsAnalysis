@@ -661,6 +661,22 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     isLandSpeed,  // Use Bonneville Pro constants for land speed runs
   };
   
+  // Debug: Log key simulation parameters
+  console.log('[VB6Exact] Simulation parameters:', {
+    weight: vehicle.weightLb,
+    tireDia: tireDiaIn,
+    wheelbase: vehicle.wheelbaseIn,
+    finalDrive,
+    NGR,
+    peakHP: Math.max(...yhp),
+    stallRPM,
+    slippage,
+    isClutch,
+    tractionIndex: vb6Env.TractionIndex,
+    trackTempEffect,
+    pmi: { engine: enginePMI, trans: transPMI, tires: tiresPMI },
+  });
+  
   // ========================================================================
   // Initialize simulation
   // ========================================================================
