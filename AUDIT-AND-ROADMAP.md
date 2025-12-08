@@ -291,6 +291,24 @@
    - Full support in ET Sim and logging
    - Toggle between 1/8, 1000', 1/4
 
+24. **Traction Index Guide (NEW)**
+   - Visual guide for selecting traction index
+   - Color-coded levels from Poor to Pro Track
+   - Inline help with examples
+   - Click-to-select functionality
+
+25. **Weather Correction Calculator (NEW)**
+   - Calculate ET change from weather changes
+   - Baseline vs current conditions comparison
+   - Density altitude calculation
+   - Individual factor breakdown (temp, baro, humidity)
+
+26. **Run Comparison Overlay (NEW)**
+   - Overlay comparison run on chart
+   - Dashed lines for comparison data
+   - Toggle comparison on/off
+   - Compare RPM, speed, acceleration, HP
+
 ---
 
 ## 4. PRIORITY ROADMAP
