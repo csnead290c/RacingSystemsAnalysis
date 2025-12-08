@@ -583,6 +583,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     LaunchRPM: isClutch 
       ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
       : stallRPM,
+    
+    // Shift by Time (alternative to shift by RPM)
+    ShiftMode: (vehicle as any).shiftMode ?? 'rpm',
+    ShiftTimes: (vehicle as any).shiftTimes ?? [],
+    
+    // Rev Limiter
+    RevLimiterRPM: (vehicle as any).revLimiterRPM ?? 0,
   };
   
   // Update overhang adjustment if using QuarterJr calculated value
@@ -824,12 +831,22 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       state.ShiftFlag = 0;
     } else if (state.Gear < vb6Vehicle.NGR) {
       // Check if we should initiate a shift
-      const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
+      const shiftMode = vb6Vehicle.ShiftMode ?? 'rpm';
       
-      // VB6: Shift when RPM reaches or exceeds shift point
-      // The tolerance check is for fine-tuning, but we should also shift if we've exceeded
-      if (state.EngRPM >= shiftRPM) {
-        state.ShiftFlag = 1;
+      if (shiftMode === 'time') {
+        // Shift by elapsed time
+        const shiftTime = vb6Vehicle.ShiftTimes?.[state.Gear - 1];
+        if (shiftTime !== undefined && state.time_s >= shiftTime) {
+          state.ShiftFlag = 1;
+        }
+      } else {
+        // Shift by RPM (default VB6 behavior)
+        const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
+        
+        // VB6: Shift when RPM reaches or exceeds shift point
+        if (state.EngRPM >= shiftRPM) {
+          state.ShiftFlag = 1;
+        }
       }
     }
   }

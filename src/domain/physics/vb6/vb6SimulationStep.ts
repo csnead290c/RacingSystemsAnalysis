@@ -115,6 +115,13 @@ export interface VB6VehicleParams {
   ShiftRPM: number[];       // Shift RPMs per gear
   NGR: number;              // Number of gears
   LaunchRPM: number;        // Launch RPM (for first step handling)
+  
+  // Shift by Time (alternative to shift by RPM)
+  ShiftMode: 'rpm' | 'time'; // 'rpm' = shift at RPM, 'time' = shift at elapsed time
+  ShiftTimes: number[];      // Shift at these elapsed times (seconds)
+  
+  // Rev Limiter
+  RevLimiterRPM: number;     // High-side RPM limit (0 = disabled)
 }
 
 /**
@@ -526,6 +533,13 @@ export function vb6SimulationStep(
   // ========================================================================
   let HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
   HP = vehicle.HPTQMult * HP / env.hpc;
+  
+  // Rev limiter - cut power above the limit RPM
+  // This simulates a high-side rev limiter that cuts fuel/spark
+  if (vehicle.RevLimiterRPM > 0 && EngRPM_L >= vehicle.RevLimiterRPM) {
+    // Hard cut - reduce HP to near zero (simulates fuel/spark cut)
+    HP = HP * 0.05; // 5% power at limiter (enough to maintain RPM, not accelerate)
+  }
   
   // Apply throttle stop if configured (bracket racing feature)
   // This reduces HP during the specified time window

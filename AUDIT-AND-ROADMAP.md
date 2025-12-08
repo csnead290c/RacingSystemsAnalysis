@@ -261,6 +261,36 @@
    - Welcome/onboarding screen
    - Quick start guide
 
+19. **Match My Times (NEW)**
+   - Auto-tune vehicle specs to match actual runs
+   - Enter 1-5 actual runs with ET/MPH
+   - Algorithm adjusts HP and weight
+   - Calculate calibration factor
+   - Apply changes to current session
+
+20. **Prediction Report Card (NEW)**
+   - Grades prediction accuracy (A+ to F)
+   - Trend analysis (improving/declining/stable)
+   - Bias detection (consistently fast/slow)
+   - Specific recommendations for improvement
+   - Detailed run-by-run breakdown
+
+21. **Shift by Time Mode (NEW)**
+   - Alternative to shift by RPM
+   - Enter elapsed time for each shift
+   - Useful for consistent bracket racing
+   - Pro mode feature
+
+22. **Rev Limiter (NEW)**
+   - High-side RPM limit option
+   - Simulates fuel/spark cut at limit
+   - Prevents over-rev in simulation
+
+23. **1000ft Race Length (NEW)**
+   - Added 1000ft as race distance option
+   - Full support in ET Sim and logging
+   - Toggle between 1/8, 1000', 1/4
+
 ---
 
 ## 4. PRIORITY ROADMAP

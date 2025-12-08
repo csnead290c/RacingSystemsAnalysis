@@ -57,6 +57,11 @@ const defaultForm: Partial<Vehicle> = {
   gearRatios: [2.5, 1.8, 1.4, 1.1, 1.0],
   gearEfficiencies: [0.97, 0.975, 0.98, 0.985, 0.99],
   shiftRPMs: [7000, 7000, 7000, 7000],
+  // Shift by Time (alternative to shift by RPM)
+  shiftMode: 'rpm',
+  shiftTimes: [],
+  // Rev Limiter
+  revLimiterRPM: undefined,
   // Clutch
   clutchLaunchRPM: 5500,
   clutchSlipRPM: 6000,
@@ -488,12 +493,22 @@ function Vehicles() {
                   }} />
                   <small style={{ color: 'var(--color-muted)' }}>RPM to shift at (all gears)</small>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', paddingTop: '1.5rem' }}>
+                <div>
+                  <label className="label">Rev Limiter RPM</label>
+                  <input type="number" step="100" className="input" value={form.revLimiterRPM ?? ''} 
+                    placeholder="None"
+                    onChange={(e) => updateForm('revLimiterRPM', e.target.value ? parseFloat(e.target.value) : undefined)} />
+                  <small style={{ color: 'var(--color-muted)' }}>High-side RPM limit (optional)</small>
+                </div>
+              </div>
+              <div className="grid grid-2 gap-4 mb-4">
+                <div style={{ display: 'flex', alignItems: 'center' }}>
                   <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                     <input type="checkbox" checked={form.n2oEnabled ?? false} onChange={(e) => updateForm('n2oEnabled', e.target.checked)} />
                     N2O (Nitrous Oxide)
                   </label>
                 </div>
+                <div></div>
               </div>
               <div style={{ padding: '0.75rem', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
                 <small style={{ color: 'var(--color-muted)' }}>
@@ -746,7 +761,58 @@ function Vehicles() {
                   ))}
                 </tbody>
               </table>
-              <button type="button" onClick={addGear} className="btn btn-secondary" style={{ marginBottom: '1.5rem' }}>+ Add Gear</button>
+              <button type="button" onClick={addGear} className="btn btn-secondary" style={{ marginBottom: '1rem' }}>+ Add Gear</button>
+
+              {/* Shift Mode & Rev Limiter */}
+              <div className="grid grid-3 gap-4 mb-4" style={{ marginTop: '1rem' }}>
+                <div>
+                  <label className="label">Shift Mode</label>
+                  <select className="input" value={form.shiftMode ?? 'rpm'} onChange={(e) => {
+                    updateForm('shiftMode', e.target.value as 'rpm' | 'time');
+                    // Initialize shift times if switching to time mode
+                    if (e.target.value === 'time' && (!form.shiftTimes || form.shiftTimes.length === 0)) {
+                      const numGears = (form.gearRatios?.length ?? 4) - 1;
+                      updateForm('shiftTimes', Array(numGears).fill(0).map((_, i) => (i + 1) * 1.5));
+                    }
+                  }}>
+                    <option value="rpm">Shift by RPM</option>
+                    <option value="time">Shift by Time</option>
+                  </select>
+                  <small style={{ color: 'var(--color-muted)' }}>When to shift gears</small>
+                </div>
+                <div>
+                  <label className="label">Rev Limiter RPM</label>
+                  <input type="number" step="100" className="input" value={form.revLimiterRPM ?? ''} 
+                    placeholder="None"
+                    onChange={(e) => updateForm('revLimiterRPM', e.target.value ? parseFloat(e.target.value) : undefined)} />
+                  <small style={{ color: 'var(--color-muted)' }}>High-side limit (optional)</small>
+                </div>
+                <div></div>
+              </div>
+
+              {/* Shift Times (only shown when shift mode is 'time') */}
+              {form.shiftMode === 'time' && (
+                <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
+                  <label className="label" style={{ marginBottom: '0.5rem' }}>Shift Times (seconds from launch)</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {(form.gearRatios ?? []).slice(0, -1).map((_, i) => (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <small style={{ color: 'var(--color-muted)' }}>{i + 1}→{i + 2}</small>
+                        <input type="number" step="0.01" className="input" style={{ width: '70px' }} 
+                          value={form.shiftTimes?.[i] ?? (i + 1) * 1.5} 
+                          onChange={(e) => {
+                            const times = [...(form.shiftTimes ?? [])];
+                            times[i] = parseFloat(e.target.value);
+                            updateForm('shiftTimes', times);
+                          }} />
+                      </div>
+                    ))}
+                  </div>
+                  <small style={{ color: 'var(--color-muted)', marginTop: '0.5rem', display: 'block' }}>
+                    Enter elapsed time (in seconds) when each shift should occur
+                  </small>
+                </div>
+              )}
 
               {/* Transmission Type Selector */}
               <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Type</h4>

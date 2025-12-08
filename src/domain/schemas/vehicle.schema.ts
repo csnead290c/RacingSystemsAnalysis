@@ -42,7 +42,14 @@ export const VehicleSchema = z.object({
   transEfficiency: z.number().optional(),      // gc_Efficiency
   gearRatios: z.array(z.number()).optional(),  // Transmission gear ratios
   gearEfficiencies: z.array(z.number()).optional(), // Per-gear efficiencies
-  shiftRPMs: z.array(z.number()).optional(),   // gc_ShiftRPM
+  shiftRPMs: z.array(z.number()).optional(),   // gc_ShiftRPM (shift by RPM)
+  
+  // Shift by Time (alternative to shift by RPM)
+  shiftMode: z.enum(['rpm', 'time']).optional(), // 'rpm' = shift at RPM, 'time' = shift at elapsed time
+  shiftTimes: z.array(z.number()).optional(),    // Shift at these elapsed times (seconds)
+  
+  // Rev Limiter
+  revLimiterRPM: z.number().optional(),        // High-side RPM limit (cuts power above this)
   
   // Clutch (manual trans)
   clutchLaunchRPM: z.number().optional(),      // gc_LaunchRPM
