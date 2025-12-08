@@ -23,6 +23,7 @@ const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLogge
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
 const DetailedParameters = lazy(() => import('../shared/components/DetailedParameters'));
 const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
+const ExplainRun = lazy(() => import('../shared/components/ExplainRun'));
 
 interface LocationState {
   vehicle: Vehicle;
@@ -82,6 +83,9 @@ function Predict() {
   
   // Optimizer modal state
   const [showOptimizer, setShowOptimizer] = useState(false);
+  
+  // InstantCalc mode - real-time ET/MPH updates without debounce
+  const [instantCalcEnabled, setInstantCalcEnabled] = useState(false);
 
   // Initialize from location state or show vehicle selector
   useEffect(() => {
@@ -147,13 +151,18 @@ function Predict() {
     }
     
     // Show debouncing indicator
-    setIsDebouncing(true);
-    
-    // Debounce the simulation by 400ms
-    debounceTimerRef.current = setTimeout(() => {
+    // InstantCalc mode: no debounce, run immediately
+    if (instantCalcEnabled) {
       setIsDebouncing(false);
       runSimulation();
-    }, 400);
+    } else {
+      // Normal mode: debounce by 400ms
+      setIsDebouncing(true);
+      debounceTimerRef.current = setTimeout(() => {
+        setIsDebouncing(false);
+        runSimulation();
+      }, 400);
+    }
     
     // Cleanup on unmount or when deps change
     return () => {
@@ -281,7 +290,7 @@ function Predict() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust, throttleStopEnabled, throttleStopActivate, throttleStopDuration, throttleStopPct]);
+  }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust, throttleStopEnabled, throttleStopActivate, throttleStopDuration, throttleStopPct, instantCalcEnabled]);
 
   // Fetch weather from track or current location
   const handleFetchWeather = async (track?: Track) => {
@@ -1014,6 +1023,18 @@ racingsystemsanalysis.com`;
           )}
         </Suspense>
 
+        {/* EXPLAIN THIS RUN - Transparent prediction breakdown */}
+        <Suspense fallback={null}>
+          {simResult && vehicle && env && (
+            <ExplainRun 
+              simResult={simResult}
+              vehicle={vehicle}
+              env={env}
+              baselineResult={comparisonRun?.result}
+            />
+          )}
+        </Suspense>
+
         {/* BOTTOM ROW: RPM Histogram + Environment + Race Length */}
         <div className="et-sim-bottom-row">
           {/* RPM Histogram */}
@@ -1280,6 +1301,48 @@ racingsystemsanalysis.com`;
                 <input type="radio" name="raceLength" value="QUARTER" checked={raceLength === 'QUARTER'} onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)} />
                 <span>1/4 Mile</span>
               </label>
+            </div>
+          </div>
+
+          {/* InstantCalc Toggle */}
+          <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '110px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--color-text)', fontSize: '0.8rem' }}>InstantCalc</div>
+            <label style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px', 
+              cursor: 'pointer',
+            }}>
+              <div 
+                onClick={() => setInstantCalcEnabled(!instantCalcEnabled)}
+                style={{
+                  width: '44px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  backgroundColor: instantCalcEnabled ? '#22c55e' : 'var(--color-border)',
+                  position: 'relative',
+                  transition: 'background-color 0.2s',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: instantCalcEnabled ? '22px' : '2px',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  backgroundColor: 'white',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+              <span style={{ fontSize: '0.8rem', color: instantCalcEnabled ? '#22c55e' : 'var(--color-text-muted)' }}>
+                {instantCalcEnabled ? 'ON' : 'OFF'}
+              </span>
+            </label>
+            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
+              Real-time updates
             </div>
           </div>
 

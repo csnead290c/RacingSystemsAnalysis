@@ -4,6 +4,7 @@ import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { useAuth } from '../domain/auth';
 import type { Product } from '../domain/auth/types';
+import Landing from './Landing';
 
 function Home() {
   const { isAuthenticated, user, getUserProducts, hasFeature } = useAuth();
@@ -33,65 +34,9 @@ function Home() {
     );
   }
 
-  // Welcome screen for non-authenticated users
+  // Show compelling landing page for non-authenticated users
   if (!isAuthenticated) {
-    return (
-      <Page>
-        <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center', paddingTop: '1rem' }}>
-          <p style={{ fontSize: '1.25rem', color: 'var(--color-muted)', marginBottom: '2.5rem' }}>
-            Professional simulation software for drag racing and land speed racing
-          </p>
-          
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
-            gap: '1rem',
-            marginBottom: '2.5rem',
-          }}>
-            {[
-              { icon: '🏁', title: 'Quarter Pro', desc: 'Drag racing ET & MPH prediction' },
-              { icon: '🚀', title: 'Bonneville Pro', desc: 'Land speed top speed simulation' },
-              { icon: '⚙️', title: 'Engine Pro', desc: 'Engine performance analysis' },
-              { icon: '🔧', title: 'Four Link', desc: 'Suspension geometry calculator' },
-            ].map(product => (
-              <div 
-                key={product.title}
-                style={{
-                  padding: '1.25rem',
-                  backgroundColor: 'var(--color-surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>{product.icon}</div>
-                <h3 style={{ fontSize: '0.9rem', marginBottom: '0.25rem', fontWeight: 600 }}>{product.title}</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-muted)', margin: 0 }}>{product.desc}</p>
-              </div>
-            ))}
-          </div>
-          
-          <Link 
-            to="/login" 
-            style={{
-              display: 'inline-block',
-              padding: '0.75rem 2rem',
-              backgroundColor: 'var(--color-primary)',
-              color: 'white',
-              borderRadius: 'var(--radius-md)',
-              textDecoration: 'none',
-              fontWeight: 600,
-              fontSize: '1rem',
-            }}
-          >
-            Sign In to Get Started
-          </Link>
-          
-          <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-            Don't have an account? Contact us for beta access.
-          </p>
-        </div>
-      </Page>
-    );
+    return <Landing />;
   }
 
   // Dashboard for authenticated users
