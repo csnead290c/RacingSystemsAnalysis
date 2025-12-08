@@ -93,22 +93,21 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
       {isExpanded && (
         <div style={{
           padding: '0.75rem 1rem',
-          fontSize: '0.75rem',
+          fontSize: '0.7rem',
           fontFamily: 'monospace',
           color: 'var(--color-text-secondary)',
           borderTop: '1px solid var(--color-warning)',
+          maxHeight: '250px',
+          overflowY: 'auto',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '0.5rem 1rem',
         }}>
           {/* Fuel Type */}
           {data.fuelType && (
             <Section title="Fuel Type">
               <Row label="Resolved" value={data.fuelType.resolved} />
               <Row label="VB6 Type" value={data.fuelType.fuelSystemType} />
-              {data.fuelType.vehicleFuelType && (
-                <Row label="vehicle.fuelType" value={data.fuelType.vehicleFuelType} />
-              )}
-              {data.fuelType.vehicleFuelSystem && (
-                <Row label="vehicle.fuelSystem" value={data.fuelType.vehicleFuelSystem} warn />
-              )}
             </Section>
           )}
 
@@ -124,29 +123,46 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
           {/* Air/HPC Calculation */}
           {data.airCalc && (
             <Section title="Air/HPC">
-              <Row label="Air Density" value={`${data.airCalc.rho_lbm_ft3.toFixed(4)} lbm/ft³`} />
+              <Row label="ρ" value={`${data.airCalc.rho_lbm_ft3.toFixed(4)} lbm/ft³`} />
               <Row label="HPC" value={data.airCalc.hpc.toFixed(4)} />
             </Section>
           )}
 
-          {/* Simulation Parameters */}
+          {/* Vehicle */}
           {data.simParams && (
-            <Section title="Simulation Parameters">
+            <Section title="Vehicle">
               <Row label="Weight" value={`${data.simParams.weight} lb`} />
               <Row label="Tire Dia" value={`${data.simParams.tireDia.toFixed(1)}"`} />
               <Row label="Wheelbase" value={`${data.simParams.wheelbase}"`} />
               <Row label="Final Drive" value={data.simParams.finalDrive.toFixed(2)} />
-              <Row label="# Gears" value={data.simParams.NGR} />
-              <Row label="Peak HP" value={data.simParams.peakHP} />
+              <Row label="Gears" value={data.simParams.NGR} />
+            </Section>
+          )}
+
+          {/* Drivetrain */}
+          {data.simParams && (
+            <Section title="Drivetrain">
               <Row label="Stall RPM" value={data.simParams.stallRPM} />
               <Row label="Slippage" value={data.simParams.slippage.toFixed(4)} 
                    warn={data.simParams.slippage === 1} />
-              <Row label="Clutch" value={data.simParams.isClutch ? 'Yes' : 'No (Converter)'} />
-              <Row label="Traction Index" value={data.simParams.tractionIndex} />
-              <Row label="Track Temp Effect" value={data.simParams.trackTempEffect.toFixed(4)} />
-              <Row label="PMI (Engine)" value={data.simParams.pmi.engine.toFixed(3)} />
-              <Row label="PMI (Trans)" value={data.simParams.pmi.trans.toFixed(3)} />
-              <Row label="PMI (Tires)" value={data.simParams.pmi.tires.toFixed(3)} />
+              <Row label="Clutch" value={data.simParams.isClutch ? 'Yes' : 'Converter'} />
+            </Section>
+          )}
+
+          {/* Traction */}
+          {data.simParams && (
+            <Section title="Traction">
+              <Row label="Index" value={data.simParams.tractionIndex} />
+              <Row label="Track Effect" value={data.simParams.trackTempEffect.toFixed(4)} />
+            </Section>
+          )}
+
+          {/* PMI */}
+          {data.simParams && (
+            <Section title="PMI">
+              <Row label="Engine" value={data.simParams.pmi.engine.toFixed(3)} />
+              <Row label="Trans" value={data.simParams.pmi.trans.toFixed(3)} />
+              <Row label="Tires" value={data.simParams.pmi.tires.toFixed(3)} />
             </Section>
           )}
 
