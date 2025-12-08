@@ -353,24 +353,31 @@
    - Run log format support
    - Vehicle data format support
 
-### Phase 3: New Innovations (FUTURE)
+### Phase 3: New Innovations (IN PROGRESS)
 
-1. **Converter Sim**
-   - Expand Clutch Sim to torque converters
+1. ✅ **Converter Sim**
+   - Torque converter simulation page
    - K-factor modeling
-   - Stall speed prediction
+   - Stall speed prediction (flash & foot-brake)
+   - Efficiency and slip curves
+   - Torque multiplication visualization
 
-2. **Component Integration**
+2. ✅ **Vehicle Grouping**
+   - Organize vehicles into groups/folders
+   - Filter by group in vehicle list
+   - Group field in vehicle schema
+
+3. **Component Integration** (FUTURE)
    - Use Engine Sim engines in vehicles
    - Use Clutch Sim clutches in vehicles
    - Suspension Sim integration
 
-3. **AI/ML Predictions**
+4. **AI/ML Predictions** (FUTURE)
    - Learn from user's actual runs
    - Personalized correction factors
    - Track-specific adjustments
 
-4. **Social Features**
+5. **Social Features** (FUTURE)
    - Share vehicles/setups
    - Leaderboards
    - Racing team collaboration
