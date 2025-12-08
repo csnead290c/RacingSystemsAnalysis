@@ -30,6 +30,26 @@ jobs:
       - name: Create .htaccess for SPA routing
         run: |
           cat > dist/.htaccess << 'EOF'
+          # Cache Control - Prevent stale content
+          <IfModule mod_headers.c>
+            # HTML files - no cache (always fetch fresh)
+            <FilesMatch "\.(html)$">
+              Header set Cache-Control "no-cache, no-store, must-revalidate"
+              Header set Pragma "no-cache"
+              Header set Expires 0
+            </FilesMatch>
+            
+            # JS/CSS with hash in filename - cache for 1 year (immutable)
+            <FilesMatch "\.(js|css)$">
+              Header set Cache-Control "public, max-age=31536000, immutable"
+            </FilesMatch>
+            
+            # Images/fonts - cache for 1 month
+            <FilesMatch "\.(ico|jpg|jpeg|png|gif|svg|woff|woff2|ttf|eot)$">
+              Header set Cache-Control "public, max-age=2592000"
+            </FilesMatch>
+          </IfModule>
+          
           <IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /

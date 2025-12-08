@@ -48,8 +48,27 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Only cache assets with hashes (immutable), not HTML
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
+        // Skip waiting - immediately activate new service worker
+        skipWaiting: true,
+        clientsClaim: true,
+        // Don't precache index.html - always fetch fresh
+        navigateFallback: null,
         runtimeCaching: [
+          {
+            // HTML pages - network first, fall back to cache
+            urlPattern: /\.html$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 // 1 hour
+              },
+              networkTimeoutSeconds: 3
+            }
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
@@ -63,6 +82,11 @@ export default defineConfig({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            // API calls - network only
+            urlPattern: /\/api\//,
+            handler: 'NetworkOnly'
           }
         ]
       }
