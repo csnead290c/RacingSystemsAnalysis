@@ -24,7 +24,8 @@ interface TraceData {
   lockRpm?: number;
   gear: number;
   slip?: boolean;
-  hp?: number;
+  hp?: number;       // Wheel HP (after losses)
+  engineHp?: number; // Engine HP (before losses)
   dragHp?: number;
 }
 
@@ -76,8 +77,14 @@ const SERIES_CONFIG = {
     unit: 'g',
     yAxisId: 'accel',
   },
+  engineHp: {
+    name: 'Engine HP',
+    color: '#a855f7', // violet
+    unit: 'HP',
+    yAxisId: 'hp',
+  },
   hp: {
-    name: 'Horsepower',
+    name: 'Wheel HP',
     color: '#8b5cf6', // purple
     unit: 'HP',
     yAxisId: 'hp',

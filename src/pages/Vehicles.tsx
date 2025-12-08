@@ -12,6 +12,7 @@ import {
   TireWidthWorksheet, 
   GearRatioWorksheet,
   RolloutWorksheet,
+  TireRolloutWorksheet,
 } from '../shared/components/WorksheetModal';
 import { TOOLTIPS } from '../domain/config/tooltips';
 
@@ -140,6 +141,7 @@ function Vehicles() {
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
   const [showRolloutWorksheet, setShowRolloutWorksheet] = useState(false);
+  const [showTireRolloutWorksheet, setShowTireRolloutWorksheet] = useState(false);
   
   // Derive transType from form
   const transType: TransType = (form.transmissionType as TransType) ?? 'clutch';
@@ -630,12 +632,20 @@ function Vehicles() {
                   <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.rearGear}</small>
                 </div>
                 <div>
-                  <label className="label">Tire Diameter (in) *</label>
+                  <label className="label">
+                    Tire Diameter (in) *
+                    <WorksheetButton onClick={() => setShowTireRolloutWorksheet(true)} tooltip="Calculate diameter from tire rollout" />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.tireDiaIn ?? ''} onChange={(e) => updateForm('tireDiaIn', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.tireDiameter}</small>
                 </div>
                 <div>
-                  <label className="label">Tire Width (in)</label>
+                  <label className="label">
+                    Tire Width (in)
+                    <WorksheetButton onClick={() => setShowTireWidthWorksheet(true)} tooltip={TOOLTIPS.btnTireWidth} />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.tireWidthIn ?? 14} onChange={(e) => updateForm('tireWidthIn', parseFloat(e.target.value))} />
+                  <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.tireWidth}</small>
                 </div>
               </div>
             </div>
@@ -670,10 +680,6 @@ function Vehicles() {
                   <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Advanced Geometry</h4>
                   <div className="grid grid-3 gap-4">
                     <div>
-                      <label className="label">Static Front Weight (lb)</label>
-                      <input type="number" step="1" className="input" value={form.staticFrontWeightLb ?? ''} onChange={(e) => updateForm('staticFrontWeightLb', parseFloat(e.target.value))} />
-                    </div>
-                    <div>
                       <label className="label">Wheelbase (in)</label>
                       <input type="number" step="0.1" className="input" value={form.wheelbaseIn ?? ''} onChange={(e) => updateForm('wheelbaseIn', parseFloat(e.target.value))} />
                     </div>
@@ -682,14 +688,28 @@ function Vehicles() {
                       <input type="number" step="0.1" className="input" value={form.overhangIn ?? ''} onChange={(e) => updateForm('overhangIn', parseFloat(e.target.value))} />
                     </div>
                     <div>
-                      <label className="label">CG Height (in)</label>
-                      <input type="number" step="0.1" className="input" value={form.cgHeightIn ?? ''} onChange={(e) => updateForm('cgHeightIn', parseFloat(e.target.value))} />
-                    </div>
-                    <div>
                       <label className="label">Tire Width (in)</label>
                       <input type="number" step="0.1" className="input" value={form.tireWidthIn ?? ''} onChange={(e) => updateForm('tireWidthIn', parseFloat(e.target.value))} />
                     </div>
                   </div>
+                  {/* Static Front Weight and CG Height - only for motorcycles (VB6: hidden for cars) */}
+                  {form.bodyStyle === 8 && (
+                    <>
+                      <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Motorcycle CG (Advanced)</h4>
+                      <div className="grid grid-2 gap-4">
+                        <div>
+                          <label className="label">Static Front Weight (lb)</label>
+                          <input type="number" step="1" className="input" value={form.staticFrontWeightLb ?? ''} onChange={(e) => updateForm('staticFrontWeightLb', parseFloat(e.target.value))} />
+                          <small style={{ color: 'var(--color-muted)' }}>Weight on front wheel with rider</small>
+                        </div>
+                        <div>
+                          <label className="label">CG Height (in)</label>
+                          <input type="number" step="0.1" className="input" value={form.cgHeightIn ?? ''} onChange={(e) => updateForm('cgHeightIn', parseFloat(e.target.value))} />
+                          <small style={{ color: 'var(--color-muted)' }}>Height of center of gravity</small>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -925,12 +945,7 @@ function Vehicles() {
           {/* Engine Tab - Power, fuel, HP curve with graph (Pro only) */}
           {activeTab === 'engine' && isPro && (
             <div className="mb-4">
-                  <div className="grid grid-3 gap-4 mb-4">
-                    <div>
-                      <label className="label">Peak Power (HP)</label>
-                      <input type="number" step="1" className="input" value={form.powerHP ?? ''} onChange={(e) => updateForm('powerHP', parseFloat(e.target.value))} />
-                      <small style={{ color: 'var(--color-muted)' }}>Used if no dyno curve</small>
-                    </div>
+                  <div className="grid grid-2 gap-4 mb-4">
                     <div>
                       <label className="label">Fuel Type</label>
                       <select className="input" value={form.fuelType ?? 'Gasoline'} onChange={(e) => updateForm('fuelType', e.target.value)}>
@@ -1250,6 +1265,13 @@ function Vehicles() {
         onClose={() => setShowRolloutWorksheet(false)}
         onApply={(value) => updateForm('rolloutIn', value)}
         tireDiameter={form.tireDiaIn}
+      />
+      <TireRolloutWorksheet
+        isOpen={showTireRolloutWorksheet}
+        onClose={() => setShowTireRolloutWorksheet(false)}
+        onApply={(value) => updateForm('tireDiaIn', value)}
+        tireDiameter={form.tireDiaIn}
+        mode="diameter"
       />
     </Page>
   );

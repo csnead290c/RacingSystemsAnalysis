@@ -459,7 +459,15 @@ class RSACLASSICModel implements PhysicsModel {
       s_ft: number;
       rpm: number;
       gear: number;
+      hp?: number;      // Wheel HP (after all losses)
+      engineHp?: number; // Engine HP (before losses)
+      dragHp?: number;   // Drag HP loss
     }> = [];
+    
+    // Track HP values for trace collection
+    let lastHPSave = 0;      // Engine HP
+    let lastHP_wheel = 0;    // Wheel HP (after losses)
+    let lastDragHP = 0;      // Drag HP
     
     const timeslip: Array<{ d_ft: number; t_s: number; v_mph: number }> = [];
     
@@ -1154,6 +1162,11 @@ class RSACLASSICModel implements PhysicsModel {
         }
         const HP_afterLine2 = HP;
         
+        // Store HP values for trace collection
+        lastHPSave = HPSave;
+        lastHP_wheel = HP_afterLine2;
+        lastDragHP = dragHP;
+        
         // VB6: TIMESLIP.FRM:1252-1253
         // PQWT = 550 * gc * HP / Weight
         PQWT_ftps2 = STRICT
@@ -1474,6 +1487,9 @@ class RSACLASSICModel implements PhysicsModel {
           s_ft: state.s_ft,
           rpm: state.rpm,
           gear: state.gearIdx + 1, // 1-based for display
+          hp: lastHP_wheel > 0 ? lastHP_wheel : undefined,         // Wheel HP (after losses)
+          engineHp: lastHPSave > 0 ? lastHPSave : undefined,       // Engine HP (before losses)
+          dragHp: lastDragHP > 0 ? lastDragHP : undefined,         // Drag HP loss
         });
         
         nextTraceTime += traceInterval_s;

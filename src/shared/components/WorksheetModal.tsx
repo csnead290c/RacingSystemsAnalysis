@@ -504,75 +504,145 @@ export function GearRatioWorksheet({ isOpen, onClose, onApply }: GearRatioWorksh
 }
 
 /**
- * Rollout Worksheet
- * Calculates rollout from tire diameter
+ * Tire Rollout Worksheet
+ * Calculates tire rollout (circumference) from tire diameter
+ * VB6: Tire Rollout = PI * Tire Diameter
+ * Can also convert rollout back to diameter
  */
-interface RolloutWorksheetProps {
+interface TireRolloutWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
   onApply: (value: number) => void;
   tireDiameter?: number;
+  mode?: 'diameter' | 'rollout'; // Which value to apply
 }
 
-export function RolloutWorksheet({ isOpen, onClose, onApply, tireDiameter = 28 }: RolloutWorksheetProps) {
+export function TireRolloutWorksheet({ isOpen, onClose, onApply, tireDiameter = 28, mode = 'rollout' }: TireRolloutWorksheetProps) {
+  const [inputMode, setInputMode] = useState<'diameter' | 'rollout'>('diameter');
   const [diameter, setDiameter] = useState(tireDiameter);
-  const [stageDistance, setStageDistance] = useState(7); // inches from beam to line
-
-  // Rollout = distance tire travels from staging beam to starting line
-  // This is typically measured, but can be estimated
-  const circumference = Math.PI * diameter;
-  const rolloutAngle = (stageDistance / circumference) * 360;
-  const rollout = stageDistance; // Direct measurement
+  const [rollout, setRollout] = useState(tireDiameter * Math.PI);
 
   useEffect(() => {
     setDiameter(tireDiameter);
+    setRollout(tireDiameter * Math.PI);
   }, [tireDiameter]);
+
+  // Sync values when input changes
+  const handleDiameterChange = (value: number) => {
+    setDiameter(value);
+    setRollout(value * Math.PI);
+  };
+
+  const handleRolloutChange = (value: number) => {
+    setRollout(value);
+    setDiameter(value / Math.PI);
+  };
+
+  const applyValue = mode === 'diameter' ? diameter : rollout;
 
   return (
     <WorksheetModal
       isOpen={isOpen}
       onClose={onClose}
-      onApply={onApply}
-      title="Rollout Worksheet"
-      calculatedValue={rollout}
-      calculatedLabel="Rollout"
+      onApply={() => onApply(applyValue)}
+      title="Tire Rollout Worksheet"
+      calculatedValue={mode === 'diameter' ? diameter : rollout}
+      calculatedLabel={mode === 'diameter' ? 'Tire Diameter' : 'Tire Rollout'}
       unit="inches"
-      helpText="Rollout is the distance the tire travels from the staging beam to the starting line. This affects your reaction time strategy."
+      helpText="Tire Rollout is the tire circumference (π × diameter). VB6 accepts either diameter or rollout - they are interchangeable."
     >
-      <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
-        <div>
-          <label className="label">Tire Diameter (inches)</label>
-          <input
-            type="number"
-            step="0.5"
-            className="input"
-            value={diameter}
-            onChange={(e) => setDiameter(parseFloat(e.target.value) || 0)}
-          />
+      <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+        {/* Input mode selector */}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+          <button
+            type="button"
+            onClick={() => setInputMode('diameter')}
+            style={{
+              flex: 1,
+              padding: 'var(--space-2)',
+              border: `2px solid ${inputMode === 'diameter' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              borderRadius: '6px',
+              backgroundColor: inputMode === 'diameter' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+              color: 'var(--color-text)',
+              cursor: 'pointer',
+              fontWeight: inputMode === 'diameter' ? 600 : 400,
+            }}
+          >
+            Enter Diameter
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputMode('rollout')}
+            style={{
+              flex: 1,
+              padding: 'var(--space-2)',
+              border: `2px solid ${inputMode === 'rollout' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              borderRadius: '6px',
+              backgroundColor: inputMode === 'rollout' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+              color: 'var(--color-text)',
+              cursor: 'pointer',
+              fontWeight: inputMode === 'rollout' ? 600 : 400,
+            }}
+          >
+            Enter Rollout
+          </button>
         </div>
-        <div>
-          <label className="label">Stage Distance (inches)</label>
-          <input
-            type="number"
-            step="0.5"
-            className="input"
-            value={stageDistance}
-            onChange={(e) => setStageDistance(parseFloat(e.target.value) || 0)}
-          />
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            Distance from staging beam to starting line (typically 7-12 inches)
+
+        {inputMode === 'diameter' ? (
+          <div>
+            <label className="label">Tire Diameter (inches)</label>
+            <input
+              type="number"
+              step="0.1"
+              className="input"
+              value={diameter}
+              onChange={(e) => handleDiameterChange(parseFloat(e.target.value) || 0)}
+            />
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+              Measured from ground to top of tire
+            </div>
           </div>
-        </div>
+        ) : (
+          <div>
+            <label className="label">Tire Rollout (inches)</label>
+            <input
+              type="number"
+              step="0.1"
+              className="input"
+              value={rollout}
+              onChange={(e) => handleRolloutChange(parseFloat(e.target.value) || 0)}
+            />
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+              Tire circumference (distance per revolution)
+            </div>
+          </div>
+        )}
+
         <div style={{ 
-          padding: 'var(--space-2)', 
+          padding: 'var(--space-3)', 
           backgroundColor: 'var(--color-bg)', 
           borderRadius: '6px',
-          fontSize: '0.85rem',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 'var(--space-2)',
         }}>
-          <strong>Tire Circumference:</strong> {circumference.toFixed(1)} inches<br />
-          <strong>Rollout Angle:</strong> {rolloutAngle.toFixed(1)}°
+          <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Diameter</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{diameter.toFixed(2)}"</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Rollout</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{rollout.toFixed(2)}"</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+          Formula: Rollout = π × Diameter
         </div>
       </div>
     </WorksheetModal>
   );
 }
+
+// Keep the old name as an alias for backward compatibility
+export const RolloutWorksheet = TireRolloutWorksheet;
