@@ -151,15 +151,9 @@ function DataLoggerChart({
 
   // Filter data and add xValue based on mode, also inject marker points
   const { chartData, markerIndices } = useMemo(() => {
-    let startIdx = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i].t_s > 0) {
-        startIdx = Math.max(0, i - 1);
-        break;
-      }
-    }
-    
-    const filtered = data.slice(startIdx);
+    // Include ALL data points including rollout/launch phase (t_s <= 0)
+    // This shows the complete run from staging through finish
+    const filtered = data;
     const activeMarkers = distanceMarkers.filter(d => d <= raceLengthFt);
     const indices: { distance: number; index: number }[] = [];
     
@@ -488,10 +482,17 @@ function DataLoggerChart({
               fontSize: '0.75rem',
               padding: '8px',
             }}
-            formatter={(value: number, name: string) => {
+            formatter={(value: number, name: string, props: any) => {
               const config = Object.values(SERIES_CONFIG).find(c => c.name === name);
               if (!config) return [value.toFixed(2), name];
-              return [`${value.toFixed(config.unit === 'RPM' ? 0 : 2)} ${config.unit}`, name];
+              
+              // Add "(s)" slip indicator for acceleration when traction-limited
+              let suffix = '';
+              if (name === 'Acceleration' && props?.payload?.slip) {
+                suffix = ' (s)';
+              }
+              
+              return [`${value.toFixed(config.unit === 'RPM' ? 0 : 2)} ${config.unit}${suffix}`, name];
             }}
             labelFormatter={(label: number) => 
               xAxisMode === 'time' 
