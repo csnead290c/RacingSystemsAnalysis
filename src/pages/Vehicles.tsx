@@ -150,6 +150,9 @@ function Vehicles() {
   const [showRolloutWorksheet, setShowRolloutWorksheet] = useState(false);
   const [showTireRolloutWorksheet, setShowTireRolloutWorksheet] = useState(false);
   
+  // Collapsible advanced sections (Pro mode)
+  const [showAdvancedGeometry, setShowAdvancedGeometry] = useState(false);
+  
   // Derive transType from form
   const transType: TransType = (form.transmissionType as TransType) ?? 'clutch';
   const setTransType = (type: TransType) => updateForm('transmissionType', type);
@@ -681,28 +684,52 @@ function Vehicles() {
                 </div>
               </div>
 
-              {/* Pro fields */}
-              {isPro && (
-                <>
-                  <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Advanced Geometry</h4>
+              {/* Collapsible Advanced Geometry section */}
+              <button 
+                type="button"
+                onClick={() => setShowAdvancedGeometry(!showAdvancedGeometry)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem',
+                  background: 'none', 
+                  border: '1px solid var(--color-border)', 
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.5rem 1rem',
+                  cursor: 'pointer',
+                  color: 'var(--color-text)',
+                  marginTop: '1rem',
+                  width: '100%',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>⚙️ Advanced Geometry (Optional)</span>
+                <span>{showAdvancedGeometry ? '▼' : '▶'}</span>
+              </button>
+              
+              {showAdvancedGeometry && (
+                <div style={{ padding: '1rem', backgroundColor: 'var(--color-surface)', borderRadius: '0 0 var(--radius-md) var(--radius-md)', marginBottom: '1rem' }}>
+                  <small style={{ color: 'var(--color-muted)', display: 'block', marginBottom: '1rem' }}>
+                    These fields are optional. If left blank, sensible defaults will be calculated.
+                  </small>
                   <div className="grid grid-3 gap-4">
                     <div>
                       <label className="label">Wheelbase (in)</label>
-                      <input type="number" step="0.1" className="input" value={form.wheelbaseIn ?? ''} onChange={(e) => updateForm('wheelbaseIn', parseFloat(e.target.value))} />
+                      <input type="number" step="0.1" className="input" value={form.wheelbaseIn ?? ''} placeholder="Auto" onChange={(e) => updateForm('wheelbaseIn', e.target.value ? parseFloat(e.target.value) : undefined)} />
                     </div>
                     <div>
                       <label className="label">Front Overhang (in)</label>
-                      <input type="number" step="0.1" className="input" value={form.overhangIn ?? ''} onChange={(e) => updateForm('overhangIn', parseFloat(e.target.value))} />
+                      <input type="number" step="0.1" className="input" value={form.overhangIn ?? ''} placeholder="Auto" onChange={(e) => updateForm('overhangIn', e.target.value ? parseFloat(e.target.value) : undefined)} />
                     </div>
                     <div>
                       <label className="label">Tire Width (in)</label>
-                      <input type="number" step="0.1" className="input" value={form.tireWidthIn ?? ''} onChange={(e) => updateForm('tireWidthIn', parseFloat(e.target.value))} />
+                      <input type="number" step="0.1" className="input" value={form.tireWidthIn ?? ''} placeholder="Auto" onChange={(e) => updateForm('tireWidthIn', e.target.value ? parseFloat(e.target.value) : undefined)} />
                     </div>
                   </div>
                   {/* Static Front Weight and CG Height - only for motorcycles (VB6: hidden for cars) */}
                   {form.bodyStyle === 8 && (
                     <>
-                      <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Motorcycle CG (Advanced)</h4>
+                      <h4 style={{ marginBottom: '0.5rem', marginTop: '1rem', color: 'var(--color-text)' }}>Motorcycle CG</h4>
                       <div className="grid grid-2 gap-4">
                         <div>
                           <label className="label">Static Front Weight (lb)</label>
@@ -717,7 +744,7 @@ function Vehicles() {
                       </div>
                     </>
                   )}
-                </>
+                </div>
               )}
             </div>
           )}
