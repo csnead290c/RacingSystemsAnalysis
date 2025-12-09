@@ -175,17 +175,45 @@ describe('TA Dragster Trace Comparison', () => {
     // Check rollout distance
     console.log(`\nRollout distance: ${debug?.simParams?.rolloutIn ?? 12} inches = ${(debug?.simParams?.rolloutIn ?? 12) / 12} ft`);
     
-    // Show first 10 trace points to see what's happening at launch
-    console.log('\n=== FIRST 10 TRACE POINTS (track time/dist) ===');
-    console.log('Step  Time(s)   Dist(ft)   MPH     Accel(g)');
-    for (let i = 0; i < Math.min(10, trace.length); i++) {
+    // Show trace points with HP data
+    console.log('\n=== TRACE WITH HP DATA ===');
+    console.log('Time(s)  Dist(ft)   MPH    Accel(g)   HP     DragHP   Gear  RPM');
+    // Sample every ~0.5s
+    for (let i = 0; i < trace.length; i += 20) {
       const pt = trace[i];
-      console.log(`${i.toString().padStart(4)}  ${pt.t_s.toFixed(4).padStart(8)}  ${pt.s_ft.toFixed(3).padStart(8)}  ${pt.v_mph.toFixed(2).padStart(6)}  ${pt.a_g.toFixed(3).padStart(8)}`);
+      if (pt.t_s > 0) {
+        console.log(
+          `${pt.t_s.toFixed(2).padStart(6)}  ${pt.s_ft.toFixed(0).padStart(7)}  ${pt.v_mph.toFixed(1).padStart(6)}  ${pt.a_g.toFixed(2).padStart(8)}  ${(pt.hp ?? 0).toFixed(0).padStart(5)}  ${(pt.dragHp ?? 0).toFixed(0).padStart(7)}  ${pt.gear}  ${pt.rpm.toFixed(0).padStart(5)}`
+        );
+      }
     }
     
-    // Check ovradj value
-    console.log(`\novradj (overhang adjustment): ${debug?.simParams?.overhangIn ? ((debug.simParams.overhangIn + 0.25 * 24) / 12).toFixed(3) : 'N/A'} ft`);
-    console.log(`Expected: (30 + 0.25*24) / 12 = ${((30 + 6) / 12).toFixed(3)} ft = 3.0 ft`);
+    // Check key simulation parameters
+    console.log(`\n=== KEY SIMULATION PARAMETERS ===`);
+    console.log(`Track Temp Effect: ${debug?.simParams?.trackTempEffect?.toFixed(4) ?? 'N/A'}`);
+    console.log(`Traction Index: ${debug?.simParams?.tractionIndex ?? 'N/A'}`);
+    console.log(`Tire Slip at Launch: ${debug?.simParams?.tireSlipAtLaunch?.toFixed(4) ?? 'N/A'}`);
+    console.log(`Ags0: ${debug?.simParams?.ags0?.toFixed(3) ?? 'N/A'} g`);
+    console.log(`Static FWt: ${debug?.simParams?.staticFWt?.toFixed(1) ?? 'N/A'} lb`);
+    console.log(`Gear Eff: ${JSON.stringify(debug?.simParams?.gearEfficiencies)}`);
+    console.log(`Overall Eff: ${debug?.simParams?.overallEfficiency?.toFixed(3) ?? 'N/A'}`);
+    
+    // Check convergence data
+    const diag = (result as any).vb6Diagnostics;
+    if (diag) {
+      console.log(`\n=== CONVERGENCE DATA ===`);
+      console.log(`Total steps: ${diag.iterations?.length ?? 'N/A'}`);
+      console.log(`Avg iterations per step: ${diag.iterations ? (diag.iterations.reduce((a: number, b: number) => a + b, 0) / diag.iterations.length).toFixed(2) : 'N/A'}`);
+      if (diag.convergenceHistory?.length > 0) {
+        console.log(`First 5 steps convergence:`);
+        for (let i = 0; i < Math.min(5, diag.convergenceHistory.length); i++) {
+          const ch = diag.convergenceHistory[i];
+          console.log(`  Step ${ch.step}: ${ch.iterations} iters, HPSave=${ch.HPSave?.toFixed(0)}, HP=${ch.HP?.toFixed(0)}, AGS=${ch.AGS_g?.toFixed(3)}g`);
+        }
+      }
+    } else {
+      console.log(`\nvb6Diagnostics not found in result`);
+    }
     
     // The track distance at t=0 should be ovradj (since raw dist = rollout = 1ft, track dist = 1 - 1 + ovradj = ovradj)
     console.log(`\nAt rollout (raw dist = 1ft): track dist = 1 - 1 + ovradj = ovradj = ~3.0 ft`);
