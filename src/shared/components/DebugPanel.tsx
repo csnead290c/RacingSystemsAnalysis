@@ -171,6 +171,16 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
             </Section>
           )}
 
+          {/* Weight Transfer */}
+          {data.simParams && (
+            <Section title="Weight Transfer">
+              <Row label="YCG" value={`${((data.simParams as any).ycg ?? 0).toFixed(2)}"`} />
+              <Row label="Static FWt" value={`${((data.simParams as any).staticFWt ?? 0).toFixed(1)} lb`} />
+              <Row label="Ags0" value={`${((data.simParams as any).ags0 ?? 0).toFixed(3)} g`} />
+              <Row label="TireSlip" value={((data.simParams as any).tireSlipAtLaunch ?? 0).toFixed(4)} />
+            </Section>
+          )}
+
           {/* Traction */}
           {data.simParams && (
             <Section title="Traction">
