@@ -598,8 +598,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // VB6: TIMESLIP.FRM lines 699-713 (#If ISQUARTERPRO branch)
     // ====================================================================
     
-    // Gear efficiencies - use from fixture/vehicle
-    const gearEfficiencies = drivetrain?.perGearEff ?? (vehicle as any).gearEfficiencies ?? null;
+    // Gear efficiencies - use from fixture/vehicle (check multiple property names)
+    const gearEfficiencies = drivetrain?.perGearEff ?? 
+                             (vehicle as any).gearEfficiencies ?? 
+                             (vehicle as any).gearEff ?? 
+                             null;
     TGEff = gearEfficiencies ?? gearRatios.map(() => 0.99);
     
     // Per-gear shift RPMs (check all common property names)

@@ -188,6 +188,13 @@ function testBenchmarkCase(
     // Run simulation using VB6 exact model
     const result = simulateVB6Exact(inputs);
     
+    // Debug: Log gear efficiencies
+    const debug = (result as any).debugData;
+    if (debug?.simParams) {
+      console.log(`  Gear Eff: ${JSON.stringify(debug.simParams.gearEfficiencies)}`);
+      console.log(`  Shift RPMs: ${JSON.stringify(debug.simParams.shiftRPMs)}`);
+    }
+    
     // Extract results
     const actualET = result.et_s;
     const actualMPH = result.mph;
