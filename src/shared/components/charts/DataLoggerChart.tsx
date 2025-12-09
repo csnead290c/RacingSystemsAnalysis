@@ -378,10 +378,14 @@ function DataLoggerChart({
           <XAxis
             dataKey="xValue"
             type="number"
-            domain={['dataMin', 'dataMax']}
+            domain={xAxisMode === 'time' 
+              ? [0, (dataMax: number) => Math.ceil(dataMax * 10) / 10] // Round up to nearest 0.1s
+              : [0, raceLengthFt + 50] // Slightly past finish line
+            }
             stroke="var(--color-text-muted)"
             tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
             tickFormatter={(v) => xAxisMode === 'time' ? v.toFixed(1) : v.toFixed(0)}
+            tickCount={xAxisMode === 'time' ? 8 : 6}
             label={{ 
               value: xAxisMode === 'time' ? 'Time (s)' : 'Distance (ft)', 
               position: 'insideBottom', 

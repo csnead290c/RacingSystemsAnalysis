@@ -70,11 +70,12 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
 
   return (
     <div style={{
-      marginTop: '1rem',
+      marginTop: '0.5rem',
       border: '1px solid var(--color-warning)',
       borderRadius: 'var(--radius-md)',
       backgroundColor: 'rgba(234, 179, 8, 0.1)',
       overflow: 'hidden',
+      flexShrink: 0,
     }}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
@@ -99,15 +100,16 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
       {isExpanded && (
         <div style={{
           padding: '0.75rem 1rem',
-          fontSize: '0.7rem',
+          fontSize: '0.65rem',
           fontFamily: 'monospace',
           color: 'var(--color-text-secondary)',
           borderTop: '1px solid var(--color-warning)',
-          maxHeight: '250px',
+          maxHeight: '200px',
           overflowY: 'auto',
+          overflowX: 'hidden',
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '0.5rem 1rem',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap: '0.25rem 0.75rem',
         }}>
           {/* Fuel Type */}
           {data.fuelType && (
@@ -257,16 +259,18 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: '0.75rem' }}>
+    <div style={{ marginBottom: '0.5rem' }}>
       <div style={{ 
         fontWeight: 600, 
         color: 'var(--color-text)', 
-        marginBottom: '0.25rem',
-        fontSize: '0.8rem',
+        marginBottom: '0.15rem',
+        fontSize: '0.7rem',
+        borderBottom: '1px solid rgba(234, 179, 8, 0.3)',
+        paddingBottom: '0.1rem',
       }}>
         {title}
       </div>
-      <div style={{ paddingLeft: '0.5rem' }}>
+      <div style={{ paddingLeft: '0.25rem' }}>
         {children}
       </div>
     </div>

@@ -1,37 +1,6 @@
 import { useState } from 'react';
 import type { Env } from '../../domain/schemas/env.schema';
 
-/**
- * Calculate Density Altitude from environmental conditions
- * Formula: DA = PA + (120 * (OAT - ISA_temp))
- * where PA = Pressure Altitude, OAT = Outside Air Temp, ISA_temp = standard temp at altitude
- */
-function calculateDensityAltitude(env: Env): number {
-  // Pressure altitude: altitude where standard pressure equals actual pressure
-  // Standard pressure at sea level = 29.92 inHg
-  // Pressure drops ~1 inHg per 1000ft
-  const pressureAltitude = env.elevation + (29.92 - env.barometerInHg) * 1000;
-  
-  // ISA standard temperature at altitude (59°F at sea level, drops 3.5°F per 1000ft)
-  const isaTemp = 59 - (pressureAltitude / 1000) * 3.5;
-  
-  // Density altitude correction for temperature deviation
-  const tempDeviation = env.temperatureF - isaTemp;
-  const densityAltitude = pressureAltitude + (120 * tempDeviation);
-  
-  // Humidity correction (approximate - humidity reduces air density)
-  // Each 10% humidity adds ~100ft to DA at typical conditions
-  const humidityCorrection = (env.humidityPct / 10) * 100;
-  
-  return Math.round(densityAltitude + humidityCorrection);
-}
-
-// HP correction calculation available if needed in future
-// function calculateHPCorrection(env: Env): number {
-//   const da = calculateDensityAltitude(env);
-//   const correction = 1 - (da / 1000) * 0.03;
-//   return Math.max(0.5, Math.min(1.5, correction));
-// }
 
 interface EnvironmentFormProps {
   value: Env;
@@ -163,23 +132,6 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
             <div style={groupStyle}>
               <label style={labelStyle}>Angle</label>
               <input type="number" style={optInputStyle} className="input" value={value.windAngleDeg ?? ''} onChange={(e) => handleOptionalChange('windAngleDeg', e.target.value)} placeholder="—" />
-            </div>
-            {/* DA Display */}
-            <div style={{ 
-              ...groupStyle, 
-              borderLeft: '1px solid var(--color-border)', 
-              paddingLeft: '12px',
-              minWidth: '70px',
-            }}>
-              <label style={labelStyle}>Density Alt</label>
-              <div style={{ 
-                fontSize: '0.9rem', 
-                fontWeight: 600, 
-                color: calculateDensityAltitude(value) > 3000 ? '#f59e0b' : 'var(--color-text)',
-                padding: '6px 0',
-              }}>
-                {calculateDensityAltitude(value).toLocaleString()} ft
-              </div>
             </div>
           </div>
         </div>

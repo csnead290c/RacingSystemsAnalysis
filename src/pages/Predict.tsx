@@ -107,6 +107,13 @@ function Predict() {
       setEnv(DEFAULT_ENV);
       setShowVehicleSelector(false);
       setLoading(false);
+      // Load throttle stop settings from vehicle
+      if (state.vehicle.throttleStopEnabled) {
+        setThrottleStopEnabled(true);
+        setThrottleStopActivate(state.vehicle.throttleStopDelay ?? 1.0);
+        setThrottleStopDuration(state.vehicle.throttleStopDuration ?? 1.5);
+        setThrottleStopPct(state.vehicle.throttleStopPct ?? 30);
+      }
       return;
     }
 
@@ -582,9 +589,10 @@ function Predict() {
         }
         .et-sim-bottom-row {
           display: flex;
-          gap: var(--space-3);
-          flex: 3;
-          min-height: 140px;
+          gap: var(--space-2);
+          flex: 0 0 auto;
+          min-height: 120px;
+          max-height: 160px;
         }
         .et-sim-chart-area {
           flex: 1;
@@ -864,6 +872,15 @@ function Predict() {
                     const fullVehicle = vehicles.find(v => v.id === selected.id);
                     if (fullVehicle) {
                       setVehicle(fullVehicle as Vehicle);
+                      // Load throttle stop settings from vehicle
+                      if ((fullVehicle as any).throttleStopEnabled) {
+                        setThrottleStopEnabled(true);
+                        setThrottleStopActivate((fullVehicle as any).throttleStopDelay ?? 1.0);
+                        setThrottleStopDuration((fullVehicle as any).throttleStopDuration ?? 1.5);
+                        setThrottleStopPct((fullVehicle as any).throttleStopPct ?? 30);
+                      } else {
+                        setThrottleStopEnabled(false);
+                      }
                     }
                   }
                 }}
@@ -1007,66 +1024,45 @@ racingsystemsanalysis.com`;
         </div>
 
         {/* BOTTOM ROW: Simplified - Environment + Race Length + Quick Tools */}
-        <div className="et-sim-bottom-row" style={{ flexWrap: 'wrap' }}>
+        <div className="et-sim-bottom-row" style={{ flexWrap: 'nowrap', overflow: 'hidden' }}>
           {/* Environment - Combined with Race Length */}
           <div className="card" style={{ flex: '1 1 300px', padding: '12px 16px', display: 'flex', flexDirection: 'column', minWidth: '280px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Environment</span>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                {/* Race Length Toggle - inline */}
-                <div style={{ 
-                  display: 'flex', 
-                  backgroundColor: 'var(--color-bg-secondary)', 
-                  borderRadius: '4px', 
-                  padding: '2px',
-                  marginRight: '8px',
-                }}>
-                  <button
-                    onClick={() => handleRaceLengthChange('EIGHTH')}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '0.65rem',
-                      borderRadius: '3px',
-                      border: 'none',
-                      backgroundColor: raceLength === 'EIGHTH' ? 'var(--color-accent)' : 'transparent',
-                      color: raceLength === 'EIGHTH' ? 'white' : 'var(--color-text-muted)',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    1/8
-                  </button>
-                  <button
-                    onClick={() => handleRaceLengthChange('THOUSAND')}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '0.65rem',
-                      borderRadius: '3px',
-                      border: 'none',
-                      backgroundColor: raceLength === 'THOUSAND' ? 'var(--color-accent)' : 'transparent',
-                      color: raceLength === 'THOUSAND' ? 'white' : 'var(--color-text-muted)',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    1000'
-                  </button>
-                  <button
-                    onClick={() => handleRaceLengthChange('QUARTER')}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '0.65rem',
-                      borderRadius: '3px',
-                      border: 'none',
-                      backgroundColor: raceLength === 'QUARTER' ? 'var(--color-accent)' : 'transparent',
-                      color: raceLength === 'QUARTER' ? 'white' : 'var(--color-text-muted)',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    1/4
-                  </button>
-                </div>
+                {/* Race Length Selector */}
+                <select
+                  value={raceLength}
+                  onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '0.65rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' 
+                      ? 'rgba(139, 92, 246, 0.2)' 
+                      : 'var(--color-bg-secondary)',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    marginRight: '8px',
+                  }}
+                >
+                  <optgroup label="Drag Racing">
+                    {(Object.keys(DISTANCES) as RaceLength[])
+                      .filter(key => RACE_LENGTH_INFO[key].category === 'drag')
+                      .map(key => (
+                        <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="Land Speed">
+                    {(Object.keys(DISTANCES) as RaceLength[])
+                      .filter(key => RACE_LENGTH_INFO[key].category === 'landspeed')
+                      .map(key => (
+                        <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
+                      ))}
+                  </optgroup>
+                </select>
                 <select
                   value={selectedTrack?.id || ''}
                   onChange={(e) => {
