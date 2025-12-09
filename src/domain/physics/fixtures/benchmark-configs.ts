@@ -310,7 +310,7 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
 
   TA_Dragster_Pro: {
     name: 'TA_Dragster_Pro',
-    fuel: 'METHANOL',
+    fuel: 'METHANOL',  // Supercharged Methanol = Fuel System 7
     env: {
       elevation: 0,
       barometerInHg: 29.92,
@@ -341,20 +341,24 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
 
       clutch: { launchRPM: 6000, slipRPM: 7200, slipRatio: 1.01, lockup: false },
 
-      // Full methanol HP curve from Quarter Pro printout
+      // PMI values from VB6 printout (critical for accuracy)
+      enginePMI: 4.84,
+      transPMI: 0.426,
+      tiresPMI: 64.6,
+
+      // EXACT HP curve from Quarter Pro printout (includes rev limiter drop at 11000+)
       torqueCurve: [
-        { rpm: 6000, hp: 1800 },
-        { rpm: 6500, hp: 2000 },
-        { rpm: 7000, hp: 2180 },
-        { rpm: 7500, hp: 2340 },
-        { rpm: 8000, hp: 2480 },
-        { rpm: 8500, hp: 2600 },
-        { rpm: 9000, hp: 2700 },
-        { rpm: 9500, hp: 2780 },
-        { rpm: 10000, hp: 2840 },
-        { rpm: 10500, hp: 2880 },
-        { rpm: 11000, hp: 2900 },
-        { rpm: 11500, hp: 2900 },
+        { rpm: 6000, hp: 1847 },
+        { rpm: 6500, hp: 2058 },
+        { rpm: 7000, hp: 2256 },
+        { rpm: 7500, hp: 2458 },
+        { rpm: 8000, hp: 2639 },
+        { rpm: 8500, hp: 2729 },
+        { rpm: 9000, hp: 2672 },
+        { rpm: 9500, hp: 2415 },
+        { rpm: 10000, hp: 1999 },
+        { rpm: 11000, hp: 73 },
+        { rpm: 11500, hp: 72 },
       ],
     },
   },

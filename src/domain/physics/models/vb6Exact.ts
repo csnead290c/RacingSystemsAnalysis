@@ -549,7 +549,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     // Per-gear shift RPMs
     shiftRPMs = drivetrain?.shiftRPMs ?? drivetrain?.shiftsRPM ?? 
-                (vehicle as any).shiftRPMs ?? gearRatios.map(() => 7000);
+                (vehicle as any).shiftRPMs ?? (vehicle as any).shiftsRPM ?? 
+                gearRatios.map(() => 7000);
     
     // Get stall/slip RPM
     const clutchSlipRPM = clutch?.slipRPM ?? (vehicle as any).clutchSlipRPM ?? 7200;
@@ -557,8 +558,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     stallRPM = isClutch ? clutchSlipRPM : converterStallRPM;
     
     // Get slippage factor (VB6's gc_Slippage.Value)
-    // Note: slipRatio is NOT the same as slippageFactor - don't use it here
-    const clutchSlippage = clutch?.slippageFactor ?? clutch?.slippage ?? (vehicle as any).clutchSlippage ?? 1.0025;
+    // slipRatio from clutch config IS the slippage factor
+    const clutchSlippage = clutch?.slippageFactor ?? clutch?.slippage ?? clutch?.slipRatio ?? (vehicle as any).clutchSlippage ?? 1.0025;
     const converterSlippage = converter?.slippageFactor ?? converter?.slippage ?? (vehicle as any).converterSlippage ?? 1.06;
     slippage = isClutch ? clutchSlippage : converterSlippage;
     
@@ -1012,6 +1013,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       wheelbase: vehicle.wheelbaseIn ?? 100,
       finalDrive,
       NGR,
+      shiftRPMs: vb6Vehicle.ShiftRPM,
       peakHP: Math.max(...yhp),
       stallRPM,
       slippage,
