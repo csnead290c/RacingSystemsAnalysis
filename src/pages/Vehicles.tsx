@@ -99,6 +99,12 @@ const defaultForm: Partial<Vehicle> = {
   fuelSystem: 'Gas+Carb',
   // N2O option
   n2oEnabled: false,
+  // Throttle Stop
+  throttleStopEnabled: false,
+  throttleStopPct: 50,
+  throttleStopDelay: 0.5,
+  throttleStopDuration: 0.3,
+  throttleStopTargetET: undefined,
   // Organization
   group: '',
   notes: '',
@@ -360,7 +366,7 @@ function Vehicles() {
           {/* Tab Navigation - Different tabs for QuarterJr vs QuarterPro */}
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
             {(isPro 
-              ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine']
+              ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine', 'throttle']
               : ['basic', 'vehicle', 'engine', 'transmission', 'finaldrive']
             ).map((tab) => (
               <button
@@ -376,7 +382,7 @@ function Vehicles() {
                   textTransform: 'capitalize',
                 }}
               >
-                {tab === 'finaldrive' ? 'Final Drive' : tab}
+                {tab === 'finaldrive' ? 'Final Drive' : tab === 'throttle' ? 'Throttle Stop' : tab}
               </button>
             ))}
           </div>
@@ -768,42 +774,8 @@ function Vehicles() {
                 </div>
               </div>
 
-              {/* Gears Table */}
-              <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Gears</h4>
-              <table style={{ width: '100%', marginBottom: '1rem', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <th style={{ padding: '0.5rem', textAlign: 'left', width: '60px' }}>Gear</th>
-                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Ratio</th>
-                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Efficiency</th>
-                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Shift RPM</th>
-                    <th style={{ padding: '0.5rem', width: '60px' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(form.gearRatios ?? []).map((ratio, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{i + 1}</td>
-                      <td style={{ padding: '0.5rem' }}>
-                        <input type="number" step="0.01" className="input" style={{ width: '100px' }} value={ratio} onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))} />
-                      </td>
-                      <td style={{ padding: '0.5rem' }}>
-                        <input type="number" step="0.001" className="input" style={{ width: '100px' }} value={form.gearEfficiencies?.[i] ?? 0.98} onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))} />
-                      </td>
-                      <td style={{ padding: '0.5rem' }}>
-                        <input type="number" step="100" className="input" style={{ width: '100px' }} value={form.shiftRPMs?.[i] ?? 7000} onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))} />
-                      </td>
-                      <td style={{ padding: '0.5rem' }}>
-                        <button type="button" onClick={() => removeGear(i)} style={{ background: 'var(--color-error)', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer' }}>✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <button type="button" onClick={addGear} className="btn btn-secondary" style={{ marginBottom: '1rem' }}>+ Add Gear</button>
-
-              {/* Shift Mode & Rev Limiter */}
-              <div className="grid grid-3 gap-4 mb-4" style={{ marginTop: '1rem' }}>
+              {/* Shift Mode & Rev Limiter - MOVED ABOVE GEAR TABLE */}
+              <div className="grid grid-3 gap-4 mb-4">
                 <div>
                   <label className="label">Shift Mode</label>
                   <select className="input" value={form.shiftMode ?? 'rpm'} onChange={(e) => {
@@ -829,29 +801,67 @@ function Vehicles() {
                 <div></div>
               </div>
 
-              {/* Shift Times (only shown when shift mode is 'time') */}
-              {form.shiftMode === 'time' && (
-                <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
-                  <label className="label" style={{ marginBottom: '0.5rem' }}>Shift Times (seconds from launch)</label>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {(form.gearRatios ?? []).slice(0, -1).map((_, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <small style={{ color: 'var(--color-muted)' }}>{i + 1}→{i + 2}</small>
-                        <input type="number" step="0.01" className="input" style={{ width: '70px' }} 
-                          value={form.shiftTimes?.[i] ?? (i + 1) * 1.5} 
-                          onChange={(e) => {
-                            const times = [...(form.shiftTimes ?? [])];
-                            times[i] = parseFloat(e.target.value);
-                            updateForm('shiftTimes', times);
-                          }} />
-                      </div>
-                    ))}
-                  </div>
-                  <small style={{ color: 'var(--color-muted)', marginTop: '0.5rem', display: 'block' }}>
-                    Enter elapsed time (in seconds) when each shift should occur
-                  </small>
-                </div>
-              )}
+              {/* Gears Table - Dynamic columns based on shift mode */}
+              <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Gears</h4>
+              <table style={{ width: '100%', marginBottom: '1rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', width: '60px' }}>Gear</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Ratio</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>Efficiency</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left' }}>
+                      {form.shiftMode === 'time' ? 'Shift Time (s)' : 'Shift RPM'}
+                    </th>
+                    <th style={{ padding: '0.5rem', width: '60px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(form.gearRatios ?? []).map((ratio, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{i + 1}</td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="0.01" className="input" style={{ width: '100px' }} value={ratio} onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <input type="number" step="0.001" className="input" style={{ width: '100px' }} value={form.gearEfficiencies?.[i] ?? 0.98} onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))} />
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        {form.shiftMode === 'time' ? (
+                          // For time mode: show shift time for all gears except the last one
+                          i < (form.gearRatios?.length ?? 1) - 1 ? (
+                            <input 
+                              type="number" 
+                              step="0.01" 
+                              className="input" 
+                              style={{ width: '100px' }} 
+                              value={form.shiftTimes?.[i] ?? (i + 1) * 1.5} 
+                              placeholder={`${i + 1}→${i + 2}`}
+                              onChange={(e) => {
+                                const times = [...(form.shiftTimes ?? [])];
+                                times[i] = parseFloat(e.target.value);
+                                updateForm('shiftTimes', times);
+                              }} 
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--color-muted)', fontStyle: 'italic' }}>—</span>
+                          )
+                        ) : (
+                          // For RPM mode: show shift RPM for all gears except the last one
+                          i < (form.gearRatios?.length ?? 1) - 1 ? (
+                            <input type="number" step="100" className="input" style={{ width: '100px' }} value={form.shiftRPMs?.[i] ?? 7000} onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))} />
+                          ) : (
+                            <span style={{ color: 'var(--color-muted)', fontStyle: 'italic' }}>—</span>
+                          )
+                        )}
+                      </td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <button type="button" onClick={() => removeGear(i)} style={{ background: 'var(--color-error)', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer' }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button type="button" onClick={addGear} className="btn btn-secondary" style={{ marginBottom: '1rem' }}>+ Add Gear</button>
 
               {/* Transmission Type Selector */}
               <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Transmission Type</h4>
@@ -894,25 +904,29 @@ function Vehicles() {
               {transType === 'converter' && (
                 <div className="grid grid-2 gap-4">
                   <div>
-                    <label className="label">Stall RPM</label>
+                    <label className="label">Stall RPM *</label>
                     <input type="number" className="input" value={form.converterStallRPM ?? ''} onChange={(e) => updateForm('converterStallRPM', parseFloat(e.target.value))} />
-                  </div>
-                  <div>
-                    <label className="label">Torque Multiplier</label>
-                    <input type="number" step="0.01" className="input" value={form.converterTorqueMult ?? ''} onChange={(e) => updateForm('converterTorqueMult', parseFloat(e.target.value))} />
-                  </div>
-                  <div>
-                    <label className="label">Slippage Factor</label>
-                    <input type="number" step="0.001" className="input" value={form.converterSlippage ?? ''} onChange={(e) => updateForm('converterSlippage', parseFloat(e.target.value))} />
+                    <small style={{ color: 'var(--color-muted)' }}>Converter stall speed (also used as launch RPM)</small>
                   </div>
                   <div>
                     <label className="label">Diameter (in)</label>
-                    <input type="number" step="0.1" className="input" value={form.converterDiameterIn ?? ''} onChange={(e) => updateForm('converterDiameterIn', parseFloat(e.target.value))} />
+                    <input type="number" step="0.1" className="input" value={form.converterDiameterIn ?? ''} placeholder="Auto-calc" onChange={(e) => updateForm('converterDiameterIn', e.target.value ? parseFloat(e.target.value) : undefined)} />
+                    <small style={{ color: 'var(--color-muted)' }}>6-15 inches (used to calculate slippage/torque mult)</small>
+                  </div>
+                  <div>
+                    <label className="label">Torque Multiplier</label>
+                    <input type="number" step="0.01" className="input" value={form.converterTorqueMult ?? ''} placeholder="Auto-calc" onChange={(e) => updateForm('converterTorqueMult', e.target.value ? parseFloat(e.target.value) : undefined)} />
+                    <small style={{ color: 'var(--color-muted)' }}>Leave blank to auto-calculate from diameter</small>
+                  </div>
+                  <div>
+                    <label className="label">Slippage Factor</label>
+                    <input type="number" step="0.001" className="input" value={form.converterSlippage ?? ''} placeholder="Auto-calc" onChange={(e) => updateForm('converterSlippage', e.target.value ? parseFloat(e.target.value) : undefined)} />
+                    <small style={{ color: 'var(--color-muted)' }}>Leave blank to auto-calculate from diameter</small>
                   </div>
                   <div>
                     <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <input type="checkbox" checked={form.converterLockup ?? false} onChange={(e) => updateForm('converterLockup', e.target.checked)} />
-                      Lockup
+                      Lockup Converter
                     </label>
                   </div>
                 </div>
@@ -1064,6 +1078,92 @@ function Vehicles() {
                 </tbody>
               </table>
               <button type="button" onClick={addHPPoint} className="btn btn-secondary">+ Add HP Point</button>
+            </div>
+          )}
+
+          {/* Throttle Stop Tab - QuarterPro only */}
+          {activeTab === 'throttle' && isPro && (
+            <div className="mb-4">
+              <div style={{ marginBottom: '1rem' }}>
+                <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={form.throttleStopEnabled ?? false} 
+                    onChange={(e) => updateForm('throttleStopEnabled', e.target.checked)} 
+                  />
+                  <span style={{ fontWeight: 600 }}>Enable Throttle Stop</span>
+                </label>
+                <small style={{ color: 'var(--color-muted)', marginLeft: '1.5rem', display: 'block' }}>
+                  Use a throttle stop to control ET for bracket racing
+                </small>
+              </div>
+
+              {form.throttleStopEnabled && (
+                <>
+                  <div className="grid grid-2 gap-4 mb-4">
+                    <div>
+                      <label className="label">Throttle % While On Stop</label>
+                      <input 
+                        type="number" 
+                        step="1" 
+                        min="0" 
+                        max="100" 
+                        className="input" 
+                        value={form.throttleStopPct ?? 50} 
+                        onChange={(e) => updateForm('throttleStopPct', parseFloat(e.target.value))} 
+                      />
+                      <small style={{ color: 'var(--color-muted)' }}>Throttle position when stop is active (0-100%)</small>
+                    </div>
+                    <div>
+                      <label className="label">Target ET (seconds)</label>
+                      <input 
+                        type="number" 
+                        step="0.001" 
+                        className="input" 
+                        value={form.throttleStopTargetET ?? ''} 
+                        placeholder="e.g. 10.500"
+                        onChange={(e) => updateForm('throttleStopTargetET', e.target.value ? parseFloat(e.target.value) : undefined)} 
+                      />
+                      <small style={{ color: 'var(--color-muted)' }}>Your dial-in or target ET for optimizer</small>
+                    </div>
+                  </div>
+
+                  <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text)' }}>Base Timers</h4>
+                  <div className="grid grid-2 gap-4 mb-4">
+                    <div>
+                      <label className="label">Delay (seconds)</label>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0" 
+                        className="input" 
+                        value={form.throttleStopDelay ?? 0.5} 
+                        onChange={(e) => updateForm('throttleStopDelay', parseFloat(e.target.value))} 
+                      />
+                      <small style={{ color: 'var(--color-muted)' }}>Time after launch before stop activates</small>
+                    </div>
+                    <div>
+                      <label className="label">Duration (seconds)</label>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0" 
+                        className="input" 
+                        value={form.throttleStopDuration ?? 0.3} 
+                        onChange={(e) => updateForm('throttleStopDuration', parseFloat(e.target.value))} 
+                      />
+                      <small style={{ color: 'var(--color-muted)' }}>How long the stop stays active</small>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '1rem', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', marginTop: '1rem' }}>
+                    <p style={{ margin: 0, color: 'var(--color-muted)', fontSize: '0.9rem' }}>
+                      💡 <strong>Tip:</strong> Set your target ET, then use the <strong>Optimize</strong> button on the ET Predict screen 
+                      to automatically calculate the duration needed to hit your dial-in.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

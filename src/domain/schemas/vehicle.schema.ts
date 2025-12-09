@@ -88,6 +88,13 @@ export const VehicleSchema = z.object({
   // N2O Option (QuarterJr)
   n2oEnabled: z.boolean().optional(),          // gc_N2O
   
+  // Throttle Stop Configuration
+  throttleStopEnabled: z.boolean().optional(),       // Whether throttle stop is active
+  throttleStopPct: z.number().optional(),            // Throttle percentage while on stop (0-100)
+  throttleStopDelay: z.number().optional(),          // Delay before stop activates (seconds)
+  throttleStopDuration: z.number().optional(),       // How long stop is active (seconds)
+  throttleStopTargetET: z.number().optional(),       // Target ET for optimizer (seconds)
+  
   // Organization
   group: z.string().optional(),                // Vehicle group/category for organization
   notes: z.string().optional(),                // User notes about the vehicle
