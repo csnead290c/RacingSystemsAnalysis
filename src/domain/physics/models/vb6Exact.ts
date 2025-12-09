@@ -582,11 +582,54 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     overhangInCalc = overhangIn;
   }
   
-  // CG height - use from fixture if provided, otherwise calculate from tire radius + 3.75"
-  const YCG_in = (vehicle as any).cgHeight_in ?? (vehicle as any).cgHeightIn ?? ((tireDiaIn / 2) + 3.75);
+  // ========================================================================
+  // VB6 TIMESLIP.FRM lines 1010-1043: Calculate YCG and StaticFWt
+  // These are CALCULATED values in VB6, not user inputs
+  // ========================================================================
   
-  // Static front weight (default 38% of total)
-  const staticFWt = (vehicle as any).staticFrontWeight_lb ?? (vehicle as any).staticFrontWeightLb ?? (vehicle.weightLb * 0.38);
+  // CG height: VB6 TIMESLIP.FRM:1032 - "assume YCG is 3.75" above static rear axle centerline"
+  // gc_YCG.Value = (TireDia / 2) + 3.75
+  const YCG_in = (tireDiaIn / 2) + 3.75;
+  
+  // Static front weight: VB6 calculates this based on weight transfer at launch
+  // VB6 TIMESLIP.FRM:1037-1043:
+  //   deltaFWT = (Ags0 * Weight * ((YCG - TireRadIn) + (FRCT / Efficiency) * TireRadIn) + DragForce * YCG) / Wheelbase
+  //   gc_StaticFWt.Value = deltaFWT + DynamicFWT  (where DynamicFWT = 0 at launch)
+  //
+  // Constants from VB6 TIMESLIP.FRM:556-559
+  const FRCT = 1.03;
+  const CMU = 0.015;
+  // Z6 = 5252 is the HP to torque conversion constant (TQ = 5252 * HP / RPM)
+  
+  const tireRadIn = tireDiaIn / 2;
+  const wheelbaseIn = vehicle.wheelbaseIn ?? 100;
+  const weight = vehicle.weightLb;
+  
+  // Calculate Ags0 exactly as VB6 does (TIMESLIP.FRM:1010-1027)
+  // 1. Get HP at launch RPM
+  const launchRPM_calc = isClutch 
+    ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
+    : stallRPM;
+  const HP_launch_calc = TABY(xrpm, yhp, NHP, 1, launchRPM_calc);
+  const HP_corrected = HP_launch_calc / hpc; // Apply weather correction
+  
+  // 2. Calculate torque: TQ = 5252 * HP / RPM * TorqueMult * GearRatio * GearEff
+  const TQ = 5252 * HP_corrected / launchRPM_calc * torqueMult * gearRatios[0] * TGEff[0];
+  
+  // 3. Calculate force at tire: force = TQ * FinalDrive * Efficiency / (TireSlip * TireDia / 24) - DragForce
+  // At launch, TireSlip = slippage, DragForce = CMU * Weight (no aero drag at Vel=0)
+  const dragForceAtLaunch = CMU * weight;
+  const force = TQ * finalDrive * overallEfficiency / (slippage * tireDiaIn / 24) - dragForceAtLaunch;
+  
+  // 4. Estimate Ags0: VB6 uses 0.88 for clutch (12% losses), 0.96 for converter (4% losses)
+  const launchEfficiency = isClutch ? 0.88 : 0.96;
+  const Ags0 = launchEfficiency * force / weight;
+  
+  // 5. Calculate deltaFWT using VB6 formula (TIMESLIP.FRM:1037)
+  const deltaFWT = (Ags0 * weight * ((YCG_in - tireRadIn) + (FRCT / overallEfficiency) * tireRadIn) + dragForceAtLaunch * YCG_in) / wheelbaseIn;
+  
+  // StaticFWt = deltaFWT (since DynamicFWT = 0 at launch)
+  const staticFWt = deltaFWT;
   
   // Use calculated overhang for QuarterJr mode, user input for QuarterPro
   const finalOverhang = isQuarterJr ? overhangInCalc : overhangIn;
