@@ -75,7 +75,7 @@ describe('Funny Car Debug', () => {
     console.log('\n=== Incremental Time Comparison ===');
     const vb6Times = [
       { dist: 60, time: 0.88, mph: 75.3 },
-      { dist: 330, time: 2.00, mph: 156.3 },
+      { dist: 330, time: 2.32, mph: 156.3 },  // Corrected from 2.00
       { dist: 660, time: 3.37, mph: 243.5 },
       { dist: 1000, time: 4.23, mph: 283.0 },
       { dist: 1320, time: 4.98, mph: 297.0 },

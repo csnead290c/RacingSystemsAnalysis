@@ -597,9 +597,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const tractionIndex_early = env.tractionIndex ?? 5;
   const tireSlipAtLaunch = 1.02 + (tractionIndex_early - 1) * 0.005 + (trackTempEffect_early - 1) * 3;
   
-  // Constants from VB6 TIMESLIP.FRM:556-559
+  // Constants from VB6 TIMESLIP.FRM:551-559
   const FRCT = 1.03;
-  const CMU = 0.015;
+  const CMU = 0.025;  // VB6 TIMESLIP.FRM:552
   
   const wheelbaseIn = vehicle.wheelbaseIn ?? 100;
   const weight = vehicle.weightLb;
