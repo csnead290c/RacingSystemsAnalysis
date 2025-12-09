@@ -1103,6 +1103,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       tireSlipAtLaunch: tireSlipAtLaunch,
       rolloutTime_s: timerStartTime_s ?? 0,
       rolloutIn,
+      gearEfficiencies: vb6Vehicle.TGEff,
+      overallEfficiency: vb6Vehicle.Efficiency,
+      overhangIn: (vehicle as any).overhangIn ?? overhangIn,
     },
     result: {
       et: et_s,

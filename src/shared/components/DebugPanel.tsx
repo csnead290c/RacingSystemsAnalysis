@@ -162,6 +162,12 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
                 <Row label="v.clutchSlippage" value={String((data.simParams as any).vehicleClutchSlippage)} />
               )}
               <Row label="Clutch" value={data.simParams.isClutch ? 'Yes' : 'Converter'} />
+              {(data.simParams as any).gearEfficiencies && (
+                <Row label="Gear Eff" value={JSON.stringify((data.simParams as any).gearEfficiencies.map((e: number) => e.toFixed(3)))} />
+              )}
+              {(data.simParams as any).overallEfficiency !== undefined && (
+                <Row label="Overall Eff" value={(data.simParams as any).overallEfficiency.toFixed(3)} />
+              )}
             </Section>
           )}
 
