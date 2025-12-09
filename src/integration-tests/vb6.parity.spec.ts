@@ -73,13 +73,9 @@ function buildSimInputs(
     finalDrive: config.vehicle.finalDrive ?? config.vehicle.rearGear,
     transEff: config.vehicle.transEff,
     gearEff: config.vehicle.gearEff,
-    perGearEff: config.vehicle.gearEff,
-    shiftsRPM: config.vehicle.shiftRPM,
     
-    // PMI values
-    enginePMI: (config.vehicle as any).enginePMI,
-    transPMI: (config.vehicle as any).transPMI,
-    tiresPMI: (config.vehicle as any).tiresPMI,
+    // PMI values (pass through nested pmi object)
+    pmi: config.vehicle.pmi,
     
     converter: config.vehicle.converter,
     clutch: config.vehicle.clutch,

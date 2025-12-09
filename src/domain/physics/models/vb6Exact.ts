@@ -547,10 +547,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const gearEfficiencies = drivetrain?.perGearEff ?? (vehicle as any).gearEfficiencies ?? null;
     TGEff = gearEfficiencies ?? gearRatios.map(() => 0.99);
     
-    // Per-gear shift RPMs
+    // Per-gear shift RPMs (check all common property names)
     shiftRPMs = drivetrain?.shiftRPMs ?? drivetrain?.shiftsRPM ?? 
                 (vehicle as any).shiftRPMs ?? (vehicle as any).shiftsRPM ?? 
-                gearRatios.map(() => 7000);
+                (vehicle as any).shiftRPM ?? gearRatios.map(() => 7000);
     
     // Get stall/slip RPM
     const clutchSlipRPM = clutch?.slipRPM ?? (vehicle as any).clutchSlipRPM ?? 7200;

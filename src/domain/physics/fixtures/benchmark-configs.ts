@@ -342,9 +342,11 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
       clutch: { launchRPM: 6000, slipRPM: 7200, slipRatio: 1.01, lockup: false },
 
       // PMI values from VB6 printout (critical for accuracy)
-      enginePMI: 4.84,
-      transPMI: 0.426,
-      tiresPMI: 64.6,
+      pmi: {
+        engine_flywheel_clutch: 4.84,
+        transmission_driveshaft: 0.426,
+        tires_wheels_ringgear: 64.6,
+      },
 
       // EXACT HP curve from Quarter Pro printout (includes rev limiter drop at 11000+)
       torqueCurve: [
