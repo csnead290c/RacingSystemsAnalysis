@@ -187,6 +187,8 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
               <Row label="Static FWt" value={`${((data.simParams as any).staticFWt ?? 0).toFixed(1)} lb`} />
               <Row label="Ags0" value={`${((data.simParams as any).ags0 ?? 0).toFixed(3)} g`} />
               <Row label="TireSlip" value={((data.simParams as any).tireSlipAtLaunch ?? 0).toFixed(4)} />
+              <Row label="Overhang" value={`${((data.simParams as any).overhangIn ?? 0).toFixed(1)}"`} />
+              <Row label="Rollout" value={`${((data.simParams as any).rolloutIn ?? 0).toFixed(1)}"`} />
             </Section>
           )}
 

@@ -18,8 +18,10 @@
     "wheelbase_in": 280, 
     "overhang_in": 30, 
     "rollout_in": 12,
-    "tireRolloutIn": 110.0, 
-    "tireWidthIn": 17.0 
+    "tire": {
+      "diameter_in": 35.01,
+      "width_in": 17.0
+    }
   },
   "aero": { 
     "frontalArea_ft2": 19.5, 
