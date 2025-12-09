@@ -150,6 +150,9 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
             <Section title="Drivetrain">
               <Row label="Launch RPM" value={data.simParams.launchRPM ?? 'N/A'} />
               <Row label="Stall RPM" value={data.simParams.stallRPM} />
+              {(data.simParams as any).shiftRPMs && (
+                <Row label="Shift RPMs" value={JSON.stringify((data.simParams as any).shiftRPMs)} />
+              )}
               <Row label="Slippage" value={data.simParams.slippage.toFixed(4)} 
                    warn={data.simParams.slippage === 1} />
               {(data.simParams as any).slippageSource && (
@@ -203,8 +206,41 @@ export function DebugPanel({ data, title = 'Simulation Debug' }: DebugPanelProps
             <Section title="Result">
               <Row label="ET" value={`${data.result.et.toFixed(3)}s`} />
               <Row label="MPH" value={`${data.result.mph.toFixed(1)} mph`} />
+              {(data.result as any).rolloutTime_s !== undefined && (
+                <Row label="Rollout Time" value={`${((data.result as any).rolloutTime_s).toFixed(3)}s`} />
+              )}
             </Section>
           )}
+        </div>
+      )}
+
+      {/* Run Trace - VB6 style detailed printout */}
+      {isExpanded && (data as any).runTrace && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          borderTop: '1px solid var(--color-warning)',
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        }}>
+          <div style={{ 
+            fontWeight: 600, 
+            color: 'var(--color-text)', 
+            marginBottom: '0.5rem',
+            fontSize: '0.8rem',
+          }}>
+            Run Trace (VB6 Style)
+          </div>
+          <pre style={{
+            fontFamily: 'monospace',
+            fontSize: '0.65rem',
+            lineHeight: 1.4,
+            margin: 0,
+            maxHeight: '300px',
+            overflowY: 'auto',
+            whiteSpace: 'pre',
+            color: 'var(--color-text-secondary)',
+          }}>
+            {(data as any).runTrace}
+          </pre>
         </div>
       )}
     </div>

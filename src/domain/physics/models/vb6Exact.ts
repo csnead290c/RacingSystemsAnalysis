@@ -261,6 +261,61 @@ function calcTrackTempEffect(trackTempF: number): number {
   return effect;
 }
 
+/**
+ * Generate VB6-style run trace printout
+ * Matches the format from Quarter Pro's detailed results
+ */
+function generateRunTrace(trace: TracePoint[], rolloutIn: number): string {
+  const lines: string[] = [];
+  
+  // Header matching VB6 format
+  lines.push('  Time     Distance    MPH  Accel   Gear    RPM');
+  
+  const rolloutFt = rolloutIn / 12;
+  let rolloutFound = false;
+  let lastPrintedTime = -0.25;
+  
+  for (let i = 0; i < trace.length; i++) {
+    const pt = trace[i];
+    const time = pt.t_s;
+    const dist = pt.s_ft;
+    const mph = pt.v_mph;
+    const accel = pt.a_g;
+    const gear = pt.gear;
+    const rpm = pt.rpm;
+    
+    // Find rollout point
+    if (!rolloutFound && dist >= rolloutFt) {
+      rolloutFound = true;
+      // Print rollout line (VB6 format: "0.146/0.00 Rollout")
+      const slipIndicator = pt.slip ? '(s)' : '';
+      lines.push(
+        `${time.toFixed(2).padStart(5)}/0.00 Rollout  ${mph.toFixed(1).padStart(6)}  ${accel.toFixed(2)}${slipIndicator.padEnd(4)}    ${gear}  ${rpm.toFixed(0).padStart(6)}`
+      );
+      lastPrintedTime = time;
+      continue;
+    }
+    
+    // Print at regular intervals (~0.25s) or on gear changes
+    const isFirst = i === 0;
+    const isQuarterSecond = time - lastPrintedTime >= 0.24;
+    const isGearChange = i > 0 && gear !== trace[i-1].gear;
+    const isLast = i === trace.length - 1;
+    
+    if (isFirst || isQuarterSecond || isGearChange || isLast) {
+      const slipIndicator = pt.slip ? '(s)' : '';
+      const distStr = dist.toFixed(0).padStart(7);
+      
+      lines.push(
+        `${time.toFixed(2).padStart(6)}  ${distStr}  ${mph.toFixed(1).padStart(6)}  ${accel.toFixed(2)}${slipIndicator.padEnd(4)}    ${gear}  ${rpm.toFixed(0).padStart(6)}`
+      );
+      lastPrintedTime = time;
+    }
+  }
+  
+  return lines.join('\n');
+}
+
 // ============================================================================
 // Main Simulation Function
 // ============================================================================
@@ -548,9 +603,20 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     TGEff = gearEfficiencies ?? gearRatios.map(() => 0.99);
     
     // Per-gear shift RPMs (check all common property names)
-    shiftRPMs = drivetrain?.shiftRPMs ?? drivetrain?.shiftsRPM ?? 
+    // For N gears, we need N-1 shift points (1→2, 2→3, etc.)
+    const rawShiftRPMs = drivetrain?.shiftRPMs ?? drivetrain?.shiftsRPM ?? 
                 (vehicle as any).shiftRPMs ?? (vehicle as any).shiftsRPM ?? 
                 (vehicle as any).shiftRPM ?? gearRatios.map(() => 7000);
+    
+    // Validate and trim shift RPMs to correct length (NGR - 1)
+    const expectedShiftCount = gearRatios.length - 1;
+    if (Array.isArray(rawShiftRPMs) && rawShiftRPMs.length > expectedShiftCount) {
+      // Trim extra values (e.g., [9200, 9400, 100] → [9200, 9400] for 3 gears)
+      shiftRPMs = rawShiftRPMs.slice(0, expectedShiftCount);
+      warnings.push(`Shift RPMs trimmed from ${rawShiftRPMs.length} to ${expectedShiftCount} values`);
+    } else {
+      shiftRPMs = rawShiftRPMs;
+    }
     
     // Get stall/slip RPM
     const clutchSlipRPM = clutch?.slipRPM ?? (vehicle as any).clutchSlipRPM ?? 7200;
@@ -1035,11 +1101,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       staticFWt: staticFWt,
       ags0: Ags0,
       tireSlipAtLaunch: tireSlipAtLaunch,
+      rolloutTime_s: timerStartTime_s ?? 0,
+      rolloutIn,
     },
     result: {
       et: et_s,
       mph,
+      rolloutTime_s: timerStartTime_s ?? 0,
     },
+    // VB6-style run trace printout
+    runTrace: generateRunTrace(trace, rolloutIn),
   };
   
   return {
