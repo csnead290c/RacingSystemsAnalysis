@@ -740,10 +740,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Calculate TSMax
   // VB6 TIMESLIP.FRM:815: DistToPrint(1) = gc_Rollout.Value / 12
   // VB6 TIMESLIP.FRM:1063: TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1/3)
-  // Note: Using 60ft gives better results - the VB6 timestep logic is complex
+  const rolloutFt_tsmax = (vehicle.rolloutIn ?? 12) / 12;
+  const DistToPrint1 = rolloutFt_tsmax > 0 ? rolloutFt_tsmax : 1; // VB6: If DistToPrint(1) = 0 Then DistToPrint(1) = 1
   const HP_launch = TABY(xrpm, yhp, NHP, 1, launchRPM);
   const TSMax = vb6CalcTSMaxInit(
-    60, // Using 60ft for now - matches observed behavior better
+    DistToPrint1,
     HP_launch,
     torqueMult,
     vehicle.weightLb
