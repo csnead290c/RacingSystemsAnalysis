@@ -583,71 +583,71 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   }
   
   // ========================================================================
-  // VB6 TIMESLIP.FRM lines 1010-1043: Calculate YCG and StaticFWt
-  // These are CALCULATED values in VB6, not user inputs
-  // However, if fixture provides explicit values, use those instead
+  // VB6 TIMESLIP.FRM lines 1005-1043: Calculate launch conditions
+  // YCG and StaticFWt are CALCULATED by VB6, not user inputs
   // ========================================================================
   
-  // CG height: VB6 TIMESLIP.FRM:1032 - "assume YCG is 3.75" above static rear axle centerline"
-  // gc_YCG.Value = (TireDia / 2) + 3.75
-  const YCG_in = (vehicle as any).cgHeight_in ?? (vehicle as any).cgHeightIn ?? ((tireDiaIn / 2) + 3.75);
+  // VB6 TIMESLIP.FRM:1032 - YCG = (TireDia / 2) + 3.75
+  const YCG_in = (tireDiaIn / 2) + 3.75;
   
-  // Static front weight: Check if fixture provides it, otherwise calculate
-  const fixtureStaticFWt = (vehicle as any).staticFrontWeight_lb ?? (vehicle as any).staticFrontWeightLb;
+  // Calculate TireSlip at launch (VB6 TIMESLIP.FRM:872)
+  // TireSlip = 1.02 + (TractionIndex - 1) * 0.005 + (TrackTempEffect - 1) * 3
+  const trackTempF_early = env.trackTempF ?? 100;
+  const trackTempEffect_early = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF_early);
+  const tractionIndex_early = env.tractionIndex ?? 5;
+  const tireSlipAtLaunch = 1.02 + (tractionIndex_early - 1) * 0.005 + (trackTempEffect_early - 1) * 3;
   
-  let staticFWt: number;
-  let Ags0: number;
-  let tireSlipAtLaunch: number;
+  // Constants from VB6 TIMESLIP.FRM:556-559
+  const FRCT = 1.03;
+  const CMU = 0.015;
   
-  if (fixtureStaticFWt !== undefined) {
-    // Use fixture value
-    staticFWt = fixtureStaticFWt;
-    Ags0 = 0; // Not calculated
-    tireSlipAtLaunch = 0; // Not calculated
-  } else {
-    // Calculate exactly as VB6 does (TIMESLIP.FRM:1010-1043)
-    
-    // Need trackTempEffect and tractionIndex for TireSlip calculation
-    const trackTempF_early = env.trackTempF ?? 100;
-    const trackTempEffect_early = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF_early);
-    const tractionIndex_early = env.tractionIndex ?? 5;
-    
-    // Constants from VB6 TIMESLIP.FRM:556-559
-    const FRCT = 1.03;
-    const CMU = 0.015;
-    
-    const wheelbaseIn = vehicle.wheelbaseIn ?? 100;
-    const weight = vehicle.weightLb;
-    
-    // 1. Get HP at launch RPM
-    const launchRPM_calc = isClutch 
-      ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
-      : stallRPM;
-    const HP_launch_calc = TABY(xrpm, yhp, NHP, 1, launchRPM_calc);
-    const HP_corrected = HP_launch_calc / hpc; // Apply weather correction
-    
-    // 2. Calculate torque: TQ = 5252 * HP / RPM * TorqueMult * GearRatio * GearEff
-    const TQ = 5252 * HP_corrected / launchRPM_calc * torqueMult * gearRatios[0] * TGEff[0];
-    
-    // 3. Calculate TireSlip at launch (VB6 TIMESLIP.FRM:872)
-    // TireSlip = 1.02 + (TractionIndex - 1) * 0.005 + (TrackTempEffect - 1) * 3
-    tireSlipAtLaunch = 1.02 + (tractionIndex_early - 1) * 0.005 + (trackTempEffect_early - 1) * 3;
-    
-    // 4. Calculate force at tire: force = TQ * FinalDrive * Efficiency / (TireSlip * TireDia / 24) - DragForce
-    const dragForceAtLaunch = CMU * weight;
-    const force = TQ * finalDrive * overallEfficiency / (tireSlipAtLaunch * tireDiaIn / 24) - dragForceAtLaunch;
-    
-    // 5. Estimate Ags0: VB6 uses 0.88 for clutch (12% losses), 0.96 for converter (4% losses)
-    const launchEfficiency = isClutch ? 0.88 : 0.96;
-    Ags0 = launchEfficiency * force / weight;
-    
-    // 6. Calculate deltaFWT using VB6 formula (TIMESLIP.FRM:1037)
-    const tireRadIn2 = tireDiaIn / 2;
-    const deltaFWT = (Ags0 * weight * ((YCG_in - tireRadIn2) + (FRCT / overallEfficiency) * tireRadIn2) + dragForceAtLaunch * YCG_in) / wheelbaseIn;
-    
-    // StaticFWt = deltaFWT (since DynamicFWT = 0 at launch)
-    staticFWt = deltaFWT;
-  }
+  const wheelbaseIn = vehicle.wheelbaseIn ?? 100;
+  const weight = vehicle.weightLb;
+  
+  // VB6 TIMESLIP.FRM:1010-1011 - Get HP at launch RPM, apply weather correction
+  const launchRPM_calc = isClutch 
+    ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
+    : stallRPM;
+  const HP_launch_calc = TABY(xrpm, yhp, NHP, 1, launchRPM_calc);
+  const HP_corrected = HP_launch_calc / hpc;
+  
+  // VB6 TIMESLIP.FRM:1013-1014 - Calculate torque at wheels
+  // TQ = Z6 * HP / RPM * TorqueMult * GearRatio * GearEff
+  const TQ = 5252 * HP_corrected / launchRPM_calc * torqueMult * gearRatios[0] * TGEff[0];
+  
+  // VB6 TIMESLIP.FRM:1016-1019 - Calculate DragForce at launch
+  // At Vel=0, wind still creates dynamic pressure
+  // WindFPS = Sqr(Vel^2 + 2*Vel*WindSpeed*Cos(angle) + WindSpeed^2) = WindSpeed at Vel=0
+  const windMph = env.windMph ?? 0;
+  // Note: windAngle doesn't matter at Vel=0 since the velocity term is 0
+  const Z5 = 0.681818; // mph to fps conversion factor (3600/5280)
+  const windFPS = windMph / Z5;
+  const q_launch = windFPS > 0 ? rho_lbm_ft3 * windFPS * windFPS / (2 * gc) : 0;
+  const frontalArea = (input as any).aero?.frontalArea_ft2 ?? vehicle.frontalArea_ft2 ?? (vehicle as any).frontalAreaFt2 ?? 20;
+  const dragForceAtLaunch = CMU * weight + dragCoef * frontalArea * q_launch;
+  
+  // VB6 TIMESLIP.FRM:1020 - Calculate force at tire
+  // force = TQ * FinalDrive * Efficiency / (TireSlip * TireDia / 24) - DragForce
+  const force = TQ * finalDrive * overallEfficiency / (tireSlipAtLaunch * tireDiaIn / 24) - dragForceAtLaunch;
+  
+  // VB6 TIMESLIP.FRM:1023-1027 - Estimate Ags0
+  // Clutch: 0.88 (12% losses), Converter: 0.96 (4% losses)
+  const launchEfficiency = isClutch ? 0.88 : 0.96;
+  const Ags0 = launchEfficiency * force / weight;
+  
+  // VB6 TIMESLIP.FRM:1035-1036 - Call Tire() to get TireCirFt, then TireRadIn
+  // At launch (Vel=0): TireGrowth = 1, TireSQ = 1 - 0.035 * Abs(Ags0)
+  // TireCirFt = TireSQ * TireDia * PI / 12
+  // TireRadIn = 12 * TireCirFt / (2 * PI) = TireSQ * TireDia / 2
+  const tireSQ = 1 - 0.035 * Math.abs(Ags0);
+  const tireRadIn = tireSQ * tireDiaIn / 2;
+  
+  // VB6 TIMESLIP.FRM:1037 - Calculate deltaFWT
+  // deltaFWT = (Ags0 * Weight * ((YCG - TireRadIn) + (FRCT / Efficiency) * TireRadIn) + DragForce * YCG) / Wheelbase
+  const deltaFWT = (Ags0 * weight * ((YCG_in - tireRadIn) + (FRCT / overallEfficiency) * tireRadIn) + dragForceAtLaunch * YCG_in) / wheelbaseIn;
+  
+  // VB6 TIMESLIP.FRM:1043 - StaticFWt = deltaFWT (since DynamicFWT = 0 at launch)
+  const staticFWt = deltaFWT;
   
   // Use calculated overhang for QuarterJr mode, user input for QuarterPro
   const finalOverhang = isQuarterJr ? overhangInCalc : overhangIn;

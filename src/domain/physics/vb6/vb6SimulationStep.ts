@@ -880,9 +880,10 @@ export function vb6InitState(
   let Ags0_g = lossFactor * force / vehicle.Weight_lbf;
   
   // VB6: TIMESLIP.FRM:1046-1054 - Calculate AMAX and clamp Ags0
-  // StaticRWT = DownForce - StaticFWt
+  // StaticRWT = DownForce - StaticFWt: If StaticRWT < 0 Then StaticRWT = Weight
   const DownForce_init = vehicle.Weight_lbf;
-  const StaticRWT = DownForce_init - vehicle.StaticFWt_lbf;
+  let StaticRWT = DownForce_init - vehicle.StaticFWt_lbf;
+  if (StaticRWT < 0) StaticRWT = vehicle.Weight_lbf;
   
   // CAXI = (1 - (TractionIndex - 1) * 0.01) / (TrackTempEffect ^ 0.25)
   const CAXI_init = calcCAXI(env.TractionIndex, env.TrackTempEffect);
