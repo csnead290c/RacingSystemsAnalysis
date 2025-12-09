@@ -155,5 +155,41 @@ describe('TA Dragster Trace Comparison', () => {
     console.log(`\nOur Rollout Time: ${debug?.simParams?.rolloutTime_s?.toFixed(3)}s`);
     console.log(`VB6 Rollout Time: 0.146s`);
     console.log(`Rollout Delta: ${((debug?.simParams?.rolloutTime_s ?? 0) - 0.146).toFixed(3)}s`);
+    
+    // Find velocity at rollout
+    // The rolloutTime is the raw simulation time when rollout was crossed
+    // But trace t_s is track time (0 until timer starts)
+    // So we need to find the first point where track time > 0 (timer just started)
+    const rolloutTime = debug?.simParams?.rolloutTime_s ?? 0;
+    let velAtRollout = 0;
+    for (const pt of trace) {
+      if (pt.t_s > 0) {
+        velAtRollout = pt.v_mph;
+        console.log(`\nFirst trace point after rollout: t=${pt.t_s.toFixed(4)}s, dist=${pt.s_ft.toFixed(1)}ft, v=${pt.v_mph.toFixed(1)}mph`);
+        break;
+      }
+    }
+    console.log(`Our velocity at rollout: ${velAtRollout.toFixed(1)} mph`);
+    console.log(`VB6 velocity at rollout: ~10.3 mph (from VB6 printout at t=0.25, dist=11ft)`);
+    
+    // Check rollout distance
+    console.log(`\nRollout distance: ${debug?.simParams?.rolloutIn ?? 12} inches = ${(debug?.simParams?.rolloutIn ?? 12) / 12} ft`);
+    
+    // Show first 10 trace points to see what's happening at launch
+    console.log('\n=== FIRST 10 TRACE POINTS (track time/dist) ===');
+    console.log('Step  Time(s)   Dist(ft)   MPH     Accel(g)');
+    for (let i = 0; i < Math.min(10, trace.length); i++) {
+      const pt = trace[i];
+      console.log(`${i.toString().padStart(4)}  ${pt.t_s.toFixed(4).padStart(8)}  ${pt.s_ft.toFixed(3).padStart(8)}  ${pt.v_mph.toFixed(2).padStart(6)}  ${pt.a_g.toFixed(3).padStart(8)}`);
+    }
+    
+    // Check ovradj value
+    console.log(`\novradj (overhang adjustment): ${debug?.simParams?.overhangIn ? ((debug.simParams.overhangIn + 0.25 * 24) / 12).toFixed(3) : 'N/A'} ft`);
+    console.log(`Expected: (30 + 0.25*24) / 12 = ${((30 + 6) / 12).toFixed(3)} ft = 3.0 ft`);
+    
+    // The track distance at t=0 should be ovradj (since raw dist = rollout = 1ft, track dist = 1 - 1 + ovradj = ovradj)
+    console.log(`\nAt rollout (raw dist = 1ft): track dist = 1 - 1 + ovradj = ovradj = ~3.0 ft`);
+    console.log(`But trace shows s_ft = ${trace[0]?.s_ft.toFixed(3)} ft at t=0`);
+    console.log(`This suggests ovradj might be ~${(trace[0]?.s_ft - 1 + 1).toFixed(3)} ft`);
   });
 });

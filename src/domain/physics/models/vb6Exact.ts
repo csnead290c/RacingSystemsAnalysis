@@ -605,9 +605,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
                              null;
     TGEff = gearEfficiencies ?? gearRatios.map(() => 0.99);
     
-    // Flag if user provided per-gear efficiencies (affects overall efficiency handling)
-    const hasUserGearEff = gearEfficiencies !== null;
-    
     // Per-gear shift RPMs (check all common property names)
     // For N gears, we need N-1 shift points (1→2, 2→3, etc.)
     const rawShiftRPMs = drivetrain?.shiftRPMs ?? drivetrain?.shiftsRPM ?? 
@@ -646,17 +643,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     transPMI = pmi?.transmission_driveshaft ?? (vehicle as any).transPMI ?? engine?.transPMI ?? 0.2;
     
     // Overall drivetrain efficiency
-    // In VB6 QuarterPro, when user provides per-gear efficiencies (TGEff), 
-    // gc_Efficiency is typically 1.0 because the per-gear values already 
-    // represent total drivetrain efficiency for each gear.
-    // Only use the separate overall efficiency if no per-gear efficiencies were provided.
-    if (hasUserGearEff) {
-      // User provided per-gear efficiencies - use 1.0 for overall
-      overallEfficiency = 1.0;
-    } else {
-      // No per-gear efficiencies - use overall efficiency (QuarterJr style)
-      overallEfficiency = drivetrain?.overallEfficiency ?? (vehicle as any).transEfficiency ?? 0.97;
-    }
+    // VB6 applies BOTH TGEff (per-gear) AND gc_Efficiency (overall) separately:
+    // - TGEff is applied in the HP chain: HP * TGEff * Efficiency
+    // - gc_Efficiency is applied in force calculation: force = TQ * FinalDrive * Efficiency / ...
+    overallEfficiency = drivetrain?.overallEfficiency ?? (vehicle as any).transEfficiency ?? 0.97;
     
     // Aero coefficients from user input - check aero object first
     const aero = (input as any).aero ?? (vehicle as any).aero;
@@ -903,8 +893,18 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Dist(L) = Dist(L) + ovradj
     // This accounts for the front overhang - the nose is ahead of where the rear tires are
     // Track distance = (rear_tire_position - rollout) + ovradj
-    const trackDist_ft = Math.max(0, state.Dist_ft - rolloutFt + ovradj);
-    const trackTime_s = timerStartTime_s !== null ? state.time_s - timerStartTime_s : 0;
+    // IMPORTANT: ovradj is only applied AFTER the timer starts (after rollout)
+    let trackDist_ft: number;
+    let trackTime_s: number;
+    if (timerStartTime_s !== null) {
+      // Timer has started - apply ovradj
+      trackDist_ft = state.Dist_ft - rolloutFt + ovradj;
+      trackTime_s = state.time_s - timerStartTime_s;
+    } else {
+      // Before rollout - no ovradj, track distance is 0
+      trackDist_ft = 0;
+      trackTime_s = 0;
+    }
     
     // Calculate driveshaft RPM (transmission output, accounting for clutch/converter slip)
     // Driveline: Engine → Clutch/Converter → Trans → Driveshaft → Final Drive → Wheels
