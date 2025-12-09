@@ -40,7 +40,11 @@ export interface VB6FixtureJSON {
     rollout_in: number;
     tireDiaIn?: number;
     tireRolloutIn?: number;
-    tireWidthIn: number;
+    tireWidthIn?: number;
+    tire?: {
+      diameter_in: number;
+      width_in: number;
+    };
   };
   aero: {
     frontalArea_ft2: number;
@@ -52,7 +56,8 @@ export interface VB6FixtureJSON {
     overallEfficiency: number;
     gearRatios: number[];
     perGearEff: number[];
-    shiftRPM: number[];
+    shiftRPM?: number[];
+    shiftsRPM?: number[];
     clutch?: {
       launchRPM: number;
       slipRPM: number;
@@ -113,9 +118,13 @@ export function toParityFixture(
   const distanceFt = distance === 'quarter' ? 1320 : 660;
   const targets = json.vb6Targets[distance];
   
-  // Derive tire diameter from rollout if not specified
+  // Derive tire diameter from rollout or nested tire object if not specified
   const tireDiaIn = json.vehicle.tireDiaIn ?? 
+    json.vehicle.tire?.diameter_in ??
     (json.vehicle.tireRolloutIn ? json.vehicle.tireRolloutIn / Math.PI : 28);
+  
+  // Get tire width from either property
+  const tireWidthIn = json.vehicle.tireWidthIn ?? json.vehicle.tire?.width_in ?? 10;
   
   return {
     name: `${json.meta.name}_${distance.toUpperCase()}`,
@@ -128,7 +137,7 @@ export function toParityFixture(
       wheelbase_in: json.vehicle.wheelbase_in,
       tireDiaIn,
       tireRolloutIn: json.vehicle.tireRolloutIn ?? tireDiaIn * Math.PI,
-      tireWidthIn: json.vehicle.tireWidthIn,
+      tireWidthIn,
       rolloutIn: json.vehicle.rollout_in,
       frontalArea_ft2: json.aero.frontalArea_ft2,
       cd: json.aero.Cd,
@@ -136,7 +145,7 @@ export function toParityFixture(
       finalDrive: json.drivetrain.finalDrive,
       gearRatios: [...json.drivetrain.gearRatios],
       gearEff: [...json.drivetrain.perGearEff],
-      shiftRPM: [...json.drivetrain.shiftRPM],
+      shiftRPM: [...(json.drivetrain.shiftRPM ?? json.drivetrain.shiftsRPM ?? [])],
       transEff: json.drivetrain.overallEfficiency,
       torqueCurve: json.engineHP.map(([rpm, hp]) => ({ rpm, hp })),
       // Clutch or converter (mutually exclusive)

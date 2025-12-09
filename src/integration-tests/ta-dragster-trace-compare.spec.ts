@@ -160,7 +160,6 @@ describe('TA Dragster Trace Comparison', () => {
     // The rolloutTime is the raw simulation time when rollout was crossed
     // But trace t_s is track time (0 until timer starts)
     // So we need to find the first point where track time > 0 (timer just started)
-    const rolloutTime = debug?.simParams?.rolloutTime_s ?? 0;
     let velAtRollout = 0;
     for (const pt of trace) {
       if (pt.t_s > 0) {
