@@ -22,7 +22,7 @@ describe('TA Dragster Exact Match', () => {
         gearRatios: [1.85, 1.3, 1.0],
         gearEfficiencies: [0.97, 0.98, 0.99],
         shiftRPMs: [9200, 9400],
-        transEfficiency: 0.97,
+        transEfficiency: 0.97,  // This should now be ignored since per-gear efficiencies are provided
         clutchLaunchRPM: 6000,
         clutchSlipRPM: 7200,
         clutchSlippage: 1.01,
