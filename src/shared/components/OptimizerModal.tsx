@@ -22,7 +22,15 @@ interface OptimizeResult {
   mph: number;
 }
 
-type OptimizeType = 'gear' | 'converter' | 'both';
+interface ThrottleStopResult {
+  duration: number;
+  activateTime: number;
+  throttlePct: number;
+  et: number;
+  mph: number;
+}
+
+type OptimizeType = 'gear' | 'converter' | 'both' | 'throttleStop';
 
 export default function OptimizerModal({ 
   vehicle, 
@@ -41,6 +49,10 @@ export default function OptimizerModal({
   const [converterResults, setConverterResults] = useState<OptimizeResult[]>([]);
   const [bestGear, setBestGear] = useState<OptimizeResult | null>(null);
   const [bestConverter, setBestConverter] = useState<OptimizeResult | null>(null);
+  const [throttleStopResult, setThrottleStopResult] = useState<ThrottleStopResult | null>(null);
+  const [targetET, setTargetET] = useState<number | null>(null);
+  const [targetETInput, setTargetETInput] = useState('');
+  const [showThrottleStopInput, setShowThrottleStopInput] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   
@@ -77,6 +89,10 @@ export default function OptimizerModal({
     setConverterResults([]);
     setBestGear(null);
     setBestConverter(null);
+    setThrottleStopResult(null);
+    setTargetET(null);
+    setTargetETInput('');
+    setShowThrottleStopInput(false);
     setSaveSuccess(false);
   }, []);
   
@@ -134,8 +150,92 @@ export default function OptimizerModal({
     return best;
   }, [vehicle, runSim]);
   
+  // Optimize throttle stop duration to hit target ET
+  const optimizeThrottleStop = useCallback(async (target: number): Promise<ThrottleStopResult | null> => {
+    setTargetET(target);
+    
+    // First, get baseline ET without throttle stop
+    setProgressText('Getting baseline ET...');
+    setProgress(5);
+    const baseline = await runSim(vehicle);
+    
+    if (baseline.et >= target) {
+      // Already slower than target, no throttle stop needed
+      setThrottleStopResult({
+        duration: 0,
+        activateTime: 0,
+        throttlePct: 100,
+        et: baseline.et,
+        mph: baseline.mph,
+      });
+      return null;
+    }
+    
+    // Binary search for optimal duration
+    // Start with reasonable activation time (60% of baseline ET)
+    const activateTime = baseline.et * 0.6;
+    const throttlePct = 30; // 30% throttle during stop
+    
+    let minDuration = 0;
+    let maxDuration = 5.0; // Max 5 seconds
+    let bestResult: ThrottleStopResult | null = null;
+    let iterations = 0;
+    const maxIterations = 15;
+    
+    while (iterations < maxIterations && (maxDuration - minDuration) > 0.01) {
+      const testDuration = (minDuration + maxDuration) / 2;
+      iterations++;
+      
+      setProgress(10 + Math.round((iterations / maxIterations) * 85));
+      setProgressText(`Testing ${testDuration.toFixed(2)}s duration...`);
+      
+      // Create test vehicle with throttle stop
+      const testVehicle = {
+        ...vehicle,
+        throttleStopEnabled: true,
+        throttleStopDelay: activateTime,
+        throttleStopDuration: testDuration,
+        throttleStopPct: throttlePct,
+      };
+      
+      const result = await runSim(testVehicle);
+      
+      if (Math.abs(result.et - target) < 0.005) {
+        // Close enough to target
+        bestResult = {
+          duration: testDuration,
+          activateTime,
+          throttlePct,
+          et: result.et,
+          mph: result.mph,
+        };
+        break;
+      }
+      
+      if (result.et < target) {
+        // Still too fast, need more duration
+        minDuration = testDuration;
+      } else {
+        // Too slow, need less duration
+        maxDuration = testDuration;
+      }
+      
+      bestResult = {
+        duration: testDuration,
+        activateTime,
+        throttlePct,
+        et: result.et,
+        mph: result.mph,
+      };
+    }
+    
+    setProgress(100);
+    setThrottleStopResult(bestResult);
+    return bestResult;
+  }, [vehicle, runSim]);
+  
   // Run optimization
-  const runOptimization = useCallback(async (type: OptimizeType) => {
+  const runOptimization = useCallback(async (type: OptimizeType, target?: number) => {
     reset();
     setIsOptimizing(true);
     setOptimizeType(type);
@@ -152,11 +252,15 @@ export default function OptimizerModal({
           : vehicle;
         await optimizeConverterStall(baseVehicle);
       }
+      
+      if (type === 'throttleStop' && target) {
+        await optimizeThrottleStop(target);
+      }
     } finally {
       setIsOptimizing(false);
       setProgressText('');
     }
-  }, [reset, optimizeGear, optimizeConverterStall, vehicle, bestGear]);
+  }, [reset, optimizeGear, optimizeConverterStall, optimizeThrottleStop, vehicle, bestGear]);
   
   // Get optimized vehicle
   const getOptimizedVehicle = useCallback((): Vehicle => {
@@ -192,7 +296,7 @@ export default function OptimizerModal({
   
   if (!isOpen) return null;
   
-  const hasResults = bestGear || bestConverter;
+  const hasResults = bestGear || bestConverter || throttleStopResult;
   const isAutomatic = vehicle.transmissionType === 'converter';
   
   return (
@@ -352,6 +456,108 @@ export default function OptimizerModal({
                   </div>
                 </button>
               )}
+              
+              {/* Throttle Stop Optimizer - for bracket racing */}
+              <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '10px', paddingTop: '10px' }}>
+                {!showThrottleStopInput ? (
+                  <button
+                    onClick={() => setShowThrottleStopInput(true)}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      fontSize: '0.9rem',
+                      borderRadius: '8px',
+                      border: '2px solid #ec4899',
+                      backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                      color: '#ec4899',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>⏱️</span>
+                    <div style={{ textAlign: 'left' }}>
+                      <div>Throttle Stop Optimizer</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.8 }}>
+                        Calculate duration to hit your dial-in (bracket racing)
+                      </div>
+                    </div>
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: '16px',
+                    backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                    borderRadius: '8px',
+                    border: '2px solid #ec4899',
+                  }}>
+                    <div style={{ fontSize: '0.85rem', color: '#ec4899', fontWeight: 600, marginBottom: '12px' }}>
+                      ⏱️ Throttle Stop Optimizer
+                    </div>
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>
+                        Target ET (your dial-in)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        placeholder="e.g., 10.500"
+                        value={targetETInput}
+                        onChange={(e) => setTargetETInput(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          fontSize: '1rem',
+                          borderRadius: '6px',
+                          border: '1px solid var(--color-border)',
+                          backgroundColor: 'var(--color-bg)',
+                          color: 'var(--color-text)',
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => {
+                          const target = parseFloat(targetETInput);
+                          if (!isNaN(target) && target > 0) {
+                            runOptimization('throttleStop', target);
+                          }
+                        }}
+                        disabled={!targetETInput || isNaN(parseFloat(targetETInput))}
+                        style={{
+                          flex: 1,
+                          padding: '10px 16px',
+                          fontSize: '0.85rem',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: '#ec4899',
+                          color: 'white',
+                          cursor: targetETInput ? 'pointer' : 'not-allowed',
+                          fontWeight: 600,
+                          opacity: targetETInput ? 1 : 0.5,
+                        }}
+                      >
+                        Calculate Duration
+                      </button>
+                      <button
+                        onClick={() => setShowThrottleStopInput(false)}
+                        style={{
+                          padding: '10px 16px',
+                          fontSize: '0.85rem',
+                          borderRadius: '6px',
+                          border: '1px solid var(--color-border)',
+                          backgroundColor: 'transparent',
+                          color: 'var(--color-text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
@@ -516,6 +722,85 @@ export default function OptimizerModal({
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+              
+              {/* Throttle Stop result */}
+              {throttleStopResult && (
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                  borderRadius: '8px',
+                  marginBottom: '12px',
+                  border: '1px solid rgba(236, 72, 153, 0.3)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: '0.75rem', color: '#ec4899', fontWeight: 600, marginBottom: '4px' }}>
+                        ⏱️ THROTTLE STOP SETTINGS
+                      </div>
+                      {throttleStopResult.duration === 0 ? (
+                        <div style={{ fontSize: '1rem', color: 'var(--color-text-muted)' }}>
+                          No throttle stop needed - car already runs {throttleStopResult.et.toFixed(3)}s
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            {throttleStopResult.duration.toFixed(2)}s duration
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                            Activate at {throttleStopResult.activateTime.toFixed(2)}s • {throttleStopResult.throttlePct}% throttle
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: '0.8rem' }}>
+                      <div style={{ color: 'var(--color-text-muted)' }}>
+                        Target: {targetET?.toFixed(3)}s
+                      </div>
+                      <div style={{ 
+                        color: Math.abs(throttleStopResult.et - (targetET ?? 0)) < 0.01 ? '#22c55e' : '#f59e0b',
+                        fontWeight: 600,
+                      }}>
+                        Result: {throttleStopResult.et.toFixed(3)}s
+                      </div>
+                      <div style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                        @ {throttleStopResult.mph.toFixed(1)} mph
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {throttleStopResult.duration > 0 && (
+                    <div style={{ 
+                      marginTop: '12px', 
+                      padding: '10px', 
+                      backgroundColor: 'var(--color-bg)', 
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                    }}>
+                      <div style={{ fontWeight: 600, marginBottom: '6px', color: 'var(--color-text)' }}>
+                        Recommended Settings:
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Activate:</span>{' '}
+                          <span style={{ color: '#ec4899', fontWeight: 600 }}>{throttleStopResult.activateTime.toFixed(2)}s</span>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Duration:</span>{' '}
+                          <span style={{ color: '#ec4899', fontWeight: 600 }}>{throttleStopResult.duration.toFixed(2)}s</span>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Throttle:</span>{' '}
+                          <span style={{ color: '#ec4899', fontWeight: 600 }}>{throttleStopResult.throttlePct}%</span>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Predicted ET:</span>{' '}
+                          <span style={{ color: '#22c55e', fontWeight: 600 }}>{throttleStopResult.et.toFixed(3)}s</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               
