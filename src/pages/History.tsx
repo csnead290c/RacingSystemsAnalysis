@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
+import PredictionReportCard from '../shared/components/PredictionReportCard';
 import { storage } from '../state/storage';
 import { hasFeature, CURRENT_TIER } from '../domain/config/entitlements';
 import { runsToCsv, downloadCsv } from '../shared/utils/csv';
@@ -14,6 +15,8 @@ function History() {
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [filterRaceLength, setFilterRaceLength] = useState<RaceLength | 'ALL'>('ALL');
+  const [showReportCard, setShowReportCard] = useState(false);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
 
   const loadRuns = async () => {
     setLoading(true);
@@ -74,6 +77,53 @@ function History() {
   };
 
   const hasDataExport = hasFeature(CURRENT_TIER, 'dataExport');
+
+  // Get unique vehicle IDs for report card selection
+  const vehicleIds = useMemo(() => {
+    const ids = new Set(runs.map(r => r.vehicleId));
+    return Array.from(ids);
+  }, [runs]);
+
+  // Prepare runs for report card (only runs with both prediction and actual data)
+  const reportCardRuns = useMemo(() => {
+    if (!selectedVehicleId) return [];
+    
+    return runs
+      .filter(r => r.vehicleId === selectedVehicleId)
+      .filter(r => r.prediction?.et_s && r.prediction?.mph)
+      .filter(r => {
+        // Check for actual ET - could be in outcome.slipET_s or quarterMileET/eighthMileET
+        const actualET = r.outcome?.slipET_s ?? 
+          (r.raceLength === 'QUARTER' ? r.quarterMileET : r.eighthMileET);
+        const actualMPH = r.outcome?.slipMPH ?? 
+          (r.raceLength === 'QUARTER' ? r.quarterMileMPH : r.eighthMileMPH);
+        return actualET !== undefined && actualMPH !== undefined;
+      })
+      .map(r => {
+        const actualET = r.outcome?.slipET_s ?? 
+          (r.raceLength === 'QUARTER' ? r.quarterMileET : r.eighthMileET) ?? 0;
+        const actualMPH = r.outcome?.slipMPH ?? 
+          (r.raceLength === 'QUARTER' ? r.quarterMileMPH : r.eighthMileMPH) ?? 0;
+        
+        return {
+          date: new Date(r.createdAt).toLocaleDateString(),
+          predictedET: r.prediction!.et_s,
+          actualET,
+          predictedMPH: r.prediction!.mph,
+          actualMPH,
+          weather: r.env ? {
+            tempF: r.env.temperatureF ?? 70,
+            humidity: r.env.humidityPct ?? 50,
+            da: 0, // Could calculate DA if needed
+          } : undefined,
+        };
+      });
+  }, [runs, selectedVehicleId]);
+
+  const handleShowReportCard = (vehicleId: string) => {
+    setSelectedVehicleId(vehicleId);
+    setShowReportCard(true);
+  };
 
   const handleExportFiltered = () => {
     if (!hasDataExport) {
@@ -142,6 +192,19 @@ function History() {
             >
               Export All ({runs.length})
             </button>
+            {vehicleIds.length > 0 && (
+              <select
+                className="btn btn-secondary"
+                style={{ cursor: 'pointer' }}
+                value=""
+                onChange={(e) => e.target.value && handleShowReportCard(e.target.value)}
+              >
+                <option value="">📊 Report Card...</option>
+                {vehicleIds.map(id => (
+                  <option key={id} value={id}>{id}</option>
+                ))}
+              </select>
+            )}
           </div>
           {!hasDataExport && (
             <div style={{ fontSize: '0.875rem', color: 'var(--color-muted)' }}>
@@ -265,6 +328,38 @@ function History() {
             description="Export your runs and analysis to CSV, JSON, or PDF for external analysis and reporting."
             onLearnMore={() => alert('Upgrade to NITRO to unlock Data Export')}
           />
+        </div>
+      )}
+
+      {/* Prediction Report Card Modal */}
+      {showReportCard && selectedVehicleId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            maxWidth: '600px',
+            width: '95%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+          }}>
+            <PredictionReportCard
+              vehicleName={selectedVehicleId}
+              runs={reportCardRuns}
+              onClose={() => {
+                setShowReportCard(false);
+                setSelectedVehicleId(null);
+              }}
+            />
+          </div>
         </div>
       )}
     </Page>
