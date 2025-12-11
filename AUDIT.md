@@ -1,4 +1,4 @@
-# RSA Project Audit - December 10, 2025
+# RSA Project Audit - December 11, 2025
 
 ## Executive Summary
 
@@ -7,8 +7,13 @@ The RSA (Racing Systems Analysis) web application is a modern TypeScript/React r
 **Current Status: ✅ VB6 Parity Tests PASSING**
 
 - **VB6 Parity Tests**: 10 passed, 0 failed, 3 skipped
+- **All Tests**: 442 passed, 85 skipped
 - **Physics Model**: VB6Exact achieves exact parity with VB6 outputs
 - **UI**: Fully functional
+
+### Recent Improvements (Dec 11, 2025)
+- ✅ **Throttle Stop Optimizer** - Binary search algorithm to find optimal duration for target ET
+- ✅ **Prediction Report Card** - Integrated into History page with accuracy grading (A+ to F)
 
 ### Physics Models
 - **VB6Exact** - Primary model, matches VB6 line-for-line ✅ COMPLETE
