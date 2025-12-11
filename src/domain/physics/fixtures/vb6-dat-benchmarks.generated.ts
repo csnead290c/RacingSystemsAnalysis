@@ -1,13 +1,13 @@
 /**
  * Auto-generated benchmark configs from VB6 .DAT files
- * Generated: 2025-12-10T20:57:26.052Z
+ * Generated: 2025-12-11T01:34:45.558Z
  * 
  * DO NOT EDIT MANUALLY - regenerate using: node scripts/parse-dat-files.mjs
  */
 
 export const VB6_DAT_BENCHMARKS = {
-  MOTORCYC_Pro: {
-    name: 'MOTORCYC_Pro',
+  Motorcycle_Pro: {
+    name: 'Motorcycle_Pro',
     fuel: 'GAS',
     // Source: test case for QUARTER Pro version 3.2
     env: {
@@ -46,10 +46,11 @@ export const VB6_DAT_BENCHMARKS = {
         lockup: true,
       },
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: 0.18,
-        trans: 0.031,
-        tires: 4.3,
+        engine_flywheel_clutch: 0.18,
+        transmission_driveshaft: 0.031,
+        tires_wheels_ringgear: 4.3,
       },
 
       // HP curve from VB6 .DAT file
@@ -69,8 +70,8 @@ export const VB6_DAT_BENCHMARKS = {
     },
   },
 
-  SUPERGAS_Pro: {
-    name: 'SUPERGAS_Pro',
+  SuperGas_Pro: {
+    name: 'SuperGas_Pro',
     fuel: 'GAS',
     // Source: test case for QUARTER Pro version 3.2
     env: {
@@ -110,10 +111,11 @@ export const VB6_DAT_BENCHMARKS = {
         lockup: false,
       },
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: 3.26,
-        trans: 0.511,
-        tires: 52.7,
+        engine_flywheel_clutch: 3.26,
+        transmission_driveshaft: 0.511,
+        tires_wheels_ringgear: 52.7,
       },
 
       // HP curve from VB6 .DAT file
@@ -129,8 +131,8 @@ export const VB6_DAT_BENCHMARKS = {
     },
   },
 
-  SUPERCMP_Pro: {
-    name: 'SUPERCMP_Pro',
+  SuperComp_Pro: {
+    name: 'SuperComp_Pro',
     fuel: 'GAS',
     // Source: test case for QUARTER Pro version 3.2
     env: {
@@ -170,10 +172,11 @@ export const VB6_DAT_BENCHMARKS = {
         lockup: false,
       },
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: 3.26,
-        trans: 0.511,
-        tires: 43.6,
+        engine_flywheel_clutch: 3.26,
+        transmission_driveshaft: 0.511,
+        tires_wheels_ringgear: 43.6,
       },
 
       // HP curve from VB6 .DAT file
@@ -189,8 +192,8 @@ export const VB6_DAT_BENCHMARKS = {
     },
   },
 
-  PROSTOCK_Pro: {
-    name: 'PROSTOCK_Pro',
+  ProStock_Pro: {
+    name: 'ProStock_Pro',
     fuel: 'GAS',
     // Source: test case for QUARTER Pro version 3.2
     env: {
@@ -229,10 +232,11 @@ export const VB6_DAT_BENCHMARKS = {
         lockup: false,
       },
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: 3.42,
-        trans: 0.247,
-        tires: 50.8,
+        engine_flywheel_clutch: 3.42,
+        transmission_driveshaft: 0.247,
+        tires_wheels_ringgear: 50.8,
       },
 
       // HP curve from VB6 .DAT file
@@ -252,8 +256,8 @@ export const VB6_DAT_BENCHMARKS = {
     },
   },
 
-  TADRAG_Pro: {
-    name: 'TADRAG_Pro',
+  TA_Dragster_Pro: {
+    name: 'TA_Dragster_Pro',
     fuel: 'GAS',
     // Source: test case for QUARTER Pro version 3.2
     env: {
@@ -292,10 +296,11 @@ export const VB6_DAT_BENCHMARKS = {
         lockup: false,
       },
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: 4.84,
-        trans: 0.426,
-        tires: 64.6,
+        engine_flywheel_clutch: 4.84,
+        transmission_driveshaft: 0.426,
+        tires_wheels_ringgear: 64.6,
       },
 
       // HP curve from VB6 .DAT file
@@ -313,8 +318,8 @@ export const VB6_DAT_BENCHMARKS = {
     },
   },
 
-  FUNNYCAR_Pro: {
-    name: 'FUNNYCAR_Pro',
+  FunnyCar_Pro: {
+    name: 'FunnyCar_Pro',
     fuel: 'GAS',
     // Source: test case for QUARTER Pro version 3.2
     env: {
@@ -353,10 +358,11 @@ export const VB6_DAT_BENCHMARKS = {
         lockup: true,
       },
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: 6.03,
-        trans: 0.107,
-        tires: 75.4,
+        engine_flywheel_clutch: 6.03,
+        transmission_driveshaft: 0.107,
+        tires_wheels_ringgear: 75.4,
       },
 
       // HP curve from VB6 .DAT file

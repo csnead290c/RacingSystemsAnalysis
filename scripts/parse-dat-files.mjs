@@ -188,8 +188,19 @@ function generateBenchmarkConfig(dat) {
     .map(p => `        { rpm: ${p.rpm}, hp: ${p.hp} },`)
     .join('\n');
 
-  return `  ${dat.name}_Pro: {
-    name: '${dat.name}_Pro',
+  // Map DAT file names to expected config names
+  const nameMap = {
+    'MOTORCYC': 'Motorcycle',
+    'SUPERGAS': 'SuperGas',
+    'SUPERCMP': 'SuperComp',
+    'PROSTOCK': 'ProStock',
+    'TADRAG': 'TA_Dragster',
+    'FUNNYCAR': 'FunnyCar',
+  };
+  const configName = nameMap[dat.name] || dat.name;
+
+  return `  ${configName}_Pro: {
+    name: '${configName}_Pro',
     fuel: 'GAS',
     // Source: ${dat.note}
     env: {
@@ -223,10 +234,11 @@ function generateBenchmarkConfig(dat) {
 
       ${clutchOrConverter}
 
+      // PMI from VB6 .DAT file
       pmi: {
-        engine: ${dat.vehicle.pmi.engine},
-        trans: ${dat.vehicle.pmi.trans},
-        tires: ${dat.vehicle.pmi.tires},
+        engine_flywheel_clutch: ${dat.vehicle.pmi.engine},
+        transmission_driveshaft: ${dat.vehicle.pmi.trans},
+        tires_wheels_ringgear: ${dat.vehicle.pmi.tires},
       },
 
       // HP curve from VB6 .DAT file

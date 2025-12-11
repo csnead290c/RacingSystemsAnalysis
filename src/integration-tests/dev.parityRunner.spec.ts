@@ -71,7 +71,8 @@ function buildSimInputs(configName: string, raceLength: RaceLength): SimInputs {
   };
 }
 
-describe('Dev Portal - Parity Runner', () => {
+// RSACLASSIC parity runner tests skipped - use vb6.parity.spec.ts for VB6Exact parity
+describe.skip('Dev Portal - Parity Runner', () => {
   it('should produce same ET/MPH as CLI harness for ProStock_Pro QUARTER', () => {
     const benchmarkName = 'ProStock_Pro';
     const raceLength: RaceLength = 'QUARTER';

@@ -284,7 +284,8 @@ describe('Dev Portal - Fixture Validation Edge Cases', () => {
     
     expect(validation.ok).toBe(false);
     if (!validation.ok) {
-      expect(validation.missing).toContain('engineHP');
+      // Validation message includes requirement details
+      expect(validation.missing.some(m => m.includes('engineHP'))).toBe(true);
     }
   });
 

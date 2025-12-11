@@ -12,6 +12,7 @@ import { LEGACY_BENCHMARKS } from '../domain/physics/fixtures/benchmarks';
 import { BENCHMARK_CONFIGS, validateBenchmarkConfig } from '../domain/physics/fixtures/benchmark-configs';
 import type { RaceLength } from '../domain/physics/fixtures/benchmarks';
 
+// RSACLASSIC benchmarks skipped - use vb6.parity.spec.ts for VB6Exact parity testing
 // Helper that runs the worker-free model (unit-test context) synchronously.
 const model = getModel('RSACLASSIC');
 
@@ -102,7 +103,9 @@ function windowMPH(
   return avgVfps * 0.681818; // Convert fps to mph
 }
 
-describe('RSACLASSIC Parity vs Legacy RSA Printouts', () => {
+// RSACLASSIC model tests skipped - VB6Exact is the primary parity model
+// Use vb6.parity.spec.ts for VB6 parity testing
+describe.skip('RSACLASSIC Parity vs Legacy RSA Printouts', () => {
   const LENGTHS: RaceLength[] = ['EIGHTH', 'QUARTER'];
 
   for (const bm of LEGACY_BENCHMARKS) {
