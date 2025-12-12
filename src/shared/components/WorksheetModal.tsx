@@ -644,5 +644,98 @@ export function TireRolloutWorksheet({ isOpen, onClose, onApply, tireDiameter = 
   );
 }
 
-// Keep the old name as an alias for backward compatibility
-export const RolloutWorksheet = TireRolloutWorksheet;
+/**
+ * Vehicle Rollout Worksheet
+ * Helps users set the staging rollout distance (distance vehicle moves before timing starts)
+ * VB6: Rollout is typically 10-14 inches, measured from staging beam to front tire
+ */
+interface VehicleRolloutWorksheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onApply: (value: number) => void;
+  currentValue?: number;
+}
+
+export function VehicleRolloutWorksheet({ isOpen, onClose, onApply, currentValue = 12 }: VehicleRolloutWorksheetProps) {
+  const [rollout, setRollout] = useState(currentValue);
+
+  useEffect(() => {
+    setRollout(currentValue);
+  }, [currentValue]);
+
+  // Common rollout presets
+  const presets = [
+    { label: 'Shallow (10")', value: 10, desc: 'Faster reaction, less margin' },
+    { label: 'Standard (12")', value: 12, desc: 'Typical staging depth' },
+    { label: 'Deep (14")', value: 14, desc: 'More margin, slower start' },
+  ];
+
+  return (
+    <WorksheetModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onApply={() => onApply(rollout)}
+      title="Vehicle Rollout Worksheet"
+      calculatedValue={rollout}
+      calculatedLabel="Staging Rollout"
+      unit="inches"
+      helpText="Rollout is the distance your vehicle moves before the timing clock starts. Measured from the staging beam to the front of your front tire. Typically 10-14 inches."
+    >
+      <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+        <div>
+          <label className="label">Rollout Distance (inches)</label>
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            max="48"
+            className="input"
+            value={rollout}
+            onChange={(e) => setRollout(parseFloat(e.target.value) || 0)}
+          />
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            Distance from staging beam to front of front tire
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>
+            Common Presets:
+          </div>
+          {presets.map(preset => (
+            <button
+              key={preset.value}
+              type="button"
+              onClick={() => setRollout(preset.value)}
+              style={{
+                padding: 'var(--space-2)',
+                border: `2px solid ${rollout === preset.value ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                borderRadius: '6px',
+                backgroundColor: rollout === preset.value ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                color: 'var(--color-text)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ fontWeight: 500 }}>{preset.label}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{preset.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ 
+          padding: 'var(--space-3)', 
+          backgroundColor: 'var(--color-surface-alt)', 
+          borderRadius: '6px',
+          fontSize: '0.8rem',
+        }}>
+          <strong>How to measure:</strong> Stage your car normally, then measure from the staging light beam 
+          to the front edge of your front tire. This is your rollout distance.
+        </div>
+      </div>
+    </WorksheetModal>
+  );
+}
+
+// RolloutWorksheet now refers to VehicleRolloutWorksheet (staging distance)
+export const RolloutWorksheet = VehicleRolloutWorksheet;

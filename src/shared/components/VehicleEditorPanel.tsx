@@ -568,6 +568,7 @@ export default function VehicleEditorPanel({
           updateField('rolloutIn', value);
           setShowRolloutWorksheet(false);
         }}
+        currentValue={vehicle.rolloutIn ?? 12}
       />
     </div>
   );

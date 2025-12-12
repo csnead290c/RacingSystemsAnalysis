@@ -1417,7 +1417,7 @@ function Vehicles() {
         isOpen={showRolloutWorksheet}
         onClose={() => setShowRolloutWorksheet(false)}
         onApply={(value) => updateForm('rolloutIn', value)}
-        tireDiameter={form.tireDiaIn}
+        currentValue={form.rolloutIn ?? 12}
       />
       <TireRolloutWorksheet
         isOpen={showTireRolloutWorksheet}
