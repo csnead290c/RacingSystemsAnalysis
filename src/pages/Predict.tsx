@@ -351,6 +351,15 @@ function Predict() {
         setVehicle(selectedVehicle as Vehicle);
         setEnv(DEFAULT_ENV);
         setShowVehicleSelector(false);
+        // Load throttle stop settings from vehicle
+        if ((selectedVehicle as Vehicle).throttleStopEnabled) {
+          setThrottleStopEnabled(true);
+          setThrottleStopActivate((selectedVehicle as Vehicle).throttleStopDelay ?? 1.0);
+          setThrottleStopDuration((selectedVehicle as Vehicle).throttleStopDuration ?? 1.5);
+          setThrottleStopPct((selectedVehicle as Vehicle).throttleStopPct ?? 30);
+        } else {
+          setThrottleStopEnabled(false);
+        }
       }
     };
 
@@ -1043,7 +1052,7 @@ racingsystemsanalysis.com`;
         </div>
 
         {/* BOTTOM ROW: Simplified - Environment + Race Length + Quick Tools */}
-        <div className="et-sim-bottom-row" style={{ flexWrap: 'nowrap', overflow: 'hidden' }}>
+        <div className="et-sim-bottom-row" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
           {/* Environment - Combined with Race Length */}
           <div className="card" style={{ flex: '1 1 300px', padding: '12px 16px', display: 'flex', flexDirection: 'column', minWidth: '280px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1172,7 +1181,7 @@ racingsystemsanalysis.com`;
           </div>
 
           {/* Quick Tools - Compact buttons */}
-          <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="card" style={{ flex: '1 1 220px', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px', maxWidth: '280px' }}>
             <div style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Tools</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
@@ -1188,24 +1197,24 @@ racingsystemsanalysis.com`;
                 <span style={{ color: throttleStopEnabled ? '#f59e0b' : 'var(--color-text-muted)' }}>Throttle Stop</span>
               </label>
               {throttleStopEnabled && (
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '18px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: 'var(--color-text-muted)', width: '50px' }}>At</span>
+                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--color-text-muted)', width: '28px', fontSize: '0.7rem' }}>At</span>
                     <input type="range" min="0.1" max="5" step="0.1" value={throttleStopActivate}
-                      onChange={(e) => setThrottleStopActivate(Number(e.target.value))} style={{ flex: 1 }} />
-                    <span style={{ width: '40px', textAlign: 'right' }}>{throttleStopActivate.toFixed(1)}s</span>
+                      onChange={(e) => setThrottleStopActivate(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
+                    <span style={{ width: '36px', textAlign: 'right', fontSize: '0.7rem' }}>{throttleStopActivate.toFixed(1)}s</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: 'var(--color-text-muted)', width: '50px' }}>For</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--color-text-muted)', width: '28px', fontSize: '0.7rem' }}>For</span>
                     <input type="range" min="0.1" max="5" step="0.1" value={throttleStopDuration}
-                      onChange={(e) => setThrottleStopDuration(Number(e.target.value))} style={{ flex: 1 }} />
-                    <span style={{ width: '40px', textAlign: 'right' }}>{throttleStopDuration.toFixed(1)}s</span>
+                      onChange={(e) => setThrottleStopDuration(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
+                    <span style={{ width: '36px', textAlign: 'right', fontSize: '0.7rem' }}>{throttleStopDuration.toFixed(1)}s</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: 'var(--color-text-muted)', width: '50px' }}>%</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--color-text-muted)', width: '28px', fontSize: '0.7rem' }}>%</span>
                     <input type="range" min="0" max="100" step="5" value={throttleStopPct}
-                      onChange={(e) => setThrottleStopPct(Number(e.target.value))} style={{ flex: 1 }} />
-                    <span style={{ width: '40px', textAlign: 'right', color: '#f59e0b' }}>{throttleStopPct}%</span>
+                      onChange={(e) => setThrottleStopPct(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
+                    <span style={{ width: '36px', textAlign: 'right', fontSize: '0.7rem', color: '#f59e0b' }}>{throttleStopPct}%</span>
                   </div>
                 </div>
               )}
