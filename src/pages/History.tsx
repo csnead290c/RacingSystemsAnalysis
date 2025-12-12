@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import PredictionReportCard from '../shared/components/PredictionReportCard';
+import QuickRunEntry from '../shared/components/QuickRunEntry';
 import { storage } from '../state/storage';
 import { hasFeature, CURRENT_TIER } from '../domain/config/entitlements';
 import { runsToCsv, downloadCsv } from '../shared/utils/csv';
@@ -17,6 +18,7 @@ function History() {
   const [filterRaceLength, setFilterRaceLength] = useState<RaceLength | 'ALL'>('ALL');
   const [showReportCard, setShowReportCard] = useState(false);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [showQuickEntry, setShowQuickEntry] = useState(false);
 
   const loadRuns = async () => {
     setLoading(true);
@@ -173,8 +175,15 @@ function History() {
       actions={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowQuickEntry(true)}
+              className="btn btn-primary"
+              style={{ fontWeight: 'bold' }}
+            >
+              ⚡ Quick Log
+            </button>
             <Link to="/log" className="btn">
-              + Log New Run
+              + Full Log
             </Link>
             <button
               onClick={handleExportFiltered}
@@ -330,6 +339,13 @@ function History() {
           />
         </div>
       )}
+
+      {/* Quick Run Entry Modal */}
+      <QuickRunEntry
+        isOpen={showQuickEntry}
+        onClose={() => setShowQuickEntry(false)}
+        onSaved={() => loadRuns()}
+      />
 
       {/* Prediction Report Card Modal */}
       {showReportCard && selectedVehicleId && (
