@@ -22,6 +22,7 @@ import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '..
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
 const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
+const VehicleEditorPopup = lazy(() => import('../shared/components/VehicleEditorPopup'));
 import { DebugPanel, type DebugData } from '../shared/components/DebugPanel';
 
 interface LocationState {
@@ -83,6 +84,9 @@ function Predict() {
   
   // Optimizer modal state
   const [showOptimizer, setShowOptimizer] = useState(false);
+  
+  // Vehicle editor popup state
+  const [showVehicleEditor, setShowVehicleEditor] = useState(false);
   
   
   // Initialize from location state or show vehicle selector
@@ -860,8 +864,8 @@ function Predict() {
               <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(2)}</span>
             </div>
             
-            {/* Vehicle selector dropdown */}
-            <div className="et-slip-vehicle" style={{ marginTop: '6px' }}>
+            {/* Vehicle selector dropdown with edit button */}
+            <div className="et-slip-vehicle" style={{ marginTop: '6px', display: 'flex', gap: '4px' }}>
               <select
                 value={vehicle.id}
                 onChange={async (e) => {
@@ -885,7 +889,7 @@ function Predict() {
                   }
                 }}
                 style={{
-                  width: '100%',
+                  flex: 1,
                   padding: '4px 6px',
                   fontSize: '0.7rem',
                   backgroundColor: '#222',
@@ -899,6 +903,21 @@ function Predict() {
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
+              <button
+                onClick={() => setShowVehicleEditor(true)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  backgroundColor: '#333',
+                  color: 'white',
+                  border: '1px solid #444',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+                title="Edit vehicle settings"
+              >
+                ⚙️
+              </button>
             </div>
             
             {/* Action Buttons */}
@@ -1291,6 +1310,28 @@ racingsystemsanalysis.com`;
             }}
           />
         )}
+      </Suspense>
+      
+      {/* Vehicle Editor Popup */}
+      <Suspense fallback={null}>
+        <VehicleEditorPopup
+          isOpen={showVehicleEditor}
+          onClose={() => setShowVehicleEditor(false)}
+          vehicle={vehicle}
+          onApply={(updatedVehicle) => {
+            setVehicle(updatedVehicle);
+            // Also update throttle stop settings if changed
+            if (updatedVehicle.throttleStopEnabled) {
+              setThrottleStopEnabled(true);
+              setThrottleStopActivate(updatedVehicle.throttleStopDelay ?? 1.0);
+              setThrottleStopDuration(updatedVehicle.throttleStopDuration ?? 1.5);
+              setThrottleStopPct(updatedVehicle.throttleStopPct ?? 30);
+            } else {
+              setThrottleStopEnabled(false);
+            }
+          }}
+          isPro={strictMode}
+        />
       </Suspense>
     </Page>
   );
