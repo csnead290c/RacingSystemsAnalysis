@@ -12,7 +12,6 @@ import {
   FrontalAreaWorksheet, 
   TireWidthWorksheet, 
   GearRatioWorksheet,
-  RolloutWorksheet,
   TireRolloutWorksheet,
 } from '../shared/components/WorksheetModal';
 import { TOOLTIPS } from '../domain/config/tooltips';
@@ -149,7 +148,6 @@ function Vehicles() {
   const [showFrontalAreaWorksheet, setShowFrontalAreaWorksheet] = useState(false);
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
-  const [showRolloutWorksheet, setShowRolloutWorksheet] = useState(false);
   const [showTireRolloutWorksheet, setShowTireRolloutWorksheet] = useState(false);
   
   // Collapsible advanced sections (Pro mode)
@@ -466,10 +464,7 @@ function Vehicles() {
                   <input type="number" step="1" className="input" value={form.weightLb ?? ''} onChange={(e) => updateForm('weightLb', parseFloat(e.target.value))} />
                 </div>
                 <div>
-                  <label className="label">
-                    Staging Rollout (in) *
-                    <WorksheetButton onClick={() => setShowRolloutWorksheet(true)} tooltip={TOOLTIPS.btnRollout} />
-                  </label>
+                  <label className="label">Staging Rollout (in) *</label>
                   <input type="number" step="0.1" className="input" value={form.rolloutIn ?? ''} onChange={(e) => updateForm('rolloutIn', parseFloat(e.target.value))} />
                   <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.rollout}</small>
                 </div>
@@ -1412,12 +1407,6 @@ function Vehicles() {
         isOpen={showGearRatioWorksheet}
         onClose={() => setShowGearRatioWorksheet(false)}
         onApply={(value) => updateForm('rearGear', value)}
-      />
-      <RolloutWorksheet
-        isOpen={showRolloutWorksheet}
-        onClose={() => setShowRolloutWorksheet(false)}
-        onApply={(value) => updateForm('rolloutIn', value)}
-        currentValue={form.rolloutIn ?? 12}
       />
       <TireRolloutWorksheet
         isOpen={showTireRolloutWorksheet}
