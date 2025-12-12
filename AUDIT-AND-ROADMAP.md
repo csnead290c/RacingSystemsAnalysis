@@ -87,7 +87,7 @@
 |---------|----------|--------|-------|
 | **Weather Station Integration** | HIGH | ⚠️ Partial | Have API weather, need RaceAir connector |
 | **DA/RAD/Correction Factors** | HIGH | ✅ Complete | Built into weather system |
-| **Prediction Report Card** | HIGH | ❌ Missing | Grade which formula works best per car |
+| **Prediction Report Card** | HIGH | ✅ Complete | Grade accuracy A+ to F, trend analysis, recommendations |
 | **Multi-formula Support** | MEDIUM | ❌ Missing | Let users choose/compare formulas |
 
 ### 2D. GODEADON (Mobile Logbook)
@@ -95,7 +95,7 @@
 | Feature | Priority | Status | Notes |
 |---------|----------|--------|-------|
 | **Mobile-first Logging** | HIGH | ⚠️ Partial | Responsive web, need native app |
-| **Quick Run Entry** | HIGH | ⚠️ Partial | Could be faster |
+| **Quick Run Entry** | HIGH | ✅ Complete | < 30 sec entry, auto-increment, remembers settings |
 | **Social/Community Features** | LOW | ❌ Missing | Share stats, leaderboards |
 
 ### 2E. TIME SLIP SIMULATOR (Finish Line Coaching)
@@ -149,6 +149,7 @@
    - Copy timeslip to clipboard
    - **NEW: Detailed Parameters panel** (collapsible table of key events)
    - **NEW: Throttle Stop simulation** (for bracket racing)
+   - **NEW: Throttle Stop Optimizer** (binary search to hit target ET)
 
 2. **Dial-In Calculator (NEW)**
    - Dedicated bracket racing tool
