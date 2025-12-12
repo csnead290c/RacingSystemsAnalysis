@@ -137,6 +137,7 @@ function UserMenu() {
 function Navigation() {
   const location = useLocation();
   const { isAuthenticated, hasFeature, hasProduct } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -158,62 +159,120 @@ function Navigation() {
   const canAccessEngineSim = isAuthenticated && hasProduct('engine_pro');
   const canAccessLog = isAuthenticated && hasFeature('save_runs');
   const canAccessHistory = isAuthenticated && hasFeature('save_runs');
-  // canAccessDev not needed - Dev link always visible in dev mode
 
-  return (
-    <nav style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-      <Link to="/" style={navLinkStyle(isActive('/'))}>
+  const navLinks = (
+    <>
+      <Link to="/" style={navLinkStyle(isActive('/'))} onClick={() => setMobileMenuOpen(false)}>
         Home
       </Link>
       {canAccessVehicles && (
-        <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))}>
+        <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))} onClick={() => setMobileMenuOpen(false)}>
           Vehicles
         </Link>
       )}
       {canAccessETSim && (
-        <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))}>
+        <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))} onClick={() => setMobileMenuOpen(false)}>
           ET Sim
         </Link>
       )}
       {canAccessSuspSim && (
-        <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))}>
+        <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))} onClick={() => setMobileMenuOpen(false)}>
           Susp Sim
         </Link>
       )}
       {canAccessClutchSim && (
-        <Link to="/clutch-sim" style={navLinkStyle(isActive('/clutch-sim'))}>
+        <Link to="/clutch-sim" style={navLinkStyle(isActive('/clutch-sim'))} onClick={() => setMobileMenuOpen(false)}>
           Clutch Sim
         </Link>
       )}
       {canAccessClutchSim && (
-        <Link to="/converter-sim" style={navLinkStyle(isActive('/converter-sim'))}>
+        <Link to="/converter-sim" style={navLinkStyle(isActive('/converter-sim'))} onClick={() => setMobileMenuOpen(false)}>
           Conv Sim
         </Link>
       )}
       {canAccessEngineSim && (
-        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))}>
+        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))} onClick={() => setMobileMenuOpen(false)}>
           Engine Sim
         </Link>
       )}
-      <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))}>
+      <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))} onClick={() => setMobileMenuOpen(false)}>
         Calcs
       </Link>
       {canAccessLog && (
-        <Link to="/log" style={navLinkStyle(isActive('/log'))}>
+        <Link to="/log" style={navLinkStyle(isActive('/log'))} onClick={() => setMobileMenuOpen(false)}>
           Log
         </Link>
       )}
       {canAccessHistory && (
-        <Link to="/history" style={navLinkStyle(isActive('/history'))}>
+        <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={() => setMobileMenuOpen(false)}>
           History
         </Link>
       )}
-      <Link to="/about" style={navLinkStyle(isActive('/about'))}>
+      <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={() => setMobileMenuOpen(false)}>
         About
       </Link>
-      {/* Dev link - visible in dev mode or to owner/admin */}
       <DevNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
-    </nav>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop nav - hidden on mobile */}
+      <nav className="desktop-nav" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+        {navLinks}
+      </nav>
+      
+      {/* Mobile hamburger button */}
+      <button
+        className="mobile-menu-btn"
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        style={{
+          display: 'none',
+          background: 'none',
+          border: 'none',
+          color: 'var(--color-header-text)',
+          fontSize: '1.5rem',
+          cursor: 'pointer',
+          padding: '4px 8px',
+        }}
+        aria-label="Toggle menu"
+      >
+        {mobileMenuOpen ? '✕' : '☰'}
+      </button>
+      
+      {/* Mobile dropdown menu */}
+      {mobileMenuOpen && (
+        <nav
+          className="mobile-nav"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            backgroundColor: 'var(--color-header-bg)',
+            padding: '1rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1000,
+          }}
+        >
+          {navLinks}
+        </nav>
+      )}
+      
+      {/* Inject responsive styles */}
+      <style>{`
+        @media (max-width: 768px) {
+          .desktop-nav { display: none !important; }
+          .mobile-menu-btn { display: block !important; }
+        }
+        @media (min-width: 769px) {
+          .mobile-nav { display: none !important; }
+        }
+      `}</style>
+    </>
   );
 }
 
@@ -251,6 +310,7 @@ function App() {
         >
         <header
           style={{
+            position: 'relative',
             backgroundColor: 'var(--color-header-bg)',
             color: 'var(--color-header-text)',
             padding: '0.75rem 1.5rem',
