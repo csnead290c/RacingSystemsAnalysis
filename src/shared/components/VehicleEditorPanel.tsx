@@ -15,7 +15,6 @@ import {
   FrontalAreaWorksheet, 
   TireWidthWorksheet, 
   GearRatioWorksheet,
-  RolloutWorksheet,
 } from './WorksheetModal';
 import { TOOLTIPS } from '../../domain/config/tooltips';
 
@@ -60,7 +59,6 @@ export default function VehicleEditorPanel({
   const [showFrontalAreaWorksheet, setShowFrontalAreaWorksheet] = useState(false);
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
-  const [showRolloutWorksheet, setShowRolloutWorksheet] = useState(false);
 
   const transType: TransType = (vehicle.transmissionType as TransType) ?? 'clutch';
 
@@ -177,10 +175,7 @@ export default function VehicleEditorPanel({
             />
           </div>
           <div>
-            <label style={labelStyle}>
-              Rollout (in)
-              <WorksheetButton onClick={() => setShowRolloutWorksheet(true)} tooltip={TOOLTIPS.btnRollout} />
-            </label>
+            <label style={labelStyle}>Rollout (in)</label>
             <input
               type="number"
               step="0.1"
@@ -560,15 +555,6 @@ export default function VehicleEditorPanel({
           updateField('rearGear', value);
           setShowGearRatioWorksheet(false);
         }}
-      />
-      <RolloutWorksheet
-        isOpen={showRolloutWorksheet}
-        onClose={() => setShowRolloutWorksheet(false)}
-        onApply={(value) => {
-          updateField('rolloutIn', value);
-          setShowRolloutWorksheet(false);
-        }}
-        currentValue={vehicle.rolloutIn ?? 12}
       />
     </div>
   );
