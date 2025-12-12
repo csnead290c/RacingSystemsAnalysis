@@ -6,6 +6,7 @@ import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import { useAuth } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
+import VehicleEditorPanel from '../shared/components/VehicleEditorPanel';
 import { 
   WorksheetButton, 
   FrontalAreaWorksheet, 
@@ -127,6 +128,7 @@ function Vehicles() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('basic');
   const [filterGroup, setFilterGroup] = useState<string>(''); // Group filter
+  const [useCompactEditor, setUseCompactEditor] = useState(true); // Use 1-page layout like VB6
   
   // Get unique groups from vehicles
   const vehicleGroups = [...new Set(vehicles.map(v => v.group).filter(Boolean))] as string[];
@@ -356,9 +358,19 @@ function Vehicles() {
     >
       {showForm && (
         <div className="card mb-6">
-          <h2 className="mb-4" style={{ fontSize: '1.25rem', color: 'var(--color-text)' }}>
-            {editingId ? 'Edit Vehicle' : 'New Vehicle'}
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text)', margin: 0 }}>
+              {editingId ? 'Edit Vehicle' : 'New Vehicle'}
+            </h2>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+              <input
+                type="checkbox"
+                checked={useCompactEditor}
+                onChange={(e) => setUseCompactEditor(e.target.checked)}
+              />
+              1-Page View
+            </label>
+          </div>
 
           {formError && (
             <div className="error mb-4">
@@ -366,29 +378,40 @@ function Vehicles() {
             </div>
           )}
 
-          {/* Tab Navigation - Different tabs for QuarterJr vs QuarterPro */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            {(isPro 
-              ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine', 'throttle']
-              : ['basic', 'vehicle', 'engine', 'transmission', 'finaldrive']
-            ).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  border: '1px solid var(--color-border)',
-                  background: activeTab === tab ? 'var(--color-primary)' : 'var(--color-surface)',
-                  color: activeTab === tab ? 'white' : 'var(--color-text)',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {tab === 'finaldrive' ? 'Final Drive' : tab === 'throttle' ? 'Throttle Stop' : tab}
-              </button>
-            ))}
-          </div>
+          {/* Compact 1-Page Editor (like VB6) */}
+          {useCompactEditor ? (
+            <VehicleEditorPanel
+              vehicle={form}
+              onChange={setForm}
+              isPro={isPro}
+              compact={false}
+              showName={true}
+            />
+          ) : (
+            <>
+              {/* Tab Navigation - Different tabs for QuarterJr vs QuarterPro */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                {(isPro 
+                  ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine', 'throttle']
+                  : ['basic', 'vehicle', 'engine', 'transmission', 'finaldrive']
+                ).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      border: '1px solid var(--color-border)',
+                      background: activeTab === tab ? 'var(--color-primary)' : 'var(--color-surface)',
+                      color: activeTab === tab ? 'white' : 'var(--color-text)',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {tab === 'finaldrive' ? 'Final Drive' : tab === 'throttle' ? 'Throttle Stop' : tab}
+                  </button>
+                ))}
+              </div>
 
           {/* Basic Tab - Just identity info */}
           {activeTab === 'basic' && (
@@ -1192,6 +1215,8 @@ function Vehicles() {
                 </>
               )}
             </div>
+          )}
+            </>
           )}
 
           {/* Make Public option for owner/admin */}
