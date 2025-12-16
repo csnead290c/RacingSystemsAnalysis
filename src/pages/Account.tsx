@@ -36,7 +36,9 @@ export default function Account() {
     // Fetch subscription status from database
     const fetchSubscription = async () => {
       try {
+        console.log('Fetching subscription status...');
         const status = await getSubscriptionStatus();
+        console.log('Subscription status received:', status);
         setDbSubscription(status);
       } catch (err) {
         console.error('Failed to fetch subscription:', err);
@@ -44,6 +46,7 @@ export default function Account() {
     };
     
     if (isAuthenticated || isClerkSignedIn) {
+      console.log('User is authenticated, fetching subscription...');
       fetchSubscription();
     }
   }, [isAuthenticated, isClerkSignedIn]);

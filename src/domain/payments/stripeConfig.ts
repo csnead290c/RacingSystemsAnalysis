@@ -150,9 +150,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://racingsystemsanaly
  */
 function getAuthToken(): string | null {
   // Try Clerk token first, then legacy token
-  return localStorage.getItem('rsa.auth.clerkToken') 
-    || localStorage.getItem('rsa.auth.token')
-    || null;
+  const clerkToken = localStorage.getItem('rsa.auth.clerkToken');
+  const legacyToken = localStorage.getItem('rsa.auth.token');
+  const token = clerkToken || legacyToken || null;
+  console.log('getAuthToken:', { hasClerkToken: !!clerkToken, hasLegacyToken: !!legacyToken, tokenLength: token?.length });
+  return token;
 }
 
 /**
