@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { lazy, useState, Suspense } from 'react';
+import { lazy, useState, useEffect, Suspense } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
@@ -159,6 +159,18 @@ function Navigation() {
   const { isAuthenticated, hasFeature, hasProduct } = useAuth();
   const { isClerkSignedIn } = useClerkRSA();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [, forceUpdate] = useState(0);
+
+  // Listen for products update event to re-render navigation
+  useEffect(() => {
+    const handleProductsUpdate = () => {
+      console.log('Products updated, re-rendering navigation');
+      forceUpdate(n => n + 1);
+    };
+    
+    window.addEventListener('rsa-products-updated', handleProductsUpdate);
+    return () => window.removeEventListener('rsa-products-updated', handleProductsUpdate);
+  }, []);
 
   const isActive = (path: string) => location.pathname === path;
 

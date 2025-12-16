@@ -66,6 +66,11 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
         if (status.products && status.products.length > 0) {
           localStorage.setItem('rsa.auth.apiProducts', JSON.stringify(status.products));
           console.log('Fetched products from DB:', status.products);
+          
+          // Dispatch custom event to notify other components that products have been updated
+          window.dispatchEvent(new CustomEvent('rsa-products-updated', { 
+            detail: { products: status.products } 
+          }));
         }
       } catch (err) {
         console.error('Failed to fetch subscription from DB:', err);
