@@ -157,6 +157,7 @@ function UserMenu() {
 function Navigation() {
   const location = useLocation();
   const { isAuthenticated, hasFeature, hasProduct } = useAuth();
+  const { isClerkSignedIn } = useClerkRSA();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
@@ -171,14 +172,17 @@ function Navigation() {
     pointerEvents: disabled ? 'none' as const : 'auto' as const,
   });
 
+  // Check if user is logged in (either legacy or Clerk)
+  const isLoggedIn = isAuthenticated || isClerkSignedIn;
+
   // Check access for each nav item
-  const canAccessVehicles = isAuthenticated && hasFeature('save_vehicles');
-  const canAccessETSim = isAuthenticated && hasProduct('quarter_jr');
-  const canAccessSuspSim = isAuthenticated && hasProduct('fourlink');
-  const canAccessClutchSim = isAuthenticated && hasFeature('clutch_sim');
-  const canAccessEngineSim = isAuthenticated && hasProduct('engine_pro');
-  const canAccessLog = isAuthenticated && hasFeature('save_runs');
-  const canAccessHistory = isAuthenticated && hasFeature('save_runs');
+  const canAccessVehicles = isLoggedIn && hasFeature('save_vehicles');
+  const canAccessETSim = isLoggedIn && hasProduct('quarter_jr');
+  const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
+  const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
+  const canAccessEngineSim = isLoggedIn && hasProduct('engine_pro');
+  const canAccessLog = isLoggedIn && hasFeature('save_runs');
+  const canAccessHistory = isLoggedIn && hasFeature('save_runs');
 
   const navLinks = (
     <>
