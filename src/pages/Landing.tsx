@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
+import { useAuth, useClerkRSA } from '../domain/auth';
 
 /**
  * Public landing page for non-authenticated users.
@@ -7,6 +8,11 @@ import { useState } from 'react';
  */
 export default function Landing() {
   const [showDemo, setShowDemo] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const { isClerkSignedIn } = useClerkRSA();
+  
+  // Determine where "Get Started" should link to
+  const getStartedLink = (isAuthenticated || isClerkSignedIn) ? '/account' : '/register';
 
   return (
     <div style={{ 
@@ -63,7 +69,7 @@ export default function Landing() {
           
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link 
-              to="/register"
+              to={getStartedLink}
               style={{
                 padding: '16px 32px',
                 backgroundColor: '#22c55e',
@@ -350,7 +356,7 @@ export default function Landing() {
                 ))}
               </ul>
               <Link
-                to="/register"
+                to={getStartedLink}
                 style={{
                   display: 'block',
                   padding: '12px 24px',
@@ -409,7 +415,7 @@ export default function Landing() {
                 ))}
               </ul>
               <Link
-                to="/register"
+                to={getStartedLink}
                 style={{
                   display: 'block',
                   padding: '12px 24px',
@@ -472,7 +478,7 @@ export default function Landing() {
             Subscribe today and start winning more rounds.
           </p>
           <Link 
-            to="/register"
+            to={getStartedLink}
             style={{
               display: 'inline-block',
               padding: '18px 48px',
@@ -553,7 +559,7 @@ export default function Landing() {
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <Link
-                to="/register"
+                to={getStartedLink}
                 style={{
                   padding: '12px 24px',
                   backgroundColor: '#22c55e',

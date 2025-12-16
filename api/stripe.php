@@ -103,7 +103,10 @@ function handleCreateCheckoutSession($pdo) {
         ]);
     } catch (\Stripe\Exception\ApiErrorException $e) {
         error_log('Stripe checkout error: ' . $e->getMessage());
-        rsa_jsonResponse(['error' => 'Failed to create checkout session'], 500);
+        rsa_jsonResponse(['error' => 'Failed to create checkout session: ' . $e->getMessage()], 500);
+    } catch (Exception $e) {
+        error_log('Checkout error: ' . $e->getMessage());
+        rsa_jsonResponse(['error' => 'Checkout error: ' . $e->getMessage()], 500);
     }
 }
 
