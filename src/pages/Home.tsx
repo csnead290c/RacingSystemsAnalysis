@@ -2,27 +2,31 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
-import { useAuth } from '../domain/auth';
+import { useAuth, useClerkRSA } from '../domain/auth';
 import type { Product } from '../domain/auth/types';
 import Landing from './Landing';
 
 function Home() {
   const { isAuthenticated, user, getUserProducts, hasFeature } = useAuth();
+  const { isClerkSignedIn, rsaUser } = useClerkRSA();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const userProducts = isAuthenticated ? getUserProducts() : [];
+  // Check if user is logged in (either legacy or Clerk)
+  const isLoggedIn = isAuthenticated || isClerkSignedIn;
+  const activeUser = isClerkSignedIn ? rsaUser : user;
+  const userProducts = isLoggedIn ? getUserProducts() : [];
 
   useEffect(() => {
     const loadData = async () => {
-      if (isAuthenticated) {
+      if (isLoggedIn) {
         const data = await loadVehicles();
         setVehicles(data);
       }
       setLoading(false);
     };
     loadData();
-  }, [isAuthenticated]);
+  }, [isLoggedIn]);
 
   if (loading) {
     return (
@@ -35,7 +39,7 @@ function Home() {
   }
 
   // Show compelling landing page for non-authenticated users
-  if (!isAuthenticated) {
+  if (!isLoggedIn) {
     return <Landing />;
   }
 
@@ -46,7 +50,7 @@ function Home() {
         {/* Welcome Header */}
         <div style={{ marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
-            Welcome back, {user?.displayName || 'User'}!
+            Welcome back, {activeUser?.displayName || 'User'}!
           </h2>
           <p style={{ color: 'var(--color-muted)' }}>
             {userProducts.length > 0 
