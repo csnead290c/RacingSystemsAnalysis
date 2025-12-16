@@ -9,6 +9,7 @@ export {
   getPlanById,
   redirectToCheckout,
   openCustomerPortal,
+  getSubscriptionStatus,
   createCheckoutSession,
   createPortalSession,
   type SubscriptionPlan,

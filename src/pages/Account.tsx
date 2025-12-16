@@ -3,11 +3,11 @@
  * Supports both Clerk OAuth and legacy authentication.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
-import { SUBSCRIPTION_PLANS, redirectToCheckout, openCustomerPortal } from '../domain/payments';
+import { SUBSCRIPTION_PLANS, redirectToCheckout, openCustomerPortal, getSubscriptionStatus } from '../domain/payments';
 import type { Product } from '../domain/auth/types';
 import Page from '../shared/components/Page';
 
@@ -21,7 +21,37 @@ export default function Account() {
     getUserProducts,
     updateUser,
   } = useAuth();
-  const { isClerkSignedIn, rsaUser, subscription } = useClerkRSA();
+  const { isClerkSignedIn, rsaUser } = useClerkRSA();
+  
+  // Fetch subscription status from backend API
+  const [dbSubscription, setDbSubscription] = useState<{
+    plan: string | null;
+    status: string;
+    periodEnd: string | null;
+    hasStripeCustomer: boolean;
+  } | null>(null);
+  
+  useEffect(() => {
+    // Fetch subscription status from database
+    const fetchSubscription = async () => {
+      try {
+        const status = await getSubscriptionStatus();
+        setDbSubscription(status);
+      } catch (err) {
+        console.error('Failed to fetch subscription:', err);
+      }
+    };
+    
+    if (isAuthenticated || isClerkSignedIn) {
+      fetchSubscription();
+    }
+  }, [isAuthenticated, isClerkSignedIn]);
+  
+  // Use database subscription data
+  const subscription = dbSubscription ? {
+    plan: dbSubscription.plan as 'racer' | 'pro' | 'team' | null,
+    status: dbSubscription.status as 'active' | 'trialing' | 'past_due' | 'canceled' | 'none',
+  } : { plan: null, status: 'none' as const };
   
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.displayName || '');

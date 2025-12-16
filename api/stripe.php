@@ -157,24 +157,29 @@ function handleCreatePortalSession($pdo) {
 function handleSubscriptionStatus($pdo) {
     $auth = rsa_requireAuth();
     
+    // Get user - handle both legacy and Clerk users
+    $user = getOrCreateUser($pdo, $auth);
+    
+    // Fetch subscription data for this user
     $stmt = $pdo->prepare("
-        SELECT subscription_plan, subscription_status, subscription_period_end, stripe_customer_id
+        SELECT subscription_plan, subscription_status, subscription_period_end, stripe_customer_id, products
         FROM users WHERE id = ?
     ");
-    $stmt->execute([$auth['user_id']]);
-    $user = $stmt->fetch();
+    $stmt->execute([$user['id']]);
+    $userData = $stmt->fetch();
     
-    if (!$user) {
+    if (!$userData) {
         rsa_jsonResponse(['error' => 'User not found'], 404);
     }
     
     rsa_jsonResponse([
         'subscription' => [
-            'plan' => $user['subscription_plan'],
-            'status' => $user['subscription_status'] ?? 'none',
-            'periodEnd' => $user['subscription_period_end'],
-            'hasStripeCustomer' => !empty($user['stripe_customer_id']),
+            'plan' => $userData['subscription_plan'],
+            'status' => $userData['subscription_status'] ?? 'none',
+            'periodEnd' => $userData['subscription_period_end'],
+            'hasStripeCustomer' => !empty($userData['stripe_customer_id']),
         ],
+        'products' => json_decode($userData['products'] ?? '[]', true),
     ]);
 }
 
