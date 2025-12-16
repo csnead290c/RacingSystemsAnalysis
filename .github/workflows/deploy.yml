@@ -26,6 +26,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+          VITE_API_URL: https://racingsystemsanalysis.com/api
 
       - name: Create .htaccess for SPA routing
         run: |
