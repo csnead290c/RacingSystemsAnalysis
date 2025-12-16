@@ -60,14 +60,8 @@ function handleCreateCheckoutSession($pdo) {
         rsa_jsonResponse(['error' => 'Invalid plan'], 400);
     }
     
-    // Get user info
-    $stmt = $pdo->prepare("SELECT id, email, stripe_customer_id FROM users WHERE id = ?");
-    $stmt->execute([$auth['user_id']]);
-    $user = $stmt->fetch();
-    
-    if (!$user) {
-        rsa_jsonResponse(['error' => 'User not found'], 404);
-    }
+    // Get or create user - handle both legacy and Clerk users
+    $user = getOrCreateUser($pdo, $auth);
     
     try {
         $sessionParams = [
@@ -241,4 +235,66 @@ function getProductsForPlan($planId) {
     ];
     
     return $products[$planId] ?? [];
+}
+
+/**
+ * Get or create a user record for Clerk or legacy users
+ */
+function getOrCreateUser($pdo, $auth) {
+    $userId = $auth['user_id'];
+    $email = $auth['email'] ?? '';
+    $clerkUserId = $auth['clerk_user_id'] ?? null;
+    
+    // Check if this is a Clerk user (ID starts with 'clerk_')
+    if ($clerkUserId || strpos($userId, 'clerk_') === 0) {
+        $clerkId = $clerkUserId ?: str_replace('clerk_', '', $userId);
+        
+        // Try to find by clerk_user_id first
+        $stmt = $pdo->prepare("SELECT id, email, stripe_customer_id FROM users WHERE clerk_user_id = ?");
+        $stmt->execute([$clerkId]);
+        $user = $stmt->fetch();
+        
+        if ($user) {
+            return $user;
+        }
+        
+        // Try to find by email
+        if ($email) {
+            $stmt = $pdo->prepare("SELECT id, email, stripe_customer_id FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+            
+            if ($user) {
+                // Update with clerk_user_id
+                $stmt = $pdo->prepare("UPDATE users SET clerk_user_id = ? WHERE id = ?");
+                $stmt->execute([$clerkId, $user['id']]);
+                return $user;
+            }
+        }
+        
+        // Create new user for Clerk
+        $stmt = $pdo->prepare("
+            INSERT INTO users (email, password_hash, name, role, clerk_user_id, products)
+            VALUES (?, '', ?, 'user', ?, '[]')
+        ");
+        $name = explode('@', $email)[0] ?? 'User';
+        $stmt->execute([$email, $name, $clerkId]);
+        
+        return [
+            'id' => $pdo->lastInsertId(),
+            'email' => $email,
+            'stripe_customer_id' => null,
+        ];
+    }
+    
+    // Legacy user - look up by ID
+    $stmt = $pdo->prepare("SELECT id, email, stripe_customer_id FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+    
+    if (!$user) {
+        rsa_jsonResponse(['error' => 'User not found'], 404);
+    }
+    
+    return $user;
 }

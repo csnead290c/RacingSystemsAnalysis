@@ -50,17 +50,37 @@ function rsa_generateToken($userId, $email, $role) {
 }
 
 function rsa_verifyToken($token) {
-    $secret = defined('JWT_SECRET') ? JWT_SECRET : 'default_secret_change_me';
     $parts = explode('.', $token);
     if (count($parts) !== 3) return null;
     
     list($header, $payload, $signature) = $parts;
+    
+    // Decode payload to check token type
+    $data = json_decode(base64_decode($payload), true);
+    if (!$data) return null;
+    
+    // Check if this is a Clerk token (has 'azp' or 'sub' starting with 'user_')
+    $isClerkToken = isset($data['azp']) || (isset($data['sub']) && strpos($data['sub'], 'user_') === 0);
+    
+    if ($isClerkToken) {
+        // For Clerk tokens, verify expiration and extract user info
+        if (($data['exp'] ?? 0) < time()) return null;
+        
+        // Return Clerk user data in a format compatible with our auth system
+        return [
+            'user_id' => 'clerk_' . ($data['sub'] ?? ''),
+            'email' => $data['email'] ?? '',
+            'role' => 'user',
+            'clerk_user_id' => $data['sub'] ?? null,
+        ];
+    }
+    
+    // Legacy RSA token verification
+    $secret = defined('JWT_SECRET') ? JWT_SECRET : 'default_secret_change_me';
     $expectedSig = base64_encode(hash_hmac('sha256', "$header.$payload", $secret, true));
     
     if ($signature !== $expectedSig) return null;
-    
-    $data = json_decode(base64_decode($payload), true);
-    if (!$data || ($data['exp'] ?? 0) < time()) return null;
+    if (($data['exp'] ?? 0) < time()) return null;
     
     return $data;
 }
