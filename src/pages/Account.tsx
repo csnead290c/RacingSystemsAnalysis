@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
 import { SUBSCRIPTION_PLANS, redirectToCheckout, openCustomerPortal, getSubscriptionStatus } from '../domain/payments';
-import { DEFAULT_PRODUCTS, type Product } from '../domain/auth/types';
+import { DEFAULT_PRODUCTS, DEFAULT_ROLES, type Product, type Role } from '../domain/auth/types';
 import Page from '../shared/components/Page';
 
 export default function Account() {
@@ -59,7 +59,7 @@ export default function Account() {
   const [theme, setTheme] = useState(user?.preferences?.theme || 'system');
   const [units, setUnits] = useState(user?.preferences?.units || 'imperial');
   
-  const role = getUserRole();
+  const authRole = getUserRole();
   const authProducts = getUserProducts();
   const { productMode, setProductMode } = usePreferences();
   
@@ -68,6 +68,20 @@ export default function Account() {
   const products: Product[] = dbProductIds.length > 0 
     ? dbProductIds.map((id: string) => DEFAULT_PRODUCTS.find(p => p.id === id)).filter((p): p is Product => p !== undefined)
     : authProducts;
+  
+  // Derive role from subscription if available
+  const role: Role | null = (() => {
+    // If we have a subscription from DB, use that to determine role
+    if (dbSubscription?.plan && dbSubscription.status === 'active') {
+      if (dbSubscription.plan === 'pro' || dbSubscription.plan === 'team') {
+        return DEFAULT_ROLES.find(r => r.id === 'subscriber_pro') || null;
+      } else if (dbSubscription.plan === 'racer') {
+        return DEFAULT_ROLES.find(r => r.id === 'subscriber_basic') || null;
+      }
+    }
+    // Fall back to auth role
+    return authRole;
+  })();
   
   // Check if user has Pro access (can switch between Pro and Jr)
   const hasProAccess = dbProductIds.includes('quarter_pro') || dbProductIds.includes('bonneville_pro') || 
