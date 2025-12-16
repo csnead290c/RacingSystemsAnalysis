@@ -66,6 +66,12 @@ jobs:
           </IfModule>
           EOF
 
+      - name: Install PHP Composer dependencies
+        run: |
+          cd api
+          composer install --no-dev --optimize-autoloader
+          cd ..
+
       - name: Copy API files to dist
         run: |
           cp -r api dist/
