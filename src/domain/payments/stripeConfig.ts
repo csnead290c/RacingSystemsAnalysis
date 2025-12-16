@@ -261,17 +261,24 @@ export async function getSubscriptionStatus(): Promise<{
   status: string;
   periodEnd: string | null;
   hasStripeCustomer: boolean;
+  products: string[];
 }> {
   try {
-    const response = await apiRequest<{ subscription: {
-      plan: string | null;
-      status: string;
-      periodEnd: string | null;
-      hasStripeCustomer: boolean;
-    }}>(
+    const response = await apiRequest<{ 
+      subscription: {
+        plan: string | null;
+        status: string;
+        periodEnd: string | null;
+        hasStripeCustomer: boolean;
+      };
+      products: string[];
+    }>(
       'stripe.php?action=subscription-status'
     );
-    return response.subscription;
+    return {
+      ...response.subscription,
+      products: response.products || [],
+    };
   } catch (error) {
     console.error('Failed to get subscription status:', error);
     return {
@@ -279,6 +286,7 @@ export async function getSubscriptionStatus(): Promise<{
       status: 'none',
       periodEnd: null,
       hasStripeCustomer: false,
+      products: [],
     };
   }
 }

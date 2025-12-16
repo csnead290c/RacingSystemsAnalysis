@@ -127,18 +127,23 @@ function handleCreateCheckoutSession($pdo) {
 function handleCreatePortalSession($pdo) {
     $auth = rsa_requireAuth();
     
-    // Get user's Stripe customer ID
-    $stmt = $pdo->prepare("SELECT stripe_customer_id FROM users WHERE id = ?");
-    $stmt->execute([$auth['user_id']]);
-    $user = $stmt->fetch();
+    // Get user - handle both legacy and Clerk users
+    $user = getOrCreateUser($pdo, $auth);
     
-    if (!$user || !$user['stripe_customer_id']) {
+    // Fetch stripe_customer_id for this user
+    $stmt = $pdo->prepare("SELECT stripe_customer_id FROM users WHERE id = ?");
+    $stmt->execute([$user['id']]);
+    $userData = $stmt->fetch();
+    
+    if (!$userData || !$userData['stripe_customer_id']) {
         rsa_jsonResponse(['error' => 'No subscription found. Please subscribe first.'], 400);
     }
     
+    $stripeCustomerId = $userData['stripe_customer_id'];
+    
     try {
         $session = \Stripe\BillingPortal\Session::create([
-            'customer' => $user['stripe_customer_id'],
+            'customer' => $stripeCustomerId,
             'return_url' => FRONTEND_URL . '/account',
         ]);
         

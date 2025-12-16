@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
 import { SUBSCRIPTION_PLANS, redirectToCheckout, openCustomerPortal, getSubscriptionStatus } from '../domain/payments';
-import type { Product } from '../domain/auth/types';
+import { DEFAULT_PRODUCTS, type Product } from '../domain/auth/types';
 import Page from '../shared/components/Page';
 
 export default function Account() {
@@ -29,6 +29,7 @@ export default function Account() {
     status: string;
     periodEnd: string | null;
     hasStripeCustomer: boolean;
+    products: string[];
   } | null>(null);
   
   useEffect(() => {
@@ -59,11 +60,18 @@ export default function Account() {
   const [units, setUnits] = useState(user?.preferences?.units || 'imperial');
   
   const role = getUserRole();
-  const products = getUserProducts();
+  const authProducts = getUserProducts();
   const { productMode, setProductMode } = usePreferences();
   
+  // Use products from database if available, otherwise fall back to auth products
+  const dbProductIds = dbSubscription?.products || [];
+  const products: Product[] = dbProductIds.length > 0 
+    ? dbProductIds.map((id: string) => DEFAULT_PRODUCTS.find(p => p.id === id)).filter((p): p is Product => p !== undefined)
+    : authProducts;
+  
   // Check if user has Pro access (can switch between Pro and Jr)
-  const hasProAccess = products.some((p: Product) => p.id === 'quarter_pro' || p.id === 'bonneville_pro');
+  const hasProAccess = dbProductIds.includes('quarter_pro') || dbProductIds.includes('bonneville_pro') || 
+    authProducts.some((p: Product) => p.id === 'quarter_pro' || p.id === 'bonneville_pro');
 
   // Redirect if not logged in (check both legacy and Clerk auth)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
