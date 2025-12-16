@@ -49,6 +49,7 @@ function handleCreateCheckoutSession($pdo) {
     
     $planId = $input['planId'] ?? '';
     $billingPeriod = $input['billingPeriod'] ?? 'monthly';
+    $customerEmail = $input['customerEmail'] ?? '';
     
     if (!$planId) {
         rsa_jsonResponse(['error' => 'Plan ID required'], 400);
@@ -60,8 +61,18 @@ function handleCreateCheckoutSession($pdo) {
         rsa_jsonResponse(['error' => 'Invalid plan'], 400);
     }
     
+    // Use email from request if provided, otherwise from auth token
+    if ($customerEmail) {
+        $auth['email'] = $customerEmail;
+    }
+    
     // Get or create user - handle both legacy and Clerk users
     $user = getOrCreateUser($pdo, $auth);
+    
+    // If user still has no email, use the one from request
+    if (empty($user['email']) && $customerEmail) {
+        $user['email'] = $customerEmail;
+    }
     
     try {
         $sessionParams = [

@@ -206,6 +206,7 @@ export async function redirectToCheckout(params: {
         body: JSON.stringify({
           planId: params.planId,
           billingPeriod: params.billingPeriod,
+          customerEmail: params.customerEmail,
         }),
       }
     );
