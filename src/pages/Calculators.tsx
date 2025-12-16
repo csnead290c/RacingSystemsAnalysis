@@ -1,8 +1,5 @@
-import { useState, useMemo, lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useMemo } from 'react';
 import Page from '../shared/components/Page';
-
-const WeatherCorrectionCalc = lazy(() => import('../shared/components/WeatherCorrectionCalc'));
 import {
   calculateWeather,
   defaultWeatherInput,
@@ -22,37 +19,7 @@ import {
   type TransmissionType,
 } from '../domain/physics/models/dragDyno';
 
-type CalculatorTab = 'weather' | 'converter' | 'dragdyno' | 'correction' | 'worksheets';
-
-// Worksheet calculator interfaces
-interface GearRatioInput {
-  primaryDrive: number;
-  countershaftTeeth: number;
-  rearWheelTeeth: number;
-}
-
-interface FrontalAreaInput {
-  maxWidth: number;      // inches
-  maxHeight: number;     // inches
-  shapeFactor: number;   // percentage (0-100)
-}
-
-interface TireWidthInput {
-  treadWidth: number;    // inches
-  numGrooves: number;
-  grooveWidth: number;   // inches
-}
-
-interface PMIInput {
-  componentType: 'engine' | 'tire' | 'transmission';
-  weight: number;        // lbs
-  radius: number;        // inches
-}
-
-interface RolloutInput {
-  tireDiameter: number;  // inches
-  stageDistance: number; // inches (typically 7-12")
-}
+type CalculatorTab = 'weather' | 'converter' | 'dragdyno';
 
 function Calculators() {
   const [activeTab, setActiveTab] = useState<CalculatorTab>('weather');
@@ -69,88 +36,17 @@ function Calculators() {
   const [dynoInput, setDynoInput] = useState<DragDynoInput>(defaultDragDynoInput);
   const dynoResult = useMemo(() => calculateDragDyno(dynoInput), [dynoInput]);
 
-  // Worksheet calculators state
-  const [gearInput, setGearInput] = useState<GearRatioInput>({
-    primaryDrive: 1.0,
-    countershaftTeeth: 15,
-    rearWheelTeeth: 42,
-  });
-  
-  const [areaInput, setAreaInput] = useState<FrontalAreaInput>({
-    maxWidth: 72,
-    maxHeight: 48,
-    shapeFactor: 85,
-  });
-  
-  const [tireInput, setTireInput] = useState<TireWidthInput>({
-    treadWidth: 12,
-    numGrooves: 0,
-    grooveWidth: 0.25,
-  });
-
-  const [pmiInput, setPmiInput] = useState<PMIInput>({
-    componentType: 'engine',
-    weight: 50,
-    radius: 6,
-  });
-
-  const [rolloutInput, setRolloutInput] = useState<RolloutInput>({
-    tireDiameter: 28,
-    stageDistance: 7,
-  });
-
-  // Worksheet calculations
-  const gearRatio = useMemo(() => {
-    if (gearInput.countershaftTeeth === 0) return 0;
-    return Math.round((gearInput.rearWheelTeeth * gearInput.primaryDrive / gearInput.countershaftTeeth) * 100) / 100;
-  }, [gearInput]);
-
-  const frontalArea = useMemo(() => {
-    // Area = (shapeFactor/100) * width * height / 144 (convert sq in to sq ft)
-    return Math.round((areaInput.shapeFactor / 100) * areaInput.maxWidth * areaInput.maxHeight / 144 * 10) / 10;
-  }, [areaInput]);
-
-  const effectiveTireWidth = useMemo(() => {
-    const width = tireInput.treadWidth - tireInput.numGrooves * tireInput.grooveWidth;
-    return Math.max(0, Math.round(width * 100) / 100);
-  }, [tireInput]);
-
-  // PMI calculation: I = (1/2) * m * r^2 for solid cylinder
-  // Convert weight to mass (lbs to slugs: divide by 32.174)
-  // Convert radius from inches to feet
-  const pmiResult = useMemo(() => {
-    const mass = pmiInput.weight / 32.174; // slugs
-    const radiusFt = pmiInput.radius / 12; // feet
-    // PMI = 0.5 * m * r^2 (for solid cylinder approximation)
-    // Multiply by factor based on component type
-    const factor = pmiInput.componentType === 'engine' ? 0.4 : 
-                   pmiInput.componentType === 'tire' ? 0.9 : 0.3;
-    const pmi = factor * mass * radiusFt * radiusFt;
-    return Math.round(pmi * 1000) / 1000; // lb-ft²
-  }, [pmiInput]);
-
-  // Rollout calculation: distance tire travels before breaking beam
-  const rolloutResult = useMemo(() => {
-    const circumference = Math.PI * rolloutInput.tireDiameter;
-    const rollout = rolloutInput.stageDistance;
-    const degreesRotation = (rollout / circumference) * 360;
-    return {
-      rolloutInches: rollout,
-      circumference: Math.round(circumference * 100) / 100,
-      degreesRotation: Math.round(degreesRotation * 10) / 10,
-    };
-  }, [rolloutInput]);
-
   const cardStyle: React.CSSProperties = {
     padding: 'var(--space-4)',
-    maxWidth: '600px',
+    maxWidth: '100%',
+    width: '100%',
   };
 
   const inputRowStyle: React.CSSProperties = {
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
     gap: 'var(--space-3)',
     marginBottom: 'var(--space-3)',
-    flexWrap: 'wrap',
   };
 
   const inputGroupStyle: React.CSSProperties = {
@@ -160,15 +56,17 @@ function Calculators() {
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: '0.75rem',
+    fontSize: '0.8rem',
     color: 'var(--color-muted)',
+    fontWeight: 500,
   };
 
   const inputStyle: React.CSSProperties = {
-    width: '100px',
-    padding: '6px 8px',
-    fontSize: '0.9rem',
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: '1rem',
     textAlign: 'right',
+    borderRadius: 'var(--radius-sm)',
   };
 
   const resultStyle: React.CSSProperties = {
@@ -196,47 +94,41 @@ function Calculators() {
   };
 
   return (
-    <Page>
+    <Page title="Calculators">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem' }}>RSA Calculators</h1>
-          <p className="text-muted" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
-            Quick calculation utilities ported from original VB6 RSA tools
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <h1 style={{ margin: '0 0 var(--space-2)', fontSize: '1.5rem' }}>RSA Calculators</h1>
+        
+        {/* Tab buttons - responsive */}
+        <div style={{ 
+          display: 'flex', 
+          gap: 'var(--space-2)', 
+          flexWrap: 'wrap',
+          backgroundColor: 'var(--color-bg-secondary)',
+          padding: 'var(--space-2)',
+          borderRadius: 'var(--radius-md)',
+        }}>
           <button
             className={`btn ${activeTab === 'weather' ? 'btn-primary' : ''}`}
             onClick={() => setActiveTab('weather')}
+            style={{ flex: '1 1 auto', minWidth: '100px' }}
           >
-            Weather
+            🌤️ Weather
           </button>
           <button
             className={`btn ${activeTab === 'converter' ? 'btn-primary' : ''}`}
             onClick={() => setActiveTab('converter')}
+            style={{ flex: '1 1 auto', minWidth: '100px' }}
           >
-            Conv Slip
+            ⚙️ Converter Slip
           </button>
           <button
             className={`btn ${activeTab === 'dragdyno' ? 'btn-primary' : ''}`}
             onClick={() => setActiveTab('dragdyno')}
+            style={{ flex: '1 1 auto', minWidth: '100px' }}
           >
-            Drag Dyno
+            🏁 Drag Dyno
           </button>
-          <button
-            className={`btn ${activeTab === 'correction' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('correction')}
-          >
-            ET Correction
-          </button>
-          <button
-            className={`btn ${activeTab === 'worksheets' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('worksheets')}
-          >
-            Worksheets
-          </button>
-          <Link to="/" className="btn">← Home</Link>
         </div>
       </div>
 
@@ -322,16 +214,19 @@ function Calculators() {
           {/* Fuel System */}
           <div style={sectionTitleStyle}>Fuel System</div>
           <div style={inputRowStyle}>
-            <select
-              className="input"
-              style={{ width: '220px', padding: '6px 8px' }}
-              value={weatherInput.fuelSystem}
-              onChange={(e) => setWeatherInput(prev => ({ ...prev, fuelSystem: parseInt(e.target.value) }))}
-            >
-              {FUEL_SYSTEMS.map(fs => (
-                <option key={fs.value} value={fs.value}>{fs.label}</option>
-              ))}
-            </select>
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Type</label>
+              <select
+                className="input"
+                style={{ ...inputStyle, textAlign: 'left' }}
+                value={weatherInput.fuelSystem}
+                onChange={(e) => setWeatherInput(prev => ({ ...prev, fuelSystem: parseInt(e.target.value) }))}
+              >
+                {FUEL_SYSTEMS.map(fs => (
+                  <option key={fs.value} value={fs.value}>{fs.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Results */}
@@ -497,7 +392,7 @@ function Calculators() {
               <label style={labelStyle}>Race Style</label>
               <select
                 className="input"
-                style={{ width: '140px', padding: '6px 8px' }}
+                style={{ ...inputStyle, textAlign: 'left' }}
                 value={dynoInput.raceStyle}
                 onChange={(e) => setDynoInput(prev => ({ ...prev, raceStyle: e.target.value as RaceStyle }))}
               >
@@ -510,7 +405,7 @@ function Calculators() {
               <label style={labelStyle}>Transmission</label>
               <select
                 className="input"
-                style={{ width: '140px', padding: '6px 8px' }}
+                style={{ ...inputStyle, textAlign: 'left' }}
                 value={dynoInput.transmissionType}
                 onChange={(e) => setDynoInput(prev => ({ ...prev, transmissionType: e.target.value as TransmissionType }))}
               >
@@ -567,286 +462,6 @@ function Calculators() {
         </div>
       )}
 
-      {/* ET CORRECTION CALCULATOR */}
-      {activeTab === 'correction' && (
-        <Suspense fallback={<div className="card" style={{ padding: 'var(--space-4)' }}>Loading...</div>}>
-          <WeatherCorrectionCalc baseET={10.0} />
-        </Suspense>
-      )}
-
-      {/* WORKSHEETS */}
-      {activeTab === 'worksheets' && (
-        <div>
-          {/* Info banner */}
-          <div 
-            style={{ 
-              backgroundColor: 'var(--color-bg)', 
-              border: '1px solid var(--color-border)',
-              borderRadius: '8px',
-              padding: 'var(--space-3)',
-              marginBottom: 'var(--space-4)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-3)',
-            }}
-          >
-            <span style={{ fontSize: '1.5rem' }}>💡</span>
-            <div>
-              <strong>Tip:</strong> These worksheets are also available as popup calculators in the{' '}
-              <Link to="/vehicles" style={{ color: 'var(--color-primary)' }}>Vehicle Builder</Link>.
-              Look for the <code style={{ backgroundColor: 'var(--color-bg-secondary)', padding: '2px 6px', borderRadius: '4px' }}>...</code> buttons 
-              next to input fields like Frontal Area, Tire Width, and Gear Ratio.
-            </div>
-          </div>
-          
-          <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-          {/* Gear Ratio Calculator */}
-          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
-            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Gear Ratio</h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-              Motorcycle final drive ratio
-            </p>
-            
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Primary Drive Reduction</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={gearInput.primaryDrive}
-                onChange={(e) => setGearInput(prev => ({ ...prev, primaryDrive: parseFloat(e.target.value) || 0 }))}
-                step="0.01"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Countershaft Sprocket Teeth</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={gearInput.countershaftTeeth}
-                onChange={(e) => setGearInput(prev => ({ ...prev, countershaftTeeth: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Rear Wheel Sprocket Teeth</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={gearInput.rearWheelTeeth}
-                onChange={(e) => setGearInput(prev => ({ ...prev, rearWheelTeeth: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
-            
-            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Final Drive Ratio</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                {gearRatio.toFixed(2)}
-              </div>
-            </div>
-          </div>
-
-          {/* Frontal Area Calculator */}
-          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
-            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Frontal Area</h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-              Aerodynamic reference area
-            </p>
-            
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Maximum Width (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={areaInput.maxWidth}
-                onChange={(e) => setAreaInput(prev => ({ ...prev, maxWidth: parseFloat(e.target.value) || 0 }))}
-                step="0.5"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Maximum Height (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={areaInput.maxHeight}
-                onChange={(e) => setAreaInput(prev => ({ ...prev, maxHeight: parseFloat(e.target.value) || 0 }))}
-                step="0.5"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Shape Factor (%)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={areaInput.shapeFactor}
-                onChange={(e) => setAreaInput(prev => ({ ...prev, shapeFactor: parseFloat(e.target.value) || 0 }))}
-                min="0"
-                max="100"
-              />
-            </div>
-            
-            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Frontal Area</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                {frontalArea.toFixed(1)} sq ft
-              </div>
-            </div>
-          </div>
-
-          {/* Tire Width Calculator */}
-          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
-            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Tire Width</h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-              Effective tire contact width
-            </p>
-            
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Tread Width (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={tireInput.treadWidth}
-                onChange={(e) => setTireInput(prev => ({ ...prev, treadWidth: parseFloat(e.target.value) || 0 }))}
-                step="0.25"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Number of Grooves</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={tireInput.numGrooves}
-                onChange={(e) => setTireInput(prev => ({ ...prev, numGrooves: parseInt(e.target.value) || 0 }))}
-                min="0"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Each Groove Width (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={tireInput.grooveWidth}
-                onChange={(e) => setTireInput(prev => ({ ...prev, grooveWidth: parseFloat(e.target.value) || 0 }))}
-                step="0.0625"
-              />
-            </div>
-            
-            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Effective Tire Width</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                {effectiveTireWidth.toFixed(2)} in
-              </div>
-            </div>
-          </div>
-
-          {/* PMI Calculator */}
-          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
-            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Polar Moment of Inertia</h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-              Rotational inertia for drivetrain components
-            </p>
-            
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Component Type</label>
-              <select
-                className="input"
-                style={inputStyle}
-                value={pmiInput.componentType}
-                onChange={(e) => setPmiInput(prev => ({ ...prev, componentType: e.target.value as PMIInput['componentType'] }))}
-              >
-                <option value="engine">Engine/Flywheel</option>
-                <option value="tire">Tire/Wheel</option>
-                <option value="transmission">Trans/Driveshaft</option>
-              </select>
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Weight (lbs)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={pmiInput.weight}
-                onChange={(e) => setPmiInput(prev => ({ ...prev, weight: parseFloat(e.target.value) || 0 }))}
-                step="1"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Effective Radius (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={pmiInput.radius}
-                onChange={(e) => setPmiInput(prev => ({ ...prev, radius: parseFloat(e.target.value) || 0 }))}
-                step="0.5"
-              />
-            </div>
-            
-            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>PMI (lb-ft²)</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                {pmiResult.toFixed(3)}
-              </div>
-            </div>
-          </div>
-
-          {/* Rollout Calculator */}
-          <div className="card" style={{ padding: 'var(--space-4)', width: '280px' }}>
-            <h3 style={{ margin: '0 0 var(--space-2)', fontSize: '1rem' }}>Tire Rollout</h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-              Staging rollout distance
-            </p>
-            
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Tire Diameter (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={rolloutInput.tireDiameter}
-                onChange={(e) => setRolloutInput(prev => ({ ...prev, tireDiameter: parseFloat(e.target.value) || 0 }))}
-                step="0.5"
-              />
-            </div>
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Stage Distance (inches)</label>
-              <input
-                type="number"
-                className="input"
-                style={inputStyle}
-                value={rolloutInput.stageDistance}
-                onChange={(e) => setRolloutInput(prev => ({ ...prev, stageDistance: parseFloat(e.target.value) || 0 }))}
-                step="0.5"
-              />
-            </div>
-            
-            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Circumference</span>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{rolloutResult.circumference}" </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Rotation</span>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{rolloutResult.degreesRotation}°</span>
-              </div>
-              <div style={{ textAlign: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Rollout</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                  {rolloutResult.rolloutInches.toFixed(1)}"
-                </div>
-              </div>
-            </div>
-          </div>
-          </div>
-        </div>
-      )}
     </Page>
   );
 }
