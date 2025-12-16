@@ -6,9 +6,10 @@
  */
 
 import { ClerkProvider, useUser, useAuth as useClerkAuth, SignIn, SignUp, UserButton } from '@clerk/clerk-react';
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { CLERK_PUBLISHABLE_KEY, isClerkConfigured, clerkAppearance, mapClerkUserToRole, mapClerkUserToProducts, getSubscriptionFromClerk, type SubscriptionInfo } from './clerkConfig';
 import type { User } from './types';
+import { getSubscriptionStatus } from '../payments/stripeConfig';
 
 // ============================================================================
 // Clerk Context for RSA Integration
@@ -47,22 +48,60 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
   const { getToken } = useClerkAuth();
   
   // Sync Clerk user to localStorage for RSA auth system
+  // State for database subscription/products
+  const [dbProducts, setDbProducts] = useState<string[]>([]);
+  const [dbSubscription, setDbSubscription] = useState<{ plan: string | null; status: string }>({ plan: null, status: 'none' });
+  
+  // Fetch subscription from database API
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    
+    const fetchDbSubscription = async () => {
+      try {
+        const status = await getSubscriptionStatus();
+        setDbProducts(status.products || []);
+        setDbSubscription({ plan: status.plan, status: status.status });
+        
+        // Store products in localStorage for auth system
+        if (status.products && status.products.length > 0) {
+          localStorage.setItem('rsa.auth.apiProducts', JSON.stringify(status.products));
+          console.log('Fetched products from DB:', status.products);
+        }
+      } catch (err) {
+        console.error('Failed to fetch subscription from DB:', err);
+      }
+    };
+    
+    fetchDbSubscription();
+  }, [isLoaded, isSignedIn]);
+  
   useEffect(() => {
     if (!isLoaded) return;
     
     if (isSignedIn && user) {
       // Map Clerk user to RSA user format
+      // Use database subscription to determine role
+      let roleId = mapClerkUserToRole(user);
+      if (dbSubscription.plan && dbSubscription.status === 'active') {
+        if (dbSubscription.plan === 'pro' || dbSubscription.plan === 'team') {
+          roleId = 'subscriber_pro';
+        } else if (dbSubscription.plan === 'racer') {
+          roleId = 'subscriber_basic';
+        }
+      }
+      
       const rsaUser: User = {
         id: `clerk_${user.id}`,
         email: user.primaryEmailAddress?.emailAddress || '',
         displayName: user.fullName || user.firstName || 'User',
-        roleId: mapClerkUserToRole(user),
+        roleId,
         status: 'active',
         createdAt: user.createdAt?.toISOString() || new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
       };
       
-      const rsaProducts = mapClerkUserToProducts(user);
+      // Use products from database if available, otherwise from Clerk metadata
+      const rsaProducts = dbProducts.length > 0 ? dbProducts : mapClerkUserToProducts(user);
       
       // Store in localStorage for RSA auth system to pick up
       localStorage.setItem('rsa.auth.currentUser', JSON.stringify(rsaUser));
@@ -73,6 +112,7 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
         email: rsaUser.email,
         roleId: rsaUser.roleId,
         products: rsaProducts,
+        dbSubscription,
       });
       
       // Get Clerk session token for API calls (if needed)
@@ -92,7 +132,7 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
         console.log('Clerk session ended, cleared RSA auth');
       }
     }
-  }, [isLoaded, isSignedIn, user, getToken]);
+  }, [isLoaded, isSignedIn, user, getToken, dbProducts, dbSubscription]);
   
   const subscription = isSignedIn && user ? getSubscriptionFromClerk(user) : { plan: null, status: 'none' as const };
   
