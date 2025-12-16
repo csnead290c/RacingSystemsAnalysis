@@ -117,7 +117,7 @@ export default function Register() {
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
             <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Choose Your Plan</h1>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem' }}>
-              Start with a 14-day free trial. No credit card required.
+              Select a plan to get started.
             </p>
           </div>
 
@@ -392,7 +392,7 @@ export default function Register() {
                 opacity: isLoading ? 0.7 : 1,
               }}
             >
-              {isLoading ? 'Creating Account...' : 'Start Free Trial'}
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>
 
             <p style={{ 

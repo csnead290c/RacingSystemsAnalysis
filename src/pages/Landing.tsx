@@ -76,7 +76,7 @@ export default function Landing() {
                 transition: 'transform 0.2s, box-shadow 0.2s',
               }}
             >
-              Start Free Trial
+              Get Started
             </Link>
             <button
               onClick={() => setShowDemo(true)}
@@ -100,7 +100,7 @@ export default function Landing() {
             fontSize: '0.9rem', 
             color: 'var(--color-text-muted)',
           }}>
-            No credit card required • 14-day free trial
+            Subscribe to unlock all features
           </p>
         </div>
       </section>
@@ -362,7 +362,7 @@ export default function Landing() {
                   fontWeight: 600,
                 }}
               >
-                Start Free Trial
+                Get Started
               </Link>
             </div>
             
@@ -420,7 +420,7 @@ export default function Landing() {
                   fontWeight: 600,
                 }}
               >
-                Start Free Trial
+                Get Started
               </Link>
             </div>
           </div>
@@ -469,7 +469,7 @@ export default function Landing() {
             marginBottom: '32px',
           }}>
             Join hundreds of racers who trust RSA for their predictions.
-            Start your free trial today — no credit card required.
+            Subscribe today and start winning more rounds.
           </p>
           <Link 
             to="/register"
@@ -485,7 +485,7 @@ export default function Landing() {
               boxShadow: '0 4px 14px rgba(34, 197, 94, 0.4)',
             }}
           >
-            Start Your Free Trial
+            Get Started Now
           </Link>
           <p style={{ marginTop: '16px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
             Already have an account? <Link to="/login" style={{ color: 'var(--color-accent)' }}>Sign in</Link>
@@ -549,8 +549,7 @@ export default function Landing() {
           }}>
             <h3 style={{ marginBottom: '16px' }}>Demo Coming Soon</h3>
             <p style={{ color: 'var(--color-text-muted)', marginBottom: '24px' }}>
-              We're working on an interactive demo. In the meantime, start your free trial 
-              to explore all features!
+              We're working on an interactive demo. In the meantime, subscribe to explore all features!
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <Link
@@ -564,7 +563,7 @@ export default function Landing() {
                   fontWeight: 600,
                 }}
               >
-                Start Free Trial
+                Get Started
               </Link>
               <button
                 onClick={() => setShowDemo(false)}

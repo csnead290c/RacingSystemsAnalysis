@@ -29,7 +29,7 @@ const tiers: Tier[] = [
       'Track Database',
       'Print/Export Timeslips',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Subscribe',
   },
   {
     name: 'Pro',
@@ -51,7 +51,7 @@ const tiers: Tier[] = [
       'Unlimited Run History',
     ],
     highlighted: true,
-    cta: 'Start Free Trial',
+    cta: 'Subscribe',
   },
   {
     name: 'Team',
@@ -86,8 +86,7 @@ export default function Pricing() {
             Simple, Transparent Pricing
           </h1>
           <p style={{ fontSize: '1.1rem', color: 'var(--color-text-muted)', maxWidth: '600px', margin: '0 auto 32px' }}>
-            Start with a 14-day free trial. No credit card required. 
-            Cancel anytime.
+            Subscribe to unlock all features. Cancel anytime.
           </p>
           
           {/* Billing Toggle */}
@@ -292,8 +291,8 @@ export default function Pricing() {
           
           {[
             {
-              q: 'How does the free trial work?',
-              a: 'Start with a 14-day free trial of any plan. No credit card required. You\'ll have full access to all features in your chosen tier. At the end of the trial, you can subscribe or downgrade to our free demo mode.',
+              q: 'Can I try before I subscribe?',
+              a: 'We offer a demo mode with limited features so you can explore the platform. Subscribe to any plan to unlock full access to all features in your chosen tier.',
             },
             {
               q: 'Can I change plans later?',
@@ -355,7 +354,7 @@ export default function Pricing() {
               boxShadow: '0 4px 14px rgba(34, 197, 94, 0.4)',
             }}
           >
-            Start Your Free Trial
+            Get Started Now
           </Link>
         </div>
       </div>
