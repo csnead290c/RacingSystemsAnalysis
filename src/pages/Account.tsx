@@ -1,11 +1,13 @@
 /**
  * Account / User Profile Page
+ * Supports both Clerk OAuth and legacy authentication.
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../domain/auth';
+import { useAuth, useClerkRSA } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
+import { SUBSCRIPTION_PLANS, redirectToCheckout, openCustomerPortal } from '../domain/payments';
 import type { Product } from '../domain/auth/types';
 import Page from '../shared/components/Page';
 
@@ -19,6 +21,7 @@ export default function Account() {
     getUserProducts,
     updateUser,
   } = useAuth();
+  const { isClerkSignedIn, rsaUser, subscription } = useClerkRSA();
   
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -32,13 +35,17 @@ export default function Account() {
   // Check if user has Pro access (can switch between Pro and Jr)
   const hasProAccess = products.some((p: Product) => p.id === 'quarter_pro' || p.id === 'bonneville_pro');
 
-  // Redirect if not logged in
-  if (!isAuthenticated || !user) {
+  // Redirect if not logged in (check both legacy and Clerk auth)
+  const isLoggedIn = isAuthenticated || isClerkSignedIn;
+  const activeUser = isClerkSignedIn ? rsaUser : user;
+  
+  if (!isLoggedIn || !activeUser) {
     navigate('/login', { replace: true });
     return null;
   }
 
   const handleSave = () => {
+    if (!user) return;
     updateUser(user.id, {
       displayName,
       preferences: {
@@ -81,7 +88,7 @@ export default function Account() {
             color: 'white',
             fontWeight: 600,
           }}>
-            {user.displayName.charAt(0).toUpperCase()}
+            {activeUser.displayName.charAt(0).toUpperCase()}
           </div>
           
           <div style={{ flex: 1 }}>
@@ -103,10 +110,10 @@ export default function Account() {
                 }}
               />
             ) : (
-              <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{user.displayName}</h2>
+              <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{activeUser.displayName}</h2>
             )}
             <div style={{ color: 'var(--color-muted)', marginTop: '0.25rem' }}>
-              {user.email}
+              {activeUser.email}
             </div>
             <div style={{ marginTop: '0.5rem' }}>
               <span style={{
@@ -127,7 +134,7 @@ export default function Account() {
             {isEditing ? (
               <>
                 <button
-                  onClick={() => { setIsEditing(false); setDisplayName(user.displayName); }}
+                  onClick={() => { setIsEditing(false); setDisplayName(activeUser.displayName); }}
                   style={{
                     padding: '0.5rem 1rem',
                     borderRadius: 'var(--radius-sm)',
@@ -288,7 +295,7 @@ export default function Account() {
                 value={theme}
                 onChange={e => {
                   setTheme(e.target.value as 'light' | 'dark' | 'system');
-                  if (!isEditing) {
+                  if (!isEditing && user) {
                     updateUser(user.id, {
                       preferences: { ...user.preferences, theme: e.target.value as any },
                     });
@@ -321,7 +328,7 @@ export default function Account() {
                 value={units}
                 onChange={e => {
                   setUnits(e.target.value as 'imperial' | 'metric');
-                  if (!isEditing) {
+                  if (!isEditing && user) {
                     updateUser(user.id, {
                       preferences: { ...user.preferences, units: e.target.value as any },
                     });
@@ -355,24 +362,24 @@ export default function Account() {
               <div style={{ marginBottom: '0.5rem' }}>
                 <strong>Status:</strong>{' '}
                 <span style={{
-                  color: user.status === 'active' ? '#16a34a' : '#dc2626',
+                  color: activeUser.status === 'active' ? '#16a34a' : '#dc2626',
                 }}>
-                  {user.status}
+                  {activeUser.status}
                 </span>
               </div>
               <div style={{ marginBottom: '0.5rem' }}>
                 <strong>Member since:</strong>{' '}
-                {new Date(user.createdAt).toLocaleDateString()}
+                {new Date(activeUser.createdAt).toLocaleDateString()}
               </div>
-              {user.lastLoginAt && (
+              {activeUser.lastLoginAt && (
                 <div>
                   <strong>Last login:</strong>{' '}
-                  {new Date(user.lastLoginAt).toLocaleString()}
+                  {new Date(activeUser.lastLoginAt).toLocaleString()}
                 </div>
               )}
             </div>
             
-            {user.subscription && (
+            {user?.subscription && (
               <div style={{
                 marginTop: '1rem',
                 padding: '0.75rem',
@@ -392,6 +399,184 @@ export default function Account() {
             )}
           </div>
 
+          {/* Subscription Management */}
+          <div style={{
+            backgroundColor: 'var(--color-surface)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '1.5rem',
+            gridColumn: '1 / -1',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                Subscription Plans
+              </h3>
+              {subscription.plan && (
+                <button
+                  onClick={() => openCustomerPortal()}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'transparent',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  Manage Subscription
+                </button>
+              )}
+            </div>
+
+            {/* Current Subscription Status */}
+            {subscription.plan && (
+              <div style={{
+                padding: '1rem',
+                marginBottom: '1rem',
+                backgroundColor: subscription.status === 'active' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                border: `1px solid ${subscription.status === 'active' ? '#22c55e' : '#eab308'}`,
+                borderRadius: 'var(--radius-md)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+                      {SUBSCRIPTION_PLANS.find(p => p.id === subscription.plan)?.name || subscription.plan} Plan
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>
+                      Status: <span style={{ 
+                        color: subscription.status === 'active' ? '#22c55e' : '#eab308',
+                        fontWeight: 500,
+                      }}>
+                        {subscription.status === 'active' ? 'Active' : 
+                         subscription.status === 'trialing' ? 'Trial' :
+                         subscription.status === 'past_due' ? 'Past Due' :
+                         subscription.status === 'canceled' ? 'Canceled' : 'Unknown'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => openCustomerPortal()}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: 'none',
+                      backgroundColor: 'var(--color-primary)',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    Change Plan
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+              gap: '1rem',
+            }}>
+              {SUBSCRIPTION_PLANS.map(plan => {
+                const isCurrentPlan = subscription.plan === plan.id || user?.subscription?.plan === plan.id;
+                return (
+                  <div
+                    key={plan.id}
+                    style={{
+                      padding: '1.25rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: isCurrentPlan 
+                        ? '2px solid var(--color-primary)' 
+                        : '1px solid var(--color-border)',
+                      backgroundColor: isCurrentPlan 
+                        ? 'var(--color-primary-light, rgba(59, 130, 246, 0.1))' 
+                        : 'var(--color-background)',
+                      position: 'relative',
+                    }}
+                  >
+                    {plan.popular && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        right: '10px',
+                        backgroundColor: '#22c55e',
+                        color: 'white',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '9999px',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}>
+                        POPULAR
+                      </div>
+                    )}
+                    {isCurrentPlan && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        left: '10px',
+                        backgroundColor: 'var(--color-primary)',
+                        color: 'white',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '9999px',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}>
+                        CURRENT
+                      </div>
+                    )}
+                    
+                    <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>
+                      {plan.name}
+                    </h4>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
+                      {plan.description}
+                    </div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+                      ${plan.priceMonthly}<span style={{ fontSize: '0.875rem', fontWeight: 400 }}>/mo</span>
+                    </div>
+                    
+                    <ul style={{ 
+                      margin: '0 0 1rem 0', 
+                      padding: '0 0 0 1.25rem',
+                      fontSize: '0.8rem',
+                      color: 'var(--color-muted)',
+                    }}>
+                      {plan.features.slice(0, 4).map((feature, i) => (
+                        <li key={i} style={{ marginBottom: '0.25rem' }}>{feature}</li>
+                      ))}
+                    </ul>
+                    
+                    {!isCurrentPlan && (
+                      <button
+                        onClick={() => {
+                          redirectToCheckout({
+                            planId: plan.id,
+                            billingPeriod: 'monthly',
+                            customerEmail: activeUser.email,
+                          });
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          borderRadius: 'var(--radius-sm)',
+                          border: 'none',
+                          backgroundColor: plan.popular ? '#22c55e' : 'var(--color-primary)',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        {user?.subscription ? 'Switch Plan' : 'Subscribe'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+          </div>
+
           {/* Actions */}
           <div style={{
             backgroundColor: 'var(--color-surface)',
@@ -402,20 +587,26 @@ export default function Account() {
               Actions
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <button
-                onClick={handleLogout}
-                style={{
-                  padding: '0.75rem 1rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid #dc2626',
-                  backgroundColor: 'transparent',
-                  color: '#dc2626',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
-              >
-                Sign Out
-              </button>
+              {isClerkSignedIn ? (
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)', marginBottom: '0.5rem' }}>
+                  Signed in via Google/OAuth. Use the profile menu in the header to sign out.
+                </div>
+              ) : (
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid #dc2626',
+                    backgroundColor: 'transparent',
+                    color: '#dc2626',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  Sign Out
+                </button>
+              )}
             </div>
           </div>
         </div>

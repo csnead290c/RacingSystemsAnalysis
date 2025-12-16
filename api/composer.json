@@ -1,0 +1,7 @@
+{
+    "name": "rsa/api",
+    "description": "Racing Systems Analysis API",
+    "require": {
+        "stripe/stripe-php": "^13.0"
+    }
+}

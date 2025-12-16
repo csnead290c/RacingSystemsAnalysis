@@ -2,10 +2,11 @@
  * Protected Route Component
  * 
  * Wraps routes that require authentication or specific features/products.
+ * Supports both Clerk OAuth and legacy authentication.
  */
 
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../domain/auth';
+import { useAuth, useClerkRSA } from '../../domain/auth';
 import type { FeatureFlag } from '../../domain/auth/types';
 
 interface ProtectedRouteProps {
@@ -32,9 +33,10 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const location = useLocation();
   const { isAuthenticated, isLoading, hasFeature, hasProduct, user } = useAuth();
+  const { isClerkLoaded, isClerkSignedIn } = useClerkRSA();
 
-  // Still loading auth state
-  if (isLoading) {
+  // Still loading auth state (either legacy or Clerk)
+  if (isLoading || !isClerkLoaded) {
     return (
       <div style={{
         display: 'flex',
@@ -48,8 +50,10 @@ export default function ProtectedRoute({
     );
   }
 
-  // Check authentication
-  if (requireAuth && !isAuthenticated) {
+  // Check authentication - user is authenticated if either legacy auth OR Clerk is signed in
+  const isUserAuthenticated = isAuthenticated || isClerkSignedIn;
+  
+  if (requireAuth && !isUserAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

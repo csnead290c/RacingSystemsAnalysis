@@ -4,7 +4,7 @@ import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
-import { AuthProvider } from '../domain/auth';
+import { AuthProvider, ClerkAuthProvider, ClerkUserButton, useClerkRSA } from '../domain/auth';
 import { RunHistoryProvider } from '../shared/state/runHistoryStore';
 import { PreferencesProvider } from '../shared/state/preferences';
 import Home from '../pages/Home';
@@ -37,7 +37,27 @@ const DevPortal = lazy(() => import('../pages/DevPortal'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
+  const { isClerkSignedIn } = useClerkRSA();
   const [showMenu, setShowMenu] = useState(false);
+  
+  // If signed in via Clerk, show Clerk's user button
+  if (isClerkSignedIn) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <Link
+          to="/account"
+          style={{
+            color: 'var(--color-header-text)',
+            textDecoration: 'none',
+            fontSize: '0.875rem',
+          }}
+        >
+          Account
+        </Link>
+        <ClerkUserButton />
+      </div>
+    );
+  }
   
   if (!isAuthenticated || !user) {
     return (
@@ -294,6 +314,7 @@ function DevNavLink({ isActive, navLinkStyle }: { isActive: (path: string) => bo
 function App() {
   return (
     <ThemeProvider>
+      <ClerkAuthProvider>
       <FlagsProvider>
         <AuthProvider>
           <PreferencesProvider>
@@ -475,6 +496,7 @@ function App() {
           </PreferencesProvider>
         </AuthProvider>
       </FlagsProvider>
+    </ClerkAuthProvider>
     </ThemeProvider>
   );
 }

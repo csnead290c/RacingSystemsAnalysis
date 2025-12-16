@@ -1,10 +1,12 @@
 /**
  * Login Page
+ * 
+ * Supports both Clerk OAuth and legacy email/password login.
  */
 
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../domain/auth';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useAuth, useClerkRSA, ClerkSignIn, isClerkConfigured } from '../domain/auth';
 import Page from '../shared/components/Page';
 
 export default function Login() {
@@ -17,8 +19,12 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect if already logged in
-  if (isAuthenticated) {
+  const { isClerkSignedIn } = useClerkRSA();
+  const [showLegacyLogin, setShowLegacyLogin] = useState(false);
+  const clerkEnabled = isClerkConfigured();
+
+  // Redirect if already logged in (via either method)
+  if (isAuthenticated || isClerkSignedIn) {
     const from = (location.state as any)?.from?.pathname || '/';
     navigate(from, { replace: true });
     return null;
@@ -44,6 +50,42 @@ export default function Login() {
     }
   };
 
+  // When Clerk is enabled and showing, use a cleaner layout without our wrapper
+  if (clerkEnabled && !showLegacyLogin) {
+    return (
+      <Page title="Sign In">
+        <div style={{
+          maxWidth: '450px',
+          margin: '2rem auto',
+          padding: '1rem',
+        }}>
+          <ClerkSignIn afterSignInUrl="/" />
+          
+          <div style={{
+            marginTop: '1.5rem',
+            textAlign: 'center',
+            fontSize: '0.85rem',
+            color: 'var(--color-muted)',
+          }}>
+            <button
+              type="button"
+              onClick={() => setShowLegacyLogin(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-primary)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              Sign in with email/password instead
+            </button>
+          </div>
+        </div>
+      </Page>
+    );
+  }
+
   return (
     <Page title="Login">
       <div style={{
@@ -57,7 +99,7 @@ export default function Login() {
         <h2 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           Sign In
         </h2>
-        
+
         <form onSubmit={handleSubmit}>
           {(error || authError) && (
             <div style={{
@@ -144,18 +186,50 @@ export default function Login() {
           </button>
         </form>
         
-        {/* Contact info for access */}
+        {/* Back to OAuth option */}
+        {clerkEnabled && showLegacyLogin && (
+          <div style={{
+            marginTop: '1rem',
+            textAlign: 'center',
+            fontSize: '0.85rem',
+          }}>
+            <button
+              type="button"
+              onClick={() => setShowLegacyLogin(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-primary)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              ← Back to sign in with Google/GitHub
+            </button>
+          </div>
+        )}
+        
+        {/* Register link */}
         <div style={{
           marginTop: '2rem',
           padding: '1rem',
           backgroundColor: 'var(--color-background)',
           borderRadius: 'var(--radius-sm)',
-          fontSize: '0.8rem',
+          fontSize: '0.85rem',
           color: 'var(--color-muted)',
           textAlign: 'center',
         }}>
           <div>Don't have an account?</div>
-          <div style={{ marginTop: '0.5rem' }}>Contact us for access.</div>
+          <Link 
+            to="/register" 
+            style={{ 
+              color: 'var(--color-primary)', 
+              textDecoration: 'none',
+              fontWeight: 500,
+            }}
+          >
+            Create an account
+          </Link>
         </div>
       </div>
     </Page>

@@ -143,8 +143,59 @@ try {
     echo "   FAILED: " . $e->getMessage() . "\n\n";
 }
 
+// Add Stripe subscription columns to users table
+echo "6. Adding Stripe subscription columns...\n";
+try {
+    $columns = [
+        "stripe_customer_id VARCHAR(255) DEFAULT NULL",
+        "subscription_id VARCHAR(255) DEFAULT NULL",
+        "subscription_plan VARCHAR(50) DEFAULT NULL",
+        "subscription_status VARCHAR(50) DEFAULT NULL",
+        "subscription_period_end TIMESTAMP NULL DEFAULT NULL",
+        "clerk_user_id VARCHAR(255) DEFAULT NULL"
+    ];
+    
+    foreach ($columns as $col) {
+        $colName = explode(' ', $col)[0];
+        try {
+            $pdo->exec("ALTER TABLE users ADD COLUMN $col");
+            echo "   Added: $colName\n";
+        } catch (PDOException $e) {
+            if (strpos($e->getMessage(), 'Duplicate column') !== false) {
+                echo "   Exists: $colName\n";
+            } else {
+                throw $e;
+            }
+        }
+    }
+    
+    // Add index on stripe_customer_id for webhook lookups
+    try {
+        $pdo->exec("CREATE INDEX idx_stripe_customer ON users(stripe_customer_id)");
+        echo "   Added index: idx_stripe_customer\n";
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'Duplicate') !== false) {
+            echo "   Index exists: idx_stripe_customer\n";
+        }
+    }
+    
+    // Add index on clerk_user_id for Clerk lookups
+    try {
+        $pdo->exec("CREATE INDEX idx_clerk_user ON users(clerk_user_id)");
+        echo "   Added index: idx_clerk_user\n";
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'Duplicate') !== false) {
+            echo "   Index exists: idx_clerk_user\n";
+        }
+    }
+    
+    echo "   SUCCESS!\n\n";
+} catch (PDOException $e) {
+    echo "   FAILED: " . $e->getMessage() . "\n\n";
+}
+
 // Create owner account
-echo "6. Creating owner account...\n";
+echo "7. Creating owner account...\n";
 try {
     $ownerEmail = 'owner@racingsystemsanalysis.com';
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
