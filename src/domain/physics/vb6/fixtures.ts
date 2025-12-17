@@ -57,6 +57,7 @@ export interface Vb6VehicleFixture {
     };
     readonly converter?: {
       readonly stallRPM: number;
+      readonly launchRPM?: number;        // gc_LaunchRPM (optional, defaults to stallRPM)
       readonly torqueMult: number;
       readonly slippageFactor: number;
       readonly lockup: boolean;

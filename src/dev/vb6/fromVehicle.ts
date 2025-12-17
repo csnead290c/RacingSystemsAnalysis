@@ -399,6 +399,7 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     } else {
       converter = {
         stallRPM: qjOut.stallRPM,
+        launchRPM: vAny.converterLaunchRPM ?? qjOut.launchRPM ?? qjOut.stallRPM,
         torqueMult: qjOut.torqueMult,
         slippageFactor: qjOut.slippage,
         lockup: vAny.converterLockup ?? dt.converter?.lockup ?? false,
@@ -501,8 +502,10 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     };
   } else if (dt.converter || transmissionType === 'converter') {
     // Use nested converter or flat Vehicle schema converter fields
+    const stallRPM = dt.converter?.stallRPM ?? vAny.converterStallRPM ?? 5000;
     converter = {
-      stallRPM: dt.converter?.stallRPM ?? vAny.converterStallRPM ?? 5000,
+      stallRPM,
+      launchRPM: vAny.converterLaunchRPM ?? (dt.converter as any)?.launchRPM ?? stallRPM,
       torqueMult: dt.converter?.torqueMult ?? vAny.converterTorqueMult ?? 2.2,
       slippageFactor: dt.converter?.slippageFactor ?? vAny.converterSlippage ?? 1.05,
       lockup: dt.converter?.lockup ?? vAny.converterLockup ?? false,
