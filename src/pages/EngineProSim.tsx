@@ -9,6 +9,7 @@ import {
   Tooltip,
 } from 'recharts';
 import Page from '../shared/components/Page';
+import { createEngineFromSim, saveSavedEngine } from '../state/components';
 import {
   simulateEnginePro,
   createDefaultEngineProConfig,
@@ -244,10 +245,135 @@ function Modal({ title, onClose, children, width = 500 }: ModalProps) {
 }
 
 // ============================================================================
+// Save Engine Modal
+// ============================================================================
+
+interface SaveEngineModalProps {
+  result: EngineProResult;
+  displacement: number;
+  config: EngineProConfig;
+  onClose: () => void;
+}
+
+function SaveEngineModal({ result, displacement, config, onClose }: SaveEngineModalProps) {
+  const [name, setName] = useState(`${Math.round(displacement)} CID - ${Math.round(result.peakHP)} HP`);
+  const [notes, setNotes] = useState('');
+  const [saved, setSaved] = useState(false);
+  
+  const handleSave = () => {
+    const hpCurve = result.dynoCurve.map(p => ({
+      rpm: p.rpm,
+      hp: p.hp,
+    }));
+    
+    const engine = createEngineFromSim(
+      name,
+      result.peakHP,
+      result.rpmAtPeakHP,
+      hpCurve,
+      'enginePro',
+      config
+    );
+    
+    engine.peakTorque = result.peakTorque_lbft;
+    engine.rpmAtPeakTorque = result.rpmAtPeakTorque;
+    engine.displacement = displacement;
+    engine.notes = notes;
+    
+    saveSavedEngine(engine);
+    setSaved(true);
+  };
+  
+  return (
+    <Modal title="Save Engine" onClose={onClose} width={400}>
+      {saved ? (
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '12px' }}>✅</div>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
+            Engine Saved!
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
+            "{name}" has been saved to your component library.
+          </div>
+          <div style={{ fontSize: '11px', color: '#888', marginBottom: '16px' }}>
+            You can now select this engine in the Vehicle Editor.
+          </div>
+          <button
+            style={{ ...styles.toolbarBtn, padding: '8px 24px' }}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>Engine Name</div>
+            <input
+              type="text"
+              style={{ ...styles.input, width: '100%', textAlign: 'left' }}
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="My Engine"
+            />
+          </div>
+          
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>Notes (optional)</div>
+            <textarea
+              style={{ ...styles.input, width: '100%', textAlign: 'left', minHeight: '60px', resize: 'vertical' }}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Optional notes about this engine..."
+            />
+          </div>
+          
+          <div style={{ ...styles.groupBox, marginBottom: '16px' }}>
+            <div style={styles.groupTitle}>Engine Summary</div>
+            <div style={styles.resultRow}>
+              <span style={styles.resultLabel}>Displacement</span>
+              <span style={styles.resultValue}>{Math.round(displacement)} CID</span>
+            </div>
+            <div style={styles.resultRow}>
+              <span style={styles.resultLabel}>Peak HP</span>
+              <span style={styles.resultValue}>{Math.round(result.peakHP)} @ {result.rpmAtPeakHP} RPM</span>
+            </div>
+            <div style={styles.resultRow}>
+              <span style={styles.resultLabel}>Peak Torque</span>
+              <span style={styles.resultValue}>{Math.round(result.peakTorque_lbft)} lb-ft @ {result.rpmAtPeakTorque} RPM</span>
+            </div>
+            <div style={styles.resultRow}>
+              <span style={styles.resultLabel}>HP Curve Points</span>
+              <span style={styles.resultValue}>{result.dynoCurve.length}</span>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button
+              style={styles.toolbarBtn}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              style={{ ...styles.toolbarBtn, backgroundColor: '#d4edda', borderColor: '#28a745' }}
+              onClick={handleSave}
+              disabled={!name.trim()}
+            >
+              💾 Save Engine
+            </button>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
-type ModalType = 'dyno' | 'mech' | 'flow' | 'recommendations' | null;
+type ModalType = 'dyno' | 'mech' | 'flow' | 'recommendations' | 'save' | null;
 
 export default function EngineProSim() {
   const [config, setConfig] = useState<EngineProConfig>(createDefaultEngineProConfig());
@@ -304,6 +430,13 @@ export default function EngineProSim() {
             onClick={() => setActiveModal('recommendations')}
           >
             Recommendations
+          </button>
+          <div style={{ flex: 1 }} />
+          <button 
+            style={{ ...styles.toolbarBtn, backgroundColor: '#d4edda', borderColor: '#28a745' }}
+            onClick={() => setActiveModal('save')}
+          >
+            💾 Save Engine
           </button>
         </div>
 
@@ -854,6 +987,15 @@ export default function EngineProSim() {
               </div>
             </div>
           </Modal>
+        )}
+
+        {activeModal === 'save' && (
+          <SaveEngineModal
+            result={result}
+            displacement={displacement}
+            config={config}
+            onClose={() => setActiveModal(null)}
+          />
         )}
       </div>
     </Page>

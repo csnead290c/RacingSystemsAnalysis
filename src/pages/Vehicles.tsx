@@ -7,7 +7,7 @@ import type { RaceLength } from '../domain/config/raceLengths';
 import { useAuth } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
 import { useSubscription } from '../domain/config/useSubscription';
-import VehicleEditorPanel from '../shared/components/VehicleEditorPanel';
+import VehicleEditor from '../shared/components/VehicleEditor';
 import { 
   WorksheetButton, 
   FrontalAreaWorksheet, 
@@ -417,15 +417,12 @@ function Vehicles() {
             </div>
           )}
 
-          {/* Compact 1-Page Editor (like VB6) */}
+          {/* Unified Collapsible Editor (new design) */}
           {useCompactEditor ? (
-            <VehicleEditorPanel
+            <VehicleEditor
               vehicle={form}
               onChange={setForm}
-              isPro={isPro}
-              compact={false}
               showName={true}
-              hasThrottleStop={hasThrottleStop}
             />
           ) : (
             <>

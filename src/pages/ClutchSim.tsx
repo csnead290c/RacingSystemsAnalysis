@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import Page from '../shared/components/Page';
+import { createClutchFromSim, saveSavedClutch } from '../state/components';
 import {
   clutchCalc,
   calcDetails,
@@ -107,6 +108,10 @@ const defaultClutchInput: ClutchInput = {
 function ClutchSim() {
   const [input, setInput] = useState<ClutchInput>(defaultClutchInput);
   const [activeTab, setActiveTab] = useState<'main' | 'details' | 'dyno' | 'arms'>('main');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [clutchName, setClutchName] = useState('');
+  const [clutchNotes, setClutchNotes] = useState('');
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Run clutch analysis using VB6 port
   const result: ClutchResult = useMemo(() => {
@@ -293,9 +298,128 @@ function ClutchSim() {
           >
             Details
           </button>
+          <button
+            className="btn"
+            style={{ backgroundColor: '#d4edda', borderColor: '#28a745' }}
+            onClick={() => {
+              setClutchName(`${input.launchRPM} RPM Launch`);
+              setClutchNotes('');
+              setSavedSuccess(false);
+              setShowSaveModal(true);
+            }}
+          >
+            💾 Save Clutch
+          </button>
           <Link to="/" className="btn">← Home</Link>
         </div>
       </div>
+
+      {/* Save Clutch Modal */}
+      {showSaveModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowSaveModal(false)}
+        >
+          <div
+            className="card"
+            style={{ width: 400, padding: 'var(--space-4)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {savedSuccess ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '12px' }}>✅</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '8px' }}>
+                  Clutch Saved!
+                </div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--color-muted)', marginBottom: '16px' }}>
+                  "{clutchName}" has been saved to your component library.
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: '16px' }}>
+                  You can now select this clutch in the Vehicle Editor.
+                </div>
+                <button className="btn" onClick={() => setShowSaveModal(false)}>
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 style={{ margin: '0 0 var(--space-3) 0' }}>Save Clutch</h3>
+                
+                <div style={{ marginBottom: 'var(--space-3)' }}>
+                  <label className="label">Clutch Name</label>
+                  <input
+                    type="text"
+                    className="input"
+                    style={{ width: '100%' }}
+                    value={clutchName}
+                    onChange={e => setClutchName(e.target.value)}
+                    placeholder="My Clutch Setup"
+                  />
+                </div>
+                
+                <div style={{ marginBottom: 'var(--space-3)' }}>
+                  <label className="label">Notes (optional)</label>
+                  <textarea
+                    className="input"
+                    style={{ width: '100%', minHeight: '60px', resize: 'vertical' }}
+                    value={clutchNotes}
+                    onChange={e => setClutchNotes(e.target.value)}
+                    placeholder="Optional notes about this clutch setup..."
+                  />
+                </div>
+                
+                <div className="card" style={{ padding: 'var(--space-2)', marginBottom: 'var(--space-3)', backgroundColor: 'var(--color-surface)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 'var(--space-1)', fontSize: '0.85rem' }}>Clutch Summary</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                    <span>Launch RPM</span>
+                    <span style={{ fontWeight: 500 }}>{input.launchRPM}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                    <span>Lockup RPM (Low Gear)</span>
+                    <span style={{ fontWeight: 500 }}>{result.lowGearLockupRPM || 'N/A'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                    <span>Static Plate Force</span>
+                    <span style={{ fontWeight: 500 }}>{input.staticPlateForce} lbs</span>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                  <button className="btn" onClick={() => setShowSaveModal(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      const clutch = createClutchFromSim(
+                        clutchName,
+                        input.launchRPM,
+                        result.lowGearLockupRPM || input.launchRPM,
+                        1.004,
+                        input
+                      );
+                      clutch.notes = clutchNotes;
+                      saveSavedClutch(clutch);
+                      setSavedSuccess(true);
+                    }}
+                    disabled={!clutchName.trim()}
+                  >
+                    💾 Save Clutch
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'main' ? (
         <div className="clutch-sim-layout">
