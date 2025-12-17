@@ -6,6 +6,7 @@ import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
 import { useAuth } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
+import { useSubscription } from '../domain/config/useSubscription';
 import VehicleEditorPanel from '../shared/components/VehicleEditorPanel';
 import { 
   WorksheetButton, 
@@ -113,11 +114,14 @@ const defaultForm: Partial<Vehicle> = {
 function Vehicles() {
   const { hasFeature, user } = useAuth();
   const { productMode } = usePreferences();
+  const { tier, tierInfo, features, vehicleLimit, canCreateVehicle } = useSubscription();
   
-  // Pro features require hp_curve_editor or advanced_settings feature
-  const hasProAccess = hasFeature('hp_curve_editor') || hasFeature('advanced_settings');
+  // Pro features require quarterProFields from subscription tier
+  const hasProAccess = features.quarterProFields || hasFeature('hp_curve_editor') || hasFeature('advanced_settings');
   // Use Pro mode only if user has access AND hasn't chosen Jr mode
   const isPro = hasProAccess && productMode === 'pro';
+  // Throttle stop requires Pro tier
+  const hasThrottleStop = features.throttleStop;
   // Check if user can create public vehicles
   const canMakePublic = user?.roleId === 'owner' || user?.roleId === 'admin';
   
@@ -264,6 +268,11 @@ function Vehicles() {
   };
 
   const handleNew = () => {
+    // Check vehicle limit
+    if (!canCreateVehicle(vehicles.length)) {
+      alert(`You've reached your vehicle limit (${vehicleLimit}). Upgrade to ${tier === 'racer' ? 'Pro' : 'a higher plan'} for more vehicles.`);
+      return;
+    }
     resetForm();
     setShowForm(true);
   };
@@ -330,6 +339,11 @@ function Vehicles() {
   };
 
   const handleDuplicate = async (vehicle: Vehicle) => {
+    // Check vehicle limit before duplicating
+    if (!canCreateVehicle(vehicles.length)) {
+      alert(`You've reached your vehicle limit (${vehicleLimit}). Upgrade to ${tier === 'racer' ? 'Pro' : 'a higher plan'} for more vehicles.`);
+      return;
+    }
     try {
       const duplicated: Vehicle = {
         ...vehicle,
@@ -343,14 +357,41 @@ function Vehicles() {
     }
   };
 
+  // Vehicle limit info for display
+  const isAtLimit = !canCreateVehicle(vehicles.length);
+  const limitDisplay = vehicleLimit === Infinity ? '∞' : vehicleLimit;
+  
   return (
     <Page
       title="Vehicle Manager"
       actions={
         !showForm && (
-          <button onClick={handleNew} className="btn">
-            + New Vehicle
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {/* Vehicle count indicator */}
+            <span style={{ 
+              fontSize: '0.875rem', 
+              color: isAtLimit ? '#f87171' : 'var(--color-muted)',
+              padding: '0.25rem 0.75rem',
+              backgroundColor: 'var(--color-surface)',
+              borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${isAtLimit ? 'rgba(248, 113, 113, 0.3)' : 'var(--color-border)'}`,
+            }}>
+              {vehicles.length} / {limitDisplay} vehicles
+              {isAtLimit && (
+                <span style={{ marginLeft: '0.5rem', color: '#fbbf24' }}>
+                  (Upgrade for more)
+                </span>
+              )}
+            </span>
+            <button 
+              onClick={handleNew} 
+              className="btn"
+              disabled={isAtLimit}
+              style={isAtLimit ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            >
+              + New Vehicle
+            </button>
+          </div>
         )
       }
     >
@@ -384,13 +425,14 @@ function Vehicles() {
               isPro={isPro}
               compact={false}
               showName={true}
+              hasThrottleStop={hasThrottleStop}
             />
           ) : (
             <>
               {/* Tab Navigation - Different tabs for QuarterJr vs QuarterPro */}
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
                 {(isPro 
-                  ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine', 'throttle']
+                  ? ['basic', 'geometry', 'aero', 'drivetrain', 'pmi', 'engine', ...(hasThrottleStop ? ['throttle'] : [])]
                   : ['basic', 'vehicle', 'engine', 'transmission', 'finaldrive']
                 ).map((tab) => (
                   <button

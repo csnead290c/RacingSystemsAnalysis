@@ -17,6 +17,7 @@ import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
+import { useSubscription } from '../domain/config/useSubscription';
 
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -32,6 +33,7 @@ interface LocationState {
 
 function Predict() {
   const location = useLocation();
+  const { features } = useSubscription();
   
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [env, setEnv] = useState<Env | null>(null);
@@ -87,6 +89,19 @@ function Predict() {
   
   // Vehicle editor popup state
   const [showVehicleEditor, setShowVehicleEditor] = useState(false);
+  
+  // Filter race lengths based on subscription tier
+  const allowedRaceLengths = (Object.keys(DISTANCES) as RaceLength[]).filter(key => {
+    const info = RACE_LENGTH_INFO[key];
+    // Racer tier: only 1/8 and 1/4 mile drag racing
+    if (key === 'EIGHTH') return features.trackEighth;
+    if (key === 'QUARTER') return features.trackQuarter;
+    if (key === 'THOUSAND') return features.trackThousand;
+    // Land speed tracks require Pro+
+    if (info.category === 'landspeed') return features.trackBonneville;
+    // Custom lengths require Pro+
+    return features.customTrackLength;
+  });
   
   
   // Initialize from location state or show vehicle selector
@@ -422,7 +437,7 @@ function Predict() {
                       fontSize: '1rem',
                     }}
                   >
-                    {(Object.keys(DISTANCES) as RaceLength[])
+                    {allowedRaceLengths
                       .filter(key => RACE_LENGTH_INFO[key].category === 'drag')
                       .map(key => (
                         <option key={key} value={key}>
@@ -1077,61 +1092,86 @@ racingsystemsanalysis.com`;
                   }}
                 >
                   <optgroup label="Drag Racing">
-                    {(Object.keys(DISTANCES) as RaceLength[])
+                    {allowedRaceLengths
                       .filter(key => RACE_LENGTH_INFO[key].category === 'drag')
                       .map(key => (
                         <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
                       ))}
                   </optgroup>
-                  <optgroup label="Land Speed">
-                    {(Object.keys(DISTANCES) as RaceLength[])
-                      .filter(key => RACE_LENGTH_INFO[key].category === 'landspeed')
-                      .map(key => (
-                        <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
-                      ))}
-                  </optgroup>
+                  {features.trackBonneville && (
+                    <optgroup label="Land Speed">
+                      {allowedRaceLengths
+                        .filter(key => RACE_LENGTH_INFO[key].category === 'landspeed')
+                        .map(key => (
+                          <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
+                        ))}
+                    </optgroup>
+                  )}
                 </select>
-                <select
-                  value={selectedTrack?.id || ''}
-                  onChange={(e) => {
-                    const track = getAllTracks().find(t => t.id === e.target.value);
-                    if (track) handleFetchWeather(track);
-                  }}
-                  style={{
-                    padding: '3px 6px',
-                    fontSize: '0.65rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-bg-secondary)',
-                    color: 'var(--color-text)',
-                    cursor: 'pointer',
-                    maxWidth: '120px',
-                  }}
-                  disabled={weatherLoading}
-                >
-                  <option value="">Track...</option>
-                  {getAllTracks().map(track => (
-                    <option key={track.id} value={track.id}>
-                      {track.name.length > 18 ? track.name.slice(0, 16) + '...' : track.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => handleFetchWeather()}
-                  disabled={weatherLoading}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.65rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-bg-secondary)',
-                    color: 'var(--color-text)',
-                    cursor: weatherLoading ? 'wait' : 'pointer',
-                  }}
-                  title="Get weather for your current location"
-                >
-                  📍
-                </button>
+                {features.liveWeather ? (
+                  <select
+                    value={selectedTrack?.id || ''}
+                    onChange={(e) => {
+                      const track = getAllTracks().find(t => t.id === e.target.value);
+                      if (track) handleFetchWeather(track);
+                    }}
+                    style={{
+                      padding: '3px 6px',
+                      fontSize: '0.65rem',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      maxWidth: '120px',
+                    }}
+                    disabled={weatherLoading}
+                  >
+                    <option value="">Track...</option>
+                    {getAllTracks().map(track => (
+                      <option key={track.id} value={track.id}>
+                        {track.name.length > 18 ? track.name.slice(0, 16) + '...' : track.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-muted)' }}>
+                    🔒 Live Weather (Pro)
+                  </span>
+                )}
+                {features.liveWeather ? (
+                  <button
+                    onClick={() => handleFetchWeather()}
+                    disabled={weatherLoading}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '0.65rem',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-bg-secondary)',
+                      color: 'var(--color-text)',
+                      cursor: weatherLoading ? 'wait' : 'pointer',
+                    }}
+                    title="Get weather for your current location"
+                  >
+                    📍
+                  </button>
+                ) : (
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '0.65rem',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-muted)',
+                      cursor: 'not-allowed',
+                    }}
+                    title="Upgrade to Pro for live weather"
+                  >
+                    🔒
+                  </span>
+                )}
               </div>
             </div>
             {weatherError && (
@@ -1184,18 +1224,32 @@ racingsystemsanalysis.com`;
           <div className="card" style={{ flex: '1 1 220px', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px', maxWidth: '280px' }}>
             <div style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Tools</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
-                style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-accent)',
-                  backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
-                ⚡ Optimize
-              </button>
+              {features.gearOptimizer ? (
+                <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-accent)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
+                  ⚡ Optimize
+                </button>
+              ) : (
+                <span style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--color-surface)', color: 'var(--color-muted)', cursor: 'not-allowed' }}
+                  title="Upgrade to Pro for optimizer">
+                  🔒 Optimize
+                </span>
+              )}
             </div>
-            {/* Throttle Stop - expandable */}
+            {/* Throttle Stop - expandable (Pro feature) */}
             <div style={{ fontSize: '0.75rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={throttleStopEnabled} onChange={(e) => setThrottleStopEnabled(e.target.checked)} />
-                <span style={{ color: throttleStopEnabled ? '#f59e0b' : 'var(--color-text-muted)' }}>Throttle Stop</span>
-              </label>
+              {features.throttleStop ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={throttleStopEnabled} onChange={(e) => setThrottleStopEnabled(e.target.checked)} />
+                  <span style={{ color: throttleStopEnabled ? '#f59e0b' : 'var(--color-text-muted)' }}>Throttle Stop</span>
+                </label>
+              ) : (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-muted)' }}>
+                  🔒 Throttle Stop <span style={{ fontSize: '0.65rem' }}>(Pro)</span>
+                </span>
+              )}
               {throttleStopEnabled && (
                 <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -135,6 +135,7 @@ interface VehicleEditorPanelProps {
   isPro?: boolean;
   compact?: boolean; // More compact layout for popup use
   showName?: boolean; // Show name field (false for popup where vehicle is already selected)
+  hasThrottleStop?: boolean; // Whether user has throttle stop feature access
 }
 
 export default function VehicleEditorPanel({
@@ -143,6 +144,7 @@ export default function VehicleEditorPanel({
   isPro = false,
   compact = false,
   showName = true,
+  hasThrottleStop = true, // Default true for backward compatibility
 }: VehicleEditorPanelProps) {
   // Inject responsive styles once
   useEffect(() => {
@@ -543,8 +545,8 @@ export default function VehicleEditorPanel({
         )}
       </div>
 
-      {/* ===== THROTTLE STOP (Pro only or if enabled) ===== */}
-      {(isPro || vehicle.throttleStopEnabled) && (
+      {/* ===== THROTTLE STOP (Pro only with feature access) ===== */}
+      {hasThrottleStop && (isPro || vehicle.throttleStopEnabled) && (
         <div className={sectionClass}>
           <div className={titleClass}>Throttle Stop</div>
           <div style={{ marginBottom: '10px' }}>
