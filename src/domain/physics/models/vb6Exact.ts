@@ -817,9 +817,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     NGR,
     // VB6 TIMESLIP.FRM:1006 - EngRPM(L) = gc_LaunchRPM.Value
     // Both clutch and converter have separate Launch RPM from Stall/Slip RPM
+    // Check flat vehicle properties FIRST since that's what the UI sets
     LaunchRPM: isClutch 
-      ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
-      : (converter?.launchRPM ?? (vehicle as any).converterLaunchRPM ?? stallRPM),
+      ? ((vehicle as any).clutchLaunchRPM ?? clutch?.launchRPM ?? stallRPM) 
+      : ((vehicle as any).converterLaunchRPM ?? converter?.launchRPM ?? stallRPM),
     
     // Shift by Time (alternative to shift by RPM)
     ShiftMode: (vehicle as any).shiftMode ?? 'rpm',
