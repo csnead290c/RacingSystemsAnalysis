@@ -856,9 +856,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // ========================================================================
   // Initialize simulation
   // ========================================================================
-  const launchRPM = isClutch 
-    ? (clutch?.launchRPM ?? stallRPM)
-    : stallRPM;
+  // Use the same LaunchRPM that was set in vb6Vehicle to ensure consistency
+  const launchRPM = vb6Vehicle.LaunchRPM;
   
   const state = vb6InitState(vb6Vehicle, vb6Env, launchRPM);
   
