@@ -96,6 +96,74 @@ export function calcStallRPMFromIndex(
 
 **Impact:** This affects converter vehicles using stall index input (values 1-220) instead of direct RPM input.
 
+### Fix #3: HPTQMult Missing in Launch HP Calculation (FIXED Dec 17, 2024)
+
+**File:** `src/domain/physics/models/vb6Exact.ts` lines 730-737
+
+**Problem:** The launch HP calculation was missing the `HPTQMult` multiplier that VB6 applies.
+
+**VB6 (TIMESLIP.FRM line 1011):**
+```vb
+HP = gc_HPTQMult.Value * HP / hpc
+```
+
+**Old TypeScript (WRONG):**
+```typescript
+const HP_corrected = HP_launch_calc / hpc;  // Missing HPTQMult!
+```
+
+**New TypeScript (CORRECT):**
+```typescript
+const hpTqMult = (vehicle as any).hpTorqueMultiplier ?? engine?.hpTqMult ?? 1.0;
+const HP_corrected = hpTqMult * HP_launch_calc / hpc;
+```
+
+**Impact:** Affects all vehicles with non-default HPTQMult values.
+
+### Fix #4: TSMax Calculation Using Uncorrected HP (FIXED Dec 17, 2024)
+
+**File:** `src/domain/physics/models/vb6Exact.ts` lines 865-878
+
+**Problem:** TSMax calculation was using raw HP from curve instead of HP corrected by HPTQMult/hpc.
+
+**VB6 (TIMESLIP.FRM line 1063):**
+```vb
+TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1 / 3)
+```
+Note: At this point, HP has already been corrected by `gc_HPTQMult.Value / hpc` at line 1011.
+
+**Fix:** Now uses `HP_launch_corrected` (with HPTQMult/hpc applied) for TSMax calculation.
+
+### Fix #5: Shift Logic Using Wrong Comparison (FIXED Dec 17, 2024)
+
+**File:** `src/domain/physics/models/vb6Exact.ts` lines 1091-1100
+
+**Problem:** Shift logic used `>=` comparison instead of VB6's tolerance-based approach.
+
+**VB6 (TIMESLIP.FRM lines 860, 1355):**
+```vb
+ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
+...
+If iGear < NGR And Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
+```
+
+**Old TypeScript (WRONG):**
+```typescript
+if (state.EngRPM >= shiftRPM) {
+  state.ShiftFlag = 1;
+}
+```
+
+**New TypeScript (CORRECT):**
+```typescript
+const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
+if (Math.abs(shiftRPM - state.EngRPM) < shiftRPMTol) {
+  state.ShiftFlag = 1;
+}
+```
+
+**Impact:** Affects shift timing precision, especially at high RPM.
+
 ---
 
 ## Verified Code Sections (MATCH VB6)
