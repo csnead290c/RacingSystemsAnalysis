@@ -538,9 +538,11 @@ export default function UserManagement() {
       <div style={{ 
         marginBottom: '1rem', 
         padding: '0.75rem', 
-        backgroundColor: '#fef3c7', 
+        backgroundColor: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-sm)',
         fontSize: '0.75rem',
+        color: 'var(--color-text)',
       }}>
         <strong>Current User:</strong> {auth.user?.email} (Role: {auth.user?.roleId})<br/>
         <strong>User Role Object:</strong> {auth.getUserRole()?.name || 'NOT FOUND'}<br/>
@@ -577,7 +579,7 @@ export default function UserManagement() {
             </div>
           </div>
           {userError && (
-            <div style={{ padding: '0.75rem', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: 'rgba(220, 38, 38, 0.15)', color: '#f87171', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem', border: '1px solid rgba(220, 38, 38, 0.3)' }}>
               {userError}
             </div>
           )}
@@ -622,7 +624,7 @@ export default function UserManagement() {
                 <div style={{ fontSize: '0.75rem' }}>
                   {role.products.length} products, {role.additionalFeatures.length} features
                 </div>
-                {role.isSystem && <span style={{ ...styles.badge, backgroundColor: '#f3f4f6', color: '#4b5563' }}>System</span>}
+                {role.isSystem && <span style={{ ...styles.badge, backgroundColor: 'var(--color-surface)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>System</span>}
                 <button style={{ ...styles.button, ...styles.secondaryBtn, ...styles.smallBtn }} onClick={() => setEditingRole(role)}>Edit</button>
               </div>
             ))}
@@ -646,7 +648,7 @@ export default function UserManagement() {
                   <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{product.description}</div>
                 </div>
                 <div style={{ fontSize: '0.75rem' }}>{product.features.length} features</div>
-                {product.isPremium && <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e' }}>Premium</span>}
+                {product.isPremium && <span style={{ ...styles.badge, backgroundColor: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.3)' }}>Premium</span>}
                 <button style={{ ...styles.button, ...styles.secondaryBtn, ...styles.smallBtn }} onClick={() => setEditingProduct(product)}>Edit</button>
               </div>
             ))}
