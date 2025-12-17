@@ -387,7 +387,8 @@ export function vb6SimulationStep(
   // TIMESLIP.FRM:1093-1094 - Special handling for first step at launch
   // If RPM0 = LaunchRPM And Time0 = 0 Then
   //     RPM0 = Stall: If LaunchRPM < Stall Then Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
-  if (state.RPM0 === vehicle.LaunchRPM && state.Time0_s === 0) {
+  // Use tolerance for floating point comparison
+  if (Math.abs(state.RPM0 - vehicle.LaunchRPM) < 1 && state.Time0_s === 0) {
     state.RPM0 = vehicle.Stall;
     if (vehicle.LaunchRPM < vehicle.Stall) {
       state.Time0_s = vehicle.EnginePMI * (vehicle.Stall - vehicle.LaunchRPM) / 250000;
