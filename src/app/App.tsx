@@ -28,6 +28,7 @@ import TechCard from '../pages/TechCard';
 import Ladder from '../pages/Ladder';
 import Pricing from '../pages/Pricing';
 import Register from '../pages/Register';
+import TeamManagement from '../pages/TeamManagement';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -132,6 +133,18 @@ function UserMenu() {
             }}
           >
             My Account
+          </Link>
+          <Link
+            to="/team"
+            onClick={() => setShowMenu(false)}
+            style={{
+              display: 'block',
+              padding: '0.75rem 1rem',
+              color: 'var(--color-text)',
+              textDecoration: 'none',
+            }}
+          >
+            Team
           </Link>
           <button
             onClick={() => { logout(); setShowMenu(false); }}
@@ -478,6 +491,13 @@ function App() {
             <Route path="/suspension-sim" element={
               <ProtectedRoute requireProduct="fourlink">
                 <SuspensionSim />
+              </ProtectedRoute>
+            } />
+            
+            {/* Team Management - requires Team tier */}
+            <Route path="/team" element={
+              <ProtectedRoute>
+                <TeamManagement />
               </ProtectedRoute>
             } />
             
