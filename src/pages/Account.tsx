@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
+import { useSubscription } from '../domain/config/useSubscription';
 import { SUBSCRIPTION_PLANS, redirectToCheckout, openCustomerPortal, getSubscriptionStatus } from '../domain/payments';
 import { DEFAULT_PRODUCTS, DEFAULT_ROLES, type Product, type Role } from '../domain/auth/types';
 import Page from '../shared/components/Page';
@@ -65,6 +66,7 @@ export default function Account() {
   const authRole = getUserRole();
   const authProducts = getUserProducts();
   const { productMode, setProductMode } = usePreferences();
+  const { tier, tierInfo, vehicleLimit, runLimit, features } = useSubscription();
   
   // Use products from database if available, otherwise fall back to auth products
   const dbProductIds = dbSubscription?.products || [];
@@ -231,6 +233,120 @@ export default function Account() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Subscription Tier Card */}
+        <div style={{
+          backgroundColor: 'var(--color-surface)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '1.5rem',
+          marginBottom: '1.5rem',
+          border: `2px solid ${tierInfo.color}`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <span style={{
+                  padding: '0.375rem 0.875rem',
+                  borderRadius: '9999px',
+                  backgroundColor: tierInfo.color,
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}>
+                  {tierInfo.name}
+                </span>
+                <span style={{ color: 'var(--color-muted)', fontSize: '0.875rem' }}>
+                  {tierInfo.price}
+                </span>
+              </div>
+              <p style={{ margin: 0, color: 'var(--color-muted)', fontSize: '0.875rem' }}>
+                {tierInfo.description}
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  {vehicleLimit === Infinity ? '∞' : vehicleLimit}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Vehicles</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  {runLimit === Infinity ? '∞' : runLimit}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Runs</div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Feature highlights */}
+          <div style={{ 
+            marginTop: '1rem', 
+            paddingTop: '1rem', 
+            borderTop: '1px solid var(--color-border)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+          }}>
+            {features.quarterProFields && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderRadius: '4px' }}>
+                Pro Editor
+              </span>
+            )}
+            {features.throttleStop && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderRadius: '4px' }}>
+                Throttle Stop
+              </span>
+            )}
+            {features.liveWeather && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', borderRadius: '4px' }}>
+                Live Weather
+              </span>
+            )}
+            {features.gearOptimizer && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', borderRadius: '4px' }}>
+                Optimizer
+              </span>
+            )}
+            {features.trackBonneville && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', borderRadius: '4px' }}>
+                Land Speed
+              </span>
+            )}
+            {features.teamManagement && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', borderRadius: '4px' }}>
+                Team Management
+              </span>
+            )}
+            {!features.quarterProFields && !features.liveWeather && (
+              <span style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', backgroundColor: 'var(--color-surface)', color: 'var(--color-muted)', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
+                Basic Features
+              </span>
+            )}
+          </div>
+          
+          {/* Upgrade prompt for non-Pro users */}
+          {tier !== 'pro' && tier !== 'team' && tier !== 'beta' && tier !== 'owner' && (
+            <div style={{ marginTop: '1rem' }}>
+              <button
+                onClick={() => navigate('/pricing')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                }}
+              >
+                Upgrade Plan
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
