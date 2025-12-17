@@ -114,7 +114,7 @@ const defaultForm: Partial<Vehicle> = {
 function Vehicles() {
   const { hasFeature, user } = useAuth();
   const { productMode } = usePreferences();
-  const { tier, tierInfo, features, vehicleLimit, canCreateVehicle } = useSubscription();
+  const { tier, features, vehicleLimit, canCreateVehicle } = useSubscription();
   
   // Pro features require quarterProFields from subscription tier
   const hasProAccess = features.quarterProFields || hasFeature('hp_curve_editor') || hasFeature('advanced_settings');
