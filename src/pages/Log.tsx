@@ -9,7 +9,7 @@ import { createModel, update } from '../domain/learning/model';
 import { extractFeatures } from '../domain/learning/features';
 import { getModel, saveModel } from '../state/models';
 import { storage } from '../state/storage';
-import { hasFeature, getEntitlements, CURRENT_TIER } from '../domain/config/entitlements';
+import { useSubscription } from '../domain/config/useSubscription';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import { parseCsv, mapWeatherRow, csvToObjects } from '../shared/utils/csvImport';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
@@ -23,6 +23,7 @@ import { fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
 function Log() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { runLimit, canSaveRun, tierInfo, features: tierFeatures } = useSubscription();
 
   // Vehicles list
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
@@ -218,10 +219,9 @@ function Log() {
     }
 
     // Check runs limit
-    const entitlements = getEntitlements(CURRENT_TIER);
     const existingRuns = await storage.loadRuns();
-    if (existingRuns.length >= entitlements.runs) {
-      setSaveError(`Run limit reached (${entitlements.runs} runs on ${CURRENT_TIER} tier). Upgrade to save more runs.`);
+    if (!canSaveRun(existingRuns.length)) {
+      setSaveError(`Run limit reached (${runLimit} runs on ${tierInfo.name} tier). Upgrade to save more runs.`);
       return;
     }
 
@@ -283,15 +283,12 @@ function Log() {
     }
   };
 
-  // Available splits based on entitlements
-  const hasFullCompletion = hasFeature(CURRENT_TIER, 'runCompletionFull');
-  const has60Completion = hasFeature(CURRENT_TIER, 'runCompletion60');
-  
+  // Available splits based on subscription tier features
   let availableSplits: number[] = [];
-  if (hasFullCompletion) {
+  if (tierFeatures.runCompletion) {
     // Full access: all splits except finish line
     availableSplits = raceLength === 'EIGHTH' ? [60, 330] : [60, 330, 660, 1000];
-  } else if (has60Completion) {
+  } else if (tierFeatures.basicSim) {
     // Basic access: 60' only
     availableSplits = [60];
   }
@@ -513,11 +510,11 @@ function Log() {
             If you lifted early, estimate the final ET from a partial run.
           </p>
 
-          {!has60Completion && !hasFullCompletion ? (
+          {!tierFeatures.runCompletion && !tierFeatures.basicSim ? (
             <PeekCard
               title="Run Completion"
               tier="JUNIOR"
-              description="Estimate final ET from partial runs. Upgrade to JUNIOR for 60' completion, or PRO for all splits."
+              description="Estimate final ET from partial runs. Upgrade to Racer for 60' completion, or Pro for all splits."
               onLearnMore={() => alert('Upgrade to unlock Run Completion')}
             />
           ) : (
