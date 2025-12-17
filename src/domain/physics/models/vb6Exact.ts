@@ -932,7 +932,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   });
   
   // Debug: Log initial state for timing analysis
-  console.log('[vb6Exact] Initial state:', {
+  console.log('[vb6Exact] Initial state:', JSON.stringify({
     launchRPM,
     stallRPM,
     enginePMI,
@@ -940,9 +940,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     rolloutFt,
     ovradj,
     TSMax,
-    hpCurve: xrpm.map((rpm, i) => `${rpm}:${yhp[i]}`).join(', '),
-    hpAtLaunch: TABY(xrpm, yhp, NHP, 1, launchRPM),
-    hpAtStall: TABY(xrpm, yhp, NHP, 1, stallRPM),
     slippage,
     torqueMult,
     isClutch,
@@ -953,7 +950,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     gearRatios,
     TGEff,
     shiftRPMs: vb6Vehicle.ShiftRPM,
-  });
+  }, null, 2));
   
   for (let step = 0; step < MAX_STEPS; step++) {
     // Check termination conditions (track distance has passed finish line)
