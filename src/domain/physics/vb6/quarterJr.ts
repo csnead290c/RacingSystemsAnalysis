@@ -163,8 +163,69 @@ export function calcTransEfficiencies(
 }
 
 /**
+ * Calculate stall RPM from lambda/stall index
+ * VB6: TIMESLIP.FRM lines 920-970
+ * 
+ * This calculates the stall RPM by finding where the torque curve intersects
+ * with the converter's absorption curve (defined by the stall index/lambda).
+ */
+export function calcStallRPMFromIndex(
+  xrpm: number[],
+  ztq: number[],
+  NHP: number,
+  stallIndex: number,
+  hpTqMult: number,
+  hpc: number
+): number {
+  // VB6: atf = 1 / (1000 * gc_SlipStallRPM.Value)
+  const atf = 1 / (1000 * stallIndex);
+  let stall = 0;
+  
+  // VB6: TIMESLIP.FRM lines 926-945
+  // Iterate through torque curve segments to find intersection
+  for (let k = 1; k < NHP; k++) {
+    const k1 = k - 1;
+    
+    // VB6: B = gc_HPTQMult.Value * (ztq(k) - ztq(k1)) / (hpc * (xrpm(k) - xrpm(k1)))
+    const B = hpTqMult * (ztq[k] - ztq[k1]) / (hpc * (xrpm[k] - xrpm[k1]));
+    // VB6: c = gc_HPTQMult.Value * ztq(k) / hpc - xrpm(k) * B
+    const c = hpTqMult * ztq[k] / hpc - xrpm[k] * B;
+    // VB6: z = B ^ 2 + 4 * atf * c
+    const z = B * B + 4 * atf * c;
+    
+    let r1 = 0;
+    let r2 = 0;
+    
+    if (z > 0) {
+      const sqrtZ = Math.sqrt(z);
+      r1 = (B + sqrtZ) / (2 * atf);
+      r2 = (B - sqrtZ) / (2 * atf);
+    }
+    
+    // VB6: Check if roots are within this segment
+    if (r1 < xrpm[k1] && k > 1) r1 = 0;
+    if (r2 < xrpm[k1] && k > 1) r2 = 0;
+    if (r1 > xrpm[k] && k < NHP - 1) r1 = 0;
+    if (r2 > xrpm[k] && k < NHP - 1) r2 = 0;
+    
+    if (r1 > 0) stall = r1;
+    if (r2 > 0) stall = r2;
+  }
+  
+  // VB6: Stall = Round(Stall, 20) - round to nearest 20
+  stall = Math.round(stall / 20) * 20;
+  
+  // VB6: Check calculated stall RPM against limits
+  if (stall < xrpm[0]) {
+    stall = xrpm[0];
+  }
+  
+  return stall;
+}
+
+/**
  * Calculate converter torque multiplier and slippage
- * VB6: TIMESLIP.FRM lines 739-758
+ * VB6: TIMESLIP.FRM lines 739-758, 920-970
  */
 export function calcConverterParams(
   xrpm: number[],
@@ -172,14 +233,16 @@ export function calcConverterParams(
   NHP: number,
   slipStallRPM: number,
   converterDia_in: number,
-  hpc: number
+  hpc: number,
+  ztq?: number[],  // Torque array (optional, needed for stall index mode)
+  hpTqMult: number = 1.0
 ): { torqueMult: number; slippage: number; work: number; stallRPM: number } {
   const Z6 = 5252;
   let stallRPM: number;
   let work: number;
   
   if (slipStallRPM > 220) {
-    // Direct RPM input
+    // Direct RPM input - VB6: TIMESLIP.FRM line 921-922
     stallRPM = slipStallRPM;
     
     // Get HP at stall RPM
@@ -187,9 +250,17 @@ export function calcConverterParams(
     const stq = shp * (Z6 / stallRPM) / hpc;
     work = (stallRPM / 1000) * (stallRPM / stq);
   } else {
-    // Stall index input
+    // Stall index input - VB6: TIMESLIP.FRM lines 923-946
     work = slipStallRPM;
-    stallRPM = 0;  // Will be calculated later
+    
+    // Calculate stall RPM from index using torque curve
+    if (ztq && ztq.length >= NHP) {
+      stallRPM = calcStallRPMFromIndex(xrpm, ztq, NHP, slipStallRPM, hpTqMult, hpc);
+    } else {
+      // Fallback: estimate stall RPM if torque array not available
+      // Use a reasonable default based on the stall index
+      stallRPM = 3000 + slipStallRPM * 20;  // Rough estimate
+    }
   }
   
   // VB6: lrat = Work / (200 * (7 / gc_ConvDia.Value) ^ 4)
