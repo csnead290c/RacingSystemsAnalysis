@@ -728,11 +728,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const weight = vehicle.weightLb;
   
   // VB6 TIMESLIP.FRM:1010-1011 - Get HP at launch RPM, apply weather correction
+  // VB6: HP = gc_HPTQMult.Value * HP / hpc
   const launchRPM_calc = isClutch 
     ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
     : stallRPM;
   const HP_launch_calc = TABY(xrpm, yhp, NHP, 1, launchRPM_calc);
-  const HP_corrected = HP_launch_calc / hpc;
+  const hpTqMult = (vehicle as any).hpTorqueMultiplier ?? engine?.hpTqMult ?? 1.0;
+  const HP_corrected = hpTqMult * HP_launch_calc / hpc;
   
   // VB6 TIMESLIP.FRM:1013-1014 - Calculate torque at wheels
   // TQ = Z6 * HP / RPM * TorqueMult * GearRatio * GearEff
@@ -863,12 +865,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Calculate TSMax
   // VB6 TIMESLIP.FRM:815: DistToPrint(1) = gc_Rollout.Value / 12
   // VB6 TIMESLIP.FRM:1063: TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1/3)
+  // Note: At this point in VB6, HP has already been corrected by HPTQMult/hpc (line 1011)
   const rolloutFt_tsmax = (vehicle.rolloutIn ?? 12) / 12;
   const DistToPrint1 = rolloutFt_tsmax > 0 ? rolloutFt_tsmax : 1; // VB6: If DistToPrint(1) = 0 Then DistToPrint(1) = 1
-  const HP_launch = TABY(xrpm, yhp, NHP, 1, launchRPM);
+  const HP_launch_raw = TABY(xrpm, yhp, NHP, 1, launchRPM);
+  const HP_launch_corrected = hpTqMult * HP_launch_raw / hpc;  // Apply same correction as VB6 line 1011
   const TSMax = vb6CalcTSMaxInit(
     DistToPrint1,
-    HP_launch,
+    HP_launch_corrected,
     torqueMult,
     vehicle.weightLb
   );
@@ -1085,10 +1089,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         }
       } else {
         // Shift by RPM (default VB6 behavior)
+        // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
+        // VB6 TIMESLIP.FRM:1355 - If iGear < NGR And Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
         const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
+        const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
         
-        // VB6: Shift when RPM reaches or exceeds shift point
-        if (state.EngRPM >= shiftRPM) {
+        // VB6: Shift when RPM is within tolerance of shift point
+        if (Math.abs(shiftRPM - state.EngRPM) < shiftRPMTol) {
           state.ShiftFlag = 1;
         }
       }
