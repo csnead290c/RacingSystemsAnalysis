@@ -64,6 +64,7 @@ export const VehicleSchema = z.object({
   
   // Converter (automatic trans)
   converterStallRPM: z.number().optional(),    // gc_SlipStallRPM
+  converterLaunchRPM: z.number().optional(),   // gc_LaunchRPM (for converter)
   converterTorqueMult: z.number().optional(),  // gc_TorqueMult
   converterSlippage: z.number().optional(),    // gc_Slippage
   converterDiameterIn: z.number().optional(),  // gc_ConvDia

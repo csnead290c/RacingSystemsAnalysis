@@ -938,6 +938,15 @@ export default function VehicleEditor({
                 onChange={(e) => updateField('converterStallRPM', parseFloat(e.target.value))}
               />
             </Field>
+            <Field label="Launch RPM" hint="RPM at launch (defaults to Stall RPM)">
+              <input
+                type="number"
+                step="100"
+                style={styles.input}
+                value={vehicle.converterLaunchRPM ?? vehicle.converterStallRPM ?? 3500}
+                onChange={(e) => updateField('converterLaunchRPM', parseFloat(e.target.value))}
+              />
+            </Field>
             {/* Pro only: Torque Mult, Slippage */}
             {isPro && (
               <>
