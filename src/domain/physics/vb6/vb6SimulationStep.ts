@@ -640,11 +640,10 @@ export function vb6SimulationStep(
     AGS_g = AMax_g - (AGS_g - AMax_g);
   }
   if (AGS_g < AMin) {
-    // VB6: TIMESLIP.FRM:1226 - Clamp to AMin
-    // When AGS is clamped, PQWT must be recalculated to be consistent
-    // PQWT = AGS * gc * Vel, so if AGS = AMin, PQWT = AMin * gc * Vel
+    // VB6: TIMESLIP.FRM:1228 - Scale PQWT proportionally, then clamp AGS
+    // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
+    PQWT = PQWT * AMin / AGS_g;
     AGS_g = AMin;
-    PQWT = AMin * gc * Vel_L;
   }
   
   // Initial time estimate
