@@ -341,6 +341,15 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     const converterDia = vAny.converterDiameterIn ?? (dt.converter as any)?.diameter ?? 10;
     const stallRPM = vAny.converterStallRPM ?? dt.converter?.stallRPM ?? 5000;
     const slipRPM = vAny.clutchSlipRPM ?? dt.clutch?.slipRPM ?? 6500;
+    const userLaunchRPM = vAny.converterLaunchRPM;
+    
+    console.log('[fromVehicleToVB6Fixture] QuarterJr converter params:', {
+      converterLaunchRPM: vAny.converterLaunchRPM,
+      converterStallRPM: vAny.converterStallRPM,
+      stallRPM,
+      userLaunchRPM,
+      isConverter,
+    });
     
     // Build QuarterJr inputs
     const qjInputs: QuarterJrInputs = {
@@ -397,9 +406,17 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
         lockup: vAny.clutchLockup ?? dt.clutch?.lockup ?? false,
       };
     } else {
+      // Use user's launch RPM if provided, otherwise fall back to QuarterJr calculated value
+      const converterLaunchRPM = userLaunchRPM ?? qjOut.launchRPM ?? qjOut.stallRPM;
+      console.log('[fromVehicleToVB6Fixture] Converter launchRPM:', {
+        userLaunchRPM,
+        qjOutLaunchRPM: qjOut.launchRPM,
+        qjOutStallRPM: qjOut.stallRPM,
+        finalLaunchRPM: converterLaunchRPM,
+      });
       converter = {
         stallRPM: qjOut.stallRPM,
-        launchRPM: vAny.converterLaunchRPM ?? qjOut.launchRPM ?? qjOut.stallRPM,
+        launchRPM: converterLaunchRPM,
         torqueMult: qjOut.torqueMult,
         slippageFactor: qjOut.slippage,
         lockup: vAny.converterLockup ?? dt.converter?.lockup ?? false,
