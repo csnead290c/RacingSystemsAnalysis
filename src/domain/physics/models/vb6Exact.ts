@@ -546,15 +546,65 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       let work: number;
       
       if (inputSlipStall > 220) {
-        // Direct RPM input
+        // Direct RPM input - VB6: TIMESLIP.FRM line 921-922
         stallRPM = inputSlipStall;
         const shp = taby(xrpm, yhp, NHP, 1, stallRPM);
         const stq = shp * (Z6 / stallRPM) / hpc;
         work = (stallRPM / 1000) * (stallRPM / stq);
       } else {
-        // Stall index input
+        // Stall index input - VB6: TIMESLIP.FRM lines 923-946
+        // Calculate stall RPM from index using torque curve intersection
         work = inputSlipStall;
-        stallRPM = inputSlipStall;
+        
+        // Build torque array from HP curve: ztq(i) = yhp(i) * (Z6 / xrpm(i))
+        const ztq: number[] = [];
+        for (let i = 0; i < NHP; i++) {
+          ztq.push(yhp[i] * (Z6 / xrpm[i]));
+        }
+        
+        // VB6: atf = 1 / (1000 * gc_SlipStallRPM.Value)
+        const atf = 1 / (1000 * inputSlipStall);
+        let calculatedStall = 0;
+        
+        // VB6: TIMESLIP.FRM lines 926-945 - Find torque curve intersection
+        for (let k = 1; k < NHP; k++) {
+          const k1 = k - 1;
+          
+          // VB6: B = gc_HPTQMult.Value * (ztq(k) - ztq(k1)) / (hpc * (xrpm(k) - xrpm(k1)))
+          const B = (ztq[k] - ztq[k1]) / (hpc * (xrpm[k] - xrpm[k1]));
+          // VB6: c = gc_HPTQMult.Value * ztq(k) / hpc - xrpm(k) * B
+          const c = ztq[k] / hpc - xrpm[k] * B;
+          // VB6: z = B ^ 2 + 4 * atf * c
+          const z = B * B + 4 * atf * c;
+          
+          let r1 = 0;
+          let r2 = 0;
+          
+          if (z > 0) {
+            const sqrtZ = Math.sqrt(z);
+            r1 = (B + sqrtZ) / (2 * atf);
+            r2 = (B - sqrtZ) / (2 * atf);
+          }
+          
+          // VB6: Check if roots are within this segment
+          if (r1 < xrpm[k1] && k > 1) r1 = 0;
+          if (r2 < xrpm[k1] && k > 1) r2 = 0;
+          if (r1 > xrpm[k] && k < NHP - 1) r1 = 0;
+          if (r2 > xrpm[k] && k < NHP - 1) r2 = 0;
+          
+          if (r1 > 0) calculatedStall = r1;
+          if (r2 > 0) calculatedStall = r2;
+        }
+        
+        // VB6: Stall = Round(Stall, 20) - round to nearest 20
+        calculatedStall = Math.round(calculatedStall / 20) * 20;
+        
+        // VB6: Check calculated stall RPM against limits
+        if (calculatedStall < xrpm[0]) {
+          calculatedStall = xrpm[0];
+        }
+        
+        stallRPM = calculatedStall > 0 ? calculatedStall : xrpm[0];
       }
       
       // VB6: lrat = Work / (200 * (7 / gc_ConvDia.Value) ^ 4)
