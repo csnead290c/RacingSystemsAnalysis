@@ -900,8 +900,24 @@ export function vb6InitState(
   // VB6: TIMESLIP.FRM:1055-1056 - Clamp Ags0 to AMax/AMin
   // If Ags0 > AMAX Then Ags0 = AMAX: SLIP(L) = 1
   // If Ags0 < AMin Then Ags0 = AMin
+  const Ags0_unclamped = Ags0_g;
   if (Ags0_g > AMax_init) Ags0_g = AMax_init;
   if (Ags0_g < AMin) Ags0_g = AMin;
+  
+  // Debug: Log traction limit calculation
+  console.log('[vb6InitState] Traction limit:', JSON.stringify({
+    Ags0_unclamped,
+    AMax_init,
+    Ags0_clamped: Ags0_g,
+    CAXI_init,
+    AX_init,
+    CRTF_init,
+    StaticRWT,
+    StaticFWt: vehicle.StaticFWt_lbf,
+    TireSlip_init,
+    force,
+    DragForce_launch,
+  }));
   
   return {
     L: 1,
