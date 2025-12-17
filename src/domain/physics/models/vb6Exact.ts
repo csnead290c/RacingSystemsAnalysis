@@ -862,6 +862,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   const state = vb6InitState(vb6Vehicle, vb6Env, launchRPM);
   
+  // Capture initial Ags0 (clamped) before simulation loop modifies state
+  const initialAgs0 = state.AGS_g;
+  
   // Calculate TSMax
   // VB6 TIMESLIP.FRM:815: DistToPrint(1) = gc_Rollout.Value / 12
   // VB6 TIMESLIP.FRM:1063: TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1/3)
@@ -1172,7 +1175,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       launchRPM: vb6Vehicle.LaunchRPM,
       ycg: YCG_in,
       staticFWt: staticFWt,
-      ags0: state.AGS_g,  // Use actual clamped value from simulation state
+      ags0: initialAgs0,  // Use initial clamped value captured before simulation loop
       ags0Unclamped: Ags0,  // Keep unclamped for reference
       tireSlipAtLaunch: tireSlipAtLaunch,
       rolloutTime_s: timerStartTime_s ?? 0,
