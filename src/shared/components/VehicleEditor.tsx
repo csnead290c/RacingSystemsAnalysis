@@ -64,8 +64,17 @@ const FUEL_TYPES = [
   { value: 'Diesel', label: 'Diesel', vb6Type: 1 },
 ] as const;
 
-// BODY_STYLES removed - not used in QUARTER Pro layout
-// Body style is determined by frontal area and Cd in Aerodynamic Data section
+// Body styles for QuarterJr Aero section
+const BODY_STYLES = [
+  { value: 1, label: 'Dragster with Wing' },
+  { value: 2, label: 'Dragster' },
+  { value: 3, label: 'Funny Car Body' },
+  { value: 4, label: 'Altered/Roadster' },
+  { value: 5, label: 'Fastback' },
+  { value: 6, label: 'Sedan' },
+  { value: 7, label: 'Station Wagon/Van' },
+  { value: 8, label: 'Motorcycle' },
+] as const;
 
 // ============================================================================
 // Styles
@@ -442,7 +451,8 @@ export default function VehicleEditor({
         </Section>
       )}
 
-      {/* ===== VEHICLE DATA (matches QUARTER Pro) ===== */}
+      {/* ===== VEHICLE DATA ===== */}
+      {/* Jr: weight, rollout, wheelbase | Pro: adds overhang */}
       <Section
         title="Vehicle Data"
         isOpen={sections.vehicleData}
@@ -457,14 +467,6 @@ export default function VehicleEditor({
               onChange={(e) => updateField('weightLb', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Wheelbase - inches">
-            <input
-              type="number"
-              style={styles.input}
-              value={vehicle.wheelbaseIn ?? 108}
-              onChange={(e) => updateField('wheelbaseIn', parseFloat(e.target.value))}
-            />
-          </Field>
           <Field label="Rollout - inches" required hint={TOOLTIPS.rollout}>
             <input
               type="number"
@@ -474,18 +476,30 @@ export default function VehicleEditor({
               onChange={(e) => updateField('rolloutIn', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Overhang - inches">
+          <Field label="Wheelbase - inches">
             <input
               type="number"
               style={styles.input}
-              value={vehicle.overhangIn ?? 40}
-              onChange={(e) => updateField('overhangIn', parseFloat(e.target.value))}
+              value={vehicle.wheelbaseIn ?? 108}
+              onChange={(e) => updateField('wheelbaseIn', parseFloat(e.target.value))}
             />
           </Field>
+          {/* Pro only: Overhang */}
+          {isPro && (
+            <Field label="Overhang - inches">
+              <input
+                type="number"
+                style={styles.input}
+                value={vehicle.overhangIn ?? 40}
+                onChange={(e) => updateField('overhangIn', parseFloat(e.target.value))}
+              />
+            </Field>
+          )}
         </div>
       </Section>
 
-      {/* ===== FINAL DRIVE DATA (matches QUARTER Pro) ===== */}
+      {/* ===== FINAL DRIVE DATA ===== */}
+      {/* Jr: gear ratio, tire diameter, tire width | Pro: adds efficiency, tire rollout mode */}
       <Section
         title="Final Drive Data"
         isOpen={sections.finalDrive}
@@ -501,34 +515,50 @@ export default function VehicleEditor({
               onChange={(e) => updateField('rearGear', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Efficiency">
-            <input
-              type="number"
-              step="0.005"
-              style={styles.input}
-              value={vehicle.finalDriveEfficiency ?? 0.975}
-              onChange={(e) => updateField('finalDriveEfficiency', parseFloat(e.target.value))}
-            />
-          </Field>
-          <Field label="Tire Rollout - inches" required hint="Circumference or diameter">
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {/* Pro only: Efficiency */}
+          {isPro && (
+            <Field label="Efficiency">
               <input
                 type="number"
-                step="0.1"
-                style={{ ...styles.input, flex: 1 }}
-                value={vehicle.tireRolloutIn ?? 102.5}
-                onChange={(e) => updateField('tireRolloutIn', parseFloat(e.target.value))}
+                step="0.005"
+                style={styles.input}
+                value={vehicle.finalDriveEfficiency ?? 0.975}
+                onChange={(e) => updateField('finalDriveEfficiency', parseFloat(e.target.value))}
               />
-              <select
-                style={{ ...styles.select, width: 'auto', padding: '0.375rem' }}
-                value={vehicle.tireRolloutMode ?? 'circumference'}
-                onChange={(e) => updateField('tireRolloutMode', e.target.value)}
-              >
-                <option value="circumference">Circ</option>
-                <option value="diameter">Dia</option>
-              </select>
-            </div>
-          </Field>
+            </Field>
+          )}
+          {/* Jr: Tire Diameter | Pro: Tire Rollout with mode selector */}
+          {isPro ? (
+            <Field label="Tire Rollout - inches" required hint="Circumference or diameter">
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  step="0.1"
+                  style={{ ...styles.input, flex: 1 }}
+                  value={vehicle.tireRolloutIn ?? 102.5}
+                  onChange={(e) => updateField('tireRolloutIn', parseFloat(e.target.value))}
+                />
+                <select
+                  style={{ ...styles.select, width: 'auto', padding: '0.375rem' }}
+                  value={vehicle.tireRolloutMode ?? 'circumference'}
+                  onChange={(e) => updateField('tireRolloutMode', e.target.value)}
+                >
+                  <option value="circumference">Circ</option>
+                  <option value="diameter">Dia</option>
+                </select>
+              </div>
+            </Field>
+          ) : (
+            <Field label="Tire Diameter - inches" required>
+              <input
+                type="number"
+                step="0.5"
+                style={styles.input}
+                value={vehicle.tireDiaIn ?? 28}
+                onChange={(e) => updateField('tireDiaIn', parseFloat(e.target.value))}
+              />
+            </Field>
+          )}
           <Field 
             label="Tire Width - inches"
             worksheetButton={<WorksheetButton onClick={() => setShowTireWidthWorksheet(true)} tooltip={TOOLTIPS.btnTireWidth} />}
@@ -544,19 +574,21 @@ export default function VehicleEditor({
         </div>
       </Section>
 
-      {/* ===== ENGINE DYNO DATA (matches QUARTER Pro) ===== */}
+      {/* ===== ENGINE DATA ===== */}
+      {/* Jr: Fuel System, displacement, rpm at peak hp, peak hp, shift rpm (global), N2O */}
+      {/* Pro: adds component selector, HP curve, HP/Torque multiplier */}
       <Section
-        title="Engine Dyno Data"
+        title={isPro ? "Engine Dyno Data" : "Engine"}
         isOpen={sections.engineDyno}
         onToggle={() => toggleSection('engineDyno')}
         action={
-          selectedEngine ? (
+          isPro && selectedEngine ? (
             <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedEngine.name}</span>
           ) : null
         }
       >
-        {/* Component selector */}
-        {savedEngines.length > 0 && (
+        {/* Pro only: Component selector */}
+        {isPro && savedEngines.length > 0 && (
           <div style={styles.componentSelector}>
             <div style={{ flex: 1 }}>
               <select
@@ -565,7 +597,6 @@ export default function VehicleEditor({
                 onChange={(e) => {
                   const engineId = e.target.value || undefined;
                   updateField('engineRef', engineId);
-                  // If selecting an engine, copy its data to vehicle
                   if (engineId) {
                     const engine = getSavedEngine(engineId);
                     if (engine) {
@@ -601,8 +632,8 @@ export default function VehicleEditor({
           </div>
         )}
         
-        {/* Show selected engine summary */}
-        {selectedEngine && (
+        {/* Pro only: Show selected engine summary */}
+        {isPro && selectedEngine && (
           <div style={{ 
             padding: '0.5rem', 
             backgroundColor: 'rgba(34, 197, 94, 0.1)', 
@@ -619,7 +650,7 @@ export default function VehicleEditor({
         )}
         
         <div style={styles.grid}>
-          <Field label="Fuel Type">
+          <Field label="Fuel System">
             <select
               style={styles.select}
               value={vehicle.fuelType ?? 'Gasoline'}
@@ -630,26 +661,13 @@ export default function VehicleEditor({
               ))}
             </select>
           </Field>
-          <Field label="Displacement" hint="CID (shapes HP curve)">
+          <Field label="Displacement - CID">
             <input
               type="number"
               style={styles.input}
               value={vehicle.displacementCID ?? ''}
               onChange={(e) => updateField('displacementCID', parseFloat(e.target.value))}
               placeholder="350"
-            />
-          </Field>
-          <Field 
-            label="Peak HP" 
-            required={!checkSuperseded('powerHP')}
-            superseded={checkSuperseded('powerHP')}
-          >
-            <input
-              type="number"
-              style={styles.input}
-              value={vehicle.powerHP ?? ''}
-              onChange={(e) => updateField('powerHP', parseFloat(e.target.value))}
-              disabled={checkSuperseded('powerHP')}
             />
           </Field>
           <Field 
@@ -666,9 +684,40 @@ export default function VehicleEditor({
               disabled={checkSuperseded('rpmAtPeakHP')}
             />
           </Field>
+          <Field 
+            label="Peak HP" 
+            required={!checkSuperseded('powerHP')}
+            superseded={checkSuperseded('powerHP')}
+          >
+            <input
+              type="number"
+              style={styles.input}
+              value={vehicle.powerHP ?? ''}
+              onChange={(e) => updateField('powerHP', parseFloat(e.target.value))}
+              disabled={checkSuperseded('powerHP')}
+            />
+          </Field>
+          {/* Jr: Global Shift RPM (single value for all gears) */}
+          {!isPro && (
+            <Field label="Shift RPM" hint="All gears shift at this RPM">
+              <input
+                type="number"
+                step="100"
+                style={styles.input}
+                value={vehicle.shiftRPMs?.[0] ?? 6500}
+                onChange={(e) => {
+                  const rpm = parseFloat(e.target.value);
+                  // Set all shift RPMs to same value for Jr
+                  const count = vehicle.gearRatios?.length ?? 5;
+                  const shifts = Array(count).fill(rpm);
+                  onChange({ ...vehicle, shiftRPMs: shifts });
+                }}
+              />
+            </Field>
+          )}
         </div>
         
-        {/* N2O option */}
+        {/* N2O option (both Jr and Pro) */}
         <div style={{ marginTop: '0.75rem' }}>
           <label style={{ ...styles.radioLabel, fontSize: '0.8rem' }}>
             <input
@@ -680,11 +729,26 @@ export default function VehicleEditor({
           </label>
         </div>
         
-        {/* Pro: HP Curve editor placeholder */}
+        {/* Pro only: HP/Torque Multiplier */}
+        {isPro && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <Field label="HP/Torque Multiplier" hint="Correction factor (default 1.0)">
+              <input
+                type="number"
+                step="0.01"
+                style={styles.input}
+                value={vehicle.hpTorqueMultiplier ?? 1.0}
+                onChange={(e) => updateField('hpTorqueMultiplier', parseFloat(e.target.value))}
+              />
+            </Field>
+          </div>
+        )}
+        
+        {/* Pro only: HP Curve editor */}
         {isPro && (
           <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--color-border)' }}>
             <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
-              HP Curve (Pro)
+              HP Curve
             </div>
             <div style={{ 
               padding: '1rem', 
@@ -714,14 +778,16 @@ export default function VehicleEditor({
       </Section>
 
       {/* ===== TRANSMISSION ===== */}
+      {/* Jr: converter/clutch toggle, clutch (slip rpm, lockup), converter (stall rpm, lockup, diameter), gear ratios only */}
+      {/* Pro: adds component selectors, launch RPM, slippage, per-gear efficiencies, per-gear shift RPMs */}
       <Section
-        title="Transmission"
+        title={isPro ? "Transmission Data" : "Transmission"}
         isOpen={sections.transmission}
         onToggle={() => toggleSection('transmission')}
         action={
-          transType === 'clutch' && selectedClutch ? (
+          isPro && transType === 'clutch' && selectedClutch ? (
             <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedClutch.name}</span>
-          ) : transType === 'converter' && selectedConverter ? (
+          ) : isPro && transType === 'converter' && selectedConverter ? (
             <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedConverter.name}</span>
           ) : null
         }
@@ -754,8 +820,8 @@ export default function VehicleEditor({
         
         {transType === 'clutch' ? (
           <>
-            {/* Clutch component selector */}
-            {savedClutches.length > 0 && (
+            {/* Pro only: Clutch component selector */}
+            {isPro && savedClutches.length > 0 && (
               <div style={{ ...styles.componentSelector, marginBottom: '0.75rem' }}>
                 <div style={{ flex: 1 }}>
                   <select
@@ -800,8 +866,8 @@ export default function VehicleEditor({
               </div>
             )}
             
-            {/* Show selected clutch summary */}
-            {selectedClutch && (
+            {/* Pro only: Show selected clutch summary */}
+            {isPro && selectedClutch && (
               <div style={{ 
                 padding: '0.5rem', 
                 backgroundColor: 'rgba(34, 197, 94, 0.1)', 
@@ -817,43 +883,48 @@ export default function VehicleEditor({
             )}
             
             <div style={styles.grid}>
-            <Field label="Launch RPM" required hint="Clutch drop RPM">
-              <input
-                type="number"
-                step="100"
-                style={styles.input}
-                value={vehicle.clutchLaunchRPM ?? 5500}
-                onChange={(e) => updateField('clutchLaunchRPM', parseFloat(e.target.value))}
-              />
-            </Field>
-            <Field label="Slip RPM" hint="RPM during slip">
-              <input
-                type="number"
-                step="100"
-                style={styles.input}
-                value={vehicle.clutchSlipRPM ?? 6000}
-                onChange={(e) => updateField('clutchSlipRPM', parseFloat(e.target.value))}
-              />
-            </Field>
-            <Field label="Slippage" hint="Slip factor (1.0-1.02)">
-              <input
-                type="number"
-                step="0.001"
-                style={styles.input}
-                value={vehicle.clutchSlippage ?? 1.004}
-                onChange={(e) => updateField('clutchSlippage', parseFloat(e.target.value))}
-              />
-            </Field>
-            <Field label="Lockup">
-              <label style={styles.radioLabel}>
+              {/* Jr: Slip RPM only | Pro: Launch RPM, Slip RPM, Slippage */}
+              {isPro && (
+                <Field label="Launch RPM" required hint="Clutch drop RPM">
+                  <input
+                    type="number"
+                    step="100"
+                    style={styles.input}
+                    value={vehicle.clutchLaunchRPM ?? 5500}
+                    onChange={(e) => updateField('clutchLaunchRPM', parseFloat(e.target.value))}
+                  />
+                </Field>
+              )}
+              <Field label="Slip RPM" hint="RPM during slip">
                 <input
-                  type="checkbox"
-                  checked={vehicle.clutchLockup ?? false}
-                  onChange={(e) => updateField('clutchLockup', e.target.checked)}
+                  type="number"
+                  step="100"
+                  style={styles.input}
+                  value={vehicle.clutchSlipRPM ?? 6000}
+                  onChange={(e) => updateField('clutchSlipRPM', parseFloat(e.target.value))}
                 />
-                Clutch locks up
-              </label>
-            </Field>
+              </Field>
+              {isPro && (
+                <Field label="Slippage" hint="Slip factor (1.0-1.02)">
+                  <input
+                    type="number"
+                    step="0.001"
+                    style={styles.input}
+                    value={vehicle.clutchSlippage ?? 1.004}
+                    onChange={(e) => updateField('clutchSlippage', parseFloat(e.target.value))}
+                  />
+                </Field>
+              )}
+              <Field label="Lockup">
+                <label style={styles.radioLabel}>
+                  <input
+                    type="checkbox"
+                    checked={vehicle.clutchLockup ?? false}
+                    onChange={(e) => updateField('clutchLockup', e.target.checked)}
+                  />
+                  Clutch locks up
+                </label>
+              </Field>
             </div>
           </>
         ) : (
@@ -867,24 +938,29 @@ export default function VehicleEditor({
                 onChange={(e) => updateField('converterStallRPM', parseFloat(e.target.value))}
               />
             </Field>
-            <Field label="Torque Mult" required hint="Stall ratio (1.8-2.5)">
-              <input
-                type="number"
-                step="0.1"
-                style={styles.input}
-                value={vehicle.converterTorqueMult ?? 2.0}
-                onChange={(e) => updateField('converterTorqueMult', parseFloat(e.target.value))}
-              />
-            </Field>
-            <Field label="Slippage" hint="Slip factor">
-              <input
-                type="number"
-                step="0.001"
-                style={styles.input}
-                value={vehicle.converterSlippage ?? 1.0}
-                onChange={(e) => updateField('converterSlippage', parseFloat(e.target.value))}
-              />
-            </Field>
+            {/* Pro only: Torque Mult, Slippage */}
+            {isPro && (
+              <>
+                <Field label="Torque Mult" hint="Stall ratio (1.8-2.5)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    style={styles.input}
+                    value={vehicle.converterTorqueMult ?? 2.0}
+                    onChange={(e) => updateField('converterTorqueMult', parseFloat(e.target.value))}
+                  />
+                </Field>
+                <Field label="Slippage" hint="Slip factor">
+                  <input
+                    type="number"
+                    step="0.001"
+                    style={styles.input}
+                    value={vehicle.converterSlippage ?? 1.0}
+                    onChange={(e) => updateField('converterSlippage', parseFloat(e.target.value))}
+                  />
+                </Field>
+              </>
+            )}
             <Field label="Lockup">
               <label style={styles.radioLabel}>
                 <input
@@ -895,25 +971,24 @@ export default function VehicleEditor({
                 Converter locks up
               </label>
             </Field>
-            {isPro && (
-              <Field label="Diameter" hint="Converter diameter (in)">
-                <input
-                  type="number"
-                  step="0.25"
-                  style={styles.input}
-                  value={vehicle.converterDiameterIn ?? ''}
-                  onChange={(e) => updateField('converterDiameterIn', parseFloat(e.target.value))}
-                />
-              </Field>
-            )}
+            {/* Jr and Pro: Converter Diameter */}
+            <Field label="Diameter - inches" hint="Converter diameter">
+              <input
+                type="number"
+                step="0.25"
+                style={styles.input}
+                value={vehicle.converterDiameterIn ?? ''}
+                onChange={(e) => updateField('converterDiameterIn', parseFloat(e.target.value))}
+              />
+            </Field>
           </div>
         )}
         
-        {/* Gear Table (matches QUARTER Pro layout) */}
+        {/* Gear Ratios */}
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>
-              Gear Table
+              {isPro ? 'Gear Table' : 'Gear Ratios'}
             </div>
             <select
               style={{ ...styles.select, width: 'auto', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
@@ -950,78 +1025,113 @@ export default function VehicleEditor({
             </select>
           </div>
           
-          {/* Table header */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '50px 1fr 1fr 1fr', 
-            gap: '0.25rem',
-            fontSize: '0.7rem',
-            fontWeight: 600,
-            color: 'var(--color-muted)',
-            marginBottom: '0.25rem',
-            paddingBottom: '0.25rem',
-            borderBottom: '1px solid var(--color-border)',
-          }}>
-            <div>Gear</div>
-            <div>Ratio</div>
-            <div>Efficiency</div>
-            <div>Shift@</div>
-          </div>
-          
-          {/* Table rows */}
-          {Array.from({ length: gearCount }).map((_, i) => (
-            <div 
-              key={i} 
-              style={{ 
+          {/* Pro: Full gear table with Ratio/Efficiency/Shift@ */}
+          {isPro ? (
+            <>
+              {/* Table header */}
+              <div style={{ 
                 display: 'grid', 
                 gridTemplateColumns: '50px 1fr 1fr 1fr', 
                 gap: '0.25rem',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                color: 'var(--color-muted)',
                 marginBottom: '0.25rem',
-                alignItems: 'center',
-              }}
-            >
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                {i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'} -
+                paddingBottom: '0.25rem',
+                borderBottom: '1px solid var(--color-border)',
+              }}>
+                <div>Gear</div>
+                <div>Ratio</div>
+                <div>Efficiency</div>
+                <div>Shift@</div>
               </div>
-              <input
-                type="number"
-                step="0.001"
-                style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
-                value={vehicle.gearRatios?.[i] ?? ''}
-                onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))}
-              />
-              <input
-                type="number"
-                step="0.001"
-                style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
-                value={vehicle.gearEfficiencies?.[i] ?? 0.990}
-                onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))}
-              />
-              <input
-                type="number"
-                step="100"
-                style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
-                value={vehicle.shiftRPMs?.[i] ?? 9400}
-                onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))}
-              />
+              
+              {/* Table rows */}
+              {Array.from({ length: gearCount }).map((_, i) => (
+                <div 
+                  key={i} 
+                  style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '50px 1fr 1fr 1fr', 
+                    gap: '0.25rem',
+                    marginBottom: '0.25rem',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                    {i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'} -
+                  </div>
+                  <input
+                    type="number"
+                    step="0.001"
+                    style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
+                    value={vehicle.gearRatios?.[i] ?? ''}
+                    onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))}
+                  />
+                  <input
+                    type="number"
+                    step="0.001"
+                    style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
+                    value={vehicle.gearEfficiencies?.[i] ?? 0.990}
+                    onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))}
+                  />
+                  <input
+                    type="number"
+                    step="100"
+                    style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
+                    value={vehicle.shiftRPMs?.[i] ?? 9400}
+                    onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))}
+                  />
+                </div>
+              ))}
+            </>
+          ) : (
+            /* Jr: Just gear ratios in a simple row */
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {Array.from({ length: gearCount }).map((_, i) => (
+                <div key={i} style={{ flex: '1 1 60px', minWidth: '60px', maxWidth: '80px' }}>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginBottom: '0.125rem' }}>
+                    {i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'}
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    style={{ ...styles.input, padding: '0.375rem' }}
+                    value={vehicle.gearRatios?.[i] ?? ''}
+                    onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </Section>
 
 
-      {/* ===== AERODYNAMICS (Pro) ===== */}
+      {/* ===== AERODYNAMICS ===== */}
+      {/* Jr: body style, frontal area | Pro: adds Cd, lift coeff */}
       <Section
-        title="Aerodynamics"
+        title={isPro ? "Aerodynamic Data" : "Aero"}
         isOpen={sections.aero}
         onToggle={() => toggleSection('aero')}
-        isPro
-        hasProAccess={isPro}
       >
         <div style={styles.grid}>
+          {/* Jr: Body Style */}
+          {!isPro && (
+            <Field label="Body Style">
+              <select
+                style={styles.select}
+                value={vehicle.bodyStyle ?? 6}
+                onChange={(e) => updateField('bodyStyle', parseInt(e.target.value))}
+              >
+                {BODY_STYLES.map(bs => (
+                  <option key={bs.value} value={bs.value}>{bs.label}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field 
-            label="Frontal Area" 
-            hint="ft²"
+            label="Frontal Area - sq ft"
             worksheetButton={<WorksheetButton onClick={() => setShowFrontalAreaWorksheet(true)} tooltip={TOOLTIPS.btnFrontalArea} />}
           >
             <input
@@ -1032,24 +1142,29 @@ export default function VehicleEditor({
               onChange={(e) => updateField('frontalAreaFt2', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Drag Coeff (Cd)" hint="0.3-0.5 typical">
-            <input
-              type="number"
-              step="0.01"
-              style={styles.input}
-              value={vehicle.cd ?? 0.35}
-              onChange={(e) => updateField('cd', parseFloat(e.target.value))}
-            />
-          </Field>
-          <Field label="Lift Coeff" hint="Positive = lift">
-            <input
-              type="number"
-              step="0.01"
-              style={styles.input}
-              value={vehicle.liftCoeff ?? 0.1}
-              onChange={(e) => updateField('liftCoeff', parseFloat(e.target.value))}
-            />
-          </Field>
+          {/* Pro only: Cd and Lift Coeff */}
+          {isPro && (
+            <>
+              <Field label="Drag Coeff (Cd)" hint="0.3-0.5 typical">
+                <input
+                  type="number"
+                  step="0.01"
+                  style={styles.input}
+                  value={vehicle.cd ?? 0.35}
+                  onChange={(e) => updateField('cd', parseFloat(e.target.value))}
+                />
+              </Field>
+              <Field label="Lift Coeff" hint="Positive = lift">
+                <input
+                  type="number"
+                  step="0.01"
+                  style={styles.input}
+                  value={vehicle.liftCoeff ?? 0.1}
+                  onChange={(e) => updateField('liftCoeff', parseFloat(e.target.value))}
+                />
+              </Field>
+            </>
+          )}
         </div>
       </Section>
 
