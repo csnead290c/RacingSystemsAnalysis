@@ -910,6 +910,27 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   let saveTime_594ft: number | null = null;  // Time at 594ft (66ft before 660ft)
   let saveTime_1254ft: number | null = null; // Time at 1254ft (66ft before 1320ft)
   
+  // Add initial trace entry at t=0 with Launch RPM (before first simulation step)
+  // VB6 shows this as the first line: 0.00 0 0.0 Ags0 1 LaunchRPM
+  trace.push({
+    t_s: 0,
+    s_ft: 0,
+    v_fps: state.Vel_ftps,
+    v_mph: state.Vel_ftps * FPS_TO_MPH,
+    a_g: state.AGS_g,
+    rpm: launchRPM,  // Show Launch RPM at t=0, not Stall RPM
+    dsrpm: 0,
+    lockRpm: 0,
+    gear: 1,
+    slip: false,
+    tireSlip: 1,
+    hp: 0,
+    dragHp: 0,
+    netHp: 0,
+    wheelSpeed_mph: 0,
+    throttleStopActive: false,
+  });
+  
   for (let step = 0; step < MAX_STEPS; step++) {
     // Check termination conditions (track distance has passed finish line)
     const currentTrackDist = state.Dist_ft - rolloutFt + ovradj;
