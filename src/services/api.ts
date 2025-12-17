@@ -195,7 +195,7 @@ export const usersApi = {
     });
   },
 
-  async update(id: number, data: { name?: string; role?: string; products?: string[] }) {
+  async update(id: number, data: { name?: string; role?: string; products?: string[]; subscription_plan?: string | null; subscription_status?: string | null }) {
     return apiRequest<{ success: boolean }>(`/users.php?id=${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -223,6 +223,9 @@ export interface ApiUser {
   name: string;
   role: 'owner' | 'admin' | 'user' | 'beta';
   products: string[];
+  subscription_plan?: string | null;
+  subscription_status?: string | null;
+  clerk_user_id?: string | null;
   created_at?: string;
 }
 

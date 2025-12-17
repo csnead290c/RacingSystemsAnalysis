@@ -147,7 +147,7 @@ function UserModal({
 }: { 
   user: ApiUser | null; 
   onClose: () => void; 
-  onSave: (data: { email: string; name: string; password?: string; role: string; products: string[] }) => void;
+  onSave: (data: { email: string; name: string; password?: string; role: string; products: string[]; subscription_plan?: string | null; subscription_status?: string | null }) => void;
   onDelete?: () => void;
 }) {
   const [email, setEmail] = useState(user?.email || '');
@@ -155,6 +155,8 @@ function UserModal({
   const [role, setRole] = useState<string>(user?.role || 'user');
   const [products, setProducts] = useState<string[]>(user?.products || []);
   const [password, setPassword] = useState('');
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string>(user?.subscription_plan || '');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>(user?.subscription_status || '');
 
   const toggleProduct = (productId: string) => {
     setProducts(prev => 
@@ -166,14 +168,27 @@ function UserModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ email, name, role, products, ...(password ? { password } : {}) });
+    onSave({ 
+      email, 
+      name, 
+      role, 
+      products, 
+      subscription_plan: subscriptionPlan || null,
+      subscription_status: subscriptionStatus || null,
+      ...(password ? { password } : {}) 
+    });
     onClose();
   };
+
+  const isClerkUser = !!user?.clerk_user_id;
 
   return (
     <div style={styles.modal} onClick={onClose}>
       <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>{user ? 'Edit User' : 'Create User'}</h3>
+        <h3 style={{ marginTop: 0 }}>
+          {user ? 'Edit User' : 'Create User'}
+          {isClerkUser && <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', marginLeft: '0.5rem' }}>🔐 Clerk User</span>}
+        </h3>
         <form onSubmit={handleSubmit}>
           <div style={styles.formGroup}>
             <label style={styles.label}>Email</label>
@@ -192,6 +207,47 @@ function UserModal({
               <option value="owner">Owner</option>
             </select>
           </div>
+          
+          {/* Subscription Override Section */}
+          {user && (
+            <div style={{ 
+              padding: '0.75rem', 
+              backgroundColor: 'var(--color-bg-secondary)', 
+              borderRadius: 'var(--radius-sm)',
+              marginBottom: '1rem',
+            }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--color-muted)' }}>
+                📋 Subscription Override (Owner Only)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Plan</label>
+                  <select style={styles.input} value={subscriptionPlan} onChange={e => setSubscriptionPlan(e.target.value)}>
+                    <option value="">None</option>
+                    <option value="racer">Racer ($9.99/mo)</option>
+                    <option value="pro">Pro ($24.99/mo)</option>
+                    <option value="team">Team ($49.99/mo)</option>
+                    <option value="free">Free (Manual)</option>
+                    <option value="beta">Beta Access</option>
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Status</label>
+                  <select style={styles.input} value={subscriptionStatus} onChange={e => setSubscriptionStatus(e.target.value)}>
+                    <option value="">None</option>
+                    <option value="active">Active</option>
+                    <option value="trialing">Trialing</option>
+                    <option value="canceled">Canceled</option>
+                    <option value="past_due">Past Due</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+                Set plan to "Free" or "Beta" with status "Active" to grant access without Stripe.
+              </div>
+            </div>
+          )}
+          
           <div style={styles.formGroup}>
             <label style={styles.label}>Products</label>
             <div style={styles.checkboxGrid}>
@@ -207,10 +263,14 @@ function UserModal({
               ))}
             </div>
           </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>{user ? 'New Password (leave blank to keep)' : 'Password'}</label>
-            <input style={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} {...(!user && { required: true, minLength: 6 })} />
-          </div>
+          
+          {!isClerkUser && (
+            <div style={styles.formGroup}>
+              <label style={styles.label}>{user ? 'New Password (leave blank to keep)' : 'Password'}</label>
+              <input style={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} {...(!user && { required: true, minLength: 6 })} />
+            </div>
+          )}
+          
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
             {user && onDelete && (
               <button type="button" style={{ ...styles.button, ...styles.dangerBtn }} onClick={() => { onDelete(); onClose(); }}>Delete</button>
@@ -604,7 +664,13 @@ export default function UserManagement() {
               if (editingUser === 'new') {
                 await usersApi.create({ email: data.email, password: data.password!, name: data.name, role: data.role, products: data.products });
               } else {
-                await usersApi.update(editingUser.id, { name: data.name, role: data.role, products: data.products });
+                await usersApi.update(editingUser.id, { 
+                  name: data.name, 
+                  role: data.role, 
+                  products: data.products,
+                  subscription_plan: data.subscription_plan,
+                  subscription_status: data.subscription_status,
+                });
               }
               loadUsers();
             } catch (err: any) {

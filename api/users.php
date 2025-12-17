@@ -90,7 +90,7 @@ function handleGet($pdo, $auth) {
     $userId = $_GET['id'] ?? null;
     
     if ($userId) {
-        $stmt = $pdo->prepare("SELECT id, email, name, role, products, created_at FROM users WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT id, email, name, role, products, subscription_plan, subscription_status, clerk_user_id, created_at FROM users WHERE id = ?");
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
         
@@ -101,7 +101,7 @@ function handleGet($pdo, $auth) {
         $user['products'] = json_decode($user['products'], true);
         rsa_jsonResponse(['user' => $user]);
     } else {
-        $stmt = $pdo->query("SELECT id, email, name, role, products, created_at FROM users ORDER BY created_at DESC");
+        $stmt = $pdo->query("SELECT id, email, name, role, products, subscription_plan, subscription_status, clerk_user_id, created_at FROM users ORDER BY created_at DESC");
         $users = $stmt->fetchAll();
         
         foreach ($users as &$user) {
@@ -143,8 +143,21 @@ function handlePut($pdo, $auth) {
     $name = $input['name'] ?? $user['name'];
     $products = $input['products'] ?? json_decode($user['products'], true);
     
-    $stmt = $pdo->prepare("UPDATE users SET name = ?, role = ?, products = ? WHERE id = ?");
-    $stmt->execute([$name, $role, json_encode($products), $userId]);
+    // Subscription override fields (only owner can modify)
+    $subscriptionPlan = $user['subscription_plan'];
+    $subscriptionStatus = $user['subscription_status'];
+    
+    if ($auth['role'] === 'owner') {
+        if (array_key_exists('subscription_plan', $input)) {
+            $subscriptionPlan = $input['subscription_plan'] ?: null;
+        }
+        if (array_key_exists('subscription_status', $input)) {
+            $subscriptionStatus = $input['subscription_status'] ?: null;
+        }
+    }
+    
+    $stmt = $pdo->prepare("UPDATE users SET name = ?, role = ?, products = ?, subscription_plan = ?, subscription_status = ? WHERE id = ?");
+    $stmt->execute([$name, $role, json_encode($products), $subscriptionPlan, $subscriptionStatus, $userId]);
     
     rsa_jsonResponse(['success' => true]);
 }

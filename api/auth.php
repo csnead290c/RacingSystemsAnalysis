@@ -210,7 +210,7 @@ function handleSyncClerkUser($pdo) {
     
     // Extract Clerk user ID from auth
     $userId = $auth['user_id'];
-    $email = $auth['email'] ?? '';
+    $authEmail = $auth['email'] ?? '';
     $clerkUserId = $auth['clerk_user_id'] ?? null;
     
     // Only process Clerk users
@@ -220,9 +220,14 @@ function handleSyncClerkUser($pdo) {
     
     $clerkId = $clerkUserId ?: str_replace('clerk_', '', $userId);
     
-    // Get additional info from request body
+    // Get additional info from request body (frontend passes name and email from Clerk user object)
     $input = rsa_getJsonInput();
-    $name = $input['name'] ?? explode('@', $email)[0] ?? 'User';
+    $name = $input['name'] ?? '';
+    $email = $input['email'] ?? $authEmail;
+    
+    if (!$name) {
+        $name = $email ? explode('@', $email)[0] : 'User';
+    }
     
     // Try to find existing user by clerk_user_id
     $stmt = $pdo->prepare("SELECT id, email, name, role, products, subscription_plan, subscription_status FROM users WHERE clerk_user_id = ?");
@@ -230,7 +235,14 @@ function handleSyncClerkUser($pdo) {
     $user = $stmt->fetch();
     
     if ($user) {
-        // User exists, return their info
+        // User exists - update name and email if they've changed
+        if (($name && $name !== $user['name']) || ($email && $email !== $user['email'])) {
+            $stmt = $pdo->prepare("UPDATE users SET name = ?, email = ? WHERE id = ?");
+            $stmt->execute([$name ?: $user['name'], $email ?: $user['email'], $user['id']]);
+            $user['name'] = $name ?: $user['name'];
+            $user['email'] = $email ?: $user['email'];
+        }
+        
         rsa_jsonResponse([
             'success' => true,
             'user' => [
@@ -254,16 +266,16 @@ function handleSyncClerkUser($pdo) {
         $user = $stmt->fetch();
         
         if ($user) {
-            // Update with clerk_user_id
-            $stmt = $pdo->prepare("UPDATE users SET clerk_user_id = ? WHERE id = ?");
-            $stmt->execute([$clerkId, $user['id']]);
+            // Update with clerk_user_id and name
+            $stmt = $pdo->prepare("UPDATE users SET clerk_user_id = ?, name = ? WHERE id = ?");
+            $stmt->execute([$clerkId, $name ?: $user['name'], $user['id']]);
             
             rsa_jsonResponse([
                 'success' => true,
                 'user' => [
                     'id' => $user['id'],
                     'email' => $user['email'],
-                    'name' => $user['name'],
+                    'name' => $name ?: $user['name'],
                     'role' => $user['role'],
                     'products' => json_decode($user['products'] ?? '[]', true),
                     'subscription_plan' => $user['subscription_plan'],

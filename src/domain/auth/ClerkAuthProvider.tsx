@@ -74,6 +74,7 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
           },
           body: JSON.stringify({
             name: user.fullName || user.firstName || 'User',
+            email: user.primaryEmailAddress?.emailAddress || '',
           }),
         });
         
