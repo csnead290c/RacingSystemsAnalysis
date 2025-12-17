@@ -343,14 +343,6 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     const slipRPM = vAny.clutchSlipRPM ?? dt.clutch?.slipRPM ?? 6500;
     const userLaunchRPM = vAny.converterLaunchRPM;
     
-    console.log('[fromVehicleToVB6Fixture] QuarterJr converter params:', {
-      converterLaunchRPM: vAny.converterLaunchRPM,
-      converterStallRPM: vAny.converterStallRPM,
-      stallRPM,
-      userLaunchRPM,
-      isConverter,
-    });
-    
     // Build QuarterJr inputs
     const qjInputs: QuarterJrInputs = {
       peakHP,
@@ -408,12 +400,6 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     } else {
       // Use user's launch RPM if provided, otherwise fall back to QuarterJr calculated value
       const converterLaunchRPM = userLaunchRPM ?? qjOut.launchRPM ?? qjOut.stallRPM;
-      console.log('[fromVehicleToVB6Fixture] Converter launchRPM:', {
-        userLaunchRPM,
-        qjOutLaunchRPM: qjOut.launchRPM,
-        qjOutStallRPM: qjOut.stallRPM,
-        finalLaunchRPM: converterLaunchRPM,
-      });
       converter = {
         stallRPM: qjOut.stallRPM,
         launchRPM: converterLaunchRPM,
