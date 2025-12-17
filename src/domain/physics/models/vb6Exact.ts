@@ -931,7 +931,30 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     throttleStopActive: false,
   });
   
+  // Debug: Log initial state for timing analysis
+  console.log('[vb6Exact] Initial state:', {
+    launchRPM,
+    stallRPM,
+    enginePMI,
+    spinUpTime: enginePMI * (stallRPM - launchRPM) / 250000,
+    rolloutFt,
+    ovradj,
+    TSMax,
+  });
+  
   for (let step = 0; step < MAX_STEPS; step++) {
+    // Debug first few steps
+    if (step < 3) {
+      console.log(`[vb6Exact] Step ${step}:`, {
+        time_s: state.time_s,
+        Time0_s: state.Time0_s,
+        Dist_ft: state.Dist_ft,
+        Vel_ftps: state.Vel_ftps,
+        EngRPM: state.EngRPM,
+        RPM0: state.RPM0,
+      });
+    }
+    
     // Check termination conditions (track distance has passed finish line)
     const currentTrackDist = state.Dist_ft - rolloutFt + ovradj;
     if (currentTrackDist >= raceLengthFt + 50) break; // Stop shortly after finish line
