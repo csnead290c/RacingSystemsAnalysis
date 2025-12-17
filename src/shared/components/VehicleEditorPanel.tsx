@@ -440,6 +440,16 @@ export default function VehicleEditorPanel({
                 />
               </div>
               <div>
+                <label className={labelClass}>Launch RPM</label>
+                <input
+                  type="number"
+                  step="100"
+                  className={inputClass}
+                  value={vehicle.converterLaunchRPM ?? vehicle.converterStallRPM ?? 3000}
+                  onChange={(e) => updateField('converterLaunchRPM', parseFloat(e.target.value))}
+                />
+              </div>
+              <div>
                 <label className={labelClass}>Torque Mult</label>
                 <input
                   type="number"

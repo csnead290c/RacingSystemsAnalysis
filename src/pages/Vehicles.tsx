@@ -644,6 +644,11 @@ function Vehicles() {
                     <small style={{ color: 'var(--color-muted)' }}>Converter stall speed</small>
                   </div>
                   <div>
+                    <label className="label">Launch RPM</label>
+                    <input type="number" className="input" value={form.converterLaunchRPM ?? form.converterStallRPM ?? 3500} onChange={(e) => updateForm('converterLaunchRPM', parseFloat(e.target.value))} />
+                    <small style={{ color: 'var(--color-muted)' }}>RPM at launch (defaults to Stall RPM)</small>
+                  </div>
+                  <div>
                     <label className="label">Converter Diameter (in)</label>
                     <input type="number" step="0.1" className="input" value={form.converterDiameterIn ?? 11} onChange={(e) => updateForm('converterDiameterIn', parseFloat(e.target.value))} />
                   </div>
@@ -990,7 +995,12 @@ function Vehicles() {
                   <div>
                     <label className="label">Stall RPM *</label>
                     <input type="number" className="input" value={form.converterStallRPM ?? ''} onChange={(e) => updateForm('converterStallRPM', parseFloat(e.target.value))} />
-                    <small style={{ color: 'var(--color-muted)' }}>Converter stall speed (also used as launch RPM)</small>
+                    <small style={{ color: 'var(--color-muted)' }}>Converter stall speed</small>
+                  </div>
+                  <div>
+                    <label className="label">Launch RPM</label>
+                    <input type="number" className="input" value={form.converterLaunchRPM ?? form.converterStallRPM ?? ''} onChange={(e) => updateForm('converterLaunchRPM', parseFloat(e.target.value))} />
+                    <small style={{ color: 'var(--color-muted)' }}>RPM at launch (defaults to Stall RPM)</small>
                   </div>
                   <div>
                     <label className="label">Diameter (in)</label>
