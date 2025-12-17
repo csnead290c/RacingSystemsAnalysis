@@ -98,6 +98,12 @@ export const VehicleSchema = z.object({
   // Organization
   group: z.string().optional(),                // Vehicle group/category for organization
   notes: z.string().optional(),                // User notes about the vehicle
+  
+  // Component References (optional - use saved components from sims)
+  // When a ref is set, inline data for that component is ignored
+  engineRef: z.string().optional(),            // ID of SavedEngine (from Engine Sim)
+  clutchRef: z.string().optional(),            // ID of SavedClutch (from Clutch Sim)
+  converterRef: z.string().optional(),         // ID of SavedConverter (from Converter Sim)
 });
 
 export type Vehicle = z.infer<typeof VehicleSchema>;
