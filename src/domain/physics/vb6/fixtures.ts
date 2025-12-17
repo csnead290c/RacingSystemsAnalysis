@@ -223,6 +223,7 @@ export function fixtureToSimInputs(fixture: Vb6VehicleFixture, raceLength: RaceL
       clutchSlippage: fixture.drivetrain.clutch?.slippageFactor,
       clutchLockup: fixture.drivetrain.clutch?.lockup,
       converterStallRPM: fixture.drivetrain.converter?.stallRPM,
+      converterLaunchRPM: fixture.drivetrain.converter?.launchRPM,
       converterTorqueMult: fixture.drivetrain.converter?.torqueMult,
       converterSlippage: fixture.drivetrain.converter?.slippageFactor,
       converterDiameterIn: fixture.drivetrain.converter?.diameter_in,
