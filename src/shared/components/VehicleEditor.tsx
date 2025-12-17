@@ -64,16 +64,8 @@ const FUEL_TYPES = [
   { value: 'Diesel', label: 'Diesel', vb6Type: 1 },
 ] as const;
 
-const BODY_STYLES = [
-  { value: 1, label: 'Dragster with Wing' },
-  { value: 2, label: 'Dragster' },
-  { value: 3, label: 'Funny Car Body' },
-  { value: 4, label: 'Altered/Roadster' },
-  { value: 5, label: 'Fastback' },
-  { value: 6, label: 'Sedan' },
-  { value: 7, label: 'Station Wagon/Van' },
-  { value: 8, label: 'Motorcycle' },
-] as const;
+// BODY_STYLES removed - not used in QUARTER Pro layout
+// Body style is determined by frontal area and Cd in Aerodynamic Data section
 
 // ============================================================================
 // Styles
@@ -316,16 +308,25 @@ export default function VehicleEditor({
   const hasThrottleStop = features.throttleStop;
   
   // Section collapse state - persisted to localStorage
+  // Matches original QUARTER Pro sections:
+  // - Identity (RSA addition for vehicle name/group)
+  // - General Data (weather/track conditions - usually on run, not vehicle)
+  // - Vehicle Data (weight, wheelbase, rollout, overhang)
+  // - Final Drive Data (gear ratio, efficiency, tire rollout, tire width)
+  // - Engine Dyno Data (HP curve, fuel system, multiplier)
+  // - Transmission Data (clutch/converter, gears)
+  // - Aerodynamic Data (frontal area, Cd, Cl)
+  // - PMI (polar moments of inertia)
+  // - Throttle Stop (RSA Pro feature)
   const [sections, setSections] = useState<SectionState>(() => {
     try {
       const saved = localStorage.getItem('vehicleEditorSections');
       return saved ? JSON.parse(saved) : {
         identity: true,
-        vehicle: true,
-        engine: true,
+        vehicleData: true,
+        finalDrive: true,
+        engineDyno: true,
         transmission: true,
-        drivetrain: true,
-        tires: true,
         aero: false,
         pmi: false,
         throttleStop: false,
@@ -333,11 +334,10 @@ export default function VehicleEditor({
     } catch {
       return {
         identity: true,
-        vehicle: true,
-        engine: true,
+        vehicleData: true,
+        finalDrive: true,
+        engineDyno: true,
         transmission: true,
-        drivetrain: true,
-        tires: true,
         aero: false,
         pmi: false,
         throttleStop: false,
@@ -442,14 +442,14 @@ export default function VehicleEditor({
         </Section>
       )}
 
-      {/* ===== VEHICLE / WEIGHT ===== */}
+      {/* ===== VEHICLE DATA (matches QUARTER Pro) ===== */}
       <Section
-        title="Vehicle"
-        isOpen={sections.vehicle}
-        onToggle={() => toggleSection('vehicle')}
+        title="Vehicle Data"
+        isOpen={sections.vehicleData}
+        onToggle={() => toggleSection('vehicleData')}
       >
         <div style={styles.grid}>
-          <Field label="Weight" required hint="Total race weight (lb)">
+          <Field label="Weight - lbs" required>
             <input
               type="number"
               style={styles.input}
@@ -457,7 +457,7 @@ export default function VehicleEditor({
               onChange={(e) => updateField('weightLb', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Wheelbase" hint="inches">
+          <Field label="Wheelbase - inches">
             <input
               type="number"
               style={styles.input}
@@ -465,7 +465,7 @@ export default function VehicleEditor({
               onChange={(e) => updateField('wheelbaseIn', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Rollout" required hint={TOOLTIPS.rollout}>
+          <Field label="Rollout - inches" required hint={TOOLTIPS.rollout}>
             <input
               type="number"
               step="0.1"
@@ -474,61 +474,81 @@ export default function VehicleEditor({
               onChange={(e) => updateField('rolloutIn', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Body Style">
-            <select
-              style={styles.select}
-              value={vehicle.bodyStyle ?? 6}
-              onChange={(e) => updateField('bodyStyle', parseInt(e.target.value))}
-            >
-              {BODY_STYLES.map(bs => (
-                <option key={bs.value} value={bs.value}>{bs.label}</option>
-              ))}
-            </select>
+          <Field label="Overhang - inches">
+            <input
+              type="number"
+              style={styles.input}
+              value={vehicle.overhangIn ?? 40}
+              onChange={(e) => updateField('overhangIn', parseFloat(e.target.value))}
+            />
           </Field>
         </div>
-        
-        {/* Pro fields */}
-        {isPro && (
-          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--color-border)' }}>
-            <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
-              Advanced Geometry
-            </div>
-            <div style={styles.grid}>
-              <Field label="Front Weight" hint="Static front weight (lb)">
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={vehicle.staticFrontWeightLb ?? ''}
-                  onChange={(e) => updateField('staticFrontWeightLb', parseFloat(e.target.value))}
-                  placeholder="Auto: 38%"
-                />
-              </Field>
-              <Field label="CG Height" hint="Center of gravity (in)">
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={vehicle.cgHeightIn ?? ''}
-                  onChange={(e) => updateField('cgHeightIn', parseFloat(e.target.value))}
-                />
-              </Field>
-              <Field label="Overhang" hint="Rear overhang (in)">
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={vehicle.overhangIn ?? ''}
-                  onChange={(e) => updateField('overhangIn', parseFloat(e.target.value))}
-                />
-              </Field>
-            </div>
-          </div>
-        )}
       </Section>
 
-      {/* ===== ENGINE ===== */}
+      {/* ===== FINAL DRIVE DATA (matches QUARTER Pro) ===== */}
       <Section
-        title="Engine"
-        isOpen={sections.engine}
-        onToggle={() => toggleSection('engine')}
+        title="Final Drive Data"
+        isOpen={sections.finalDrive}
+        onToggle={() => toggleSection('finalDrive')}
+      >
+        <div style={styles.grid}>
+          <Field label="Gear Ratio" required>
+            <input
+              type="number"
+              step="0.01"
+              style={styles.input}
+              value={vehicle.rearGear ?? 4.10}
+              onChange={(e) => updateField('rearGear', parseFloat(e.target.value))}
+            />
+          </Field>
+          <Field label="Efficiency">
+            <input
+              type="number"
+              step="0.005"
+              style={styles.input}
+              value={vehicle.finalDriveEfficiency ?? 0.975}
+              onChange={(e) => updateField('finalDriveEfficiency', parseFloat(e.target.value))}
+            />
+          </Field>
+          <Field label="Tire Rollout - inches" required hint="Circumference or diameter">
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input
+                type="number"
+                step="0.1"
+                style={{ ...styles.input, flex: 1 }}
+                value={vehicle.tireRolloutIn ?? 102.5}
+                onChange={(e) => updateField('tireRolloutIn', parseFloat(e.target.value))}
+              />
+              <select
+                style={{ ...styles.select, width: 'auto', padding: '0.375rem' }}
+                value={vehicle.tireRolloutMode ?? 'circumference'}
+                onChange={(e) => updateField('tireRolloutMode', e.target.value)}
+              >
+                <option value="circumference">Circ</option>
+                <option value="diameter">Dia</option>
+              </select>
+            </div>
+          </Field>
+          <Field 
+            label="Tire Width - inches"
+            worksheetButton={<WorksheetButton onClick={() => setShowTireWidthWorksheet(true)} tooltip={TOOLTIPS.btnTireWidth} />}
+          >
+            <input
+              type="number"
+              step="0.5"
+              style={styles.input}
+              value={vehicle.tireWidthIn ?? 17}
+              onChange={(e) => updateField('tireWidthIn', parseFloat(e.target.value))}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      {/* ===== ENGINE DYNO DATA (matches QUARTER Pro) ===== */}
+      <Section
+        title="Engine Dyno Data"
+        isOpen={sections.engineDyno}
+        onToggle={() => toggleSection('engineDyno')}
         action={
           selectedEngine ? (
             <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedEngine.name}</span>
@@ -888,46 +908,33 @@ export default function VehicleEditor({
             )}
           </div>
         )}
-      </Section>
-
-      {/* ===== DRIVETRAIN ===== */}
-      <Section
-        title="Drivetrain"
-        isOpen={sections.drivetrain}
-        onToggle={() => toggleSection('drivetrain')}
-      >
-        <div style={styles.grid}>
-          <Field label="Rear Gear" required hint="Final drive ratio">
-            <input
-              type="number"
-              step="0.01"
-              style={styles.input}
-              value={vehicle.rearGear ?? 3.73}
-              onChange={(e) => updateField('rearGear', parseFloat(e.target.value))}
-            />
-          </Field>
-          <Field label="# of Gears">
+        
+        {/* Gear Table (matches QUARTER Pro layout) */}
+        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>
+              Gear Table
+            </div>
             <select
-              style={styles.select}
+              style={{ ...styles.select, width: 'auto', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
               value={gearCount}
               onChange={(e) => {
                 const count = parseInt(e.target.value);
-                const ratios = vehicle.gearRatios ?? [2.5, 1.8, 1.4, 1.1, 1.0];
-                const effs = vehicle.gearEfficiencies ?? [0.97, 0.975, 0.98, 0.985, 0.99];
-                const shifts = vehicle.shiftRPMs ?? [7000, 7000, 7000, 7000];
+                const ratios = vehicle.gearRatios ?? [2.6, 1.9, 1.5, 1.2, 1.0];
+                const effs = vehicle.gearEfficiencies ?? [0.990, 0.991, 0.992, 0.993, 0.994];
+                const shifts = vehicle.shiftRPMs ?? [9400, 9400, 9400, 9400];
                 
-                // Resize arrays
                 const newRatios = [...ratios];
                 const newEffs = [...effs];
                 const newShifts = [...shifts];
                 
                 while (newRatios.length < count) newRatios.push(1.0);
-                while (newEffs.length < count) newEffs.push(0.99);
-                while (newShifts.length < count - 1) newShifts.push(7000);
+                while (newEffs.length < count) newEffs.push(0.994);
+                while (newShifts.length < count) newShifts.push(9400);
                 
                 newRatios.length = count;
                 newEffs.length = count;
-                newShifts.length = count - 1;
+                newShifts.length = count;
                 
                 onChange({
                   ...vehicle,
@@ -937,128 +944,71 @@ export default function VehicleEditor({
                 });
               }}
             >
-              {[2, 3, 4, 5, 6, 7].map(n => (
-                <option key={n} value={n}>{n} speed</option>
+              {[2, 3, 4, 5, 6].map(n => (
+                <option key={n} value={n}>{n} gears</option>
               ))}
             </select>
-          </Field>
-          {isPro && (
-            <Field label="Trans Efficiency" hint="Overall efficiency">
+          </div>
+          
+          {/* Table header */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '50px 1fr 1fr 1fr', 
+            gap: '0.25rem',
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            color: 'var(--color-muted)',
+            marginBottom: '0.25rem',
+            paddingBottom: '0.25rem',
+            borderBottom: '1px solid var(--color-border)',
+          }}>
+            <div>Gear</div>
+            <div>Ratio</div>
+            <div>Efficiency</div>
+            <div>Shift@</div>
+          </div>
+          
+          {/* Table rows */}
+          {Array.from({ length: gearCount }).map((_, i) => (
+            <div 
+              key={i} 
+              style={{ 
+                display: 'grid', 
+                gridTemplateColumns: '50px 1fr 1fr 1fr', 
+                gap: '0.25rem',
+                marginBottom: '0.25rem',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                {i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'} -
+              </div>
               <input
                 type="number"
-                step="0.01"
-                style={styles.input}
-                value={vehicle.transEfficiency ?? 0.97}
-                onChange={(e) => updateField('transEfficiency', parseFloat(e.target.value))}
+                step="0.001"
+                style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
+                value={vehicle.gearRatios?.[i] ?? ''}
+                onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))}
               />
-            </Field>
-          )}
-        </div>
-        
-        {/* Gear ratios */}
-        <div style={{ marginTop: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-muted)', marginBottom: '0.5rem' }}>
-            Gear Ratios
-            <WorksheetButton onClick={() => setShowGearRatioWorksheet(true)} tooltip={TOOLTIPS.btnGearRatio} />
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {Array.from({ length: gearCount }).map((_, i) => (
-              <div key={i} style={{ flex: '1 1 60px', minWidth: '60px', maxWidth: '80px' }}>
-                <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginBottom: '0.125rem' }}>
-                  {i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'}
-                </div>
-                <input
-                  type="number"
-                  step="0.01"
-                  style={{ ...styles.input, padding: '0.375rem' }}
-                  value={vehicle.gearRatios?.[i] ?? ''}
-                  onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Shift RPMs */}
-        <div style={{ marginTop: '0.75rem' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-muted)', marginBottom: '0.5rem' }}>
-            Shift RPMs
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {Array.from({ length: gearCount - 1 }).map((_, i) => (
-              <div key={i} style={{ flex: '1 1 60px', minWidth: '60px', maxWidth: '80px' }}>
-                <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginBottom: '0.125rem' }}>
-                  {i + 1}→{i + 2}
-                </div>
-                <input
-                  type="number"
-                  step="100"
-                  style={{ ...styles.input, padding: '0.375rem' }}
-                  value={vehicle.shiftRPMs?.[i] ?? 7000}
-                  onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Pro: Per-gear efficiencies */}
-        {isPro && (
-          <div style={{ marginTop: '0.75rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-muted)', marginBottom: '0.5rem' }}>
-              Per-Gear Efficiencies
+              <input
+                type="number"
+                step="0.001"
+                style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
+                value={vehicle.gearEfficiencies?.[i] ?? 0.990}
+                onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))}
+              />
+              <input
+                type="number"
+                step="100"
+                style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
+                value={vehicle.shiftRPMs?.[i] ?? 9400}
+                onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))}
+              />
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {Array.from({ length: gearCount }).map((_, i) => (
-                <div key={i} style={{ flex: '1 1 60px', minWidth: '60px', maxWidth: '80px' }}>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginBottom: '0.125rem' }}>
-                    Gear {i + 1}
-                  </div>
-                  <input
-                    type="number"
-                    step="0.005"
-                    style={{ ...styles.input, padding: '0.375rem' }}
-                    value={vehicle.gearEfficiencies?.[i] ?? 0.97}
-                    onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          ))}
+        </div>
       </Section>
 
-      {/* ===== TIRES ===== */}
-      <Section
-        title="Tires"
-        isOpen={sections.tires}
-        onToggle={() => toggleSection('tires')}
-      >
-        <div style={styles.grid}>
-          <Field label="Tire Diameter" required hint="inches">
-            <input
-              type="number"
-              step="0.5"
-              style={styles.input}
-              value={vehicle.tireDiaIn ?? 28}
-              onChange={(e) => updateField('tireDiaIn', parseFloat(e.target.value))}
-            />
-          </Field>
-          <Field 
-            label="Tire Width" 
-            hint="inches"
-            worksheetButton={<WorksheetButton onClick={() => setShowTireWidthWorksheet(true)} tooltip={TOOLTIPS.btnTireWidth} />}
-          >
-            <input
-              type="number"
-              step="0.5"
-              style={styles.input}
-              value={vehicle.tireWidthIn ?? 14}
-              onChange={(e) => updateField('tireWidthIn', parseFloat(e.target.value))}
-            />
-          </Field>
-        </div>
-      </Section>
 
       {/* ===== AERODYNAMICS (Pro) ===== */}
       <Section
@@ -1103,43 +1053,43 @@ export default function VehicleEditor({
         </div>
       </Section>
 
-      {/* ===== PMI (Pro) ===== */}
+      {/* ===== PMI (Pro) - matches QUARTER Pro ===== */}
       <Section
-        title="Polar Moments of Inertia"
+        title="Polar Moments of Inertia (in-lbs sec*sec)"
         isOpen={sections.pmi}
         onToggle={() => toggleSection('pmi')}
         isPro
         hasProAccess={isPro}
       >
         <div style={styles.grid}>
-          <Field label="Engine PMI" hint="lb·ft²">
+          <Field label="Engine + Flywheel + Clutch">
             <input
               type="number"
               step="0.01"
               style={styles.input}
               value={vehicle.enginePMI ?? ''}
               onChange={(e) => updateField('enginePMI', parseFloat(e.target.value))}
-              placeholder="0.85"
+              placeholder="3.42"
             />
           </Field>
-          <Field label="Trans PMI" hint="lb·ft²">
+          <Field label="Transmission + Driveshaft">
             <input
               type="number"
-              step="0.01"
+              step="0.001"
               style={styles.input}
               value={vehicle.transPMI ?? ''}
               onChange={(e) => updateField('transPMI', parseFloat(e.target.value))}
-              placeholder="0.15"
+              placeholder=".247"
             />
           </Field>
-          <Field label="Tires PMI" hint="lb·ft²">
+          <Field label="Tires + Wheels + Ring Gear">
             <input
               type="number"
               step="0.1"
               style={styles.input}
               value={vehicle.tiresPMI ?? ''}
               onChange={(e) => updateField('tiresPMI', parseFloat(e.target.value))}
-              placeholder="12"
+              placeholder="50.8"
             />
           </Field>
         </div>

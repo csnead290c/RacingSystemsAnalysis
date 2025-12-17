@@ -30,6 +30,7 @@ export const VehicleSchema = z.object({
   
   // Tires
   tireDiaIn: z.number(),                       // gc_TireDia
+  tireRolloutIn: z.number().optional(),        // Tire circumference (inches) - calculated or measured
   tireWidthIn: z.number().optional(),          // gc_TireWidth
   
   // Aerodynamics
@@ -37,11 +38,15 @@ export const VehicleSchema = z.object({
   cd: z.number().optional(),                   // gc_DragCoef
   liftCoeff: z.number().optional(),            // gc_LiftCoef
   
-  // Drivetrain
-  rearGear: z.number(),                        // gc_GearRatio (final drive)
-  transEfficiency: z.number().optional(),      // gc_Efficiency
+  // Final Drive (rear end)
+  rearGear: z.number(),                        // gc_GearRatio (final drive ratio)
+  finalDriveEfficiency: z.number().optional(), // Final drive efficiency (0.95-0.98 typical)
+  tireRolloutMode: z.enum(['circumference', 'diameter']).optional(), // How tire size is entered
+  
+  // Transmission
+  transEfficiency: z.number().optional(),      // gc_Efficiency (overall trans efficiency, legacy)
   gearRatios: z.array(z.number()).optional(),  // Transmission gear ratios
-  gearEfficiencies: z.array(z.number()).optional(), // Per-gear efficiencies
+  gearEfficiencies: z.array(z.number()).optional(), // Per-gear efficiencies (from QUARTER Pro table)
   shiftRPMs: z.array(z.number()).optional(),   // gc_ShiftRPM (shift by RPM)
   
   // Shift by Time (alternative to shift by RPM)
