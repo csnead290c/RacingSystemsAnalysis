@@ -943,6 +943,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     hpCurve: xrpm.map((rpm, i) => `${rpm}:${yhp[i]}`).join(', '),
     hpAtLaunch: TABY(xrpm, yhp, NHP, 1, launchRPM),
     hpAtStall: TABY(xrpm, yhp, NHP, 1, stallRPM),
+    slippage,
+    torqueMult,
+    isClutch,
+    weight: vehicle.weightLb,
+    tireDia: tireDiaIn,
+    tireWidth: tireWidthIn,
+    finalDrive,
+    gearRatios,
+    TGEff,
+    shiftRPMs: vb6Vehicle.ShiftRPM,
   });
   
   for (let step = 0; step < MAX_STEPS; step++) {
