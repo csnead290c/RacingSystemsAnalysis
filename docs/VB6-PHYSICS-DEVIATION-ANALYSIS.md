@@ -108,9 +108,142 @@ TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) *
 
 **Status:** TypeScript implementation matches VB6 exactly. Loss factors (0.88 clutch, 0.96 converter) are correct.
 
+### 3. TIRE SLIP FORMULAS ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/vb6SimulationStep.ts` lines 408-420
+
+**VB6 (TIMESLIP.FRM lines 1098-1101):**
+```vb
+Work = 0.005 * (gc_TractionIndex.Value - 1) + 3 * (TrackTempEffect - 1)
+TireSlip = 1.02 + Work * (1 - (Dist0 / 1320) ^ 2)
+```
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
+### 4. ENGINE() CURVE GENERATION ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/engineCurve.ts`
+
+**VB6 (TIMESLIP.FRM lines 1758-1828):**
+- 16-point synthetic HP curve from peak HP/RPM
+- DTABY 2D interpolation for torque ratio lookup
+- Special handling for supercharged nitro (fuel system 8)
+
+**Status:** TypeScript implementation matches VB6 exactly, including all lookup table values.
+
+### 5. CalcWork() FUEL MULTIPLIER ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/calcWork.ts`
+
+**VB6 (QTRPERF.BAS lines 256-265):**
+```vb
+Select Case gc_FuelSystem.Value
+    Case 1, 2:  CalcWork = 1
+    Case 3, 4:  CalcWork = 1.08
+    Case 5:     CalcWork = 5
+    Case 6:     CalcWork = 2 * 1
+    Case 7, 9:  CalcWork = 2.5 * 1.08
+    Case 8:     CalcWork = 1.5 * 5.5
+End Select
+```
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
+### 6. CONSTANTS ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/constants.ts`
+
+All constants match VB6 TIMESLIP.FRM lines 540-570:
+- `AX = 10.8` (traction coefficient)
+- `CMU = 0.025` (rolling resistance)
+- `CMUK = 0.01` (distance-dependent CMU reduction)
+- `AMin = 0.004` (minimum acceleration)
+- `JMin = -4`, `JMax = 2` (jerk limits)
+- `K6 = 0.92`, `K61 = 1.08` (HP ratio bounds)
+- `KP21 = 0.15`, `KP22 = 0.25` (PMI deceleration factors)
+- `FRCT = 1.03` (driveline friction)
+
+### 7. TIRE GROWTH CALCULATION ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/vb6SimulationStep.ts` lines 209-245
+
+**VB6 (TIMESLIP.FRM lines 1585-1606):**
+```vb
+TGK = (gc_TireWidth.Value ^ 1.4 + TireDia - 16) / (0.171 * TireDia ^ 1.7)
+TireGrowth = 1 + TGK * 0.0000135 * Vel(L) ^ 1.6
+TGLinear = 1 + TGK * 0.00035 * Vel(L)
+If TGLinear < TireGrowth Then TireGrowth = TGLinear
+TireSQ = TireGrowth - 0.035 * Abs(Ags0)
+TireCirFt = TireSQ * TireDia * PI / 12
+```
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
+### 8. AIR DENSITY / HPC CALCULATION ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/air.ts`
+
+**VB6 (QTRPERF.BAS lines 1290-1377):**
+- Saturation vapor pressure polynomial
+- Elevation correction
+- Fuel-specific HP correction factors
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
+### 9. WEIGHT TRANSFER & CRTF ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/vb6SimulationStep.ts` lines 590-616
+
+**VB6 (TIMESLIP.FRM lines 1196-1216):**
+```vb
+deltaFWT = (Ags0 * gc_Weight.Value * ((gc_YCG.Value - TireRadIn) + (FRCT / gc_Efficiency.Value) * TireRadIn) + DragForce * gc_YCG.Value) / gc_Wheelbase.Value
+DynamicFWT = gc_StaticFWt.Value - deltaFWT
+CRTF = CAXI * AX * TireDia * (gc_TireWidth.Value + 1) * (0.92 + 0.08 * (DynamicRWT / 1900) ^ 2.15)
+```
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
+### 10. ITERATION LOOP & CONVERGENCE ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/vb6SimulationStep.ts` lines 683-747
+
+**VB6 (TIMESLIP.FRM lines 1244-1276):**
+- 12-iteration maximum
+- Convergence check: `|100*(dtk2-dtk1)/dtk2| <= 0.01`
+- Jerk limits applied
+- AMax reflection formula: `AGS = AMAX - (AGS - AMAX)`
+- AMin proportional scaling (FIXED)
+
+**Status:** TypeScript implementation matches VB6 exactly after AMin fix.
+
+### 11. DRAG FORCE CALCULATION ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/vb6SimulationStep.ts` lines 552-588
+
+**VB6 (TIMESLIP.FRM lines 1180-1194):**
+```vb
+WindFPS = Sqr(Vel(L) ^ 2 + 2 * Vel(L) * (gc_WindSpeed.Value / Z5) * Cos(PI * gc_WindAngle.Value / 180) + (gc_WindSpeed.Value / Z5) ^ 2)
+q = Sgn(WindFPS) * rho * Abs(WindFPS) ^ 2 / (2 * gc)
+DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel(L)) + gc_DragCoef.Value * RefArea2 * q
+```
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
+### 12. DTShift HANDLING ✅ VERIFIED CORRECT
+
+**Location:** `src/domain/physics/vb6/vb6SimulationStep.ts` lines 339-351
+
+**VB6 (TIMESLIP.FRM lines 702-703, 722, 732):**
+- Clutch: DTShift = 0.2 seconds
+- Converter: DTShift = 0.25 seconds
+
+**Status:** TypeScript implementation matches VB6 exactly.
+
 ---
 
-### 3. TRANSMISSION HANDLING (1-SPEED/2-SPEED LOGIC) ⚠️ MEDIUM PRIORITY
+## Remaining Investigation Areas
+
+### 1. TRANSMISSION HANDLING (1-SPEED/2-SPEED LOGIC) ⚠️ NEEDS INVESTIGATION
 
 **Location:** `src/domain/physics/models/vb6Exact.ts` lines 491-493
 
@@ -135,7 +268,7 @@ const NGR = gearRatios.length;
 
 ---
 
-### 4. QUARTERJR vs QUARTERPRO MODE DETECTION
+### 2. QUARTERJR vs QUARTERPRO MODE DETECTION ⚠️ NEEDS INVESTIGATION
 
 **Location:** `src/domain/physics/models/vb6Exact.ts` lines 486-594
 
