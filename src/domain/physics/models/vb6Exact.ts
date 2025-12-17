@@ -950,6 +950,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     gearRatios,
     TGEff,
     shiftRPMs: vb6Vehicle.ShiftRPM,
+    // Launch calculation debug
+    tireSlipAtLaunch,
+    trackTempEffect: trackTempEffect_early,
+    tractionIndex: tractionIndex_early,
+    Ags0,
+    HP_launch: HP_corrected,
+    TQ_launch: 5252 * HP_corrected / launchRPM * torqueMult * gearRatios[0] * TGEff[0],
+    force_launch: force,
   }, null, 2));
   
   for (let step = 0; step < MAX_STEPS; step++) {
