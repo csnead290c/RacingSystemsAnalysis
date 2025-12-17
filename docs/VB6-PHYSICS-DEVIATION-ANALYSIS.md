@@ -51,6 +51,51 @@ if (AGS_g < AMin) {
 
 **Impact:** This affects low-acceleration scenarios (near terminal velocity, high drag situations).
 
+### Fix #2: Stall RPM Calculation from Lambda/Stall Index (FIXED Dec 17, 2024)
+
+**File:** `src/domain/physics/vb6/quarterJr.ts` lines 172-224
+
+**Problem:** When `slipStallRPM <= 220` (lambda/stall index input mode), VB6 calculates the actual stall RPM by finding where the torque curve intersects the converter's absorption curve. Our implementation was setting `stallRPM = 0` and not calculating it.
+
+**VB6 (TIMESLIP.FRM lines 920-946):**
+```vb
+If gc_SlipStallRPM.Value > 220 Then
+    Stall = gc_SlipStallRPM.Value
+Else
+    Stall = 0
+    atf = 1 / (1000 * gc_SlipStallRPM.Value)
+    For k = 2 To NHP
+        k1 = k - 1
+        B = gc_HPTQMult.Value * (ztq(k) - ztq(k1)) / (hpc * (xrpm(k) - xrpm(k1)))
+        c = gc_HPTQMult.Value * ztq(k) / hpc - xrpm(k) * B
+        z = B ^ 2 + 4 * atf * c
+        ' ... find roots and set Stall
+    Next
+End If
+```
+
+**New TypeScript (CORRECT):**
+```typescript
+export function calcStallRPMFromIndex(
+  xrpm: number[], ztq: number[], NHP: number,
+  stallIndex: number, hpTqMult: number, hpc: number
+): number {
+  const atf = 1 / (1000 * stallIndex);
+  let stall = 0;
+  
+  for (let k = 1; k < NHP; k++) {
+    const k1 = k - 1;
+    const B = hpTqMult * (ztq[k] - ztq[k1]) / (hpc * (xrpm[k] - xrpm[k1]));
+    const c = hpTqMult * ztq[k] / hpc - xrpm[k] * B;
+    const z = B * B + 4 * atf * c;
+    // ... find roots and set stall
+  }
+  return stall;
+}
+```
+
+**Impact:** This affects converter vehicles using stall index input (values 1-220) instead of direct RPM input.
+
 ---
 
 ## Verified Code Sections (MATCH VB6)
