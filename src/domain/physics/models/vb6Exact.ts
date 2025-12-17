@@ -958,6 +958,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     if (currentTrackDist >= raceLengthFt + 50) break; // Stop shortly after finish line
     if (state.time_s >= MAX_TIME_S) break;
     
+    // Debug: Log first 10 steps to compare with VB6
+    if (step < 10) {
+      console.log(`[vb6Exact] Step ${step}: t=${state.time_s.toFixed(4)}, d=${state.Dist_ft.toFixed(3)}, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, a=${state.AGS_g.toFixed(3)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
+    }
+    
     // Debug: Check for NaN before step
     if (!Number.isFinite(state.Vel_ftps) || !Number.isFinite(state.Dist_ft) || !Number.isFinite(state.AGS_g)) {
       warnings.push(`NaN detected at step ${step}: Vel=${state.Vel_ftps}, Dist=${state.Dist_ft}, AGS=${state.AGS_g}`);
