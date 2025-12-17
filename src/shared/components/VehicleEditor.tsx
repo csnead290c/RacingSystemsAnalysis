@@ -9,11 +9,19 @@
  * - Responsive layout
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Vehicle } from '../../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../../domain/config/raceLengths';
 import { useSubscription } from '../../domain/config/useSubscription';
 import { isFieldSuperseded } from '../../domain/schemas/components.schema';
+// Types imported for documentation - actual types inferred from storage functions
+import { 
+  loadSavedEngines, 
+  loadSavedClutches,
+  getSavedEngine,
+  getSavedClutch,
+  getSavedConverter,
+} from '../../state/components';
 import { 
   WorksheetButton, 
   FrontalAreaWorksheet, 
@@ -342,6 +350,24 @@ export default function VehicleEditor({
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
   
+  // Load saved components
+  const savedEngines = useMemo(() => loadSavedEngines(), []);
+  const savedClutches = useMemo(() => loadSavedClutches(), []);
+  
+  // Get currently selected components
+  const selectedEngine = useMemo(() => 
+    vehicle.engineRef ? getSavedEngine(vehicle.engineRef) : undefined,
+    [vehicle.engineRef]
+  );
+  const selectedClutch = useMemo(() => 
+    vehicle.clutchRef ? getSavedClutch(vehicle.clutchRef) : undefined,
+    [vehicle.clutchRef]
+  );
+  const selectedConverter = useMemo(() => 
+    vehicle.converterRef ? getSavedConverter(vehicle.converterRef) : undefined,
+    [vehicle.converterRef]
+  );
+  
   // Save section state to localStorage
   useEffect(() => {
     localStorage.setItem('vehicleEditorSections', JSON.stringify(sections));
@@ -504,24 +530,73 @@ export default function VehicleEditor({
         isOpen={sections.engine}
         onToggle={() => toggleSection('engine')}
         action={
-          vehicle.engineRef ? (
-            <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>Using saved engine</span>
+          selectedEngine ? (
+            <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedEngine.name}</span>
           ) : null
         }
       >
-        {/* Component selector placeholder - future feature */}
-        {/* <div style={styles.componentSelector}>
-          <div style={styles.radioGroup}>
-            <label style={styles.radioLabel}>
-              <input type="radio" name="engineSource" value="manual" checked={!vehicle.engineRef} />
-              Manual Entry
-            </label>
-            <label style={styles.radioLabel}>
-              <input type="radio" name="engineSource" value="saved" checked={!!vehicle.engineRef} />
-              Use Saved Engine
-            </label>
+        {/* Component selector */}
+        {savedEngines.length > 0 && (
+          <div style={styles.componentSelector}>
+            <div style={{ flex: 1 }}>
+              <select
+                style={{ ...styles.select, width: '100%' }}
+                value={vehicle.engineRef ?? ''}
+                onChange={(e) => {
+                  const engineId = e.target.value || undefined;
+                  updateField('engineRef', engineId);
+                  // If selecting an engine, copy its data to vehicle
+                  if (engineId) {
+                    const engine = getSavedEngine(engineId);
+                    if (engine) {
+                      onChange({
+                        ...vehicle,
+                        engineRef: engineId,
+                        powerHP: engine.peakHP,
+                        rpmAtPeakHP: engine.rpmAtPeakHP,
+                        hpCurve: engine.hpCurve,
+                        displacementCID: engine.displacement,
+                      });
+                    }
+                  }
+                }}
+              >
+                <option value="">Manual Entry</option>
+                {savedEngines.map(eng => (
+                  <option key={eng.id} value={eng.id}>
+                    {eng.name} ({Math.round(eng.peakHP)} HP)
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedEngine && (
+              <button
+                style={{ ...styles.input, width: 'auto', padding: '0.375rem 0.5rem', cursor: 'pointer' }}
+                onClick={() => updateField('engineRef', undefined)}
+                title="Clear selection"
+              >
+                ✕
+              </button>
+            )}
           </div>
-        </div> */}
+        )}
+        
+        {/* Show selected engine summary */}
+        {selectedEngine && (
+          <div style={{ 
+            padding: '0.5rem', 
+            backgroundColor: 'rgba(34, 197, 94, 0.1)', 
+            borderRadius: 'var(--radius-sm)',
+            marginBottom: '0.75rem',
+            fontSize: '0.8rem',
+          }}>
+            <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>{selectedEngine.name}</div>
+            <div style={{ color: 'var(--color-muted)' }}>
+              {Math.round(selectedEngine.peakHP)} HP @ {selectedEngine.rpmAtPeakHP} RPM
+              {selectedEngine.hpCurve && ` • ${selectedEngine.hpCurve.length} point curve`}
+            </div>
+          </div>
+        )}
         
         <div style={styles.grid}>
           <Field label="Fuel Type">
@@ -623,6 +698,13 @@ export default function VehicleEditor({
         title="Transmission"
         isOpen={sections.transmission}
         onToggle={() => toggleSection('transmission')}
+        action={
+          transType === 'clutch' && selectedClutch ? (
+            <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedClutch.name}</span>
+          ) : transType === 'converter' && selectedConverter ? (
+            <span style={{ fontSize: '0.7rem', color: '#22c55e' }}>✓ {selectedConverter.name}</span>
+          ) : null
+        }
       >
         {/* Trans type selector */}
         <div style={{ marginBottom: '1rem' }}>
@@ -651,7 +733,70 @@ export default function VehicleEditor({
         </div>
         
         {transType === 'clutch' ? (
-          <div style={styles.grid}>
+          <>
+            {/* Clutch component selector */}
+            {savedClutches.length > 0 && (
+              <div style={{ ...styles.componentSelector, marginBottom: '0.75rem' }}>
+                <div style={{ flex: 1 }}>
+                  <select
+                    style={{ ...styles.select, width: '100%' }}
+                    value={vehicle.clutchRef ?? ''}
+                    onChange={(e) => {
+                      const clutchId = e.target.value || undefined;
+                      if (clutchId) {
+                        const clutch = getSavedClutch(clutchId);
+                        if (clutch) {
+                          onChange({
+                            ...vehicle,
+                            clutchRef: clutchId,
+                            clutchLaunchRPM: clutch.launchRPM,
+                            clutchSlipRPM: clutch.slipRPM,
+                            clutchSlippage: clutch.slippage,
+                            clutchLockup: clutch.lockup,
+                          });
+                        }
+                      } else {
+                        updateField('clutchRef', undefined);
+                      }
+                    }}
+                  >
+                    <option value="">Manual Entry</option>
+                    {savedClutches.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.launchRPM} RPM)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedClutch && (
+                  <button
+                    style={{ ...styles.input, width: 'auto', padding: '0.375rem 0.5rem', cursor: 'pointer' }}
+                    onClick={() => updateField('clutchRef', undefined)}
+                    title="Clear selection"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {/* Show selected clutch summary */}
+            {selectedClutch && (
+              <div style={{ 
+                padding: '0.5rem', 
+                backgroundColor: 'rgba(34, 197, 94, 0.1)', 
+                borderRadius: 'var(--radius-sm)',
+                marginBottom: '0.75rem',
+                fontSize: '0.8rem',
+              }}>
+                <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>{selectedClutch.name}</div>
+                <div style={{ color: 'var(--color-muted)' }}>
+                  Launch: {selectedClutch.launchRPM} RPM • Slip: {selectedClutch.slipRPM} RPM
+                </div>
+              </div>
+            )}
+            
+            <div style={styles.grid}>
             <Field label="Launch RPM" required hint="Clutch drop RPM">
               <input
                 type="number"
@@ -689,7 +834,8 @@ export default function VehicleEditor({
                 Clutch locks up
               </label>
             </Field>
-          </div>
+            </div>
+          </>
         ) : (
           <div style={styles.grid}>
             <Field label="Stall RPM" required hint="Converter stall speed">
