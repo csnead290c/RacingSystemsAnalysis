@@ -1172,7 +1172,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       launchRPM: vb6Vehicle.LaunchRPM,
       ycg: YCG_in,
       staticFWt: staticFWt,
-      ags0: Ags0,
+      ags0: state.AGS_g,  // Use actual clamped value from simulation state
+      ags0Unclamped: Ags0,  // Keep unclamped for reference
       tireSlipAtLaunch: tireSlipAtLaunch,
       rolloutTime_s: timerStartTime_s ?? 0,
       rolloutIn,
