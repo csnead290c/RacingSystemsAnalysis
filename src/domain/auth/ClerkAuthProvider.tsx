@@ -52,12 +52,37 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
   const [dbProducts, setDbProducts] = useState<string[]>([]);
   const [dbSubscription, setDbSubscription] = useState<{ plan: string | null; status: string }>({ plan: null, status: 'none' });
   
-  // Fetch subscription from database API
+  // Sync Clerk user to database and fetch subscription
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded || !isSignedIn || !user) return;
     
-    const fetchDbSubscription = async () => {
+    const syncAndFetchSubscription = async () => {
       try {
+        // First, get the Clerk token
+        const token = await getToken();
+        if (!token) {
+          console.error('No Clerk token available');
+          return;
+        }
+        
+        // Sync user to database
+        const syncResponse = await fetch('/api/auth.php?action=sync-clerk-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: user.fullName || user.firstName || 'User',
+          }),
+        });
+        
+        if (syncResponse.ok) {
+          const syncData = await syncResponse.json();
+          console.log('Clerk user synced to database:', syncData);
+        }
+        
+        // Then fetch subscription status
         const status = await getSubscriptionStatus();
         setDbProducts(status.products || []);
         setDbSubscription({ plan: status.plan, status: status.status });
@@ -73,12 +98,12 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
           }));
         }
       } catch (err) {
-        console.error('Failed to fetch subscription from DB:', err);
+        console.error('Failed to sync/fetch subscription from DB:', err);
       }
     };
     
-    fetchDbSubscription();
-  }, [isLoaded, isSignedIn]);
+    syncAndFetchSubscription();
+  }, [isLoaded, isSignedIn, user, getToken]);
   
   useEffect(() => {
     if (!isLoaded) return;

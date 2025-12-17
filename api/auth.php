@@ -28,6 +28,9 @@ switch ($action) {
     case 'preferences':
         handlePreferences($pdo);
         break;
+    case 'sync-clerk-user':
+        handleSyncClerkUser($pdo);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -196,4 +199,102 @@ function handlePreferences($pdo) {
     } else {
         rsa_jsonResponse(['error' => 'Method not allowed'], 405);
     }
+}
+
+/**
+ * Sync Clerk user to database
+ * Creates or updates user record when a Clerk user signs in
+ */
+function handleSyncClerkUser($pdo) {
+    $auth = rsa_requireAuth();
+    
+    // Extract Clerk user ID from auth
+    $userId = $auth['user_id'];
+    $email = $auth['email'] ?? '';
+    $clerkUserId = $auth['clerk_user_id'] ?? null;
+    
+    // Only process Clerk users
+    if (!$clerkUserId && strpos($userId, 'clerk_') !== 0) {
+        rsa_jsonResponse(['error' => 'Not a Clerk user'], 400);
+    }
+    
+    $clerkId = $clerkUserId ?: str_replace('clerk_', '', $userId);
+    
+    // Get additional info from request body
+    $input = rsa_getJsonInput();
+    $name = $input['name'] ?? explode('@', $email)[0] ?? 'User';
+    
+    // Try to find existing user by clerk_user_id
+    $stmt = $pdo->prepare("SELECT id, email, name, role, products, subscription_plan, subscription_status FROM users WHERE clerk_user_id = ?");
+    $stmt->execute([$clerkId]);
+    $user = $stmt->fetch();
+    
+    if ($user) {
+        // User exists, return their info
+        rsa_jsonResponse([
+            'success' => true,
+            'user' => [
+                'id' => $user['id'],
+                'email' => $user['email'],
+                'name' => $user['name'],
+                'role' => $user['role'],
+                'products' => json_decode($user['products'] ?? '[]', true),
+                'subscription_plan' => $user['subscription_plan'],
+                'subscription_status' => $user['subscription_status'],
+            ],
+            'created' => false,
+        ]);
+        return;
+    }
+    
+    // Try to find by email
+    if ($email) {
+        $stmt = $pdo->prepare("SELECT id, email, name, role, products, subscription_plan, subscription_status FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+        
+        if ($user) {
+            // Update with clerk_user_id
+            $stmt = $pdo->prepare("UPDATE users SET clerk_user_id = ? WHERE id = ?");
+            $stmt->execute([$clerkId, $user['id']]);
+            
+            rsa_jsonResponse([
+                'success' => true,
+                'user' => [
+                    'id' => $user['id'],
+                    'email' => $user['email'],
+                    'name' => $user['name'],
+                    'role' => $user['role'],
+                    'products' => json_decode($user['products'] ?? '[]', true),
+                    'subscription_plan' => $user['subscription_plan'],
+                    'subscription_status' => $user['subscription_status'],
+                ],
+                'created' => false,
+            ]);
+            return;
+        }
+    }
+    
+    // Create new user
+    $stmt = $pdo->prepare("
+        INSERT INTO users (email, password_hash, name, role, clerk_user_id, products)
+        VALUES (?, '', ?, 'user', ?, '[]')
+    ");
+    $stmt->execute([$email, $name, $clerkId]);
+    
+    $newId = $pdo->lastInsertId();
+    
+    rsa_jsonResponse([
+        'success' => true,
+        'user' => [
+            'id' => $newId,
+            'email' => $email,
+            'name' => $name,
+            'role' => 'user',
+            'products' => [],
+            'subscription_plan' => null,
+            'subscription_status' => null,
+        ],
+        'created' => true,
+    ], 201);
 }
