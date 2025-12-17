@@ -69,22 +69,6 @@ function Calculators() {
     borderRadius: 'var(--radius-sm)',
   };
 
-  const resultStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '8px 0',
-    borderBottom: '1px solid var(--color-border)',
-    fontSize: '0.9rem',
-  };
-
-  const bigResultStyle: React.CSSProperties = {
-    fontSize: '2rem',
-    fontWeight: '700',
-    color: 'var(--color-primary)',
-    textAlign: 'center',
-    padding: 'var(--space-3)',
-  };
-
   const sectionTitleStyle: React.CSSProperties = {
     fontSize: '0.9rem',
     fontWeight: '600',
@@ -95,11 +79,8 @@ function Calculators() {
 
   return (
     <Page title="Calculators">
-      {/* Header */}
+      {/* Tab buttons - responsive */}
       <div style={{ marginBottom: 'var(--space-4)' }}>
-        <h1 style={{ margin: '0 0 var(--space-2)', fontSize: '1.5rem' }}>RSA Calculators</h1>
-        
-        {/* Tab buttons - responsive */}
         <div style={{ 
           display: 'flex', 
           gap: 'var(--space-2)', 
@@ -135,10 +116,6 @@ function Calculators() {
       {/* WEATHER CALCULATOR */}
       {activeTab === 'weather' && (
         <div className="card" style={cardStyle}>
-          <h2 style={{ margin: '0 0 var(--space-3)', fontSize: '1.2rem' }}>Weather Calculator</h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-            Calculate density altitude and HP correction factor from atmospheric conditions.
-          </p>
 
           {/* Pressure Input */}
           <div style={sectionTitleStyle}>Pressure</div>
@@ -231,26 +208,19 @@ function Calculators() {
 
           {/* Results */}
           <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-3)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-            <div style={sectionTitleStyle}>Results</div>
-            <div style={bigResultStyle}>
-              {weatherResult.densityAltitude.toLocaleString()} ft
-              <div style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--color-muted)' }}>Density Altitude</div>
-            </div>
-            <div style={resultStyle}>
-              <span>HP Correction Factor</span>
-              <span style={{ fontWeight: '600' }}>{weatherResult.hpCorrectionFactor.toFixed(3)}</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Density Index (ADI)</span>
-              <span style={{ fontWeight: '600' }}>{weatherResult.densityIndex.toFixed(1)}%</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Ambient Pressure</span>
-              <span>{weatherResult.ambientPressure.toFixed(3)} psi</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Vapor Pressure</span>
-              <span>{weatherResult.vaporPressure.toFixed(4)} psi</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+              <div style={{ textAlign: 'center', padding: 'var(--space-3)', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                  {weatherResult.densityAltitude.toLocaleString()} ft
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>Density Altitude</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: 'var(--space-3)', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                  {weatherResult.hpCorrectionFactor.toFixed(3)}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>HP Correction Factor</div>
+              </div>
             </div>
           </div>
         </div>
@@ -259,10 +229,6 @@ function Calculators() {
       {/* CONVERTER SLIP CALCULATOR */}
       {activeTab === 'converter' && (
         <div className="card" style={cardStyle}>
-          <h2 style={{ margin: '0 0 var(--space-3)', fontSize: '1.2rem' }}>Converter Slip Calculator</h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-            Calculate torque converter slip percentage from trap speed data.
-          </p>
 
           <div style={sectionTitleStyle}>Vehicle Data</div>
           <div style={inputRowStyle}>
@@ -318,24 +284,13 @@ function Calculators() {
 
           {/* Results */}
           <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-3)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-            <div style={sectionTitleStyle}>Results</div>
-            <div style={bigResultStyle}>
-              {convResult.converterSlip > 0 ? '+' : ''}{convResult.converterSlip.toFixed(1)}%
-              <div style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--color-muted)' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--space-3)', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                {convResult.converterSlip > 0 ? '+' : ''}{convResult.converterSlip.toFixed(1)}%
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>
                 Converter Slip {convResult.converterSlip > 0 ? '(slipping)' : '(locked)'}
               </div>
-            </div>
-            <div style={resultStyle}>
-              <span>Ideal MPH (no slip)</span>
-              <span style={{ fontWeight: '600' }}>{convResult.idealMph.toFixed(1)} MPH</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Tire Circumference</span>
-              <span>{convResult.tireCircumference.toFixed(2)} ft</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Tire Growth Factor</span>
-              <span>{convResult.tireGrowth.toFixed(3)}</span>
             </div>
           </div>
         </div>
@@ -344,11 +299,6 @@ function Calculators() {
       {/* DRAG DYNO CALCULATOR */}
       {activeTab === 'dragdyno' && (
         <div className="card" style={cardStyle}>
-          <h2 style={{ margin: '0 0 var(--space-3)', fontSize: '1.2rem' }}>Drag Dyno Calculator</h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: 'var(--space-3)' }}>
-            Quick ET and MPH estimator from HP and weight. Uses RSA empirical equations (1978-2000).
-          </p>
-
           <div style={sectionTitleStyle}>Vehicle</div>
           <div style={inputRowStyle}>
             <div style={inputGroupStyle}>
@@ -444,19 +394,6 @@ function Calculators() {
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>1/4 Mile MPH</div>
               </div>
-            </div>
-
-            <div style={resultStyle}>
-              <span>Effective HP/Weight</span>
-              <span>{dynoResult.hpPerWeight.toFixed(4)}</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Trans Efficiency</span>
-              <span>{(dynoResult.transmissionEfficiency * 100).toFixed(0)}%</span>
-            </div>
-            <div style={resultStyle}>
-              <span>Race Efficiency</span>
-              <span>{(dynoResult.raceEfficiency * 100).toFixed(0)}%</span>
             </div>
           </div>
         </div>
