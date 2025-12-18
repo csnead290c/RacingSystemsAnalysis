@@ -986,15 +986,23 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       break;
     }
     
-    // Update nextDistPrint if we've passed the current target
-    // VB6: TIMESLIP.FRM:1131-1136 - Distance targeting
-    while (distPrintIdx < distPrintPoints.length - 1 && state.Dist_ft >= distPrintPoints[distPrintIdx]) {
-      distPrintIdx++;
-    }
+    // Set nextDistPrint for this step (VB6: iDist tracks current target)
     vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
+    
+    // VB6: TIMESLIP.FRM:1373-1418 - Advance iDist AFTER hitting distance target
+    // VB6 condition: (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol)
+    // DistStep = Abs(DistToPrint(iDist) - Dist(L))
+    const DistStep = Math.abs(distPrintPoints[distPrintIdx] - state.Dist_ft);
+    const DistTol = 0.1;
+    const TimeTol = 0.002;
+    if (distPrintIdx < distPrintPoints.length - 1 && 
+        DistStep < DistTol && 
+        (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true)) {
+      distPrintIdx++;
+    }
     
     // Track convergence
     convergenceHistory.iterations.push(stepResult.iterations);
