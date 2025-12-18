@@ -406,11 +406,7 @@ export function vb6SimulationStep(
   
   if (!gearChanged) {
     // Only apply timestep limits when NOT in a gear change (ShiftFlag < 2)
-    // TIMESLIP.FRM:1111-1120 - Limit timestep
-    
-    // TIMESLIP.FRM:1120 - Absolute max timestep
-    // VB6: If TimeStep > 0.05 Then TimeStep = 0.05
-    if (TimeStep > 0.05) TimeStep = 0.05;
+    // TIMESLIP.FRM:1111-1120 - Limit timestep (in VB6 ORDER)
     
     // TIMESLIP.FRM:1116-1119 - Don't let TimeStep exceed 4.5 steps to distance print
     // VB6: If iDist > 1 Then  <-- ONLY applies AFTER rollout (iDist=1)
@@ -425,6 +421,10 @@ export function vb6SimulationStep(
         if (TimeStep > Work_dist) TimeStep = Work_dist;
       }
     }
+    
+    // TIMESLIP.FRM:1120 - Absolute max timestep (LAST in VB6 order)
+    // VB6: If TimeStep > 0.05 Then TimeStep = 0.05
+    if (TimeStep > 0.05) TimeStep = 0.05;
     
     // TIMESLIP.FRM:1122 - Recalculate velocity with limited timestep
     // VB6: Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
