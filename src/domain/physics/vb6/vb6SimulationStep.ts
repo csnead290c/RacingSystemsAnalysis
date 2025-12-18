@@ -280,42 +280,8 @@ export interface ThrottleStopParams {
   rampTime_s?: number;       // Time to ramp (default: instant)
 }
 
-/**
- * Calculate throttle stop HP multiplier based on current time.
- * Returns 1.0 for full power, or reduced value when stop is active.
- */
-function calcThrottleStopMultiplier(
-  currentTime_s: number,
-  throttleStop?: ThrottleStopParams
-): number {
-  if (!throttleStop?.enabled) return 1.0;
-  
-  const { activateTime_s, duration_s, throttlePct, rampTime_s = 0 } = throttleStop;
-  const deactivateTime_s = activateTime_s + duration_s;
-  
-  // Before activation - full power
-  if (currentTime_s < activateTime_s) return 1.0;
-  
-  // After deactivation - full power
-  if (currentTime_s >= deactivateTime_s) return 1.0;
-  
-  // During activation - reduced power
-  const targetMult = throttlePct / 100;
-  
-  // Handle ramp-in
-  if (rampTime_s > 0 && currentTime_s < activateTime_s + rampTime_s) {
-    const rampProgress = (currentTime_s - activateTime_s) / rampTime_s;
-    return 1.0 - (1.0 - targetMult) * rampProgress;
-  }
-  
-  // Handle ramp-out
-  if (rampTime_s > 0 && currentTime_s > deactivateTime_s - rampTime_s) {
-    const rampProgress = (deactivateTime_s - currentTime_s) / rampTime_s;
-    return 1.0 - (1.0 - targetMult) * rampProgress;
-  }
-  
-  return targetMult;
-}
+// NOTE: Throttle stop functionality removed from VB6-exact mode to match original VB6 code.
+// The ThrottleStopParams interface is kept for API compatibility but not used in physics.
 
 /**
  * Execute one VB6 simulation step with full iteration loop.
@@ -334,7 +300,7 @@ export function vb6SimulationStep(
   vehicle: VB6VehicleParams,
   env: VB6EnvParams,
   TSMax: number,
-  throttleStop?: ThrottleStopParams
+  _throttleStop?: ThrottleStopParams  // RSA extension - not used in VB6-exact mode
 ): VB6StepComputed {
   const iGear = state.Gear;
   
@@ -562,23 +528,13 @@ export function vb6SimulationStep(
   
   // ========================================================================
   // TIMESLIP.FRM:1176-1178 - Get HP from curve
+  // VB6: Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+  //      HP = gc_HPTQMult.Value * HP / hpc
+  //      HPSave = HP:    HP = HP * ClutchSlip
   // ========================================================================
   let HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
   HP = vehicle.HPTQMult * HP / env.hpc;
-  
-  // Rev limiter - cut power above the limit RPM
-  // This simulates a high-side rev limiter that cuts fuel/spark
-  if (vehicle.RevLimiterRPM > 0 && EngRPM_L >= vehicle.RevLimiterRPM) {
-    // Hard cut - reduce HP to near zero (simulates fuel/spark cut)
-    HP = HP * 0.05; // 5% power at limiter (enough to maintain RPM, not accelerate)
-  }
-  
-  // Apply throttle stop if configured (bracket racing feature)
-  // This reduces HP during the specified time window
-  const throttleStopMult = calcThrottleStopMultiplier(state.time_s, throttleStop);
-  HP = HP * throttleStopMult;
-  
-  const HPSave = HP;
+  const HPSave = HP;  // VB6: HPSave = HP (BEFORE ClutchSlip, BEFORE any RSA additions)
   HP = HP * ClutchSlip;
   
   // ========================================================================
