@@ -139,6 +139,7 @@ export interface VB6EnvParams {
   prevDistPrint?: number;   // Previous distance print point (ft) for VB6 timestep limiting
   TimePrintInc?: number;    // VB6 TIMESLIP.FRM:902-918 - Time print increment
   TimePrint?: number;       // VB6 TIMESLIP.FRM:918 - Next time print point
+  iDist?: number;           // VB6 iDist - current distance print index (1-based like VB6)
 }
 
 /**
@@ -434,9 +435,10 @@ export function vb6SimulationStep(
     // VB6: If iDist > 1 Then
     //        Work = ((DistToPrint(iDist) - DistToPrint(iDist - 1)) / Vel0) / 4.5
     //        If TimeStep > Work Then TimeStep = Work
-    // CRITICAL: VB6 uses SPAN between consecutive targets, NOT remaining distance!
-    if (env.nextDistPrint !== undefined && env.prevDistPrint !== undefined && 
-        state.Vel0_ftps > 0 && state.Dist0_ft > 1) {
+    // CRITICAL: VB6 condition is iDist > 1 (past rollout), NOT distance > 1ft
+    if (env.iDist !== undefined && env.iDist > 1 &&
+        env.nextDistPrint !== undefined && env.prevDistPrint !== undefined && 
+        state.Vel0_ftps > 0) {
       const distSpan = env.nextDistPrint - env.prevDistPrint;
       if (distSpan > 0) {
         const Work_dist = (distSpan / state.Vel0_ftps) / 4.5;

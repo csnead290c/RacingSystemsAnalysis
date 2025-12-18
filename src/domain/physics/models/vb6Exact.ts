@@ -996,19 +996,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       break;
     }
     
-    // Set nextDistPrint and prevDistPrint for this step (VB6: iDist tracks current target)
+    // Set nextDistPrint, prevDistPrint, and iDist for this step (VB6: iDist tracks current target)
+    // VB6 iDist is 1-based, so iDist = distPrintIdx + 1
     vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
     vb6Env.prevDistPrint = distPrintIdx > 0 ? distPrintPoints[distPrintIdx - 1] : 0;
+    vb6Env.iDist = distPrintIdx + 1;  // Convert 0-based to 1-based like VB6
     vb6Env.TimePrint = TimePrint;
-    
-    // VB6 TIMESLIP.FRM:1421-1422 - Check for time print update
-    // If (Abs(TimePrint - time(L)) < TimeTol) Or (ShiftFlag = 2 And time(L) >= TimePrint) Then
-    //     TimePrint = TimePrint + TimePrintInc
-    const TimeTolForPrint = 0.002;
-    if (Math.abs(TimePrint - state.time_s) < TimeTolForPrint || 
-        (state.ShiftFlag === 2 && state.time_s >= TimePrint)) {
-      TimePrint = TimePrint + TimePrintInc;
-    }
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
     // Track previous state for interpolation when shift fallback occurs
@@ -1319,6 +1312,15 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     } else if (state.ShiftFlag === 2) {
       // Shift complete, reset flag
       state.ShiftFlag = 0;
+    }
+    
+    // VB6 TIMESLIP.FRM:1421-1422 - Check for time print update (AFTER step completes)
+    // If (Abs(TimePrint - time(L)) < TimeTol) Or (ShiftFlag = 2 And time(L) >= TimePrint) Then
+    //     TimePrint = TimePrint + TimePrintInc
+    const TimeTolForPrint = 0.002;
+    if (Math.abs(TimePrint - state.time_s) < TimeTolForPrint || 
+        (state.ShiftFlag === 2 && state.time_s >= TimePrint)) {
+      TimePrint = TimePrint + TimePrintInc;
     }
   }
   
