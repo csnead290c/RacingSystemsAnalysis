@@ -449,9 +449,9 @@ export function vb6SimulationStep(
     const DistTol = 0.1;
     const DistStep_est = state.Dist0_ft + state.Vel0_ftps * TimeStep + state.Ags0_g * gc * TimeStep * TimeStep / 2;
     
-    // Debug: Log distance targeting check for steps near rollout
-    if (env.nextDistPrint !== undefined && env.nextDistPrint <= 2 && state.L >= 15 && state.L <= 25) {
-      console.log(`[vb6Step] L=${state.L} DistCheck: Dist0=${state.Dist0_ft.toFixed(4)}, DistStep_est=${DistStep_est.toFixed(4)}, target=${env.nextDistPrint.toFixed(1)}, threshold=${(env.nextDistPrint - DistTol).toFixed(2)}, triggered=${DistStep_est >= (env.nextDistPrint - DistTol)}`);
+    // Debug: Log distance targeting for 330ft (target ~330 when Dist0 is 280-340)
+    if (env.nextDistPrint !== undefined && env.nextDistPrint > 300 && env.nextDistPrint < 350 && state.Dist0_ft > 280 && state.Dist0_ft < 340) {
+      console.log(`[vb6Step] L=${state.L} 330ft CHECK: Dist0=${state.Dist0_ft.toFixed(2)}, DistStep_est=${DistStep_est.toFixed(2)}, target=${env.nextDistPrint.toFixed(1)}, threshold=${(env.nextDistPrint - DistTol).toFixed(2)}, triggered=${DistStep_est >= (env.nextDistPrint - DistTol)}, TimeStep=${TimeStep.toFixed(5)}`);
     }
     
     if (env.nextDistPrint !== undefined && DistStep_est >= (env.nextDistPrint - DistTol)) {
@@ -461,8 +461,9 @@ export function vb6SimulationStep(
         // VB6 unconditionally sets velocity - no sanity check
         const Vel_L_old = Vel_L;
         Vel_L = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
-        if (env.nextDistPrint <= 2) {
-          console.log(`[vb6Step] L=${state.L} DistTarget: Vel0=${state.Vel0_ftps.toFixed(3)}, Ags0=${state.Ags0_g.toFixed(4)}, distToTarget=${distToTarget.toFixed(4)}, Vel_L ${Vel_L_old.toFixed(3)} -> ${Vel_L.toFixed(3)}`);
+        // Debug: Log when distance targeting triggers
+        if (env.nextDistPrint > 300 && env.nextDistPrint < 350) {
+          console.log(`[vb6Step] L=${state.L} 330ft TARGET ADJUSTED: distToTarget=${distToTarget.toFixed(2)}, Vel_L ${Vel_L_old.toFixed(2)} -> ${Vel_L.toFixed(2)}`);
         }
       }
     }
