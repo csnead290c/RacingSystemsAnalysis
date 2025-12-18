@@ -1140,29 +1140,40 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     }
     
     // Check distance targets (using track distance)
-    while (targetIdx < distanceTargets.length && trackDist_ft >= distanceTargets[targetIdx]) {
+    // VB6: TIMESLIP.FRM:1373-1375 - Uses tolerance check for ALL distance prints
+    // If (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) Then record time
+    // VB6 does NOT interpolate - it records the actual step time when tolerance is met
+    while (targetIdx < distanceTargets.length) {
       const target = distanceTargets[targetIdx];
+      const DistStep = Math.abs(target - trackDist_ft);
+      // VB6 DistTol varies: 0.1 for rollout (case 1), 0.008 for case 4, default ~0.25
+      // For simplicity, use 0.1 for 60ft (case 3), 0.008 for 330ft (case 4), 0.1 for others
+      const DistTol = target === 330 ? 0.008 : 0.1;
+      const TimeTol = 0.002;  // VB6 constant
       
-      // Interpolate to find exact time at target distance
-      const prevDist = trace.length > 1 ? trace[trace.length - 2]?.s_ft ?? 0 : 0;
-      const prevTime = trace.length > 1 ? trace[trace.length - 2]?.t_s ?? 0 : 0;
-      let exactTime = trackTime_s;
-      if (prevDist < target && trackDist_ft > prevDist) {
-        const frac = (target - prevDist) / (trackDist_ft - prevDist);
-        exactTime = prevTime + frac * (trackTime_s - prevTime);
+      // VB6 tolerance check - triggers when CLOSE to target, not just past it
+      // Also allow if we've passed it (fallback)
+      const toleranceMet = DistStep < DistTol && (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true);
+      const passedTarget = trackDist_ft >= target;
+      
+      if (!toleranceMet && !passedTarget) {
+        break;  // Not close enough yet
       }
+      
+      // VB6 uses actual step time, not interpolation
+      const recordedTime = trackTime_s;
       
       // VB6 trap speed calculation: average speed over last 66ft
       // TIMESLIP.FRM:1392,1621 - TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime) for 660ft
       // TIMESLIP.FRM:1400,1626 - TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime) for 1320ft
       let speed_mph: number;
-      if (target === 660 && saveTime_594ft !== null && exactTime > saveTime_594ft) {
+      if (target === 660 && saveTime_594ft !== null && recordedTime > saveTime_594ft) {
         // 8th mile trap speed: 66ft / (time@660 - time@594) * Z5
         // Z5 = 3600/5280 = FPS_TO_MPH, so: 66 / dt * Z5 = 66 / dt * (3600/5280) mph
-        speed_mph = FPS_TO_MPH * 66 / (exactTime - saveTime_594ft);
-      } else if (target === 1320 && saveTime_1254ft !== null && exactTime > saveTime_1254ft) {
+        speed_mph = FPS_TO_MPH * 66 / (recordedTime - saveTime_594ft);
+      } else if (target === 1320 && saveTime_1254ft !== null && recordedTime > saveTime_1254ft) {
         // 1/4 mile trap speed: 66ft / (time@1320 - time@1254) * Z5
-        speed_mph = FPS_TO_MPH * 66 / (exactTime - saveTime_1254ft);
+        speed_mph = FPS_TO_MPH * 66 / (recordedTime - saveTime_1254ft);
       } else {
         // For other distances (60ft, 330ft, 1000ft), use instantaneous velocity
         speed_mph = state.Vel_ftps * FPS_TO_MPH;
@@ -1170,7 +1181,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       
       timeslip.push({
         d_ft: target,
-        t_s: exactTime,
+        t_s: recordedTime,
         v_mph: speed_mph,
       });
       targetIdx++;
