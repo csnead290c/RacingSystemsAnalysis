@@ -676,9 +676,10 @@ export function vb6SimulationStep(
   const safeVelSqrd = Math.max(0, VelSqrd);
   let time_L = safeVelSqrd / (2 * PQWT) + state.Time0_s;
   
-  // Debug: Log first step physics values
+  // Debug: Log first step physics values with full HP chain
   if (state.L <= 2) {
-    console.log(`[vb6Step] L=${state.L} BEFORE iter: Vel_L=${Vel_L.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, HP=${HP.toFixed(1)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HPSave=${HPSave.toFixed(1)}, Time0=${state.Time0_s.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}, TireSlip=${TireSlip.toFixed(4)}`);
+    console.log(`[vb6Step] L=${state.L} HP chain: HPSave=${HPSave.toFixed(1)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HP_afterClutch=${(HPSave*ClutchSlip).toFixed(1)}, TGEff=${TGEff_gear.toFixed(3)}, Eff=${vehicle.Efficiency.toFixed(3)}, TireSlip=${TireSlip.toFixed(4)}, DragHP=${DragHP.toFixed(2)}, HP_final=${HP.toFixed(1)}`);
+    console.log(`[vb6Step] L=${state.L} PQWT: Vel_L=${Vel_L.toFixed(4)}, Vel0=${state.Vel0_ftps.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, Time0=${state.Time0_s.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}`);
   }
   
   // ========================================================================
@@ -955,7 +956,7 @@ export function vb6InitState(
   return {
     L: 1,
     time_s: 0,
-    Vel_ftps: 0.001, // Small non-zero to avoid division by zero
+    Vel_ftps: 0.001, // Small non-zero to avoid division by zero in initial display
     Dist_ft: 0,
     AGS_g: Ags0_g,
     EngRPM: launchRPM,
