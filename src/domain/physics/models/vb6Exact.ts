@@ -983,6 +983,35 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
+    // Calculate track distance EARLY (needed for saveTime before TIMESLIP recording)
+    // VB6 TIMESLIP.FRM line 1381: After rollout, Dist(L) already includes ovradj
+    const earlyTrackDist_ft = timerStartTime_s !== null ? state.Dist_ft - rolloutFt : 0;
+    const earlyTrackTime_s = timerStartTime_s !== null ? state.time_s - timerStartTime_s : 0;
+    const earlyPrevTrackDist = timerStartTime_s !== null ? prevDist_ft - rolloutFt : 0;
+    const earlyPrevTrackTime = timerStartTime_s !== null ? prevTime_s - timerStartTime_s : 0;
+    
+    // VB6 trap speed: capture time at 66ft before finish lines BEFORE TIMESLIP recording
+    // TIMESLIP.FRM:1388,1619 - Case 5 (594ft): SaveTime = time(L)
+    // TIMESLIP.FRM:1396,1624 - Case 8 (1254ft): SaveTime = time(L)
+    if (saveTime_594ft === null && earlyTrackDist_ft >= 594) {
+      // Interpolate to find exact time at 594ft
+      if (earlyPrevTrackDist < 594 && earlyTrackDist_ft > earlyPrevTrackDist) {
+        const frac = (594 - earlyPrevTrackDist) / (earlyTrackDist_ft - earlyPrevTrackDist);
+        saveTime_594ft = earlyPrevTrackTime + frac * (earlyTrackTime_s - earlyPrevTrackTime);
+      } else {
+        saveTime_594ft = earlyTrackTime_s;
+      }
+    }
+    if (saveTime_1254ft === null && earlyTrackDist_ft >= 1254) {
+      // Interpolate to find exact time at 1254ft
+      if (earlyPrevTrackDist < 1254 && earlyTrackDist_ft > earlyPrevTrackDist) {
+        const frac = (1254 - earlyPrevTrackDist) / (earlyTrackDist_ft - earlyPrevTrackDist);
+        saveTime_1254ft = earlyPrevTrackTime + frac * (earlyTrackTime_s - earlyPrevTrackTime);
+      } else {
+        saveTime_1254ft = earlyTrackTime_s;
+      }
+    }
+    
     // VB6: TIMESLIP.FRM:1373-1418 - Check distance print and advance iDist
     // VB6 condition line 1375: 
     //   (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) Or (ShiftFlag = 2 And Dist(L) >= DistToPrint(iDist))
@@ -1188,34 +1217,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       throttleStopActive,
     });
     
-    // VB6 trap speed: capture time at 66ft before finish lines
-    // TIMESLIP.FRM:1388,1619 - Case 5 (594ft): SaveTime = time(L)
-    // TIMESLIP.FRM:1396,1624 - Case 8 (1254ft): SaveTime = time(L)
-    // We need to interpolate to get the exact time when crossing these distances
-    if (saveTime_594ft === null && trackDist_ft >= 594) {
-      // Interpolate to find exact time at 594ft
-      const prevDist = trace.length > 1 ? trace[trace.length - 2]?.s_ft ?? 0 : 0;
-      const prevTime = trace.length > 1 ? trace[trace.length - 2]?.t_s ?? 0 : 0;
-      if (prevDist < 594 && trackDist_ft > prevDist) {
-        const frac = (594 - prevDist) / (trackDist_ft - prevDist);
-        saveTime_594ft = prevTime + frac * (trackTime_s - prevTime);
-      } else {
-        saveTime_594ft = trackTime_s;
-      }
-    }
-    if (saveTime_1254ft === null && trackDist_ft >= 1254) {
-      // Interpolate to find exact time at 1254ft
-      const prevDist = trace.length > 1 ? trace[trace.length - 2]?.s_ft ?? 0 : 0;
-      const prevTime = trace.length > 1 ? trace[trace.length - 2]?.t_s ?? 0 : 0;
-      if (prevDist < 1254 && trackDist_ft > prevDist) {
-        const frac = (1254 - prevDist) / (trackDist_ft - prevDist);
-        saveTime_1254ft = prevTime + frac * (trackTime_s - prevTime);
-      } else {
-        saveTime_1254ft = trackTime_s;
-      }
-    }
-    
-    // TIMESLIP recording is now integrated with distPrintIdx advancement above
+    // saveTime_594ft and saveTime_1254ft are now recorded BEFORE TIMESLIP recording (see above)
     
     // Handle gear shifts - VB6 TIMESLIP.FRM:1355, 1433-1434
     // VB6 uses ShiftFlag state machine:
