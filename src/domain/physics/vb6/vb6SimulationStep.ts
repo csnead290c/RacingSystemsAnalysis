@@ -446,6 +446,20 @@ export function vb6SimulationStep(
     // VB6: If TimeStep > 0.05 Then TimeStep = 0.05
     if (TimeStep > 0.05) TimeStep = 0.05;
     
+    // TIMESLIP.FRM:1116-1119 - Don't let TimeStep exceed 4.5 steps to distance print
+    // VB6: If iDist > 1 Then
+    //        Work = ((DistToPrint(iDist) - DistToPrint(iDist - 1)) / Vel0) / 4.5
+    //        If TimeStep > Work Then TimeStep = Work
+    // Note: We skip iDist=1 (rollout) check since RSA handles distance targeting differently
+    // This limit prevents overshooting distance print points
+    if (env.nextDistPrint !== undefined && state.Vel0_ftps > 0) {
+      const distToNext = env.nextDistPrint - state.Dist0_ft;
+      if (distToNext > 0) {
+        const Work_dist = (distToNext / state.Vel0_ftps) / 4.5;
+        if (TimeStep > Work_dist) TimeStep = Work_dist;
+      }
+    }
+    
     // TIMESLIP.FRM:1122 - Recalculate velocity with limited timestep
     // VB6: Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
     Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
@@ -656,9 +670,7 @@ export function vb6SimulationStep(
   
   // Initial time estimate
   // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-  // Protect against negative VelSqrd (shouldn't happen with AMin clamp)
-  const safeVelSqrd = Math.max(0, VelSqrd);
-  let time_L = safeVelSqrd / (2 * PQWT) + state.Time0_s;
+  let time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
   
   // Debug: Log first step physics values with full HP chain
   if (state.L <= 2) {
@@ -701,7 +713,7 @@ export function vb6SimulationStep(
   
   for (k = 1; k <= 12; k++) {
     const dtk1 = time_L - state.Time0_s;
-    if (dtk1 <= 0) break;
+    // VB6 doesn't have a dtk1 <= 0 check - it proceeds with the calculation
     
     // TIMESLIP.FRM:1247-1248
     const Work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dtk1);
@@ -749,9 +761,8 @@ export function vb6SimulationStep(
     }
     
     // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
-    // Protect against negative VelSqrd (shouldn't happen with AMin clamp)
-    const safeVelSqrd_iter = Math.max(0, VelSqrd);
-    const dtk2_time = safeVelSqrd_iter / (2 * PQWT) + state.Time0_s;
+    // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
+    const dtk2_time = VelSqrd / (2 * PQWT) + state.Time0_s;
     const dtk2 = dtk2_time - state.Time0_s;
     
     // Debug: Log iteration values
@@ -930,7 +941,7 @@ export function vb6InitState(
   return {
     L: 1,
     time_s: 0,
-    Vel_ftps: 0.001, // Small non-zero to avoid division by zero in initial display
+    Vel_ftps: 0, // VB6: TIMESLIP.FRM:1003 - Vel(L) = 0
     Dist_ft: 0,
     AGS_g: Ags0_g,
     EngRPM: launchRPM,
@@ -943,15 +954,11 @@ export function vb6InitState(
     Dist0_ft: 0,
     DSRPM0: 0,
     
-    // VB6: TIMESLIP.FRM:1092-1095 - Special handling for first step
-    // RPM0 = EngRPM(L): Time0 = time(L)
-    // If RPM0 = gc_LaunchRPM.Value And Time0 = 0 Then
-    //     RPM0 = Stall: If gc_LaunchRPM.Value < Stall Then Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
-    // End If
-    RPM0: (launchRPM === vehicle.LaunchRPM && launchRPM < vehicle.Stall) ? vehicle.Stall : launchRPM,
-    Time0_s: (launchRPM === vehicle.LaunchRPM && launchRPM < vehicle.Stall) 
-      ? vehicle.EnginePMI * (vehicle.Stall - launchRPM) / 250000 
-      : 0,
+    // VB6: TIMESLIP.FRM:1003 - Initial values before first step
+    // RPM0 and Time0 are set DURING the step (lines 1092-1095), not at init
+    // Initialize to values that will trigger the first-step special handling
+    RPM0: launchRPM,
+    Time0_s: 0,
     
     AgsMax_g: Ags0_g,
     TireGrowth: tireResult.TireGrowth,
