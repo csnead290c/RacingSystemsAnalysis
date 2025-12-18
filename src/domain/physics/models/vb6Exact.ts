@@ -977,6 +977,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
+    // Track previous state for interpolation when shift fallback occurs
+    const prevDist_ft = state.Dist0_ft;
+    const prevTime_s = state.Time0_s;
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
     // VB6 TIMESLIP.FRM:1355 - Check for shift TRIGGER (before distance check!)
@@ -1027,11 +1030,24 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // Note: distPrintIdx is 0-based, VB6 iDist is 1-based
       const vb6iDist = distPrintIdx + 1;  // Convert to VB6's 1-based index
       
-      // VB6 uses actual step time time(L), NOT interpolated time
-      // VB6 only records TIMESLIP when ShiftFlag < 2 (not during shift)
-      // Exception: Case 3 (60ft) has special fallback, Case 5/8 (SaveTime) allow ShiftFlag=2 if SaveTime=0
+      // VB6 has a velocity revision loop (lines 1295-1352) that iterates to hit distance targets precisely.
+      // RSA doesn't have this loop, so we use interpolation when shift fallback occurs.
+      // For shift fallback, interpolate back to find when the target was actually crossed.
+      let recordTime_s: number;
+      let recordVel_ftps: number;
+      
+      if (shiftFallback && !normalToleranceMet && prevDist_ft < currentTarget && state.Dist_ft > prevDist_ft) {
+        // Interpolate to find exact crossing time
+        const frac = (currentTarget - prevDist_ft) / (state.Dist_ft - prevDist_ft);
+        recordTime_s = prevTime_s + frac * (state.time_s - prevTime_s);
+        recordVel_ftps = state.Vel0_ftps + frac * (state.Vel_ftps - state.Vel0_ftps);
+      } else {
+        recordTime_s = state.time_s;
+        recordVel_ftps = state.Vel_ftps;
+      }
+      
       const currentTrackTime = timerStartTime_s !== null 
-        ? state.time_s - timerStartTime_s 
+        ? recordTime_s - timerStartTime_s 
         : 0;
       
       // VB6 TIMESLIP.FRM:1383-1402 - Match EXACTLY
@@ -1044,15 +1060,19 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         //      If ShiftFlag = 2 And TIMESLIP(1) = 0 Then TIMESLIP(1) = time(L)
         if (state.ShiftFlag < 2 || !timeslip.find(t => t.d_ft === 60)) {
           if (!timeslip.find(t => t.d_ft === 60)) {
-            timeslip.push({ d_ft: 60, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+            timeslip.push({ d_ft: 60, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
           }
         }
       }
       // Case 4 (330ft): VB6 line 1386
+      // VB6's velocity revision loop (lines 1305-1352) ensures 330ft is hit precisely.
+      // RSA uses interpolation for shift fallback to approximate this behavior.
       else if (vb6iDist === 4 && timerStartTime_s !== null) {
-        // VB6: If ShiftFlag < 2 Then TIMESLIP(2) = time(L)
-        if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 330)) {
-          timeslip.push({ d_ft: 330, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+        if (!timeslip.find(t => t.d_ft === 330)) {
+          // Record with interpolated time if shift fallback, otherwise actual time if ShiftFlag < 2
+          if (state.ShiftFlag < 2 || shiftFallback) {
+            timeslip.push({ d_ft: 330, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
+          }
         }
       }
       // Case 5 (594ft): VB6 line 1388
