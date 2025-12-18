@@ -654,8 +654,8 @@ export function vb6SimulationStep(
   let time_L = safeVelSqrd / (2 * PQWT) + state.Time0_s;
   
   // Debug: Log first step physics values
-  if (state.L <= 3) {
-    console.log(`[vb6Step] L=${state.L}: Vel_L=${Vel_L.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, HP=${HP.toFixed(1)}, Time0=${state.Time0_s.toFixed(5)}, time_L=${time_L.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}`);
+  if (state.L <= 2) {
+    console.log(`[vb6Step] L=${state.L} BEFORE iter: Vel_L=${Vel_L.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, HP=${HP.toFixed(1)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HPSave=${HPSave.toFixed(1)}`);
   }
   
   // ========================================================================
@@ -739,6 +739,11 @@ export function vb6SimulationStep(
     const safeVelSqrd_iter = Math.max(0, VelSqrd);
     const dtk2_time = safeVelSqrd_iter / (2 * PQWT) + state.Time0_s;
     const dtk2 = dtk2_time - state.Time0_s;
+    
+    // Debug: Log iteration values
+    if (state.L <= 2 && k <= 3) {
+      console.log(`[vb6Step] L=${state.L} iter k=${k}: HP=${HP.toFixed(1)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, dtk1=${dtk1.toFixed(5)}, dtk2=${dtk2.toFixed(5)}`);
+    }
     
     if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
       time_L = dtk2_time;
