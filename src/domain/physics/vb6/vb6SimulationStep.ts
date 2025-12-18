@@ -447,12 +447,12 @@ export function vb6SimulationStep(
     if (TimeStep > 0.05) TimeStep = 0.05;
     
     // TIMESLIP.FRM:1116-1119 - Don't let TimeStep exceed 4.5 steps to distance print
-    // VB6: If iDist > 1 Then
+    // VB6: If iDist > 1 Then  <-- ONLY applies AFTER rollout (iDist=1)
     //        Work = ((DistToPrint(iDist) - DistToPrint(iDist - 1)) / Vel0) / 4.5
     //        If TimeStep > Work Then TimeStep = Work
-    // Note: We skip iDist=1 (rollout) check since RSA handles distance targeting differently
-    // This limit prevents overshooting distance print points
-    if (env.nextDistPrint !== undefined && state.Vel0_ftps > 0) {
+    // Note: This limit is SKIPPED for rollout (iDist=1), only applies for subsequent distance points
+    // We check if Dist0 > 1ft (past rollout) to match VB6's "If iDist > 1" condition
+    if (env.nextDistPrint !== undefined && state.Vel0_ftps > 0 && state.Dist0_ft > 1) {
       const distToNext = env.nextDistPrint - state.Dist0_ft;
       if (distToNext > 0) {
         const Work_dist = (distToNext / state.Vel0_ftps) / 4.5;
