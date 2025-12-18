@@ -1052,10 +1052,21 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         ? recordTime_s - timerStartTime_s 
         : 0;
       
-      // actualTrackTime uses real step time for saveTime (594ft, 1254ft) - VB6 uses time(L)
+      // actualTrackTime uses real step time
       const actualTrackTime = timerStartTime_s !== null
         ? state.time_s - timerStartTime_s
         : 0;
+      
+      // VB6 interpolates to hit EXACT distances (sub310 sets Dist(L) = DistToPrint(iDist))
+      // For trap speed distances (594, 660, 1254, 1320), interpolate to find exact crossing time
+      // This matches VB6's time(L) which is recorded AFTER interpolation to exact distance
+      let interpolatedTrackTime = actualTrackTime;
+      if (prevDist_ft < currentTarget && state.Dist_ft > prevDist_ft && state.Dist_ft >= currentTarget) {
+        // Interpolate to find exact time when target was crossed
+        const frac = (currentTarget - prevDist_ft) / (state.Dist_ft - prevDist_ft);
+        const interpolatedTime_s = prevTime_s + frac * (state.time_s - prevTime_s);
+        interpolatedTrackTime = timerStartTime_s !== null ? interpolatedTime_s - timerStartTime_s : 0;
+      }
       
       // VB6 TIMESLIP.FRM:1383-1402 - Match EXACTLY
       // VB6 only records TIMESLIP when ShiftFlag < 2 (not during shift)
@@ -1086,10 +1097,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // Case 5 (594ft): VB6 line 1388
       else if (vb6iDist === 5 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Or SaveTime = 0 Then SaveTime = time(L)
-        // IMPORTANT: Use actualTrackTime (real step time), NOT interpolated time
-        // VB6 uses time(L) which is the actual step time
+        // VB6 interpolates to exact 594ft (sub310), so use interpolatedTrackTime
         if (state.ShiftFlag < 2 || saveTime_594ft === null) {
-          saveTime_594ft = actualTrackTime;
+          saveTime_594ft = interpolatedTrackTime;
         }
       }
       // Case 6 (660ft): VB6 lines 1390-1394
@@ -1099,12 +1109,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         //        TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)
         //        SaveTime = 0
         if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 660)) {
-          // VB6 uses time(L) for trap speed calculation, so use actualTrackTime
+          // VB6 interpolates to exact 660ft (sub310), so use interpolatedTrackTime for trap speed
           let speed_mph = state.Vel_ftps * FPS_TO_MPH;  // fallback
-          if (saveTime_594ft !== null && actualTrackTime > saveTime_594ft) {
-            speed_mph = FPS_TO_MPH * 66 / (actualTrackTime - saveTime_594ft);
+          if (saveTime_594ft !== null && interpolatedTrackTime > saveTime_594ft) {
+            speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_594ft);
           }
-          timeslip.push({ d_ft: 660, t_s: actualTrackTime, v_mph: speed_mph });
+          timeslip.push({ d_ft: 660, t_s: interpolatedTrackTime, v_mph: speed_mph });
           saveTime_594ft = null;  // VB6: SaveTime = 0
         }
       }
@@ -1119,9 +1129,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // Case 8 (1254ft): VB6 line 1396
       else if (vb6iDist === 8 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Or SaveTime = 0 Then SaveTime = time(L)
-        // IMPORTANT: Use actualTrackTime (real step time), NOT interpolated time
+        // VB6 interpolates to exact 1254ft (sub310), so use interpolatedTrackTime
         if (state.ShiftFlag < 2 || saveTime_1254ft === null) {
-          saveTime_1254ft = actualTrackTime;
+          saveTime_1254ft = interpolatedTrackTime;
         }
       }
       // Case 9 (1320ft): VB6 lines 1398-1402
@@ -1131,12 +1141,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         //        TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime)
         //        SaveTime = 0
         if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 1320)) {
-          // VB6 uses time(L) for trap speed calculation, so use actualTrackTime
+          // VB6 interpolates to exact 1320ft (sub310), so use interpolatedTrackTime for trap speed
           let speed_mph = state.Vel_ftps * FPS_TO_MPH;  // fallback
-          if (saveTime_1254ft !== null && actualTrackTime > saveTime_1254ft) {
-            speed_mph = FPS_TO_MPH * 66 / (actualTrackTime - saveTime_1254ft);
+          if (saveTime_1254ft !== null && interpolatedTrackTime > saveTime_1254ft) {
+            speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_1254ft);
           }
-          timeslip.push({ d_ft: 1320, t_s: actualTrackTime, v_mph: speed_mph });
+          timeslip.push({ d_ft: 1320, t_s: interpolatedTrackTime, v_mph: speed_mph });
           saveTime_1254ft = null;  // VB6: SaveTime = 0
         }
       }
