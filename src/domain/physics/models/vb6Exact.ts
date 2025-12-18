@@ -995,7 +995,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // 2. Shift fallback: during gear shift (ShiftFlag=2) AND we've passed the target
     const shiftFallback = state.ShiftFlag === 2 && state.Dist_ft >= currentTarget;
     
-    const toleranceMet = distPrintIdx < distPrintPoints.length - 1 && 
+    const toleranceMet = distPrintIdx < distPrintPoints.length && 
         (normalToleranceMet || shiftFallback);
     
     if (toleranceMet) {
