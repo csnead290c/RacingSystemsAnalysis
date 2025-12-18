@@ -785,8 +785,9 @@ export function vb6SimulationStep(
   // ========================================================================
   // TIMESLIP.FRM:1295-1352 - Velocity revision loop for hitting exact targets
   // VB6 checks if we overshot and loops back (GoTo 270) with revised velocity
+  // NOTE: VB6 does this check AFTER the main physics, regardless of gear change
   // ========================================================================
-  if (env.nextDistPrint !== undefined && !gearChanged) {
+  if (env.nextDistPrint !== undefined) {
     const targetDist = env.nextDistPrint;
     const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
     const TimeTol_rev = 0.002;
