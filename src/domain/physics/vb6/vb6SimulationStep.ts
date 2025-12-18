@@ -691,6 +691,12 @@ export function vb6SimulationStep(
   const kp22_const = env.isLandSpeed ? KP22_BV : KP22;
   
   let EngAccHP = vehicle.EnginePMI * EngRPM_L * (EngRPM_L - state.RPM0);
+  
+  // Debug: Show EngAccHP calculation on first step
+  if (state.L <= 2) {
+    console.log(`[vb6Step] L=${state.L} EngAccHP: EnginePMI=${vehicle.EnginePMI.toFixed(2)}, EngRPM_L=${EngRPM_L.toFixed(0)}, RPM0=${state.RPM0.toFixed(0)}, EngAccHP=${EngAccHP.toFixed(0)}`);
+  }
+  
   if (EngAccHP < 0) {
     if (vehicle.isClutch) {
       EngAccHP = kp21_const * EngAccHP;
