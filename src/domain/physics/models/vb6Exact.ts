@@ -846,6 +846,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6: TIMESLIP.FRM:874 - Bonneville Pro forces TrackTempEffect = 1
   const trackTempEffect = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF);
   
+  // VB6 distance print points (in feet, from rear tire position)
+  // VB6: TIMESLIP.FRM:815-817 - DistToPrint array
+  // These are used for distance targeting to hit exact print points
+  const distPrintPoints = isLandSpeed 
+    ? [rolloutFt, 660, 1320, 1980, 2640, 3300, 3960, 4620, 5280] // Bonneville
+    : [rolloutFt, 30, 60, 330, 594, 660, 1000, 1254, 1320];      // Quarter mile
+  let distPrintIdx = 0;
+  
   const vb6Env: VB6EnvParams = {
     rho: rho_lbm_ft3,
     hpc,
@@ -854,6 +862,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     WindSpeed_mph: env.windMph ?? 0,
     WindAngle_deg: env.windAngleDeg ?? 0,
     isLandSpeed,  // Use Bonneville Pro constants for land speed runs
+    nextDistPrint: distPrintPoints[distPrintIdx], // First target is rollout
   };
   
   // ========================================================================
@@ -976,6 +985,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       warnings.push(`NaN detected at step ${step}: Vel=${state.Vel_ftps}, Dist=${state.Dist_ft}, AGS=${state.AGS_g}`);
       break;
     }
+    
+    // Update nextDistPrint if we've passed the current target
+    // VB6: TIMESLIP.FRM:1131-1136 - Distance targeting
+    while (distPrintIdx < distPrintPoints.length - 1 && state.Dist_ft >= distPrintPoints[distPrintIdx]) {
+      distPrintIdx++;
+    }
+    vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);

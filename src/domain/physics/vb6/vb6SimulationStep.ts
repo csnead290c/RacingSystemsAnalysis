@@ -135,6 +135,7 @@ export interface VB6EnvParams {
   WindSpeed_mph: number;
   WindAngle_deg: number;
   isLandSpeed?: boolean;    // True for Bonneville Pro mode (different constants)
+  nextDistPrint?: number;   // Next distance print point (ft) for VB6 distance targeting
 }
 
 /**
@@ -467,6 +468,26 @@ export function vb6SimulationStep(
         Vel_L = VelAtShift;
         // Recalculate timestep to match this velocity
         if (state.Ags0_g * gc > 0) {
+          TimeStep = (Vel_L - state.Vel0_ftps) / (state.Ags0_g * gc);
+        }
+      }
+    }
+    
+    // TIMESLIP.FRM:1131-1136 - Adjust velocity to hit exact distance print points
+    // DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
+    // If DistStep >= (DistToPrint(iDist) - DistTol) Then
+    //     Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
+    const DistTol = 0.1; // VB6 uses 0.1 for rollout
+    const DistStep_est = state.Dist0_ft + state.Vel0_ftps * TimeStep + state.Ags0_g * gc * TimeStep * TimeStep / 2;
+    if (env.nextDistPrint !== undefined && DistStep_est >= (env.nextDistPrint - DistTol)) {
+      // Adjust velocity to hit exact distance point
+      const targetDist = env.nextDistPrint;
+      const distToTarget = targetDist - state.Dist0_ft;
+      if (distToTarget > 0 && state.Ags0_g > 0) {
+        const Vel_target = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
+        if (Vel_target > 0 && Vel_target < Vel_L * 1.1) { // Sanity check
+          Vel_L = Vel_target;
+          // Recalculate timestep to match this velocity
           TimeStep = (Vel_L - state.Vel0_ftps) / (state.Ags0_g * gc);
         }
       }
