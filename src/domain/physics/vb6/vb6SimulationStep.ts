@@ -352,16 +352,12 @@ export function vb6SimulationStep(
   } else {
     // ========================================================================
     // TIMESLIP.FRM:1082 - Calculate adaptive timestep
-    // TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+    // VB6: TimeStep = TSMax * (AgsMax / Ags0) ^ 4
     // ========================================================================
     TimeStep = TSMax;
     if (state.Ags0_g > 0 && state.L > 1) {
-      // Limit the ratio to prevent huge timesteps at terminal velocity
-      const ratio = Math.min(state.AgsMax_g / state.Ags0_g, 10);
-      TimeStep = TSMax * Math.pow(ratio, 4);
+      TimeStep = TSMax * Math.pow(state.AgsMax_g / state.Ags0_g, 4);
     }
-    // Cap timestep to prevent numerical instability at terminal velocity
-    if (TimeStep > 0.1) TimeStep = 0.1;
   }
   
   // ========================================================================
@@ -436,14 +432,6 @@ export function vb6SimulationStep(
   // ========================================================================
   let Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
   
-  // Sanity check: velocity should never go negative or drop dramatically
-  // At terminal velocity, maintain current speed
-  if (Vel_L < state.Vel0_ftps * 0.9 && state.Vel0_ftps > 100) {
-    // Velocity dropped more than 10% at high speed - likely numerical issue
-    Vel_L = state.Vel0_ftps;
-  }
-  if (Vel_L < 0) Vel_L = 0;
-  
   // ========================================================================
   // TIMESLIP.FRM:1109 - Skip timestep limiting during shift
   // If ShiftFlag = 2 Then GoTo 270
@@ -451,49 +439,41 @@ export function vb6SimulationStep(
   const ShiftRPM_gear = vehicle.ShiftRPM[iGear - 1] ?? 9000;
   
   if (!gearChanged) {
-    // Only apply timestep limits when NOT in a gear change
+    // Only apply timestep limits when NOT in a gear change (ShiftFlag < 2)
     // TIMESLIP.FRM:1111-1120 - Limit timestep
-    // TIMESLIP.FRM:1064 - Minimum timestep (from TSMax init)
-    if (TimeStep < 0.005) TimeStep = 0.005;
+    
     // TIMESLIP.FRM:1120 - Absolute max timestep
+    // VB6: If TimeStep > 0.05 Then TimeStep = 0.05
     if (TimeStep > 0.05) TimeStep = 0.05;
     
-    // Recalculate velocity with limited timestep
+    // TIMESLIP.FRM:1122 - Recalculate velocity with limited timestep
+    // VB6: Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
     Vel_L = state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2;
     
     // TIMESLIP.FRM:1125-1129 - Limit velocity to shift point
+    // VB6: If Vel0 > 0 And RPM0 > Stall And iGear < NGR Then
+    //        Work = Vel0 * (ShiftRPM(iGear) + 5) / RPM0
+    //        If Vel(L) > Work Then Vel(L) = Work: TimeStep = (Vel(L) - Vel0) / (Ags0 * gc)
     if (state.Vel0_ftps > 0 && state.RPM0 > vehicle.Stall && iGear < vehicle.NGR) {
       const VelAtShift = state.Vel0_ftps * (ShiftRPM_gear + 5) / state.RPM0;
       if (Vel_L > VelAtShift) {
         Vel_L = VelAtShift;
-        // Recalculate timestep to match this velocity
-        if (state.Ags0_g * gc > 0) {
-          TimeStep = (Vel_L - state.Vel0_ftps) / (state.Ags0_g * gc);
-        }
+        TimeStep = (Vel_L - state.Vel0_ftps) / (state.Ags0_g * gc);
       }
     }
     
-    // TIMESLIP.FRM:1131-1136 - Adjust velocity to hit exact distance print points
-    // DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
-    // If DistStep >= (DistToPrint(iDist) - DistTol) Then
-    //     Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
-    const DistTol = 0.1; // VB6 uses 0.1 for rollout
+    // TIMESLIP.FRM:1132-1136 - Adjust velocity to hit exact distance print points
+    // VB6: DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
+    //      If DistStep >= (DistToPrint(iDist) - DistTol) Then
+    //          Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
+    const DistTol = 0.1;
     const DistStep_est = state.Dist0_ft + state.Vel0_ftps * TimeStep + state.Ags0_g * gc * TimeStep * TimeStep / 2;
     if (env.nextDistPrint !== undefined && DistStep_est >= (env.nextDistPrint - DistTol)) {
-      // Adjust velocity to hit exact distance point
       const targetDist = env.nextDistPrint;
       const distToTarget = targetDist - state.Dist0_ft;
-      if (distToTarget > 0 && state.Ags0_g > 0) {
-        const Vel_target = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
-        // Debug: Show distance targeting
-        if (targetDist <= 60) {
-          console.log(`[vb6Step] DistTarget: L=${state.L}, target=${targetDist.toFixed(1)}ft, Dist0=${state.Dist0_ft.toFixed(3)}, DistStep_est=${DistStep_est.toFixed(3)}, Vel_L=${Vel_L.toFixed(3)}, Vel_target=${Vel_target.toFixed(3)}`);
-        }
-        if (Vel_target > 0 && Vel_target < Vel_L * 1.1) { // Sanity check
-          Vel_L = Vel_target;
-          // Recalculate timestep to match this velocity
-          TimeStep = (Vel_L - state.Vel0_ftps) / (state.Ags0_g * gc);
-        }
+      if (distToTarget > 0) {
+        // VB6 unconditionally sets velocity - no sanity check
+        Vel_L = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
       }
     }
   }
@@ -793,28 +773,12 @@ export function vb6SimulationStep(
   
   // ========================================================================
   // TIMESLIP.FRM:1280 - Calculate distance after convergence
-  // Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
+  // VB6: Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
   // ========================================================================
   const dt_final = time_L - state.Time0_s;
-  let Dist_L: number;
-  
-  // At terminal velocity, PQWT is very small or negative, so use simple distance = velocity * time
-  // The complex VB6 formula can produce NaN when PQWT is negative (drag > power)
-  if (PQWT < 0.1 || dt_final <= 0) {
-    // Near terminal velocity or invalid timestep - use average velocity for distance
-    const avgVel = (state.Vel0_ftps + Vel_L) / 2;
-    Dist_L = state.Dist0_ft + Math.max(0, avgVel * Math.abs(dt_final));
-  } else {
-    const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
-    const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-    if (term < 0) {
-      // Numerical instability - fall back to simple formula
-      const avgVel = (state.Vel0_ftps + Vel_L) / 2;
-      Dist_L = state.Dist0_ft + avgVel * dt_final;
-    } else {
-      Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
-    }
-  }
+  const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
+  const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
+  const Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
   
   // ========================================================================
   // Update state
