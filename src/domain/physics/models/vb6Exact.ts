@@ -977,6 +977,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
+    // Track previous state for interpolation
+    const prevDist_ft = state.Dist0_ft;
+    const prevTime_s = state.Time0_s;
+    
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
     // VB6: TIMESLIP.FRM:1373-1418 - Check distance print and advance iDist
@@ -1007,27 +1011,42 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       const vb6iDist = distPrintIdx + 1;  // Convert to VB6's 1-based index
       
       // Record TIMESLIP for key distances (VB6 cases 3, 4, 6, 7, 9)
-      // Track distance at this point
+      // For shift fallback, interpolate to find exact time at target distance
+      let recordTime_s: number;
+      let recordVel_ftps: number;
+      
+      if (shiftFallback && !normalToleranceMet && prevDist_ft < currentTarget && state.Dist_ft > prevDist_ft) {
+        // Interpolate back to exact target distance
+        const frac = (currentTarget - prevDist_ft) / (state.Dist_ft - prevDist_ft);
+        recordTime_s = prevTime_s + frac * (state.time_s - prevTime_s);
+        // Interpolate velocity as well
+        recordVel_ftps = state.Vel0_ftps + frac * (state.Vel_ftps - state.Vel0_ftps);
+      } else {
+        recordTime_s = state.time_s;
+        recordVel_ftps = state.Vel_ftps;
+      }
+      
       const currentTrackTime = timerStartTime_s !== null 
-        ? state.time_s - timerStartTime_s 
+        ? recordTime_s - timerStartTime_s 
         : 0;
       
       // Map VB6 iDist to TIMESLIP distances
       // iDist 3 = 60ft, iDist 4 = 330ft, iDist 6 = 660ft, iDist 7 = 1000ft, iDist 9 = 1320ft
+      // Use recordVel_ftps (interpolated if shift fallback) for speed
       if (vb6iDist === 3 && timerStartTime_s !== null) {
         // 60ft - record if not already recorded
         if (!timeslip.find(t => t.d_ft === 60)) {
-          timeslip.push({ d_ft: 60, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+          timeslip.push({ d_ft: 60, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
         }
       } else if (vb6iDist === 4 && timerStartTime_s !== null) {
         // 330ft
         if (!timeslip.find(t => t.d_ft === 330)) {
-          timeslip.push({ d_ft: 330, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+          timeslip.push({ d_ft: 330, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
         }
       } else if (vb6iDist === 6 && timerStartTime_s !== null) {
         // 660ft - use trap speed calculation
         if (!timeslip.find(t => t.d_ft === 660)) {
-          let speed_mph = state.Vel_ftps * FPS_TO_MPH;
+          let speed_mph = recordVel_ftps * FPS_TO_MPH;
           if (saveTime_594ft !== null && currentTrackTime > saveTime_594ft) {
             speed_mph = FPS_TO_MPH * 66 / (currentTrackTime - saveTime_594ft);
           }
@@ -1036,12 +1055,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       } else if (vb6iDist === 7 && timerStartTime_s !== null) {
         // 1000ft
         if (!timeslip.find(t => t.d_ft === 1000)) {
-          timeslip.push({ d_ft: 1000, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+          timeslip.push({ d_ft: 1000, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
         }
       } else if (vb6iDist === 9 && timerStartTime_s !== null) {
         // 1320ft - use trap speed calculation
         if (!timeslip.find(t => t.d_ft === 1320)) {
-          let speed_mph = state.Vel_ftps * FPS_TO_MPH;
+          let speed_mph = recordVel_ftps * FPS_TO_MPH;
           if (saveTime_1254ft !== null && currentTrackTime > saveTime_1254ft) {
             speed_mph = FPS_TO_MPH * 66 / (currentTrackTime - saveTime_1254ft);
           }
