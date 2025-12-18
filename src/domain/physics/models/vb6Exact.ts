@@ -903,6 +903,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     prevDistPrint: 0,  // Previous distance target (0 for first target)
     TimePrintInc,
     TimePrint,
+    shiftRPMs,  // VB6 ShiftRPM array for VelShiftMatch calculation
   };
   
   // ========================================================================
