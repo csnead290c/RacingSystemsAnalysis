@@ -844,14 +844,42 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     : [rolloutFt, 30, 60, 330, 594, 660, 1000, 1254, 1320];      // Quarter mile
   let distPrintIdx = 0;
   
-  // VB6 TIMESLIP.FRM:902-918 - Calculate TimePrintInc based on estimated ET
-  // VB6 selects smallest increment that keeps output lines manageable
-  // kd = 104 lines max for Quarter Pro (kd - 7 for motorcycle)
-  const kd = bodyStyle === 8 ? 97 : 104;  // 97 for motorcycle, 104 otherwise
-  const estimatedET = isLandSpeed 
-    ? distPrintPoints[8] / (300 * 0.72)  // Rough estimate for land speed
-    : 1320 / (200 * 1.467 * 0.72);       // Rough estimate ~6-7s for quarter mile
+  // VB6 TIMESLIP.FRM:878-918 - Calculate TimePrintInc based on estimated ET
+  // VB6 uses a physics-based ET estimate and specific kd values
   
+  // VB6 line 879: hpmax calculation for ET estimate
+  const TGEff1 = TGEff[0] ?? 0.99;
+  const peakHP_et = Math.max(...yhp);
+  const hpmax_et = (peakHP_et * hpTqMult / hpc) * TGEff1 * overallEfficiency / (slippage * tireSlipAtLaunch);
+  
+  // VB6 line 882 (Quarter Pro): ET = (TrackTempEffect ^ 0.25) * (1.8 + 4.2 * (hpmax / Weight) ^ (-1/3))
+  // VB6 line 884-886 (Bonneville Pro): vmax formula
+  let estimatedET: number;
+  if (isLandSpeed) {
+    // Bonneville Pro formula
+    const vmax1 = 0.95 * Math.pow(2 * 32.174 * 550 * hpmax_et / (rho_lbm_ft3 * dragCoef * frontalArea), 1/3);
+    const vmax2 = vmax1 * Math.pow(hpmax_et / vehicle.weightLb, 0.2);
+    estimatedET = distPrintPoints[8] / (vmax2 * 0.72);
+  } else {
+    // Quarter Pro formula (line 882)
+    estimatedET = Math.pow(trackTempEffect, 0.25) * (1.8 + 4.2 * Math.pow(hpmax_et / vehicle.weightLb, -1/3));
+  }
+  // VB6 line 888: motorcycle adjustment
+  if (bodyStyle === 8) estimatedET = 1.04 * estimatedET;
+  
+  // VB6 lines 890-900: kd values (much smaller than I was using!)
+  // ISQUARTERPRO && !ISBVPRO: kd = 33 (line 894)
+  // ISQUARTERPRO && ISBVPRO: kd = 29 (line 892)
+  // else (Quarter Jr): kd = 28 (line 898)
+  let kd: number;
+  if (isLandSpeed) {
+    kd = 29;  // Bonneville Pro
+  } else {
+    kd = 33;  // Quarter Pro (assuming ISQUARTERPRO since we're in Quarter Pro mode)
+  }
+  if (bodyStyle === 8) kd = kd - 1;  // VB6 line 896 for Quarter Pro, line 899 uses -7 for Jr
+  
+  // VB6 lines 902-917: Find smallest TimePrintInc where z < kd
   let TimePrintInc = 0.25;
   const timePrintOptions = [0.25, 0.5, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 50, 100];
   for (const inc of timePrintOptions) {
