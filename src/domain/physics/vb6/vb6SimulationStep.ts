@@ -385,14 +385,14 @@ export function vb6SimulationStep(
   state.DSRPM0 = state.DSRPM;
   
   // TIMESLIP.FRM:1093-1094 - Special handling for first step at launch
-  // If RPM0 = LaunchRPM And Time0 = 0 Then
-  //     RPM0 = Stall: If LaunchRPM < Stall Then Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
+  // VB6 sets Time0 = spinUpTime AFTER the first step's time calculation completes
+  // This is handled at the END of this function, not here
+  // The check here is only for RPM0 -> Stall transition
   // Use tolerance for floating point comparison
-  if (Math.abs(state.RPM0 - vehicle.LaunchRPM) < 1 && state.Time0_s === 0) {
+  const isFirstStep = Math.abs(state.RPM0 - vehicle.LaunchRPM) < 1 && state.Time0_s === 0;
+  if (isFirstStep) {
     state.RPM0 = vehicle.Stall;
-    if (vehicle.LaunchRPM < vehicle.Stall) {
-      state.Time0_s = vehicle.EnginePMI * (vehicle.Stall - vehicle.LaunchRPM) / 250000;
-    }
+    // NOTE: Time0_s is set at the END of this function, after time calculation
   }
   
   // ========================================================================
@@ -793,6 +793,13 @@ export function vb6SimulationStep(
   state.EngRPM = EngRPM_L;
   state.DSRPM = DSRPM;
   state.SLIP = SLIP;
+  
+  // TIMESLIP.FRM:1093-1094 - Set Time0 = spinUpTime AFTER first step completes
+  // VB6: If RPM0 = LaunchRPM And Time0 = 0 Then Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
+  // This must happen AFTER the time calculation, so subsequent steps use spinUpTime as base
+  if (isFirstStep && vehicle.LaunchRPM < vehicle.Stall) {
+    state.Time0_s = vehicle.EnginePMI * (vehicle.Stall - vehicle.LaunchRPM) / 250000;
+  }
   
   // VB6: AgsMax is set ONCE at launch (line 1028) and never updated
   // It's the initial launch acceleration, NOT the maximum seen during the run
