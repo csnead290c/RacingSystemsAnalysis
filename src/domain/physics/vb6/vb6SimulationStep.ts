@@ -485,6 +485,10 @@ export function vb6SimulationStep(
       const distToTarget = targetDist - state.Dist0_ft;
       if (distToTarget > 0 && state.Ags0_g > 0) {
         const Vel_target = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
+        // Debug: Show distance targeting
+        if (targetDist <= 60) {
+          console.log(`[vb6Step] DistTarget: L=${state.L}, target=${targetDist.toFixed(1)}ft, Dist0=${state.Dist0_ft.toFixed(3)}, DistStep_est=${DistStep_est.toFixed(3)}, Vel_L=${Vel_L.toFixed(3)}, Vel_target=${Vel_target.toFixed(3)}`);
+        }
         if (Vel_target > 0 && Vel_target < Vel_L * 1.1) { // Sanity check
           Vel_L = Vel_target;
           // Recalculate timestep to match this velocity
