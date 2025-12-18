@@ -653,6 +653,11 @@ export function vb6SimulationStep(
   const safeVelSqrd = Math.max(0, VelSqrd);
   let time_L = safeVelSqrd / (2 * PQWT) + state.Time0_s;
   
+  // Debug: Log first step physics values
+  if (state.L <= 3) {
+    console.log(`[vb6Step] L=${state.L}: Vel_L=${Vel_L.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, HP=${HP.toFixed(1)}, Time0=${state.Time0_s.toFixed(5)}, time_L=${time_L.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}`);
+  }
+  
   // ========================================================================
   // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
   // ========================================================================
