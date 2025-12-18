@@ -1103,19 +1103,20 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         }
       }
       // Case 6 (660ft): VB6 lines 1390-1394
+      // RSA extension: Also record during shift fallback (when shift crosses 660ft)
+      // This handles Pro Stock where shift to 5th gear happens right at 660ft
       else if (vb6iDist === 6 && timerStartTime_s !== null) {
-        // VB6: If ShiftFlag < 2 Then
-        //        TIMESLIP(3) = time(L)
-        //        TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)
-        //        SaveTime = 0
-        if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 660)) {
-          // VB6 interpolates to exact 660ft (sub310), so use interpolatedTrackTime for trap speed
-          let speed_mph = state.Vel_ftps * FPS_TO_MPH;  // fallback
-          if (saveTime_594ft !== null && interpolatedTrackTime > saveTime_594ft) {
-            speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_594ft);
+        // VB6: If ShiftFlag < 2 Then record, but RSA also needs shift fallback
+        if (!timeslip.find(t => t.d_ft === 660)) {
+          if (state.ShiftFlag < 2 || shiftFallback) {
+            // VB6 interpolates to exact 660ft (sub310), so use interpolatedTrackTime for trap speed
+            let speed_mph = recordVel_ftps * FPS_TO_MPH;  // fallback using interpolated velocity
+            if (saveTime_594ft !== null && interpolatedTrackTime > saveTime_594ft) {
+              speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_594ft);
+            }
+            timeslip.push({ d_ft: 660, t_s: interpolatedTrackTime, v_mph: speed_mph });
+            saveTime_594ft = null;  // VB6: SaveTime = 0
           }
-          timeslip.push({ d_ft: 660, t_s: interpolatedTrackTime, v_mph: speed_mph });
-          saveTime_594ft = null;  // VB6: SaveTime = 0
         }
       }
       // Case 7 (1000ft): VB6 line 1395
@@ -1135,19 +1136,19 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         }
       }
       // Case 9 (1320ft): VB6 lines 1398-1402
+      // RSA extension: Also record during shift fallback (when shift crosses 1320ft)
       else if (vb6iDist === 9 && timerStartTime_s !== null) {
-        // VB6: If ShiftFlag < 2 Then
-        //        TIMESLIP(6) = time(L)
-        //        TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime)
-        //        SaveTime = 0
-        if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 1320)) {
-          // VB6 interpolates to exact 1320ft (sub310), so use interpolatedTrackTime for trap speed
-          let speed_mph = state.Vel_ftps * FPS_TO_MPH;  // fallback
-          if (saveTime_1254ft !== null && interpolatedTrackTime > saveTime_1254ft) {
-            speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_1254ft);
+        // VB6: If ShiftFlag < 2 Then record, but RSA also needs shift fallback
+        if (!timeslip.find(t => t.d_ft === 1320)) {
+          if (state.ShiftFlag < 2 || shiftFallback) {
+            // VB6 interpolates to exact 1320ft (sub310), so use interpolatedTrackTime for trap speed
+            let speed_mph = recordVel_ftps * FPS_TO_MPH;  // fallback using interpolated velocity
+            if (saveTime_1254ft !== null && interpolatedTrackTime > saveTime_1254ft) {
+              speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_1254ft);
+            }
+            timeslip.push({ d_ft: 1320, t_s: interpolatedTrackTime, v_mph: speed_mph });
+            saveTime_1254ft = null;  // VB6: SaveTime = 0
           }
-          timeslip.push({ d_ft: 1320, t_s: interpolatedTrackTime, v_mph: speed_mph });
-          saveTime_1254ft = null;  // VB6: SaveTime = 0
         }
       }
       
