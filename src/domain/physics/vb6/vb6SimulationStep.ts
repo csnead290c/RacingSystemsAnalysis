@@ -657,7 +657,7 @@ export function vb6SimulationStep(
   
   // Debug: Log first step physics values
   if (state.L <= 2) {
-    console.log(`[vb6Step] L=${state.L} BEFORE iter: Vel_L=${Vel_L.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, HP=${HP.toFixed(1)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HPSave=${HPSave.toFixed(1)}`);
+    console.log(`[vb6Step] L=${state.L} BEFORE iter: Vel_L=${Vel_L.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, HP=${HP.toFixed(1)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HPSave=${HPSave.toFixed(1)}, Time0=${state.Time0_s.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}`);
   }
   
   // ========================================================================
