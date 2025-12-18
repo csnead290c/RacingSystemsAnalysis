@@ -1000,6 +1000,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       const distPastRollout = state.Dist_ft - rolloutFt;
       const timeToReachRollout = distPastRollout / state.Vel_ftps;
       timerStartTime_s = state.time_s - timeToReachRollout;
+      
+      // Debug: Log rollout timing (VB6 shows 0.146s at rollout for TA Dragster)
+      console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${rolloutFt}ft, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
     }
     
     // Calculate track distance (what the timer measures)
