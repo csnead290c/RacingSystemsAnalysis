@@ -966,10 +966,18 @@ export function vb6InitState(
     
     Vel0_ftps: 0,
     Ags0_g: Ags0_g,
-    Time0_s: 0,
     Dist0_ft: 0,
-    RPM0: launchRPM,
     DSRPM0: 0,
+    
+    // VB6: TIMESLIP.FRM:1092-1095 - Special handling for first step
+    // RPM0 = EngRPM(L): Time0 = time(L)
+    // If RPM0 = gc_LaunchRPM.Value And Time0 = 0 Then
+    //     RPM0 = Stall: If gc_LaunchRPM.Value < Stall Then Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
+    // End If
+    RPM0: (launchRPM === vehicle.LaunchRPM && launchRPM < vehicle.Stall) ? vehicle.Stall : launchRPM,
+    Time0_s: (launchRPM === vehicle.LaunchRPM && launchRPM < vehicle.Stall) 
+      ? vehicle.EnginePMI * (vehicle.Stall - launchRPM) / 250000 
+      : 0,
     
     AgsMax_g: Ags0_g,
     TireGrowth: tireResult.TireGrowth,
