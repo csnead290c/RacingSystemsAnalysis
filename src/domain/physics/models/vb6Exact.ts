@@ -1005,6 +1005,23 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${rolloutFt}ft, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
     }
     
+    // Debug: Log at key distance points to find where discrepancy accumulates
+    // VB6 TA Dragster times: 60ft=0.89s, 330ft=2.38s, 660ft=3.55s, 1000ft=4.58s, 1320ft=5.52s
+    const trackDist = state.Dist_ft - rolloutFt + ovradj;
+    const trackTime = timerStartTime_s !== null ? state.time_s - timerStartTime_s : 0;
+    if (trackDist >= 60 && trackDist < 62) {
+      console.log(`[vb6Exact] 60ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
+    }
+    if (trackDist >= 330 && trackDist < 335) {
+      console.log(`[vb6Exact] 330ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
+    }
+    if (trackDist >= 660 && trackDist < 665) {
+      console.log(`[vb6Exact] 660ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
+    }
+    if (trackDist >= 1000 && trackDist < 1005) {
+      console.log(`[vb6Exact] 1000ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
+    }
+    
     // Calculate track distance (what the timer measures)
     // VB6 TIMESLIP.FRM line 1381: After rollout, distance is adjusted by ovradj
     // Dist(L) = Dist(L) + ovradj
