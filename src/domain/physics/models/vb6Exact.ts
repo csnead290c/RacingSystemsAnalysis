@@ -254,7 +254,7 @@ function calcTrackTempEffect(trackTempF: number): number {
  * Generate VB6-style run trace printout
  * Matches the format from Quarter Pro's detailed results
  */
-function generateRunTrace(trace: TracePoint[], rolloutIn: number): string {
+function generateRunTrace(trace: TracePoint[], rolloutIn: number, rolloutTime_s: number): string {
   const lines: string[] = [];
   
   // Header matching VB6 format
@@ -277,9 +277,10 @@ function generateRunTrace(trace: TracePoint[], rolloutIn: number): string {
     if (!rolloutFound && dist >= rolloutFt) {
       rolloutFound = true;
       // Print rollout line (VB6 format: "0.146/0.00 Rollout")
+      // First time is simulation time when rollout crossed, second is track time (0.00)
       const slipIndicator = pt.slip ? '(s)' : '';
       lines.push(
-        `${time.toFixed(2).padStart(5)}/0.00 Rollout  ${mph.toFixed(1).padStart(6)}  ${accel.toFixed(2)}${slipIndicator.padEnd(4)}    ${gear}  ${rpm.toFixed(0).padStart(6)}`
+        `${rolloutTime_s.toFixed(2).padStart(5)}/0.00 Rollout  ${mph.toFixed(1).padStart(6)}  ${accel.toFixed(2)}${slipIndicator.padEnd(4)}    ${gear}  ${rpm.toFixed(0).padStart(6)}`
       );
       lastPrintedTime = time;
       continue;
@@ -1046,8 +1047,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         recordVel_ftps = state.Vel_ftps;
       }
       
+      // currentTrackTime uses interpolated time for TIMESLIP display (like 330ft)
       const currentTrackTime = timerStartTime_s !== null 
         ? recordTime_s - timerStartTime_s 
+        : 0;
+      
+      // actualTrackTime uses real step time for saveTime (594ft, 1254ft) - VB6 uses time(L)
+      const actualTrackTime = timerStartTime_s !== null
+        ? state.time_s - timerStartTime_s
         : 0;
       
       // VB6 TIMESLIP.FRM:1383-1402 - Match EXACTLY
@@ -1058,9 +1065,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       if (vb6iDist === 3 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Then TIMESLIP(1) = time(L)
         //      If ShiftFlag = 2 And TIMESLIP(1) = 0 Then TIMESLIP(1) = time(L)
+        // Use actualTrackTime to match VB6's time(L)
         if (state.ShiftFlag < 2 || !timeslip.find(t => t.d_ft === 60)) {
           if (!timeslip.find(t => t.d_ft === 60)) {
-            timeslip.push({ d_ft: 60, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
+            timeslip.push({ d_ft: 60, t_s: actualTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
           }
         }
       }
@@ -1078,8 +1086,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // Case 5 (594ft): VB6 line 1388
       else if (vb6iDist === 5 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Or SaveTime = 0 Then SaveTime = time(L)
+        // IMPORTANT: Use actualTrackTime (real step time), NOT interpolated time
+        // VB6 uses time(L) which is the actual step time
         if (state.ShiftFlag < 2 || saveTime_594ft === null) {
-          saveTime_594ft = currentTrackTime;
+          saveTime_594ft = actualTrackTime;
         }
       }
       // Case 6 (660ft): VB6 lines 1390-1394
@@ -1089,26 +1099,29 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         //        TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime)
         //        SaveTime = 0
         if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 660)) {
+          // VB6 uses time(L) for trap speed calculation, so use actualTrackTime
           let speed_mph = state.Vel_ftps * FPS_TO_MPH;  // fallback
-          if (saveTime_594ft !== null && currentTrackTime > saveTime_594ft) {
-            speed_mph = FPS_TO_MPH * 66 / (currentTrackTime - saveTime_594ft);
+          if (saveTime_594ft !== null && actualTrackTime > saveTime_594ft) {
+            speed_mph = FPS_TO_MPH * 66 / (actualTrackTime - saveTime_594ft);
           }
-          timeslip.push({ d_ft: 660, t_s: currentTrackTime, v_mph: speed_mph });
+          timeslip.push({ d_ft: 660, t_s: actualTrackTime, v_mph: speed_mph });
           saveTime_594ft = null;  // VB6: SaveTime = 0
         }
       }
       // Case 7 (1000ft): VB6 line 1395
       else if (vb6iDist === 7 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Then TIMESLIP(5) = time(L)
+        // Use actualTrackTime to match VB6's time(L)
         if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 1000)) {
-          timeslip.push({ d_ft: 1000, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+          timeslip.push({ d_ft: 1000, t_s: actualTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
         }
       }
       // Case 8 (1254ft): VB6 line 1396
       else if (vb6iDist === 8 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Or SaveTime = 0 Then SaveTime = time(L)
+        // IMPORTANT: Use actualTrackTime (real step time), NOT interpolated time
         if (state.ShiftFlag < 2 || saveTime_1254ft === null) {
-          saveTime_1254ft = currentTrackTime;
+          saveTime_1254ft = actualTrackTime;
         }
       }
       // Case 9 (1320ft): VB6 lines 1398-1402
@@ -1118,11 +1131,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         //        TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime)
         //        SaveTime = 0
         if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 1320)) {
+          // VB6 uses time(L) for trap speed calculation, so use actualTrackTime
           let speed_mph = state.Vel_ftps * FPS_TO_MPH;  // fallback
-          if (saveTime_1254ft !== null && currentTrackTime > saveTime_1254ft) {
-            speed_mph = FPS_TO_MPH * 66 / (currentTrackTime - saveTime_1254ft);
+          if (saveTime_1254ft !== null && actualTrackTime > saveTime_1254ft) {
+            speed_mph = FPS_TO_MPH * 66 / (actualTrackTime - saveTime_1254ft);
           }
-          timeslip.push({ d_ft: 1320, t_s: currentTrackTime, v_mph: speed_mph });
+          timeslip.push({ d_ft: 1320, t_s: actualTrackTime, v_mph: speed_mph });
           saveTime_1254ft = null;  // VB6: SaveTime = 0
         }
       }
@@ -1349,7 +1363,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       rolloutTime_s: timerStartTime_s ?? 0,
     },
     // VB6-style run trace printout
-    runTrace: generateRunTrace(trace, rolloutIn),
+    runTrace: generateRunTrace(trace, rolloutIn, timerStartTime_s ?? 0),
   };
   
   return {
