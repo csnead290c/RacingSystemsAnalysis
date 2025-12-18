@@ -979,6 +979,28 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Run one VB6 step (pass throttle stop params for bracket racing)
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
+    // VB6 TIMESLIP.FRM:1355 - Check for shift TRIGGER (before distance check!)
+    // This sets ShiftFlag = 1 when at shift point, BEFORE the distance check
+    // The distance check then uses this updated ShiftFlag
+    if (state.ShiftFlag === 0 && state.Gear < vb6Vehicle.NGR) {
+      const shiftMode = vb6Vehicle.ShiftMode ?? 'rpm';
+      
+      if (shiftMode === 'time') {
+        const shiftTime = vb6Vehicle.ShiftTimes?.[state.Gear - 1];
+        if (shiftTime !== undefined && state.time_s >= shiftTime) {
+          state.ShiftFlag = 1;
+        }
+      } else {
+        // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
+        // VB6 TIMESLIP.FRM:1355 - If iGear < NGR And Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
+        const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
+        const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
+        if (Math.abs(shiftRPM - state.EngRPM) < shiftRPMTol) {
+          state.ShiftFlag = 1;
+        }
+      }
+    }
+    
     // VB6: TIMESLIP.FRM:1373-1418 - Check distance print and advance iDist
     // VB6 condition line 1375: 
     //   (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) Or (ShiftFlag = 2 And Dist(L) >= DistToPrint(iDist))
@@ -1207,41 +1229,18 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     // saveTime_594ft and saveTime_1254ft are recorded inside tolerance block (matching VB6 exactly)
     
-    // Handle gear shifts - VB6 TIMESLIP.FRM:1355, 1433-1434
-    // VB6 uses ShiftFlag state machine:
-    // 1. Line 1355: If at shift RPM, set ShiftFlag = 1
-    // 2. Line 1433: If ShiftFlag = 1, set ShiftFlag = 2, increment gear, GoTo 230 (DTShift applied)
-    // 3. Line 1434: If ShiftFlag = 2, reset ShiftFlag = 0
+    // VB6 TIMESLIP.FRM:1433-1434 - Execute shift AFTER distance check
+    // Line 1433: If ShiftFlag = 1, set ShiftFlag = 2, increment gear, GoTo 230
+    // Line 1434: If ShiftFlag = 2, reset ShiftFlag = 0
+    // Note: Shift TRIGGER (0→1) is done BEFORE distance check (see above)
     if (state.ShiftFlag === 1) {
-      // ShiftFlag was set last step - now increment gear and apply DTShift
+      // ShiftFlag was set this step or earlier - now execute shift
       state.ShiftFlag = 2;
       state.Gear++;
       // PrevGear will differ from Gear, triggering DTShift in next step
     } else if (state.ShiftFlag === 2) {
       // Shift complete, reset flag
       state.ShiftFlag = 0;
-    } else if (state.Gear < vb6Vehicle.NGR) {
-      // Check if we should initiate a shift
-      const shiftMode = vb6Vehicle.ShiftMode ?? 'rpm';
-      
-      if (shiftMode === 'time') {
-        // Shift by elapsed time
-        const shiftTime = vb6Vehicle.ShiftTimes?.[state.Gear - 1];
-        if (shiftTime !== undefined && state.time_s >= shiftTime) {
-          state.ShiftFlag = 1;
-        }
-      } else {
-        // Shift by RPM (default VB6 behavior)
-        // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
-        // VB6 TIMESLIP.FRM:1355 - If iGear < NGR And Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
-        const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
-        const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
-        
-        // VB6: Shift when RPM is within tolerance of shift point
-        if (Math.abs(shiftRPM - state.EngRPM) < shiftRPMTol) {
-          state.ShiftFlag = 1;
-        }
-      }
     }
   }
   
