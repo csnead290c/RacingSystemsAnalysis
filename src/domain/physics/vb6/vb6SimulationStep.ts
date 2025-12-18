@@ -498,7 +498,7 @@ export function vb6SimulationStep(
   // TIMESLIP.FRM:1139 - Calculate VelSqrd
   // VelSqrd = Vel(L)^2 - Vel0^2
   // ========================================================================
-  const VelSqrd = Vel_L * Vel_L - state.Vel0_ftps * state.Vel0_ftps;
+  let VelSqrd = Vel_L * Vel_L - state.Vel0_ftps * state.Vel0_ftps;
   
   // ========================================================================
   // TIMESLIP.FRM:1140 - Calculate DSRPM
@@ -777,10 +777,53 @@ export function vb6SimulationStep(
   // TIMESLIP.FRM:1280 - Calculate distance after convergence
   // VB6: Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
   // ========================================================================
-  const dt_final = time_L - state.Time0_s;
+  let dt_final = time_L - state.Time0_s;
   const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
-  const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-  const Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+  let term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
+  let Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+  
+  // ========================================================================
+  // TIMESLIP.FRM:1295-1352 - Velocity revision loop for hitting exact targets
+  // VB6 checks if we overshot and loops back (GoTo 270) with revised velocity
+  // ========================================================================
+  if (env.nextDistPrint !== undefined && !gearChanged) {
+    const targetDist = env.nextDistPrint;
+    const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
+    const TimeTol_rev = 0.002;
+    
+    // VB6 lines 1296-1310: Check for distance overshoot and calculate VelDistMatch
+    const DistStep_rev = Math.abs(targetDist - Dist_L);
+    let VelDistMatch = 0;
+    
+    if (!(DistStep_rev < DistTol_rev && (DistStep_rev / Vel_L) < TimeTol_rev)) {
+      // Not within tolerance - check if we overshot
+      if (Dist_L > targetDist) {
+        // VB6 line 1306: Work = 3 * PQWT * (DistToPrint(iDist) - Dist(L)) + Vel(L) ^ 3
+        const Work_dist = 3 * PQWT * (targetDist - Dist_L) + Math.pow(Vel_L, 3);
+        if (Work_dist > 0) {
+          VelDistMatch = Math.pow(Work_dist, 1/3);
+        }
+      }
+    }
+    
+    // VB6 lines 1344-1352: Apply velocity revision if needed
+    let NextVel = Vel_L;
+    if (VelDistMatch > 0 && VelDistMatch < NextVel) NextVel = VelDistMatch;
+    
+    // VB6 line 1352: If NextVel > Vel0 And NextVel < Vel(L) Then Vel(L) = NextVel: GoTo 270
+    if (NextVel > state.Vel0_ftps && NextVel < Vel_L) {
+      // Revise velocity and recalculate (equivalent to GoTo 270)
+      Vel_L = NextVel;
+      VelSqrd = Vel_L * Vel_L - state.Vel0_ftps * state.Vel0_ftps;
+      
+      // Recalculate time and distance with revised velocity
+      // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
+      time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
+      dt_final = time_L - state.Time0_s;
+      term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
+      Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+    }
+  }
   
   // Debug: Log distance calculation near rollout
   if (env.nextDistPrint !== undefined && env.nextDistPrint <= 2 && state.L >= 19 && state.L <= 21) {
