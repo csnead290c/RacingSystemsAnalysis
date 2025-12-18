@@ -35,7 +35,7 @@ import {
 import { type FuelSystemValue } from '../vb6/calcWork';
 import { taby } from '../vb6/dtaby';
 import { Z6 } from '../vb6/constants';
-import { DISTANCES, RACE_LENGTH_INFO, type RaceLength } from '../../config/raceLengths';
+import { RACE_LENGTH_INFO, type RaceLength } from '../../config/raceLengths';
 
 /**
  * Get race length in feet from race length key
@@ -48,17 +48,6 @@ function getRaceLengthFt(raceLength: RaceLength | string): number {
   if (raceLength === 'EIGHTH') return 660;
   if (raceLength === 'QUARTER') return 1320;
   return 1320; // Default to quarter mile
-}
-
-/**
- * Get distance checkpoints for a race length
- */
-function getDistanceTargets(raceLength: RaceLength | string): readonly number[] {
-  const distances = DISTANCES[raceLength as RaceLength];
-  if (distances) return distances;
-  
-  // Fallback
-  return raceLength === 'EIGHTH' ? DISTANCES.EIGHTH : DISTANCES.QUARTER;
 }
 
 /**
@@ -905,10 +894,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   };
   
   // Timeslip results (array format per SimResult)
+  // TIMESLIP recording is now integrated with distPrintIdx (VB6's iDist)
   const timeslip: { d_ft: number; t_s: number; v_mph: number }[] = [];
-  // Distance targets depend on race length (these are TRACK distances, not rear tire distances)
-  const distanceTargets = getDistanceTargets(raceLength);
-  let targetIdx = 0;
   
   // Track when the timer starts (when car has moved rolloutFt distance)
   let timerStartTime_s: number | null = null;
@@ -992,15 +979,68 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Run one VB6 step (pass throttle stop params for bracket racing)
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
-    // VB6: TIMESLIP.FRM:1373-1418 - Advance iDist AFTER hitting distance target
+    // VB6: TIMESLIP.FRM:1373-1418 - Check distance print and advance iDist
     // VB6 condition: (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol)
-    // DistStep = Abs(DistToPrint(iDist) - Dist(L))
-    const DistStep = Math.abs(distPrintPoints[distPrintIdx] - state.Dist_ft);
-    const DistTol = 0.1;
+    // VB6 records time WHEN tolerance check passes, THEN advances iDist
+    const currentTarget = distPrintPoints[distPrintIdx];
+    const DistStep = Math.abs(currentTarget - state.Dist_ft);
+    const DistTol = 0.1;  // VB6 line 1379: DistTol = 0.1 for rollout, stays 0.1 until case 4
     const TimeTol = 0.002;
-    if (distPrintIdx < distPrintPoints.length - 1 && 
+    const toleranceMet = distPrintIdx < distPrintPoints.length - 1 && 
         DistStep < DistTol && 
-        (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true)) {
+        (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true);
+    
+    if (toleranceMet) {
+      // VB6 records TIMESLIP values when hitting specific distance print points
+      // For Quarter mile: distPrintPoints = [rollout, 30, 60, 330, 594, 660, 1000, 1254, 1320]
+      // TIMESLIP indices:                     1       2   3    4    5    6     7     8     9
+      // We record times for: 60ft (idx 2), 330ft (idx 3), 660ft (idx 5), 1000ft (idx 6), 1320ft (idx 8)
+      // Note: distPrintIdx is 0-based, VB6 iDist is 1-based
+      const vb6iDist = distPrintIdx + 1;  // Convert to VB6's 1-based index
+      
+      // Record TIMESLIP for key distances (VB6 cases 3, 4, 6, 7, 9)
+      // Track distance at this point
+      const currentTrackTime = timerStartTime_s !== null 
+        ? state.time_s - timerStartTime_s 
+        : 0;
+      
+      // Map VB6 iDist to TIMESLIP distances
+      // iDist 3 = 60ft, iDist 4 = 330ft, iDist 6 = 660ft, iDist 7 = 1000ft, iDist 9 = 1320ft
+      if (vb6iDist === 3 && timerStartTime_s !== null) {
+        // 60ft - record if not already recorded
+        if (!timeslip.find(t => t.d_ft === 60)) {
+          timeslip.push({ d_ft: 60, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+        }
+      } else if (vb6iDist === 4 && timerStartTime_s !== null) {
+        // 330ft
+        if (!timeslip.find(t => t.d_ft === 330)) {
+          timeslip.push({ d_ft: 330, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+        }
+      } else if (vb6iDist === 6 && timerStartTime_s !== null) {
+        // 660ft - use trap speed calculation
+        if (!timeslip.find(t => t.d_ft === 660)) {
+          let speed_mph = state.Vel_ftps * FPS_TO_MPH;
+          if (saveTime_594ft !== null && currentTrackTime > saveTime_594ft) {
+            speed_mph = FPS_TO_MPH * 66 / (currentTrackTime - saveTime_594ft);
+          }
+          timeslip.push({ d_ft: 660, t_s: currentTrackTime, v_mph: speed_mph });
+        }
+      } else if (vb6iDist === 7 && timerStartTime_s !== null) {
+        // 1000ft
+        if (!timeslip.find(t => t.d_ft === 1000)) {
+          timeslip.push({ d_ft: 1000, t_s: currentTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+        }
+      } else if (vb6iDist === 9 && timerStartTime_s !== null) {
+        // 1320ft - use trap speed calculation
+        if (!timeslip.find(t => t.d_ft === 1320)) {
+          let speed_mph = state.Vel_ftps * FPS_TO_MPH;
+          if (saveTime_1254ft !== null && currentTrackTime > saveTime_1254ft) {
+            speed_mph = FPS_TO_MPH * 66 / (currentTrackTime - saveTime_1254ft);
+          }
+          timeslip.push({ d_ft: 1320, t_s: currentTrackTime, v_mph: speed_mph });
+        }
+      }
+      
       distPrintIdx++;
     }
     
@@ -1139,53 +1179,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       }
     }
     
-    // Check distance targets (using track distance)
-    // VB6: TIMESLIP.FRM:1373-1375 - Uses tolerance check for ALL distance prints
-    // If (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) Then record time
-    // VB6 does NOT interpolate - it records the actual step time when tolerance is met
-    while (targetIdx < distanceTargets.length) {
-      const target = distanceTargets[targetIdx];
-      const DistStep = Math.abs(target - trackDist_ft);
-      // VB6 DistTol varies: 0.1 for rollout (case 1), 0.008 for case 4, default ~0.25
-      // For simplicity, use 0.1 for 60ft (case 3), 0.008 for 330ft (case 4), 0.1 for others
-      const DistTol = target === 330 ? 0.008 : 0.1;
-      const TimeTol = 0.002;  // VB6 constant
-      
-      // VB6 tolerance check - triggers when CLOSE to target, not just past it
-      // Also allow if we've passed it (fallback)
-      const toleranceMet = DistStep < DistTol && (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true);
-      const passedTarget = trackDist_ft >= target;
-      
-      if (!toleranceMet && !passedTarget) {
-        break;  // Not close enough yet
-      }
-      
-      // VB6 uses actual step time, not interpolation
-      const recordedTime = trackTime_s;
-      
-      // VB6 trap speed calculation: average speed over last 66ft
-      // TIMESLIP.FRM:1392,1621 - TIMESLIP(4) = Z5 * 66 / (TIMESLIP(3) - SaveTime) for 660ft
-      // TIMESLIP.FRM:1400,1626 - TIMESLIP(7) = Z5 * 66 / (TIMESLIP(6) - SaveTime) for 1320ft
-      let speed_mph: number;
-      if (target === 660 && saveTime_594ft !== null && recordedTime > saveTime_594ft) {
-        // 8th mile trap speed: 66ft / (time@660 - time@594) * Z5
-        // Z5 = 3600/5280 = FPS_TO_MPH, so: 66 / dt * Z5 = 66 / dt * (3600/5280) mph
-        speed_mph = FPS_TO_MPH * 66 / (recordedTime - saveTime_594ft);
-      } else if (target === 1320 && saveTime_1254ft !== null && recordedTime > saveTime_1254ft) {
-        // 1/4 mile trap speed: 66ft / (time@1320 - time@1254) * Z5
-        speed_mph = FPS_TO_MPH * 66 / (recordedTime - saveTime_1254ft);
-      } else {
-        // For other distances (60ft, 330ft, 1000ft), use instantaneous velocity
-        speed_mph = state.Vel_ftps * FPS_TO_MPH;
-      }
-      
-      timeslip.push({
-        d_ft: target,
-        t_s: recordedTime,
-        v_mph: speed_mph,
-      });
-      targetIdx++;
-    }
+    // TIMESLIP recording is now integrated with distPrintIdx advancement above
     
     // Handle gear shifts - VB6 TIMESLIP.FRM:1355, 1433-1434
     // VB6 uses ShiftFlag state machine:
