@@ -844,25 +844,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     : [rolloutFt, 30, 60, 330, 594, 660, 1000, 1254, 1320];      // Quarter mile
   let distPrintIdx = 0;
   
-  // VB6 TIMESLIP.FRM:902-918 - Calculate TimePrintInc based on estimated ET
-  // VB6 selects smallest increment that keeps output lines manageable
-  // kd = 104 lines max for Quarter Pro (kd - 7 for motorcycle)
-  const kd = bodyStyle === 8 ? 97 : 104;  // 97 for motorcycle, 104 otherwise
-  const estimatedET = isLandSpeed 
-    ? distPrintPoints[8] / (300 * 0.72)  // Rough estimate for land speed
-    : 1320 / (200 * 1.467 * 0.72);       // Rough estimate ~6-7s for quarter mile
-  
-  let TimePrintInc = 0.25;
-  const timePrintOptions = [0.25, 0.5, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 50, 100];
-  for (const inc of timePrintOptions) {
-    const z = estimatedET / inc + 2 * (NGR - 1);
-    if (z < kd) {
-      TimePrintInc = inc;
-      break;
-    }
-  }
-  let TimePrint = TimePrintInc;  // VB6: TimePrint = TimePrintInc (line 918)
-  
   const vb6Env: VB6EnvParams = {
     rho: rho_lbm_ft3,
     hpc,
@@ -872,9 +853,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     WindAngle_deg: env.windAngleDeg ?? 0,
     isLandSpeed,  // Use Bonneville Pro constants for land speed runs
     nextDistPrint: distPrintPoints[distPrintIdx], // First target is rollout
-    prevDistPrint: 0,  // Previous distance target (0 for first target)
-    TimePrintInc,
-    TimePrint,
   };
   
   // ========================================================================
@@ -996,19 +974,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       break;
     }
     
-    // Set nextDistPrint and prevDistPrint for this step (VB6: iDist tracks current target)
+    // Set nextDistPrint for this step (VB6: iDist tracks current target)
     vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
-    vb6Env.prevDistPrint = distPrintIdx > 0 ? distPrintPoints[distPrintIdx - 1] : 0;
-    vb6Env.TimePrint = TimePrint;
-    
-    // VB6 TIMESLIP.FRM:1421-1422 - Check for time print update
-    // If (Abs(TimePrint - time(L)) < TimeTol) Or (ShiftFlag = 2 And time(L) >= TimePrint) Then
-    //     TimePrint = TimePrint + TimePrintInc
-    const TimeTolForPrint = 0.002;
-    if (Math.abs(TimePrint - state.time_s) < TimeTolForPrint || 
-        (state.ShiftFlag === 2 && state.time_s >= TimePrint)) {
-      TimePrint = TimePrint + TimePrintInc;
-    }
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
     // Track previous state for interpolation when shift fallback occurs
