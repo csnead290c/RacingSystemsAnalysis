@@ -2,3 +2,10 @@ node_modules
 
 # API config with credentials (never commit this)
 api/config.php
+
+# Environment files (never commit)
+.env.local
+.env
+
+# PHP vendor directory (installed by composer on server)
+api/vendor/
