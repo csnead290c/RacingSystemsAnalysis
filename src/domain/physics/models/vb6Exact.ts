@@ -1070,16 +1070,26 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       
       // VB6 tolerance check - triggers when CLOSE to target, not just past it
       if (DistStep < DistTol && (DistStep / state.Vel_ftps) < TimeTol) {
+        // VB6 line 1380: If gc_Rollout.Value > 0 Then time(L) = 0
         timerStartTime_s = state.time_s;
         
+        // VB6 line 1381: Dist(L) = Dist(L) + ovradj - PERMANENTLY adjust distance for front overhang
+        // This is critical - after this point, all distances include ovradj
+        state.Dist_ft = state.Dist_ft + ovradj;
+        state.Dist0_ft = state.Dist0_ft + ovradj;  // Also adjust Dist0 so next step starts correctly
+        
         // Debug: Log rollout timing
-        console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (err=${DistStep.toFixed(4)}), v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
+        console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (after ovradj=${ovradj.toFixed(3)}), v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
       }
     }
     
     // Debug: Log at key distance points to find where discrepancy accumulates
     // VB6 TA Dragster times: 60ft=0.89s, 330ft=2.38s, 660ft=3.55s, 1000ft=4.58s, 1320ft=5.52s
-    const trackDist = state.Dist_ft - rolloutFt + ovradj;
+    // After rollout, state.Dist_ft already includes ovradj (VB6 line 1381)
+    // So trackDist = state.Dist_ft - rolloutFt (ovradj is already in Dist_ft)
+    const trackDist = timerStartTime_s !== null 
+      ? state.Dist_ft - rolloutFt  // After rollout: Dist_ft includes ovradj
+      : 0;
     const trackTime = timerStartTime_s !== null ? state.time_s - timerStartTime_s : 0;
     if (trackDist >= 60 && trackDist < 62) {
       console.log(`[vb6Exact] 60ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
@@ -1095,19 +1105,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     }
     
     // Calculate track distance (what the timer measures)
-    // VB6 TIMESLIP.FRM line 1381: After rollout, distance is adjusted by ovradj
-    // Dist(L) = Dist(L) + ovradj
-    // This accounts for the front overhang - the nose is ahead of where the rear tires are
-    // Track distance = (rear_tire_position - rollout) + ovradj
-    // IMPORTANT: ovradj is only applied AFTER the timer starts (after rollout)
+    // VB6 TIMESLIP.FRM line 1381: After rollout, Dist(L) already includes ovradj
+    // So track distance = Dist_ft - rolloutFt (no need to add ovradj again)
     let trackDist_ft: number;
     let trackTime_s: number;
     if (timerStartTime_s !== null) {
-      // Timer has started - apply ovradj
-      trackDist_ft = state.Dist_ft - rolloutFt + ovradj;
+      // Timer has started - Dist_ft already includes ovradj from line 1381
+      trackDist_ft = state.Dist_ft - rolloutFt;
       trackTime_s = state.time_s - timerStartTime_s;
     } else {
-      // Before rollout - no ovradj, track distance is 0
+      // Before rollout - track distance is 0
       trackDist_ft = 0;
       trackTime_s = 0;
     }
