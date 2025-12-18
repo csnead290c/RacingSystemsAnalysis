@@ -482,12 +482,22 @@ export function vb6SimulationStep(
     //          Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
     const DistTol = 0.1;
     const DistStep_est = state.Dist0_ft + state.Vel0_ftps * TimeStep + state.Ags0_g * gc * TimeStep * TimeStep / 2;
+    
+    // Debug: Log distance targeting check for steps near rollout
+    if (env.nextDistPrint !== undefined && env.nextDistPrint <= 2 && state.L >= 15 && state.L <= 25) {
+      console.log(`[vb6Step] L=${state.L} DistCheck: Dist0=${state.Dist0_ft.toFixed(4)}, DistStep_est=${DistStep_est.toFixed(4)}, target=${env.nextDistPrint.toFixed(1)}, threshold=${(env.nextDistPrint - DistTol).toFixed(2)}, triggered=${DistStep_est >= (env.nextDistPrint - DistTol)}`);
+    }
+    
     if (env.nextDistPrint !== undefined && DistStep_est >= (env.nextDistPrint - DistTol)) {
       const targetDist = env.nextDistPrint;
       const distToTarget = targetDist - state.Dist0_ft;
       if (distToTarget > 0) {
         // VB6 unconditionally sets velocity - no sanity check
+        const Vel_L_old = Vel_L;
         Vel_L = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
+        if (env.nextDistPrint <= 2) {
+          console.log(`[vb6Step] L=${state.L} DistTarget APPLIED: Vel_L ${Vel_L_old.toFixed(3)} -> ${Vel_L.toFixed(3)}, distToTarget=${distToTarget.toFixed(4)}`);
+        }
       }
     }
   }
