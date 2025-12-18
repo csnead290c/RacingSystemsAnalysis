@@ -12,7 +12,7 @@ function About() {
           
           <p className="text-muted mb-4" style={{ fontSize: '0.95rem', lineHeight: '1.8' }}>
             Racing Systems Analysis (RSA) has been developing professional-grade drag racing simulation 
-            software since 1992. Our software is trusted by racers, engine builders, and chassis shops 
+            software since 1986. Our software is trusted by racers, engine builders, and chassis shops 
             worldwide to predict performance, optimize setups, and win races.
           </p>
 
