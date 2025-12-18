@@ -471,7 +471,16 @@ export function vb6SimulationStep(
     // VB6: DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
     //      If DistStep >= (DistToPrint(iDist) - DistTol) Then
     //          Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
-    const DistTol = 0.1;
+    // VB6 DistTol is dynamic: 0.005 initial, 0.1 after rollout (case 1), 0.008 after 330ft (case 4)
+    // Quarter Pro: initial=0.005, after case 1=0.1, after case 4=0.008
+    let DistTol: number;
+    if (env.iDist === undefined || env.iDist <= 1) {
+      DistTol = 0.005;  // Initial value before/at rollout
+    } else if (env.iDist <= 4) {
+      DistTol = 0.1;    // After rollout (case 1) through 330ft
+    } else {
+      DistTol = 0.008;  // After 330ft (case 4)
+    }
     const DistStep_est = state.Dist0_ft + state.Vel0_ftps * TimeStep + state.Ags0_g * gc * TimeStep * TimeStep / 2;
     
     // Debug: Log distance targeting for 330ft (target ~330 when Dist0 is 280-340)
