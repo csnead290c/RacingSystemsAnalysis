@@ -495,247 +495,198 @@ export function vb6SimulationStep(
   // During gear change (gearChanged=true), TimeStep=DTShift is used without limiting
   
   // ========================================================================
-  // TIMESLIP.FRM:1139 - Calculate VelSqrd
-  // VelSqrd = Vel(L)^2 - Vel0^2
+  // VB6 SECTION 270-330 LOOP: Main physics with velocity revision
+  // VB6 uses GoTo 270 to loop back when velocity needs revision
+  // We implement this as an outer loop around the main calculation
   // ========================================================================
-  let VelSqrd = Vel_L * Vel_L - state.Vel0_ftps * state.Vel0_ftps;
   
-  // ========================================================================
-  // TIMESLIP.FRM:1140 - Calculate DSRPM
-  // DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
-  // ========================================================================
-  const DSRPM = TireSlip * Vel_L * 60 / state.TireCirFt;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1144-1174 - Clutch/Converter calculations
-  // ========================================================================
-  const LockRPM = DSRPM * vehicle.GearRatio * TGR_gear;
-  let EngRPM_L = vehicle.Slippage * LockRPM;
-  let ClutchSlip: number;
+  // Variables that need to persist across velocity revision iterations
+  let VelSqrd = 0;
+  let DSRPM = 0;
+  let LockRPM = 0;
+  let EngRPM_L = 0;
+  let ClutchSlip = 0;
   let zStall = vehicle.Stall;
   let SlipRatio = 0;
-  
-  if (vehicle.isClutch) {
-    // TIMESLIP.FRM:1148-1152 - Clutch
-    if (EngRPM_L < vehicle.Stall) {
-      if (iGear === 1 || !vehicle.LockUp) {
-        EngRPM_L = vehicle.Stall;
-      }
-    }
-    ClutchSlip = LockRPM / EngRPM_L;
-  } else {
-    // TIMESLIP.FRM:1154-1172 - Converter
-    if (iGear === 1 || !vehicle.LockUp) {
-      // Non lock-up converter
-      zStall = vehicle.Stall;
-      SlipRatio = vehicle.Slippage * LockRPM / zStall;
-      
-      if (state.L > 2) {
-        if (SlipRatio > 0.6) {
-          zStall = zStall * (1 + (vehicle.Slippage - 1) * (SlipRatio - 0.6) / ((1 / vehicle.Slippage) - 0.6));
-        }
-        SlipRatio = vehicle.Slippage * LockRPM / zStall;
-      }
-      ClutchSlip = 1 / vehicle.Slippage;
-      
-      if (EngRPM_L < zStall) {
-        EngRPM_L = zStall;
-        const Work_conv = vehicle.TorqueMult - (vehicle.TorqueMult - 1) * SlipRatio;
-        ClutchSlip = Work_conv * LockRPM / zStall;
-      }
-    } else {
-      // Lock-up converter
-      EngRPM_L = 1.005 * LockRPM; // 0.5% slippage
-      ClutchSlip = LockRPM / EngRPM_L;
-    }
-  }
-  if (ClutchSlip > 1) ClutchSlip = 1;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1176-1178 - Get HP from curve
-  // VB6: Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
-  //      HP = gc_HPTQMult.Value * HP / hpc
-  //      HPSave = HP:    HP = HP * ClutchSlip
-  // ========================================================================
-  let HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
-  HP = vehicle.HPTQMult * HP / env.hpc;
-  const HPSave = HP;  // VB6: HPSave = HP (BEFORE ClutchSlip, BEFORE any RSA additions)
-  HP = HP * ClutchSlip;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1180-1194 - Calculate drag forces
-  // ========================================================================
-  // Wind effective velocity
-  const WindFPS = Math.sqrt(
-    Vel_L * Vel_L + 
-    2 * Vel_L * (env.WindSpeed_mph / Z5) * Math.cos(PI * env.WindAngle_deg / 180) + 
-    Math.pow(env.WindSpeed_mph / Z5, 2)
-  );
-  
-  // Dynamic pressure (VB6 uses lbm/ft³ for rho, divides by gc)
-  const q = Math.sign(WindFPS) * env.rho * Math.pow(Math.abs(WindFPS), 2) / (2 * gc);
-  
-  // Frontal area with tire growth
-  let RefArea2: number;
-  if (vehicle.BodyStyle === 8) {
-    // Motorcycle
-    RefArea2 = vehicle.RefArea_ft2 + ((state.TireGrowth - 1) * vehicle.TireDia_in / 2) * vehicle.TireWidth_in / 144;
-  } else {
-    RefArea2 = vehicle.RefArea_ft2 + ((state.TireGrowth - 1) * vehicle.TireDia_in / 2) * (2 * vehicle.TireWidth_in) / 144;
-  }
-  
-  // Down force (weight + aero lift)
-  const DownForce = vehicle.Weight_lbf + vehicle.LiftCoef * RefArea2 * q;
-  
-  // Select constants based on land speed mode
-  // VB6: TIMESLIP.FRM:550-570 - different constants for ISBVPRO
-  const cmu_const = env.isLandSpeed ? CMU_BV : CMU;
-  const cmuk_const = env.isLandSpeed ? CMUK_BV : CMUK;
-  const frct_const = env.isLandSpeed ? FRCT_BV : FRCT;
-  
-  // Rolling resistance coefficient (decreases with distance for QPro, constant for BVPro)
-  const cmu1 = cmu_const - (state.Dist0_ft / 1320) * cmuk_const;
-  
-  // Total drag force
-  const DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel_L) + vehicle.DragCoef * RefArea2 * q;
-  const DragHP = DragForce * Vel_L / 550;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1196-1211 - Calculate dynamic weight transfer
-  // ========================================================================
-  const TireRadIn = 12 * state.TireCirFt / (2 * PI);
-  const deltaFWT = (state.Ags0_g * vehicle.Weight_lbf * ((vehicle.YCG_in - TireRadIn) + (frct_const / vehicle.Efficiency) * TireRadIn) + DragForce * vehicle.YCG_in) / vehicle.Wheelbase_in;
-  let DynamicFWT = vehicle.StaticFWt_lbf - deltaFWT;
-  
-  // Wheelie bar
+  let HP = 0;
+  let HPSave = 0;
+  let WindFPS = 0;
+  let q = 0;
+  let RefArea2 = 0;
+  let DownForce = 0;
+  let DragForce = 0;
+  let DragHP = 0;
+  let DynamicFWT = 0;
+  let DynamicRWT = 0;
   let WheelBarWT = 0;
-  if (DynamicFWT < 0) {
-    WheelBarWT = -DynamicFWT * vehicle.Wheelbase_in / 64;
-    DynamicFWT = 0;
-  }
-  
-  // Dynamic rear weight
-  let DynamicRWT = DownForce - DynamicFWT - WheelBarWT;
-  if (DynamicRWT < 0) DynamicRWT = vehicle.Weight_lbf;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1213-1216 - Calculate AMax (traction limit)
-  // ========================================================================
-  const CAXI = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-  const AX_val = calcAX(env.isLandSpeed);
-  let CRTF = CAXI * AX_val * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(DynamicRWT / 1900, 2.15));
-  if (vehicle.BodyStyle === 8) CRTF = 0.5 * CRTF;
-  
-  const AMax_g = ((CRTF / state.TireGrowth) - DragForce) / vehicle.Weight_lbf;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1218-1229 - Initial HP chain and time estimate
-  // VB6: HP = HP * TGEff(iGear) * Efficiency / TireSlip - DragHP
-  // 
-  // NOTE: TorqueMult is handled through ClutchSlip when converter is stalling.
-  // The VB6 HP chain does NOT directly apply TorqueMult - it's incorporated via ClutchSlip.
-  // ========================================================================
-  const TGEff_gear = vehicle.TGEff[iGear - 1] ?? 0.99;
-  HP = HP * TGEff_gear * vehicle.Efficiency / TireSlip;
-  const HPAtWheels = HP;  // HP at wheels BEFORE subtracting drag (for plotting)
-  HP = HP - DragHP;
-  
-  let PQWT = 550 * gc * HP / vehicle.Weight_lbf;
-  let AGS_g = PQWT / (Vel_L * gc);
-  
-  // TIMESLIP.FRM:1223-1228 - Initial AMin/AMax clamps
-  // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
-  // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
+  let CRTF = 0;
+  let AMax_g = 0;
+  let HPAtWheels = 0;
+  let PQWT = 0;
+  let AGS_g = 0;
   let SLIP = false;
-  if (AGS_g > AMax_g) {
-    SLIP = true;
-    PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
-    AGS_g = AMax_g - (AGS_g - AMax_g);
-  }
-  if (AGS_g < AMin) {
-    // VB6: TIMESLIP.FRM:1228 - Scale PQWT proportionally, then clamp AGS
-    // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
-    PQWT = PQWT * AMin / AGS_g;
-    AGS_g = AMin;
-  }
-  
-  // Initial time estimate
-  // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-  let time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
-  
-  // Debug: Log first step physics values with full HP chain
-  if (state.L <= 2) {
-    console.log(`[vb6Step] L=${state.L} HP chain: HPSave=${HPSave.toFixed(1)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HP_afterClutch=${(HPSave*ClutchSlip).toFixed(1)}, TGEff=${TGEff_gear.toFixed(3)}, Eff=${vehicle.Efficiency.toFixed(3)}, TireSlip=${TireSlip.toFixed(4)}, DragHP=${DragHP.toFixed(2)}, HP_final=${HP.toFixed(1)}`);
-    console.log(`[vb6Step] L=${state.L} PQWT: Vel_L=${Vel_L.toFixed(4)}, Vel0=${state.Vel0_ftps.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, Time0=${state.Time0_s.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}`);
-  }
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
-  // ========================================================================
-  // Select KP21/KP22 based on land speed mode
-  // VB6: TIMESLIP.FRM:557-558 (QPro) vs 567-568 (BVPro)
-  const kp21_const = env.isLandSpeed ? KP21_BV : KP21;
-  const kp22_const = env.isLandSpeed ? KP22_BV : KP22;
-  
-  let EngAccHP = vehicle.EnginePMI * EngRPM_L * (EngRPM_L - state.RPM0);
-  
-  // Debug: Show EngAccHP calculation on first step
-  if (state.L <= 2) {
-    console.log(`[vb6Step] L=${state.L} EngAccHP: EnginePMI=${vehicle.EnginePMI.toFixed(2)}, EngRPM_L=${EngRPM_L.toFixed(0)}, RPM0=${state.RPM0.toFixed(0)}, EngAccHP=${EngAccHP.toFixed(0)}`);
-  }
-  
-  if (EngAccHP < 0) {
-    if (vehicle.isClutch) {
-      EngAccHP = kp21_const * EngAccHP;
-    } else {
-      EngAccHP = kp22_const * EngAccHP;
-    }
-  }
-  
-  let ChasAccHP = ChassisPMI * DSRPM * (DSRPM - state.DSRPM0);
-  if (ChasAccHP < 0) ChasAccHP = 0;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1244-1276 - ITERATION LOOP
-  // ========================================================================
+  let time_L = 0;
+  let EngAccHP = 0;
+  let ChasAccHP = 0;
   let HPEngPMI = 0;
   let HPChasPMI = 0;
   let k = 0;
+  let dt_final = 0;
+  let Dist_L = 0;
+  const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
   
-  for (k = 1; k <= 12; k++) {
-    const dtk1 = time_L - state.Time0_s;
-    // VB6 doesn't have a dtk1 <= 0 check - it proceeds with the calculation
+  // VB6 velocity revision loop - equivalent to GoTo 270
+  const MAX_VEL_REVISIONS = 10;
+  for (let velRevision = 0; velRevision < MAX_VEL_REVISIONS; velRevision++) {
     
-    // TIMESLIP.FRM:1247-1248
-    const Work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dtk1);
-    HPEngPMI = EngAccHP * Work;
-    HPChasPMI = ChasAccHP * Work;
+    // ========================================================================
+    // TIMESLIP.FRM:1139 - Calculate VelSqrd
+    // VelSqrd = Vel(L)^2 - Vel0^2
+    // ========================================================================
+    VelSqrd = Vel_L * Vel_L - state.Vel0_ftps * state.Vel0_ftps;
+  
+    // ========================================================================
+    // TIMESLIP.FRM:1140 - Calculate DSRPM
+    // DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
+    // ========================================================================
+    DSRPM = TireSlip * Vel_L * 60 / state.TireCirFt;
     
-    // TIMESLIP.FRM:1250-1253
-    // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
-    // VB6: HP = ((HP * TGEff(iGear) * Efficiency - HPChasPMI) / TireSlip) - DragHP
-    HP = (HPSave - HPEngPMI) * ClutchSlip;
-    HP = ((HP * TGEff_gear * vehicle.Efficiency - HPChasPMI) / TireSlip) - DragHP;
+    // ========================================================================
+    // TIMESLIP.FRM:1144-1174 - Clutch/Converter calculations
+    // ========================================================================
+    LockRPM = DSRPM * vehicle.GearRatio * TGR_gear;
+    EngRPM_L = vehicle.Slippage * LockRPM;
+    zStall = vehicle.Stall;
+    SlipRatio = 0;
+  
+    if (vehicle.isClutch) {
+      // TIMESLIP.FRM:1148-1152 - Clutch
+      if (EngRPM_L < vehicle.Stall) {
+        if (iGear === 1 || !vehicle.LockUp) {
+          EngRPM_L = vehicle.Stall;
+        }
+      }
+      ClutchSlip = LockRPM / EngRPM_L;
+    } else {
+      // TIMESLIP.FRM:1154-1172 - Converter
+      if (iGear === 1 || !vehicle.LockUp) {
+        // Non lock-up converter
+        zStall = vehicle.Stall;
+        SlipRatio = vehicle.Slippage * LockRPM / zStall;
+        
+        if (state.L > 2) {
+          if (SlipRatio > 0.6) {
+            zStall = zStall * (1 + (vehicle.Slippage - 1) * (SlipRatio - 0.6) / ((1 / vehicle.Slippage) - 0.6));
+          }
+          SlipRatio = vehicle.Slippage * LockRPM / zStall;
+        }
+        ClutchSlip = 1 / vehicle.Slippage;
+        
+        if (EngRPM_L < zStall) {
+          EngRPM_L = zStall;
+          const Work_conv = vehicle.TorqueMult - (vehicle.TorqueMult - 1) * SlipRatio;
+          ClutchSlip = Work_conv * LockRPM / zStall;
+        }
+      } else {
+        // Lock-up converter
+        EngRPM_L = 1.005 * LockRPM; // 0.5% slippage
+        ClutchSlip = LockRPM / EngRPM_L;
+      }
+    }
+    if (ClutchSlip > 1) ClutchSlip = 1;
+  
+    // ========================================================================
+    // TIMESLIP.FRM:1176-1178 - Get HP from curve
+    // VB6: Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+    //      HP = gc_HPTQMult.Value * HP / hpc
+    //      HPSave = HP:    HP = HP * ClutchSlip
+    // ========================================================================
+    HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
+    HP = vehicle.HPTQMult * HP / env.hpc;
+    HPSave = HP;  // VB6: HPSave = HP (BEFORE ClutchSlip, BEFORE any RSA additions)
+    HP = HP * ClutchSlip;
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1180-1194 - Calculate drag forces
+    // ========================================================================
+    // Wind effective velocity
+    WindFPS = Math.sqrt(
+      Vel_L * Vel_L + 
+      2 * Vel_L * (env.WindSpeed_mph / Z5) * Math.cos(PI * env.WindAngle_deg / 180) + 
+      Math.pow(env.WindSpeed_mph / Z5, 2)
+    );
+    
+    // Dynamic pressure (VB6 uses lbm/ft³ for rho, divides by gc)
+    q = Math.sign(WindFPS) * env.rho * Math.pow(Math.abs(WindFPS), 2) / (2 * gc);
+    
+    // Frontal area with tire growth
+    if (vehicle.BodyStyle === 8) {
+      // Motorcycle
+      RefArea2 = vehicle.RefArea_ft2 + ((state.TireGrowth - 1) * vehicle.TireDia_in / 2) * vehicle.TireWidth_in / 144;
+    } else {
+      RefArea2 = vehicle.RefArea_ft2 + ((state.TireGrowth - 1) * vehicle.TireDia_in / 2) * (2 * vehicle.TireWidth_in) / 144;
+    }
+    
+    // Down force (weight + aero lift)
+    DownForce = vehicle.Weight_lbf + vehicle.LiftCoef * RefArea2 * q;
+    
+    // Select constants based on land speed mode
+    // VB6: TIMESLIP.FRM:550-570 - different constants for ISBVPRO
+    const cmu_const = env.isLandSpeed ? CMU_BV : CMU;
+    const cmuk_const = env.isLandSpeed ? CMUK_BV : CMUK;
+    const frct_const = env.isLandSpeed ? FRCT_BV : FRCT;
+    
+    // Rolling resistance coefficient (decreases with distance for QPro, constant for BVPro)
+    const cmu1 = cmu_const - (state.Dist0_ft / 1320) * cmuk_const;
+    
+    // Total drag force
+    DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel_L) + vehicle.DragCoef * RefArea2 * q;
+    DragHP = DragForce * Vel_L / 550;
+  
+    // ========================================================================
+    // TIMESLIP.FRM:1196-1211 - Calculate dynamic weight transfer
+    // ========================================================================
+    const TireRadIn = 12 * state.TireCirFt / (2 * PI);
+    const deltaFWT = (state.Ags0_g * vehicle.Weight_lbf * ((vehicle.YCG_in - TireRadIn) + (frct_const / vehicle.Efficiency) * TireRadIn) + DragForce * vehicle.YCG_in) / vehicle.Wheelbase_in;
+    DynamicFWT = vehicle.StaticFWt_lbf - deltaFWT;
+    
+    // Wheelie bar
+    WheelBarWT = 0;
+    if (DynamicFWT < 0) {
+      WheelBarWT = -DynamicFWT * vehicle.Wheelbase_in / 64;
+      DynamicFWT = 0;
+    }
+    
+    // Dynamic rear weight
+    DynamicRWT = DownForce - DynamicFWT - WheelBarWT;
+    if (DynamicRWT < 0) DynamicRWT = vehicle.Weight_lbf;
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1213-1216 - Calculate AMax (traction limit)
+    // ========================================================================
+    const CAXI = calcCAXI(env.TractionIndex, env.TrackTempEffect);
+    const AX_val = calcAX(env.isLandSpeed);
+    CRTF = CAXI * AX_val * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(DynamicRWT / 1900, 2.15));
+    if (vehicle.BodyStyle === 8) CRTF = 0.5 * CRTF;
+    
+    AMax_g = ((CRTF / state.TireGrowth) - DragForce) / vehicle.Weight_lbf;
+  
+    // ========================================================================
+    // TIMESLIP.FRM:1218-1229 - Initial HP chain and time estimate
+    // VB6: HP = HP * TGEff(iGear) * Efficiency / TireSlip - DragHP
+    // 
+    // NOTE: TorqueMult is handled through ClutchSlip when converter is stalling.
+    // The VB6 HP chain does NOT directly apply TorqueMult - it's incorporated via ClutchSlip.
+    // ========================================================================
+    const TGEff_gear = vehicle.TGEff[iGear - 1] ?? 0.99;
+    HP = HP * TGEff_gear * vehicle.Efficiency / TireSlip;
+    HPAtWheels = HP;  // HP at wheels BEFORE subtracting drag (for plotting)
+    HP = HP - DragHP;
+    
     PQWT = 550 * gc * HP / vehicle.Weight_lbf;
     AGS_g = PQWT / (Vel_L * gc);
     
-    // TIMESLIP.FRM:1255-1258 - Jerk limits
-    let Jerk_iter = 0;
-    if (dtk1 !== 0) {
-      Jerk_iter = (AGS_g - state.Ags0_g) / dtk1;
-    }
-    if (Jerk_iter < JMin) {
-      Jerk_iter = JMin;
-      AGS_g = state.Ags0_g + Jerk_iter * dtk1;
-      PQWT = AGS_g * gc * Vel_L;
-    }
-    if (Jerk_iter > JMax) {
-      Jerk_iter = JMax;
-      AGS_g = state.Ags0_g + Jerk_iter * dtk1;
-      PQWT = AGS_g * gc * Vel_L;
-    }
-    
-    // TIMESLIP.FRM:1260-1266 - AMin/AMax clamps
+    // TIMESLIP.FRM:1223-1228 - Initial AMin/AMax clamps
     // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
     // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
     SLIP = false;
@@ -745,86 +696,174 @@ export function vb6SimulationStep(
       AGS_g = AMax_g - (AGS_g - AMax_g);
     }
     if (AGS_g < AMin) {
-      // VB6: TIMESLIP.FRM:1266 - Scale PQWT proportionally, then clamp AGS
+      // VB6: TIMESLIP.FRM:1228 - Scale PQWT proportionally, then clamp AGS
       // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
       PQWT = PQWT * AMin / AGS_g;
       AGS_g = AMin;
     }
     
-    // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
+    // Initial time estimate
     // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-    const dtk2_time = VelSqrd / (2 * PQWT) + state.Time0_s;
-    const dtk2 = dtk2_time - state.Time0_s;
-    
-    // Debug: Log iteration values
-    if (state.L <= 2 && k <= 3) {
-      console.log(`[vb6Step] L=${state.L} iter k=${k}: HP=${HP.toFixed(1)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, dtk1=${dtk1.toFixed(5)}, dtk2=${dtk2.toFixed(5)}`);
+    time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
+  
+    // Debug: Log first step physics values with full HP chain
+    if (state.L <= 2) {
+      console.log(`[vb6Step] L=${state.L} HP chain: HPSave=${HPSave.toFixed(1)}, ClutchSlip=${ClutchSlip.toFixed(4)}, HP_afterClutch=${(HPSave*ClutchSlip).toFixed(1)}, TGEff=${TGEff_gear.toFixed(3)}, Eff=${vehicle.Efficiency.toFixed(3)}, TireSlip=${TireSlip.toFixed(4)}, DragHP=${DragHP.toFixed(2)}, HP_final=${HP.toFixed(1)}`);
+      console.log(`[vb6Step] L=${state.L} PQWT: Vel_L=${Vel_L.toFixed(4)}, Vel0=${state.Vel0_ftps.toFixed(4)}, VelSqrd=${VelSqrd.toFixed(4)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, AMax_g=${AMax_g.toFixed(3)}, Time0=${state.Time0_s.toFixed(5)}, TimeStep=${TimeStep.toFixed(5)}`);
     }
     
-    if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
-      time_L = dtk2_time;
-      break;
+    // ========================================================================
+    // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
+    // ========================================================================
+    // Select KP21/KP22 based on land speed mode
+    // VB6: TIMESLIP.FRM:557-558 (QPro) vs 567-568 (BVPro)
+    const kp21_const = env.isLandSpeed ? KP21_BV : KP21;
+    const kp22_const = env.isLandSpeed ? KP22_BV : KP22;
+    
+    EngAccHP = vehicle.EnginePMI * EngRPM_L * (EngRPM_L - state.RPM0);
+    
+    // Debug: Show EngAccHP calculation on first step
+    if (state.L <= 2) {
+      console.log(`[vb6Step] L=${state.L} EngAccHP: EnginePMI=${vehicle.EnginePMI.toFixed(2)}, EngRPM_L=${EngRPM_L.toFixed(0)}, RPM0=${state.RPM0.toFixed(0)}, EngAccHP=${EngAccHP.toFixed(0)}`);
     }
     
-    // TIMESLIP.FRM:1272-1275 - Relaxation for next iteration
-    let z = HP / HPSave;
-    if (z < K6) z = K6;
-    if (z > K61) z = K61;
-    time_L = state.Time0_s + dtk1 + z * (dtk2 - dtk1);
-  }
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1280 - Calculate distance after convergence
-  // VB6: Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
-  // ========================================================================
-  let dt_final = time_L - state.Time0_s;
-  const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
-  let term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-  let Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
-  
-  // ========================================================================
-  // TIMESLIP.FRM:1295-1352 - Velocity revision loop for hitting exact targets
-  // VB6 checks if we overshot and loops back (GoTo 270) with revised velocity
-  // NOTE: Skip during gear changes to avoid breaking timeslip recording
-  // ========================================================================
-  if (env.nextDistPrint !== undefined && !gearChanged) {
-    const targetDist = env.nextDistPrint;
-    const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
-    const TimeTol_rev = 0.002;
-    
-    // VB6 lines 1296-1310: Check for distance overshoot and calculate VelDistMatch
-    const DistStep_rev = Math.abs(targetDist - Dist_L);
-    let VelDistMatch = 0;
-    
-    if (!(DistStep_rev < DistTol_rev && (DistStep_rev / Vel_L) < TimeTol_rev)) {
-      // Not within tolerance - check if we overshot
-      if (Dist_L > targetDist) {
-        // VB6 line 1306: Work = 3 * PQWT * (DistToPrint(iDist) - Dist(L)) + Vel(L) ^ 3
-        const Work_dist = 3 * PQWT * (targetDist - Dist_L) + Math.pow(Vel_L, 3);
-        if (Work_dist > 0) {
-          VelDistMatch = Math.pow(Work_dist, 1/3);
-        }
+    if (EngAccHP < 0) {
+      if (vehicle.isClutch) {
+        EngAccHP = kp21_const * EngAccHP;
+      } else {
+        EngAccHP = kp22_const * EngAccHP;
       }
     }
     
-    // VB6 lines 1344-1352: Apply velocity revision if needed
-    let NextVel = Vel_L;
-    if (VelDistMatch > 0 && VelDistMatch < NextVel) NextVel = VelDistMatch;
+    ChasAccHP = ChassisPMI * DSRPM * (DSRPM - state.DSRPM0);
+    if (ChasAccHP < 0) ChasAccHP = 0;
     
-    // VB6 line 1352: If NextVel > Vel0 And NextVel < Vel(L) Then Vel(L) = NextVel: GoTo 270
-    if (NextVel > state.Vel0_ftps && NextVel < Vel_L) {
-      // Revise velocity and recalculate (equivalent to GoTo 270)
-      Vel_L = NextVel;
-      VelSqrd = Vel_L * Vel_L - state.Vel0_ftps * state.Vel0_ftps;
+    // ========================================================================
+    // TIMESLIP.FRM:1244-1276 - ITERATION LOOP
+    // ========================================================================
+    HPEngPMI = 0;
+    HPChasPMI = 0;
+    k = 0;
+  
+    for (k = 1; k <= 12; k++) {
+      const dtk1 = time_L - state.Time0_s;
+      // VB6 doesn't have a dtk1 <= 0 check - it proceeds with the calculation
       
-      // Recalculate time and distance with revised velocity
+      // TIMESLIP.FRM:1247-1248
+      const Work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dtk1);
+      HPEngPMI = EngAccHP * Work;
+      HPChasPMI = ChasAccHP * Work;
+      
+      // TIMESLIP.FRM:1250-1253
+      // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
+      // VB6: HP = ((HP * TGEff(iGear) * Efficiency - HPChasPMI) / TireSlip) - DragHP
+      HP = (HPSave - HPEngPMI) * ClutchSlip;
+      HP = ((HP * TGEff_gear * vehicle.Efficiency - HPChasPMI) / TireSlip) - DragHP;
+      PQWT = 550 * gc * HP / vehicle.Weight_lbf;
+      AGS_g = PQWT / (Vel_L * gc);
+      
+      // TIMESLIP.FRM:1255-1258 - Jerk limits
+      let Jerk_iter = 0;
+      if (dtk1 !== 0) {
+        Jerk_iter = (AGS_g - state.Ags0_g) / dtk1;
+      }
+      if (Jerk_iter < JMin) {
+        Jerk_iter = JMin;
+        AGS_g = state.Ags0_g + Jerk_iter * dtk1;
+        PQWT = AGS_g * gc * Vel_L;
+      }
+      if (Jerk_iter > JMax) {
+        Jerk_iter = JMax;
+        AGS_g = state.Ags0_g + Jerk_iter * dtk1;
+        PQWT = AGS_g * gc * Vel_L;
+      }
+      
+      // TIMESLIP.FRM:1260-1266 - AMin/AMax clamps
+      // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
+      // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
+      SLIP = false;
+      if (AGS_g > AMax_g) {
+        SLIP = true;
+        PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
+        AGS_g = AMax_g - (AGS_g - AMax_g);
+      }
+      if (AGS_g < AMin) {
+        // VB6: TIMESLIP.FRM:1266 - Scale PQWT proportionally, then clamp AGS
+        // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
+        PQWT = PQWT * AMin / AGS_g;
+        AGS_g = AMin;
+      }
+      
+      // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
       // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-      time_L = VelSqrd / (2 * PQWT) + state.Time0_s;
-      dt_final = time_L - state.Time0_s;
-      term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-      Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+      const dtk2_time = VelSqrd / (2 * PQWT) + state.Time0_s;
+      const dtk2 = dtk2_time - state.Time0_s;
+      
+      // Debug: Log iteration values
+      if (state.L <= 2 && k <= 3) {
+        console.log(`[vb6Step] L=${state.L} iter k=${k}: HP=${HP.toFixed(1)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, dtk1=${dtk1.toFixed(5)}, dtk2=${dtk2.toFixed(5)}`);
+      }
+      
+      if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
+        time_L = dtk2_time;
+        break;
+      }
+      
+      // TIMESLIP.FRM:1272-1275 - Relaxation for next iteration
+      let z = HP / HPSave;
+      if (z < K6) z = K6;
+      if (z > K61) z = K61;
+      time_L = state.Time0_s + dtk1 + z * (dtk2 - dtk1);
     }
-  }
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1280 - Calculate distance after convergence
+    // VB6: Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
+    // ========================================================================
+    dt_final = time_L - state.Time0_s;
+    let term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
+    Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1295-1352 - Velocity revision check
+    // VB6 checks if we overshot and loops back (GoTo 270) with revised velocity
+    // This is now a proper loop - we use 'continue' to re-run full physics
+    // ========================================================================
+    if (env.nextDistPrint !== undefined) {
+      const targetDist = env.nextDistPrint;
+      const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
+      const TimeTol_rev = 0.002;
+      
+      // VB6 lines 1296-1310: Check for distance overshoot and calculate VelDistMatch
+      const DistStep_rev = Math.abs(targetDist - Dist_L);
+      let VelDistMatch = 0;
+      
+      if (!(DistStep_rev < DistTol_rev && (DistStep_rev / Vel_L) < TimeTol_rev)) {
+        // Not within tolerance - check if we overshot
+        if (Dist_L > targetDist) {
+          // VB6 line 1306: Work = 3 * PQWT * (DistToPrint(iDist) - Dist(L)) + Vel(L) ^ 3
+          const Work_dist = 3 * PQWT * (targetDist - Dist_L) + Math.pow(Vel_L, 3);
+          if (Work_dist > 0) {
+            VelDistMatch = Math.pow(Work_dist, 1/3);
+          }
+        }
+      }
+      
+      // VB6 lines 1344-1352: Apply velocity revision if needed
+      let NextVel = Vel_L;
+      if (VelDistMatch > 0 && VelDistMatch < NextVel) NextVel = VelDistMatch;
+      
+      // VB6 line 1352: If NextVel > Vel0 And NextVel < Vel(L) Then Vel(L) = NextVel: GoTo 270
+      if (NextVel > state.Vel0_ftps && NextVel < Vel_L) {
+        // Revise velocity and LOOP BACK to re-run full physics (GoTo 270)
+        Vel_L = NextVel;
+        continue;  // This loops back to recalculate DSRPM, EngRPM, HP, PQWT, etc.
+      }
+    }
+    
+    // No velocity revision needed - break out of the outer loop
+    break;
+  } // End of velocity revision loop
   
   // Debug: Log distance calculation near rollout
   if (env.nextDistPrint !== undefined && env.nextDistPrint <= 2 && state.L >= 19 && state.L <= 21) {
