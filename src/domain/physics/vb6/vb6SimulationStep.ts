@@ -462,7 +462,7 @@ export function vb6SimulationStep(
         const Vel_L_old = Vel_L;
         Vel_L = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
         if (env.nextDistPrint <= 2) {
-          console.log(`[vb6Step] L=${state.L} DistTarget APPLIED: Vel_L ${Vel_L_old.toFixed(3)} -> ${Vel_L.toFixed(3)}, distToTarget=${distToTarget.toFixed(4)}`);
+          console.log(`[vb6Step] L=${state.L} DistTarget: Vel0=${state.Vel0_ftps.toFixed(3)}, Ags0=${state.Ags0_g.toFixed(4)}, distToTarget=${distToTarget.toFixed(4)}, Vel_L ${Vel_L_old.toFixed(3)} -> ${Vel_L.toFixed(3)}`);
         }
       }
     }
@@ -756,6 +756,12 @@ export function vb6SimulationStep(
   const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
   const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
   const Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+  
+  // Debug: Log distance calculation near rollout
+  if (env.nextDistPrint !== undefined && env.nextDistPrint <= 2 && state.L >= 19 && state.L <= 21) {
+    const distTraveled = Dist_L - state.Dist0_ft;
+    console.log(`[vb6Step] L=${state.L} DistCalc: dt=${dt_final.toFixed(5)}, PQWT=${PQWT.toFixed(2)}, Vel0=${state.Vel0_ftps.toFixed(3)}, Vel_L=${Vel_L.toFixed(3)}, Dist0=${state.Dist0_ft.toFixed(4)}, Dist_L=${Dist_L.toFixed(4)}, traveled=${distTraveled.toFixed(4)}`);
+  }
   
   // ========================================================================
   // Update state

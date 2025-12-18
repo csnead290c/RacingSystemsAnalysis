@@ -1018,23 +1018,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     }
     
     // Check if timer has started (car has moved past rollout distance)
-    // VB6: TIMESLIP.FRM:1373-1375 - Check distance print with tolerance
-    // VB6 condition: (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol)
-    // Since distance targeting may overshoot, interpolate to find exact rollout time
+    // VB6: TIMESLIP.FRM:1373-1381 - Check distance print and record time
+    // VB6 uses the step time when distance is within tolerance, no interpolation
     if (timerStartTime_s === null && state.Dist_ft >= rolloutFt) {
-      // Interpolate back to find exact time when we crossed rolloutFt
-      // VB6 uses step time, but with distance targeting the car should hit exactly
-      // If we overshoot, interpolate based on velocity
-      const distPastRollout = state.Dist_ft - rolloutFt;
-      if (distPastRollout > 0 && state.Vel_ftps > 0) {
-        const timeToReachRollout = distPastRollout / state.Vel_ftps;
-        timerStartTime_s = state.time_s - timeToReachRollout;
-      } else {
-        timerStartTime_s = state.time_s;
-      }
+      // VB6 uses the actual step time - no interpolation
+      timerStartTime_s = state.time_s;
       
       // Debug: Log rollout timing (VB6 shows 0.146s at rollout for TA Dragster)
-      console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${rolloutFt}ft (actual=${state.Dist_ft.toFixed(4)}), v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
+      console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
     }
     
     // Debug: Log at key distance points to find where discrepancy accumulates
