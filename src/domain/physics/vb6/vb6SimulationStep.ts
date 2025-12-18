@@ -412,6 +412,25 @@ export function vb6SimulationStep(
     // Only apply timestep limits when NOT in a gear change (ShiftFlag < 2)
     // TIMESLIP.FRM:1111-1120 - Limit timestep (in VB6 ORDER)
     
+    // VB6 constant K7 = 9.5 for Quarter Pro, 5.5 for Bonneville Pro
+    const K7 = env.isLandSpeed ? 5.5 : 9.5;
+    
+    // TIMESLIP.FRM:1111-1112 - Don't let TimeStep exceed K7 steps per TimePrintInc
+    // VB6: If TimeStep > (TimePrintInc / K7) Then TimeStep = TimePrintInc / K7
+    if (env.TimePrintInc !== undefined) {
+      const maxTimeStepByInc = env.TimePrintInc / K7;
+      if (TimeStep > maxTimeStepByInc) TimeStep = maxTimeStepByInc;
+    }
+    
+    // TIMESLIP.FRM:1113-1114 - Don't let TimeStep exceed TimePrint
+    // VB6: If TimeStep > (TimePrint - Time0) Then TimeStep = TimePrint - Time0
+    if (env.TimePrint !== undefined) {
+      const timeToNextPrint = env.TimePrint - state.Time0_s;
+      if (timeToNextPrint > 0 && TimeStep > timeToNextPrint) {
+        TimeStep = timeToNextPrint;
+      }
+    }
+    
     // TIMESLIP.FRM:1116-1119 - Don't let TimeStep exceed 4.5 steps to distance print
     // VB6: If iDist > 1 Then
     //        Work = ((DistToPrint(iDist) - DistToPrint(iDist - 1)) / Vel0) / 4.5
