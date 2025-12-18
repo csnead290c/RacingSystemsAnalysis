@@ -980,15 +980,23 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
     // VB6: TIMESLIP.FRM:1373-1418 - Check distance print and advance iDist
-    // VB6 condition: (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol)
-    // VB6 records time WHEN tolerance check passes, THEN advances iDist
+    // VB6 condition line 1375: 
+    //   (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) Or (ShiftFlag = 2 And Dist(L) >= DistToPrint(iDist))
+    // Two ways to trigger: (1) within tolerance, OR (2) during shift AND past target
     const currentTarget = distPrintPoints[distPrintIdx];
     const DistStep = Math.abs(currentTarget - state.Dist_ft);
     const DistTol = 0.1;  // VB6 line 1379: DistTol = 0.1 for rollout, stays 0.1 until case 4
     const TimeTol = 0.002;
-    const toleranceMet = distPrintIdx < distPrintPoints.length - 1 && 
-        DistStep < DistTol && 
+    
+    // VB6's two conditions for recording distance print:
+    // 1. Normal tolerance check: within DistTol AND time to cover < TimeTol
+    const normalToleranceMet = DistStep < DistTol && 
         (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true);
+    // 2. Shift fallback: during gear shift (ShiftFlag=2) AND we've passed the target
+    const shiftFallback = state.ShiftFlag === 2 && state.Dist_ft >= currentTarget;
+    
+    const toleranceMet = distPrintIdx < distPrintPoints.length - 1 && 
+        (normalToleranceMet || shiftFallback);
     
     if (toleranceMet) {
       // VB6 records TIMESLIP values when hitting specific distance print points
