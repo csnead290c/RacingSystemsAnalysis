@@ -1018,14 +1018,23 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     }
     
     // Check if timer has started (car has moved past rollout distance)
-    // VB6: TIMESLIP.FRM:1373-1381 - Check distance print and record time
-    // VB6 uses the step time when distance is within tolerance, no interpolation
-    if (timerStartTime_s === null && state.Dist_ft >= rolloutFt) {
-      // VB6 uses the actual step time - no interpolation
-      timerStartTime_s = state.time_s;
+    // VB6: TIMESLIP.FRM:1373-1381 - Check distance print with tolerance
+    // VB6 uses TWO conditions (both must be true):
+    //   1. DistStep < DistTol (distance error < 0.1 ft for rollout)
+    //   2. (DistStep / Vel(L)) < TimeTol (time to cover error < 0.002s)
+    // OR during shift: ShiftFlag = 2 And Dist(L) >= DistToPrint(iDist)
+    if (timerStartTime_s === null) {
+      const DistStep = Math.abs(rolloutFt - state.Dist_ft);
+      const DistTol = 0.1;  // VB6 line 1379: DistTol = 0.1 for rollout
+      const TimeTol = 0.002;  // VB6 constant
       
-      // Debug: Log rollout timing (VB6 shows 0.146s at rollout for TA Dragster)
-      console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
+      // VB6 tolerance check - triggers when CLOSE to target, not just past it
+      if (DistStep < DistTol && (DistStep / state.Vel_ftps) < TimeTol) {
+        timerStartTime_s = state.time_s;
+        
+        // Debug: Log rollout timing
+        console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (err=${DistStep.toFixed(4)}), v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
+      }
     }
     
     // Debug: Log at key distance points to find where discrepancy accumulates
