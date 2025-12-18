@@ -1076,7 +1076,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         // VB6 line 1381: Dist(L) = Dist(L) + ovradj - PERMANENTLY adjust distance for front overhang
         // This is critical - after this point, all distances include ovradj
         state.Dist_ft = state.Dist_ft + ovradj;
-        state.Dist0_ft = state.Dist0_ft + ovradj;  // Also adjust Dist0 so next step starts correctly
+        // vb6SimulationStep already set Dist0_ft = Dist_ft (before adjustment)
+        // We need to update Dist0_ft to the adjusted value so next step starts correctly
+        state.Dist0_ft = state.Dist_ft;
         
         // Debug: Log rollout timing
         console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (after ovradj=${ovradj.toFixed(3)}), v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
