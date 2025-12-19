@@ -1066,17 +1066,17 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       }
     }
     
-    // VB6: TIMESLIP.FRM:1373-1418 - Check distance print and advance iDist
-    // VB6 condition line 1375: 
-    //   (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) Or (ShiftFlag = 2 And Dist(L) >= DistToPrint(iDist))
-    // Two ways to trigger: (1) within tolerance, OR (2) during shift AND past target
+    // VB6: TIMESLIP.FRM:1373-1418 and doOpt/sub310 - Distance print detection
+    // VB6 has TWO mechanisms:
+    // 1. Line 1375: (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) - within tolerance
+    // 2. doOpt/sub310: When Dist(L) >= DistToPrint(iDist) + DistTol - overshoot, then interpolate back
+    // Both mechanisms trigger distance recording and iDist advancement.
     const currentTarget = distPrintPoints[distPrintIdx];
     const DistStep = Math.abs(currentTarget - state.Dist_ft);
     // VB6 DistTol is dynamic, updated AFTER each distance target is reached:
     // - Initial (iDist=1): 0.005 (TIMESLIP.FRM:997)
     // - After rollout Case 1 (iDist=2,3,4): 0.1 (TIMESLIP.FRM:1379)
     // - After 330ft Case 4 (iDist>=5): 0.008 (TIMESLIP.FRM:1387)
-    // distPrintIdx is 0-based, so vb6iDist = distPrintIdx + 1
     const vb6iDist_check = distPrintIdx + 1;
     let DistTol: number;
     if (vb6iDist_check <= 1) {
@@ -1088,15 +1088,17 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     }
     const TimeTol = 0.002;
     
-    // VB6's two conditions for recording distance print:
-    // 1. Normal tolerance check: within DistTol AND time to cover < TimeTol
-    const normalToleranceMet = DistStep < DistTol && 
+    // VB6's conditions for recording distance print:
+    // 1. Within tolerance: DistStep < DistTol AND (DistStep / Vel) < TimeTol
+    const withinTolerance = DistStep < DistTol && 
         (state.Vel_ftps > 0 ? (DistStep / state.Vel_ftps) < TimeTol : true);
-    // 2. Shift fallback: during gear shift (ShiftFlag=2) AND we've passed the target
+    // 2. Overshoot (doOpt/sub310): Dist >= target + DistTol - triggers interpolation back to exact target
+    const overshoot = state.Dist_ft >= currentTarget + DistTol;
+    // 3. Shift fallback: during gear shift (ShiftFlag=2) AND we've passed the target
     const shiftFallback = state.ShiftFlag === 2 && state.Dist_ft >= currentTarget;
     
     const toleranceMet = distPrintIdx < distPrintPoints.length && 
-        (normalToleranceMet || shiftFallback);
+        (withinTolerance || overshoot || shiftFallback);
     
     if (toleranceMet) {
       // VB6 records TIMESLIP values when hitting specific distance print points
@@ -1105,66 +1107,66 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // Note: distPrintIdx is 0-based, VB6 iDist is 1-based
       const vb6iDist = distPrintIdx + 1;  // Convert to VB6's 1-based index
       
-      // VB6 has a velocity revision loop (lines 1295-1352) that iterates to hit distance targets precisely.
-      // RSA doesn't have this loop, so we use interpolation when shift fallback occurs.
-      // For shift fallback, interpolate back to find when the target was actually crossed.
+      // VB6 sub310 DISTANCE INTERPOLATION (TIMESLIP.FRM:1609-1640)
+      // When we overshoot a distance target, VB6 interpolates back to exact distance.
+      // VB6 calculates: factor1 = (DistToPrint(iDist) - Dist0) / (ASV(2) - Dist0)
+      // Then: time(L) = Time0 + factor * (ASV(1) - Time0)
+      //       Vel(L) = Vel0 + factor * (ASV(3) - Vel0)
+      //       Dist(L) = DistToPrint(iDist)  -- exact target!
       let recordTime_s: number;
       let recordVel_ftps: number;
       
-      if (shiftFallback && !normalToleranceMet && prevDist_ft < currentTarget && state.Dist_ft > prevDist_ft) {
-        // Interpolate to find exact crossing time
-        const frac = (currentTarget - prevDist_ft) / (state.Dist_ft - prevDist_ft);
-        recordTime_s = prevTime_s + frac * (state.time_s - prevTime_s);
-        recordVel_ftps = state.Vel0_ftps + frac * (state.Vel_ftps - state.Vel0_ftps);
+      // Check if we need to interpolate (overshoot or shift fallback)
+      const needsInterpolation = (overshoot || shiftFallback) && 
+          prevDist_ft < currentTarget && state.Dist_ft > prevDist_ft;
+      
+      if (needsInterpolation) {
+        // VB6 sub310: factor1 = (DistToPrint(iDist) - Dist0) / (Dist(L) - Dist0)
+        const factor1 = (currentTarget - prevDist_ft) / (state.Dist_ft - prevDist_ft);
+        // Validate factor (VB6: If factor1 <= 0 Or factor1 >= 1 Then factor1 = 0)
+        if (factor1 > 0 && factor1 < 1) {
+          // VB6 sub310: time(L) = Time0 + factor * (ASV(1) - Time0)
+          recordTime_s = prevTime_s + factor1 * (state.time_s - prevTime_s);
+          // VB6 sub310: Vel(L) = Vel0 + factor * (ASV(3) - Vel0)
+          recordVel_ftps = state.Vel0_ftps + factor1 * (state.Vel_ftps - state.Vel0_ftps);
+        } else {
+          recordTime_s = state.time_s;
+          recordVel_ftps = state.Vel_ftps;
+        }
       } else {
         recordTime_s = state.time_s;
         recordVel_ftps = state.Vel_ftps;
       }
       
-      // currentTrackTime uses interpolated time for TIMESLIP display (like 330ft)
-      const currentTrackTime = timerStartTime_s !== null 
+      // Track time relative to timer start (rollout)
+      // VB6 sub310 uses interpolated time for all distance recordings
+      const interpolatedTrackTime = timerStartTime_s !== null 
         ? recordTime_s - timerStartTime_s 
         : 0;
-      
-      // actualTrackTime uses real step time
-      const actualTrackTime = timerStartTime_s !== null
-        ? state.time_s - timerStartTime_s
-        : 0;
-      
-      // VB6 interpolates to hit EXACT distances (sub310 sets Dist(L) = DistToPrint(iDist))
-      // For trap speed distances (594, 660, 1254, 1320), interpolate to find exact crossing time
-      // This matches VB6's time(L) which is recorded AFTER interpolation to exact distance
-      let interpolatedTrackTime = actualTrackTime;
-      if (prevDist_ft < currentTarget && state.Dist_ft > prevDist_ft && state.Dist_ft >= currentTarget) {
-        // Interpolate to find exact time when target was crossed
-        const frac = (currentTarget - prevDist_ft) / (state.Dist_ft - prevDist_ft);
-        const interpolatedTime_s = prevTime_s + frac * (state.time_s - prevTime_s);
-        interpolatedTrackTime = timerStartTime_s !== null ? interpolatedTime_s - timerStartTime_s : 0;
-      }
       
       // VB6 TIMESLIP.FRM:1383-1402 - Match EXACTLY
       // VB6 only records TIMESLIP when ShiftFlag < 2 (not during shift)
       // VB6 uses instantaneous speed Vel(L) * Z5 for non-trap-speed points
       
-      // Case 3 (60ft): VB6 line 1383-1385
+      // Case 3 (60ft): VB6 line 1383-1385 and sub310
       if (vb6iDist === 3 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Then TIMESLIP(1) = time(L)
         //      If ShiftFlag = 2 And TIMESLIP(1) = 0 Then TIMESLIP(1) = time(L)
-        // Use actualTrackTime to match VB6's time(L)
+        // Use interpolatedTrackTime for sub310 precision
         if (state.ShiftFlag < 2 || !timeslip.find(t => t.d_ft === 60)) {
           if (!timeslip.find(t => t.d_ft === 60)) {
-            timeslip.push({ d_ft: 60, t_s: actualTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+            timeslip.push({ d_ft: 60, t_s: interpolatedTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
           }
         }
       }
       // Case 4 (330ft): VB6 line 1386
       // VB6's velocity revision loop (lines 1305-1352) ensures 330ft is hit precisely.
-      // RSA uses interpolation for shift fallback to approximate this behavior.
+      // RSA uses sub310 interpolation to approximate this behavior.
       else if (vb6iDist === 4 && timerStartTime_s !== null) {
         if (!timeslip.find(t => t.d_ft === 330)) {
-          // Record with interpolated time if shift fallback, otherwise actual time if ShiftFlag < 2
-          if (state.ShiftFlag < 2 || shiftFallback) {
-            timeslip.push({ d_ft: 330, t_s: currentTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
+          // Record with interpolated time (sub310 style)
+          if (state.ShiftFlag < 2 || shiftFallback || overshoot) {
+            timeslip.push({ d_ft: 330, t_s: interpolatedTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
           }
         }
       }
@@ -1176,13 +1178,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           saveTime_594ft = interpolatedTrackTime;
         }
       }
-      // Case 6 (660ft): VB6 lines 1390-1394
-      // RSA extension: Also record during shift fallback (when shift crosses 660ft)
-      // This handles Pro Stock where shift to 5th gear happens right at 660ft
+      // Case 6 (660ft): VB6 lines 1390-1394 and sub310
+      // VB6 sub310 interpolates to exact 660ft for trap speed calculation
       else if (vb6iDist === 6 && timerStartTime_s !== null) {
-        // VB6: If ShiftFlag < 2 Then record, but RSA also needs shift fallback
+        // VB6: If ShiftFlag < 2 Then record, also handle overshoot via sub310
         if (!timeslip.find(t => t.d_ft === 660)) {
-          if (state.ShiftFlag < 2 || shiftFallback) {
+          if (state.ShiftFlag < 2 || shiftFallback || overshoot) {
             // VB6 interpolates to exact 660ft (sub310), so use interpolatedTrackTime for trap speed
             let speed_mph = recordVel_ftps * FPS_TO_MPH;  // fallback using interpolated velocity
             if (saveTime_594ft !== null && interpolatedTrackTime > saveTime_594ft) {
@@ -1193,12 +1194,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           }
         }
       }
-      // Case 7 (1000ft): VB6 line 1395
+      // Case 7 (1000ft): VB6 line 1395 and sub310
       else if (vb6iDist === 7 && timerStartTime_s !== null) {
         // VB6: If ShiftFlag < 2 Then TIMESLIP(5) = time(L)
-        // Use actualTrackTime to match VB6's time(L)
-        if (state.ShiftFlag < 2 && !timeslip.find(t => t.d_ft === 1000)) {
-          timeslip.push({ d_ft: 1000, t_s: actualTrackTime, v_mph: state.Vel_ftps * FPS_TO_MPH });
+        // Use interpolatedTrackTime for sub310 precision
+        if ((state.ShiftFlag < 2 || overshoot) && !timeslip.find(t => t.d_ft === 1000)) {
+          timeslip.push({ d_ft: 1000, t_s: interpolatedTrackTime, v_mph: recordVel_ftps * FPS_TO_MPH });
         }
       }
       // Case 8 (1254ft): VB6 line 1396
@@ -1209,12 +1210,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           saveTime_1254ft = interpolatedTrackTime;
         }
       }
-      // Case 9 (1320ft): VB6 lines 1398-1402
-      // RSA extension: Also record during shift fallback (when shift crosses 1320ft)
+      // Case 9 (1320ft): VB6 lines 1398-1402 and sub310
+      // VB6 sub310 interpolates to exact 1320ft for trap speed calculation
       else if (vb6iDist === 9 && timerStartTime_s !== null) {
-        // VB6: If ShiftFlag < 2 Then record, but RSA also needs shift fallback
+        // VB6: If ShiftFlag < 2 Then record, also handle overshoot via sub310
         if (!timeslip.find(t => t.d_ft === 1320)) {
-          if (state.ShiftFlag < 2 || shiftFallback) {
+          if (state.ShiftFlag < 2 || shiftFallback || overshoot) {
             // VB6 interpolates to exact 1320ft (sub310), so use interpolatedTrackTime for trap speed
             let speed_mph = recordVel_ftps * FPS_TO_MPH;  // fallback using interpolated velocity
             if (saveTime_1254ft !== null && interpolatedTrackTime > saveTime_1254ft) {
