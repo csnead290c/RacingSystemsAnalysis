@@ -892,6 +892,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   let TimePrint = TimePrintInc;  // VB6: TimePrint = TimePrintInc (line 918)
   let Shift2PrintTime: number | undefined = undefined;  // VB6 line 1071 - set ONCE when ShiftFlag transitions 1→2
   
+  // VB6 TIMESLIP.FRM:818 - MPHtoPrint array for VelMPHMatch velocity revision
+  // Quarter Pro: MPHtoPrint(1) = 60/Z5, MPHtoPrint(2) = 100/Z5 (in ft/s)
+  // Z5 = 3600/5280 = 0.681818 (already defined above)
+  const MPHtoPrint = isLandSpeed 
+    ? [100 / Z5, 200 / Z5]  // Bonneville: 100 and 200 MPH
+    : [60 / Z5, 100 / Z5];  // Quarter Pro: 60 and 100 MPH
+  let iMPH = 1;  // VB6 TIMESLIP.FRM:1002 - iMPH starts at 1
+  
   const vb6Env: VB6EnvParams = {
     rho: rho_lbm_ft3,
     hpc,
@@ -905,6 +913,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     TimePrintInc,
     TimePrint,
     shiftRPMs,  // VB6 ShiftRPM array for VelShiftMatch calculation
+    iMPH,       // VB6 iMPH for VelMPHMatch velocity revision
+    MPHtoPrint, // VB6 MPHtoPrint array [60/Z5, 100/Z5] in ft/s
   };
   
   // ========================================================================
@@ -1374,6 +1384,21 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         (state.ShiftFlag === 2 && state.time_s >= TimePrint)) {
       TimePrint = TimePrint + TimePrintInc;
     }
+    
+    // VB6 TIMESLIP.FRM:1426-1429 - Check for speed match (iMPH update)
+    // If iMPH <= 2 Then
+    //     If (Abs(MPHtoPrint(iMPH) - Vel(L)) < KV) Or (ShiftFlag = 2 And Vel(L) >= MPHtoPrint(iMPH)) Then
+    //         iMPH = iMPH + 1
+    const KV_ftps = isLandSpeed ? (0.05 / Z5) : (0.02 / Z5);
+    if (iMPH <= 2) {
+      const targetMPH_ftps = MPHtoPrint[iMPH - 1];
+      if ((Math.abs(targetMPH_ftps - state.Vel_ftps) < KV_ftps) ||
+          (state.ShiftFlag === 2 && state.Vel_ftps >= targetMPH_ftps)) {
+        iMPH++;
+      }
+    }
+    // Update vb6Env.iMPH for next step
+    vb6Env.iMPH = iMPH;
   }
   
   // ========================================================================

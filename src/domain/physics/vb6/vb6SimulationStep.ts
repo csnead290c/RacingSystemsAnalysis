@@ -29,9 +29,9 @@
 import { 
   gc, PI, JMin, JMax, AMin, K6, K61, Z5,
   // Quarter Pro constants
-  CMU, CMUK, KP21, KP22, FRCT, AX,
+  CMU, CMUK, KP21, KP22, FRCT, AX, KV,
   // Bonneville Pro constants
-  CMU_BV, CMUK_BV, KP21_BV, KP22_BV, FRCT_BV, AX_BV
+  CMU_BV, CMUK_BV, KP21_BV, KP22_BV, FRCT_BV, AX_BV, KV_BV
 } from './constants';
 
 // ============================================================================
@@ -142,6 +142,8 @@ export interface VB6EnvParams {
   iDist?: number;           // VB6 iDist - current distance print index (1-based like VB6)
   shiftRPMs?: number[];     // VB6 ShiftRPM array for VelShiftMatch calculation
   Shift2PrintTime?: number; // VB6 TIMESLIP.FRM:1071 - Target time for shift completion
+  iMPH?: number;            // VB6 iMPH - current MPH print index (1-based, 1 or 2)
+  MPHtoPrint?: number[];    // VB6 MPHtoPrint array [60/Z5, 100/Z5] in ft/s for VelMPHMatch
 }
 
 /**
@@ -906,9 +908,21 @@ export function vb6SimulationStep(
     }
     
     // VB6 lines 1323-1331: Check for MPH overshoot (VelMPHMatch)
-    // VB6 uses MPHtoPrint array for speed matching - we skip this for now
-    // as it's primarily for display purposes and not physics-critical
+    // VB6 uses MPHtoPrint array for speed matching at 60 and 100 MPH
+    // KV = 0.02 / Z5 for Quarter Pro (velocity tolerance in ft/s)
     let VelMPHMatch = 0;
+    const KV_ftps = env.isLandSpeed ? KV_BV : KV;
+    if (env.iMPH !== undefined && env.iMPH <= 2 && env.MPHtoPrint !== undefined) {
+      const targetMPH_ftps = env.MPHtoPrint[env.iMPH - 1];  // 0-based array
+      if (targetMPH_ftps !== undefined) {
+        if (Math.abs(targetMPH_ftps - Vel_L) >= KV_ftps) {
+          if (Vel_L > targetMPH_ftps) {
+            // VB6 line 1329: VelMPHMatch = MPHtoPrint(iMPH)
+            VelMPHMatch = targetMPH_ftps;
+          }
+        }
+      }
+    }
     
     // VB6 lines 1333-1341: Check for SHIFT RPM overshoot (VelShiftMatch)
     // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
