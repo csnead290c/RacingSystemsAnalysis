@@ -141,6 +141,33 @@ function Predict() {
       try {
         const vehicles = await loadVehicles();
         setAvailableVehicles(vehicles);
+        
+        // Check sessionStorage for vehicle ID from "Run Sim" button in Vehicle Manager
+        const storedVehicleId = sessionStorage.getItem('selectedVehicleId');
+        const storedRaceLength = sessionStorage.getItem('selectedRaceLength') as RaceLength | null;
+        
+        if (storedVehicleId) {
+          // Clear sessionStorage after reading
+          sessionStorage.removeItem('selectedVehicleId');
+          sessionStorage.removeItem('selectedRaceLength');
+          
+          // Find the vehicle and auto-select it
+          const foundVehicle = vehicles.find(v => v.id === storedVehicleId);
+          if (foundVehicle) {
+            setVehicle(foundVehicle as Vehicle);
+            setSelectedVehicleId(foundVehicle.id);
+            if (storedRaceLength) {
+              setRaceLength(storedRaceLength);
+            } else if (foundVehicle.defaultRaceLength) {
+              setRaceLength(foundVehicle.defaultRaceLength as RaceLength);
+            }
+            setEnv(DEFAULT_ENV);
+            setShowVehicleSelector(false);
+            setLoading(false);
+            return;
+          }
+        }
+        
         if (vehicles.length > 0) {
           setSelectedVehicleId(vehicles[0].id);
         }
@@ -208,14 +235,16 @@ function Predict() {
           // Override fixture env with UI env settings for user control
           const simInputs = fixtureToSimInputs(fixture as any, raceLength);
           // Use UI environment settings instead of fixture env
+          // VB6 Quarter Jr default: trackTemp = temperature + 30 when not specified
+          const tempF_strict = currentEnv.temperatureF ?? 75;
           simInputs.env = {
             elevation: currentEnv.elevation ?? 0,
             barometerInHg: currentEnv.barometerInHg ?? 29.92,
-            temperatureF: currentEnv.temperatureF ?? 75,
+            temperatureF: tempF_strict,
             humidityPct: currentEnv.humidityPct ?? 50,
             windMph: currentEnv.windMph ?? 0,
             windAngleDeg: currentEnv.windAngleDeg ?? 0,
-            trackTempF: currentEnv.trackTempF ?? 100,
+            trackTempF: currentEnv.trackTempF ?? (tempF_strict + 30),
             tractionIndex: currentEnv.tractionIndex ?? 3,
           };
           
@@ -267,18 +296,23 @@ function Predict() {
         
         // Convert standard vehicle to VB6 fixture format
         // This will use synthetic HP curve if no full curve is available (QuarterJr mode)
-        const vb6Fixture = fromVehicleToVB6Fixture(adjustedVehicle as any);
+        // Force QuarterJr mode if user doesn't have Pro access - prevents using stored Pro data after downgrade
+        const vb6Fixture = fromVehicleToVB6Fixture(adjustedVehicle as any, { 
+          forceQuarterJr: !features.quarterProFields 
+        });
         const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
         // Override with UI environment settings
         // Note: tractionIndex defaults to 5 to match VB6 QuarterJr default
+        // VB6 Quarter Jr default: trackTemp = temperature + 30 when not specified
+        const tempF_normal = currentEnv.temperatureF ?? 75;
         simInputs.env = {
           elevation: currentEnv.elevation ?? 0,
           barometerInHg: currentEnv.barometerInHg ?? 29.92,
-          temperatureF: currentEnv.temperatureF ?? 75,
+          temperatureF: tempF_normal,
           humidityPct: currentEnv.humidityPct ?? 50,
           windMph: currentEnv.windMph ?? 0,
           windAngleDeg: currentEnv.windAngleDeg ?? 0,
-          trackTempF: currentEnv.trackTempF ?? 100,
+          trackTempF: currentEnv.trackTempF ?? (tempF_normal + 30),
           tractionIndex: currentEnv.tractionIndex ?? 5,
         };
         
@@ -1393,7 +1427,6 @@ racingsystemsanalysis.com`;
               setThrottleStopEnabled(false);
             }
           }}
-          isPro={strictMode}
         />
       </Suspense>
     </Page>

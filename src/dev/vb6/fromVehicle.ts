@@ -12,6 +12,7 @@
 import type { Vb6VehicleFixture } from '../../domain/physics/vb6/fixtures';
 import { buildEngineCurve, convertToZeroIndexed } from '../../domain/physics/vb6/engineCurve';
 import { calculateQuarterJr, getAeroByBodyStyle, type QuarterJrInputs } from '../../domain/physics/vb6/quarterJr';
+import { airDensityVB6 } from '../../domain/physics/vb6/air';
 
 /**
  * Vehicle type matching what we persist in the Vehicle Editor.
@@ -232,8 +233,12 @@ function buildPerGearEff(gearCount: number, provided?: number[]): number[] {
 
 /**
  * Detect if we're in QuarterJr mode (no HP curve provided, only peak HP/RPM)
+ * @param forceQuarterJr - If true, always use QuarterJr mode (for non-Pro users)
  */
-function isQuarterJrMode(v: Vehicle): boolean {
+function isQuarterJrMode(v: Vehicle, forceQuarterJr: boolean = false): boolean {
+  // If forced, always use QuarterJr mode (ignores any stored HP curves)
+  if (forceQuarterJr) return true;
+  
   const vAny = v as any;
   
   // Check if we have a full HP curve
@@ -293,6 +298,14 @@ function mapFuelSystemToNumber(fuelSystem: string | number | undefined): number 
 }
 
 /**
+ * Options for converting a Vehicle to VB6 fixture format.
+ */
+export interface FromVehicleOptions {
+  /** Force QuarterJr mode even if vehicle has Pro data (HP curve, etc.) */
+  forceQuarterJr?: boolean;
+}
+
+/**
  * Convert a Vehicle object to a Vb6VehicleFixture.
  * Provides sensible defaults for sparse vehicles.
  * Handles both snake_case and camelCase field names for compatibility.
@@ -300,17 +313,35 @@ function mapFuelSystemToNumber(fuelSystem: string | number | undefined): number 
  * When in QuarterJr mode (no HP curve, only peak HP/RPM), uses the VB6
  * QuarterJr calculations to derive transmission efficiencies, converter
  * parameters, PMI values, and aero coefficients.
+ * 
+ * @param v - Vehicle data
+ * @param options - Conversion options (e.g., forceQuarterJr for non-Pro users)
  */
-export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
+export function fromVehicleToVB6Fixture(v: Vehicle, options: FromVehicleOptions = {}): Vb6VehicleFixture {
+  const { forceQuarterJr = false } = options;
   // Cast to any to access fields with different naming conventions
   const vAny = v as any;
   
   // Defaults - handle both snake_case and camelCase field names
   const weightLb = v.weightLb ?? vAny.weight_lb ?? 2400;
-  const tireDiaIn = v.tireDiaIn ?? vAny.tire_dia_in ?? 28;
+  
+  // Tire diameter: check tireRolloutMode to determine how to interpret tire size
+  // If tireRolloutMode === 'circumference', convert tireRolloutIn to diameter
+  let tireDiaIn: number;
+  const tireRolloutMode = vAny.tireRolloutMode;
+  if (tireRolloutMode === 'circumference' && vAny.tireRolloutIn) {
+    // Convert circumference to diameter: diameter = circumference / π
+    tireDiaIn = vAny.tireRolloutIn / Math.PI;
+  } else if (vAny.tireRolloutIn && !v.tireDiaIn && !vAny.tire_dia_in) {
+    // If only tireRolloutIn is provided (no diameter), assume it's circumference
+    tireDiaIn = vAny.tireRolloutIn / Math.PI;
+  } else {
+    tireDiaIn = v.tireDiaIn ?? vAny.tire_dia_in ?? 28;
+  }
+  
   const tireWidthIn = v.tireWidthIn ?? vAny.tire_width_in ?? 14;
-  const wheelbase_in = v.wheelbase_in ?? vAny.wheelbaseIn ?? 108;
-  const rollout_in = v.rollout_in ?? vAny.rolloutIn ?? vAny.tireRolloutIn ?? 9;
+  const wheelbase_in = vAny.wheelbaseIn ?? v.wheelbase_in ?? 108;
+  const rollout_in = vAny.rolloutIn ?? v.rollout_in ?? 12; // Staging beam rollout, NOT tire rollout
   
   // Drivetrain - handle both nested drivetrain object and flat Vehicle schema fields
   const dt = v.drivetrain ?? {};
@@ -329,8 +360,8 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   const fuelSystem = vAny.fuelType ?? vAny.fuelSystem ?? vAny.fuel?.type ?? v.fuel?.type ?? 'Gasoline';
   const fuelSystemNum = mapFuelSystemToNumber(fuelSystem);
   
-  // Check if we're in QuarterJr mode
-  if (isQuarterJrMode(v)) {
+  // Check if we're in QuarterJr mode (forced for non-Pro users, or auto-detected by lack of HP curve)
+  if (isQuarterJrMode(v, forceQuarterJr)) {
     console.log('[fromVehicleToVB6Fixture] QuarterJr mode detected - using VB6 QuarterJr calculations');
     
     const peakHP = vAny.powerHP ?? vAny.peakHP ?? vAny.peak_hp ?? vAny.hp ?? 400;
@@ -342,6 +373,17 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     const stallRPM = vAny.converterStallRPM ?? dt.converter?.stallRPM ?? 5000;
     const slipRPM = vAny.clutchSlipRPM ?? dt.clutch?.slipRPM ?? 6500;
     const userLaunchRPM = vAny.converterLaunchRPM;
+    
+    // Calculate hpc (horsepower correction) from air density
+    // VB6 uses hpc in the torque multiplier calculation for converters
+    const airResult = airDensityVB6({
+      barometer_inHg: env.barometer_inHg ?? 29.92,
+      temperature_F,
+      relHumidity_pct: env.relHumidity_pct ?? 50,
+      elevation_ft: env.elevation_ft ?? 0,
+      fuelSystem: fuelSystemNum as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+    });
+    const hpc = airResult.hpc;
     
     // Build QuarterJr inputs
     const qjInputs: QuarterJrInputs = {
@@ -364,8 +406,8 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
       shiftRPM,
     };
     
-    // Calculate QuarterJr outputs
-    const qjOut = calculateQuarterJr(qjInputs);
+    // Calculate QuarterJr outputs with correct hpc
+    const qjOut = calculateQuarterJr(qjInputs, hpc);
     
     console.log('[fromVehicleToVB6Fixture] QuarterJr outputs:', {
       NHP: qjOut.NHP,
@@ -380,7 +422,12 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
     });
     
     // Build engineHP from QuarterJr curve
-    const engineHP: [number, number][] = qjOut.xrpm.map((rpm, i) => [rpm, qjOut.yhp[i]]);
+    // Note: qjOut.xrpm and qjOut.yhp are 1-indexed arrays with placeholder at index 0
+    // Skip index 0 to avoid including the (0,0) placeholder point
+    const engineHP: [number, number][] = [];
+    for (let i = 1; i < qjOut.xrpm.length; i++) {
+      engineHP.push([qjOut.xrpm[i], qjOut.yhp[i]]);
+    }
     
     // Get aero from body style
     const aero = getAeroByBodyStyle(bodyStyle);
@@ -409,15 +456,19 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
       };
     }
     
+    // VB6 Quarter Jr defaults: wind = 0, trackTemp = temperature + 30
+    // See MDI.FRM lines 883-885
+    const trackTemp_F = env.trackTemp_F ?? (temperature_F + 30);
+    
     const fixture: Vb6VehicleFixture = {
       env: {
         elevation_ft: env.elevation_ft ?? 0,
         barometer_inHg: env.barometer_inHg ?? 29.92,
         temperature_F,
         relHumidity_pct: env.relHumidity_pct ?? 50,
-        wind_mph: env.wind_mph ?? 0,
-        wind_angle_deg: env.wind_angle_deg ?? env.wind_dir_deg ?? 0,
-        trackTemp_F: env.trackTemp_F ?? 100,
+        wind_mph: env.wind_mph ?? 0,  // VB6 Quarter Jr: wind = 0
+        wind_angle_deg: env.wind_angle_deg ?? env.wind_dir_deg ?? 0,  // VB6 Quarter Jr: wind angle = 0
+        trackTemp_F,  // VB6 Quarter Jr: trackTemp = temperature + 30
         tractionIndex: env.tractionIndex ?? 5,
       },
       vehicle: {
@@ -473,7 +524,7 @@ export function fromVehicleToVB6Fixture(v: Vehicle): Vb6VehicleFixture {
   const frontalArea_ft2 = v.frontalArea_ft2 ?? vAny.frontalAreaFt2 ?? 22;
   const cd = v.cd ?? vAny.dragCoef ?? 0.35;
   const liftCoeff = v.liftCoeff ?? vAny.liftCoef ?? 0.1;
-  const overhang_in = vAny.overhangIn ?? vAny.overhang_in ?? 40;
+  const overhang_in = vAny.overhangIn ?? vAny.overhang_in ?? 30;
   const overallEff = dt.overallEff ?? dt.overallEfficiency ?? vAny.transEfficiency ?? 0.97;
   const perGearEff = buildPerGearEff(gearRatios.length, dt.perGearEff ?? vAny.gearEfficiencies);
   const shiftsRPM = dt.shiftsRPM ?? dt.shiftRPM ?? vAny.shiftRPMs ?? Array(gearRatios.length - 1).fill(9000);

@@ -7,6 +7,7 @@ import { simulate } from '../workerBridge';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import type { Vehicle } from '../domain/schemas/vehicle.schema';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
+import { useSubscription } from '../domain/config/useSubscription';
 import { fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
 
 interface RaceDayState {
@@ -68,6 +69,7 @@ function calcAirDensityCorrection(tempF: number, baroInHg: number, humidity: num
 }
 
 export default function RaceDay() {
+  const { features } = useSubscription();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -135,16 +137,20 @@ export default function RaceDay() {
     
     const runSim = async () => {
       try {
-        const vb6Fixture = fromVehicleToVB6Fixture(selectedVehicle as any);
+        const vb6Fixture = fromVehicleToVB6Fixture(selectedVehicle as any, { 
+          forceQuarterJr: !features.quarterProFields 
+        });
         const simInputs = fixtureToSimInputs(vb6Fixture, 'QUARTER');
+        // VB6 Quarter Jr default: trackTemp = temperature + 30 when not specified
+        const tempF = env.temperatureF ?? 75;
         simInputs.env = {
           elevation: env.elevation ?? 0,
           barometerInHg: env.barometerInHg ?? 29.92,
-          temperatureF: env.temperatureF ?? 75,
+          temperatureF: tempF,
           humidityPct: env.humidityPct ?? 50,
           windMph: env.windMph ?? 0,
           windAngleDeg: env.windAngleDeg ?? 0,
-          trackTempF: env.trackTempF ?? 100,
+          trackTempF: env.trackTempF ?? (tempF + 30),
           tractionIndex: env.tractionIndex ?? 5,
         };
         

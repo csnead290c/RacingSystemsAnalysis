@@ -4,6 +4,7 @@ import { fromVehicleToVB6Fixture } from '../../dev/vb6/fromVehicle';
 import { fixtureToSimInputs } from '../../domain/physics/vb6/fixtures';
 import type { Vehicle } from '../../domain/schemas/vehicle.schema';
 import type { Env } from '../../domain/schemas/env.schema';
+import { useSubscription } from '../../domain/config/useSubscription';
 import type { RaceLength } from '../../domain/config/raceLengths';
 
 interface MatchMyTimesProps {
@@ -49,6 +50,7 @@ export default function MatchMyTimes({
   onClose,
   onApply,
 }: MatchMyTimesProps) {
+  const { features } = useSubscription();
   const [step, setStep] = useState<'input' | 'tuning' | 'results'>('input');
   const [actualRuns, setActualRuns] = useState<ActualRun[]>([{ et: 0, mph: 0 }]);
   const [isTuning, setIsTuning] = useState(false);
@@ -63,16 +65,20 @@ export default function MatchMyTimes({
   // Run simulation with given vehicle
   const runSim = useCallback(async (testVehicle: Vehicle): Promise<{ et: number; mph: number }> => {
     try {
-      const vb6Fixture = fromVehicleToVB6Fixture(testVehicle as any);
+      const vb6Fixture = fromVehicleToVB6Fixture(testVehicle as any, { 
+        forceQuarterJr: !features.quarterProFields 
+      });
       const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
+      // VB6 Quarter Jr default: trackTemp = temperature + 30 when not specified
+      const tempF = env.temperatureF ?? 75;
       simInputs.env = {
         elevation: env.elevation ?? 0,
         barometerInHg: env.barometerInHg ?? 29.92,
-        temperatureF: env.temperatureF ?? 75,
+        temperatureF: tempF,
         humidityPct: env.humidityPct ?? 50,
         windMph: env.windMph ?? 0,
         windAngleDeg: env.windAngleDeg ?? 0,
-        trackTempF: env.trackTempF ?? 100,
+        trackTempF: env.trackTempF ?? (tempF + 30),
         tractionIndex: env.tractionIndex ?? 5,
       };
       const result = await simulate('VB6Exact', simInputs);

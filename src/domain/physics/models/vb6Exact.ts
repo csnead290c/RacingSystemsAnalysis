@@ -454,13 +454,20 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     : (rawFuel?.fuelType ?? rawFuel?.fuelSystem ?? rawFuel?.type ?? (input as any).fuelType ?? (vehicle as any).fuelType ?? (input as any).fuelSystem ?? (vehicle as any).fuelSystem);
   const fuelSystemType = getFuelSystemType(fuelString);
   
+  // Extract temperature first - needed for trackTemp default
+  const temperatureF = env.temperatureF ?? 59;
+  
   const airResult = airDensityVB6({
     barometer_inHg: env.barometerInHg ?? 29.92,
-    temperature_F: env.temperatureF ?? 59,
+    temperature_F: temperatureF,
     relHumidity_pct: env.humidityPct ?? 50,
     elevation_ft: env.elevation ?? 0,
     fuelSystem: fuelSystemType,
   });
+  
+  // VB6 Quarter Jr: trackTemp = temperature + 30 when not specified
+  // See MDI.FRM lines 883-885: gc_TrackTemp.Value = degf + 30
+  const trackTempF = env.trackTempF ?? (env.temperatureF + 30);
   
   // VB6 uses rho in lbm/ft³ (multiply slugs by gc)
   const rho_lbm_ft3 = airResult.rho_slug_per_ft3 * gc;
@@ -708,8 +715,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   // Calculate TireSlip at launch (VB6 TIMESLIP.FRM:872)
   // TireSlip = 1.02 + (TractionIndex - 1) * 0.005 + (TrackTempEffect - 1) * 3
-  const trackTempF_early = env.trackTempF ?? 100;
-  const trackTempEffect_early = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF_early);
+  // trackTempF already calculated earlier with VB6 default (temp + 30)
+  const trackTempEffect_early = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF);
   const tractionIndex_early = env.tractionIndex ?? 5;
   const tireSlipAtLaunch = 1.02 + (tractionIndex_early - 1) * 0.005 + (trackTempEffect_early - 1) * 3;
   
@@ -835,7 +842,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // ========================================================================
   // Build VB6 environment params
   // ========================================================================
-  const trackTempF = env.trackTempF ?? 100;
+  // trackTempF already calculated earlier with VB6 default (temp + 30)
   // VB6: TIMESLIP.FRM:874 - Bonneville Pro forces TrackTempEffect = 1
   const trackTempEffect = isLandSpeed ? 1 : calcTrackTempEffect(trackTempF);
   
@@ -1335,7 +1342,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // OR during shift: ShiftFlag = 2 And Dist(L) >= DistToPrint(iDist)
     if (timerStartTime_s === null) {
       const DistStep = Math.abs(rolloutFt - state.Dist_ft);
-      const DistTol = 0.1;  // VB6 line 1379: DistTol = 0.1 for rollout
+      const DistTol = 0.005;  // VB6 line 997: DistTol = 0.005 BEFORE rollout, changes to 0.1 AFTER rollout (line 1379)
       const TimeTol = 0.002;  // VB6 constant
       
       // VB6 tolerance check - triggers when CLOSE to target, not just past it

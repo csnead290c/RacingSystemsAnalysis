@@ -105,6 +105,11 @@ export const VehicleSchema = z.object({
   group: z.string().optional(),                // Vehicle group/category for organization
   notes: z.string().optional(),                // User notes about the vehicle
   
+  // Editor Mode - determines which input set is used for simulation
+  // 'simple' = Quarter Jr style (peak HP, single shift RPM, etc.)
+  // 'advanced' = Quarter Pro style (HP curve, per-gear shifts, PMI, etc.)
+  editorMode: z.enum(['simple', 'advanced']).optional(), // default: 'simple'
+  
   // Component References (optional - use saved components from sims)
   // When a ref is set, inline data for that component is ignored
   engineRef: z.string().optional(),            // ID of SavedEngine (from Engine Sim)

@@ -5,6 +5,7 @@ import { fixtureToSimInputs } from '../../domain/physics/vb6/fixtures';
 import type { Vehicle } from '../../domain/schemas/vehicle.schema';
 import type { Env } from '../../domain/schemas/env.schema';
 import type { RaceLength } from '../../domain/config/raceLengths';
+import { useSubscription } from '../../domain/config/useSubscription';
 
 interface OptimizerModalProps {
   vehicle: Vehicle;
@@ -41,6 +42,7 @@ export default function OptimizerModal({
   onApplyToSession,
   onSaveToVehicle,
 }: OptimizerModalProps) {
+  const { features } = useSubscription();
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [, setOptimizeType] = useState<OptimizeType | null>(null);
   const [progress, setProgress] = useState(0);
@@ -59,16 +61,20 @@ export default function OptimizerModal({
   // Run simulation for a given vehicle config
   const runSim = useCallback(async (testVehicle: Vehicle): Promise<{ et: number; mph: number }> => {
     try {
-      const vb6Fixture = fromVehicleToVB6Fixture(testVehicle as any);
+      const vb6Fixture = fromVehicleToVB6Fixture(testVehicle as any, { 
+        forceQuarterJr: !features.quarterProFields 
+      });
       const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
+      // VB6 Quarter Jr default: trackTemp = temperature + 30 when not specified
+      const tempF = env.temperatureF ?? 75;
       simInputs.env = {
         elevation: env.elevation ?? 0,
         barometerInHg: env.barometerInHg ?? 29.92,
-        temperatureF: env.temperatureF ?? 75,
+        temperatureF: tempF,
         humidityPct: env.humidityPct ?? 50,
         windMph: env.windMph ?? 0,
         windAngleDeg: env.windAngleDeg ?? 0,
-        trackTempF: env.trackTempF ?? 100,
+        trackTempF: env.trackTempF ?? (tempF + 30),
         tractionIndex: env.tractionIndex ?? 5,
       };
       

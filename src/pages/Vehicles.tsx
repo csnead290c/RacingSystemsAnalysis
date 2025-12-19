@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, saveVehicle, deleteVehicle, type VehicleLite } from '../state/vehicles';
 import { VehicleSchema, type Vehicle } from '../domain/schemas/vehicle.schema';
@@ -7,7 +7,7 @@ import type { RaceLength } from '../domain/config/raceLengths';
 import { useAuth } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
 import { useSubscription } from '../domain/config/useSubscription';
-import VehicleEditor from '../shared/components/VehicleEditor';
+import VehicleEditorUnified from '../shared/components/VehicleEditorUnified';
 import { 
   WorksheetButton, 
   FrontalAreaWorksheet, 
@@ -113,6 +113,7 @@ const defaultForm: Partial<Vehicle> = {
 
 function Vehicles() {
   const { hasFeature, user } = useAuth();
+  const navigate = useNavigate();
   const { productMode } = usePreferences();
   const { tier, features, vehicleLimit, canCreateVehicle } = useSubscription();
   
@@ -129,9 +130,8 @@ function Vehicles() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('basic');
+  const [activeTab, setActiveTab] = useState('basic'); // Used by disabled tabbed code
   const [filterGroup, setFilterGroup] = useState<string>(''); // Group filter
-  const [useCompactEditor, setUseCompactEditor] = useState(true); // Use 1-page layout like VB6
   
   // Get unique groups from vehicles
   const vehicleGroups = [...new Set(vehicles.map(v => v.group).filter(Boolean))] as string[];
@@ -397,19 +397,9 @@ function Vehicles() {
     >
       {showForm && (
         <div className="card mb-6">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text)', margin: 0 }}>
-              {editingId ? 'Edit Vehicle' : 'New Vehicle'}
-            </h2>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
-              <input
-                type="checkbox"
-                checked={useCompactEditor}
-                onChange={(e) => setUseCompactEditor(e.target.checked)}
-              />
-              1-Page View
-            </label>
-          </div>
+          <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text)', marginBottom: '1rem' }}>
+            {editingId ? 'Edit Vehicle' : 'New Vehicle'}
+          </h2>
 
           {formError && (
             <div className="error mb-4">
@@ -417,14 +407,27 @@ function Vehicles() {
             </div>
           )}
 
-          {/* Unified Collapsible Editor (new design) */}
-          {useCompactEditor ? (
-            <VehicleEditor
-              vehicle={form}
-              onChange={setForm}
-              showName={true}
+          {/* Unified Vehicle Editor with Simple/Advanced toggle */}
+          <VehicleEditorUnified
+            vehicle={form}
+            onChange={setForm}
+            showName={true}
+          />
+
+          {/* Notes field (not in unified editor) */}
+          <div style={{ marginTop: '1rem' }}>
+            <label className="label">Notes</label>
+            <textarea
+              className="input"
+              rows={2}
+              value={form.notes ?? ''}
+              onChange={(e) => updateForm('notes', e.target.value)}
+              placeholder="Optional notes about this vehicle..."
+              style={{ resize: 'vertical' }}
             />
-          ) : (
+          </div>
+
+          {(false) && (
             <>
               {/* Tab Navigation - Different tabs for QuarterJr vs QuarterPro */}
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
@@ -1392,6 +1395,23 @@ function Vehicles() {
                   <td className="align-right mono">{vehicle.rearGear}</td>
                   <td className="align-right">
                     <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => {
+                          // Navigate to ET Sim with this vehicle selected
+                          // Store selected vehicle ID in sessionStorage for Predict page to pick up
+                          sessionStorage.setItem('selectedVehicleId', vehicle.id);
+                          sessionStorage.setItem('selectedRaceLength', vehicle.defaultRaceLength || 'QUARTER');
+                          navigate('/predict');
+                        }}
+                        className="btn"
+                        style={{
+                          padding: 'var(--space-2) var(--space-3)',
+                          fontSize: '0.875rem',
+                        }}
+                        title="Run ET simulation with this vehicle"
+                      >
+                        Run Sim
+                      </button>
                       <button
                         onClick={() => handleEdit(vehicle)}
                         className="btn btn-secondary"

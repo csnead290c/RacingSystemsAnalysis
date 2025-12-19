@@ -3,10 +3,11 @@
  * 
  * Allows quick adjustments to vehicle specs without leaving the simulation page.
  * Changes can be applied temporarily (for what-if) or saved permanently.
+ * Uses the unified VehicleEditorUnified component with Simple/Advanced modes.
  */
 
 import { useState, useEffect } from 'react';
-import VehicleEditorPanel from './VehicleEditorPanel';
+import VehicleEditorUnified from './VehicleEditorUnified';
 import type { Vehicle } from '../../domain/schemas/vehicle.schema';
 import { saveVehicle } from '../../state/vehicles';
 
@@ -15,7 +16,6 @@ interface VehicleEditorPopupProps {
   onClose: () => void;
   vehicle: Vehicle | null;
   onApply: (vehicle: Vehicle) => void; // Apply changes (temporary or permanent)
-  isPro?: boolean;
 }
 
 export default function VehicleEditorPopup({
@@ -23,7 +23,6 @@ export default function VehicleEditorPopup({
   onClose,
   vehicle,
   onApply,
-  isPro = false,
 }: VehicleEditorPopupProps) {
   const [editedVehicle, setEditedVehicle] = useState<Partial<Vehicle>>({});
   const [saving, setSaving] = useState(false);
@@ -155,10 +154,9 @@ export default function VehicleEditorPopup({
           overflowY: 'auto',
           flex: 1,
         }}>
-          <VehicleEditorPanel
+          <VehicleEditorUnified
             vehicle={editedVehicle}
             onChange={handleChange}
-            isPro={isPro}
             compact={true}
             showName={false}
           />
