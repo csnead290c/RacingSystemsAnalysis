@@ -1032,6 +1032,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vb6Env.iDist = distPrintIdx + 1;  // Convert 0-based to 1-based like VB6
     vb6Env.TimePrint = TimePrint;
     
+    // VB6 TIMESLIP.FRM:1071 - Set Shift2PrintTime when gear change is active
+    // Shift2PrintTime = time(L) + DTShift (set at top of gear change loop)
+    if (state.ShiftFlag === 2) {
+      vb6Env.Shift2PrintTime = state.time_s + vb6Vehicle.DTShift;
+    } else {
+      vb6Env.Shift2PrintTime = undefined;
+    }
+    
     // Run one VB6 step (pass throttle stop params for bracket racing)
     // Track previous state for interpolation when shift fallback occurs
     const prevDist_ft = state.Dist0_ft;

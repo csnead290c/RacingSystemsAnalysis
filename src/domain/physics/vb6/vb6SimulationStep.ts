@@ -141,6 +141,7 @@ export interface VB6EnvParams {
   TimePrint?: number;       // VB6 TIMESLIP.FRM:918 - Next time print point
   iDist?: number;           // VB6 iDist - current distance print index (1-based like VB6)
   shiftRPMs?: number[];     // VB6 ShiftRPM array for VelShiftMatch calculation
+  Shift2PrintTime?: number; // VB6 TIMESLIP.FRM:1071 - Target time for shift completion
 }
 
 /**
@@ -833,6 +834,24 @@ export function vb6SimulationStep(
     dt_final = time_L - state.Time0_s;
     let term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
     Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1282-1287 - Shift2PrintTime velocity revision (during gear shift)
+    // VB6: If ShiftFlag < 2 Then GoTo 330
+    //      If Abs(Shift2PrintTime - time(L)) >= TimeTol Then
+    //          Work = 2 * PQWT * (Shift2PrintTime - time(L)) + Vel(L) ^ 2
+    //          If Work > 0 Then Vel(L) = Sqr(Work): GoTo 270
+    // ========================================================================
+    const TimeTol = 0.002;
+    if (gearChanged && env.Shift2PrintTime !== undefined) {
+      if (Math.abs(env.Shift2PrintTime - time_L) >= TimeTol) {
+        const Work_shift = 2 * PQWT * (env.Shift2PrintTime - time_L) + Vel_L * Vel_L;
+        if (Work_shift > 0) {
+          Vel_L = Math.sqrt(Work_shift);
+          continue;  // GoTo 270 - re-run full physics
+        }
+      }
+    }
     
     // ========================================================================
     // TIMESLIP.FRM:1295-1352 - Velocity revision checks (ALL FOUR)
