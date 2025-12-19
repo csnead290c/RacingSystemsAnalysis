@@ -1197,11 +1197,15 @@ export function vb6SimulationStep(
     //      If Abs(Shift2PrintTime - time(L)) >= TimeTol Then
     //          Work = 2 * PQWT * (Shift2PrintTime - time(L)) + Vel(L) ^ 2
     //          If Work > 0 Then Vel(L) = Sqr(Work): GoTo 270
-    // NOTE: VB6 skips section 330 after this IF within tolerance, but we need
-    // section 330 for distance targeting. The skip is only for printing logic.
+    // CRITICAL FIX: VB6 uses ShiftFlag >= 2, NOT gearChanged!
+    // ShiftFlag = 2 persists through the velocity revision loop because line 1434
+    // (ShiftFlag = 0) is only reached AFTER the loop exits via GoTo 340.
+    // Using gearChanged would only check on first iteration since PrevGear is updated.
     // ========================================================================
     const TimeTol = 0.002;
-    if (gearChanged && env.Shift2PrintTime !== undefined) {
+    // VB6: If ShiftFlag < 2 Then GoTo 330 (skip this check if ShiftFlag is 0 or 1)
+    // Only do Shift2PrintTime revision when ShiftFlag = 2 (shift in progress)
+    if (state.ShiftFlag === 2 && env.Shift2PrintTime !== undefined) {
       if (Math.abs(env.Shift2PrintTime - time_L) >= TimeTol) {
         const Work_shift = 2 * PQWT * (env.Shift2PrintTime - time_L) + Vel_L * Vel_L;
         if (Work_shift > 0) {
