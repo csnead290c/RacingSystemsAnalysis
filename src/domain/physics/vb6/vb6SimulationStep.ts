@@ -861,7 +861,18 @@ export function vb6SimulationStep(
     // This is now a proper loop - we use 'continue' to re-run full physics
     // ========================================================================
     const TimeTol_rev = 0.002;
-    const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
+    // VB6 DistTol is updated AFTER distance targets are reached:
+    // - Initial (iDist=1): 0.005 (TIMESLIP.FRM:997)
+    // - After rollout Case 1 (iDist=2,3,4): 0.1 (TIMESLIP.FRM:1379)
+    // - After 330ft Case 4 (iDist>=5): 0.008 (TIMESLIP.FRM:1387)
+    let DistTol_rev: number;
+    if (env.iDist === undefined || env.iDist <= 1) {
+      DistTol_rev = 0.005;  // Initial value before rollout
+    } else if (env.iDist <= 4) {
+      DistTol_rev = 0.1;    // After rollout, before 330ft
+    } else {
+      DistTol_rev = 0.008;  // After 330ft
+    }
     
     // VB6 lines 1296-1310: Check for DISTANCE overshoot (VelDistMatch)
     let VelDistMatch = 0;
@@ -900,8 +911,9 @@ export function vb6SimulationStep(
     let VelMPHMatch = 0;
     
     // VB6 lines 1333-1341: Check for SHIFT RPM overshoot (VelShiftMatch)
+    // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
     let VelShiftMatch = 0;
-    const ShiftRPMTol = 50;  // VB6 tolerance for shift RPM matching
+    const ShiftRPMTol = (vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
     if (iGear < vehicle.NGR && env.shiftRPMs !== undefined) {
       const targetShiftRPM = env.shiftRPMs[iGear - 1];
       if (targetShiftRPM !== undefined) {
