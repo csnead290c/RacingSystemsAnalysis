@@ -890,6 +890,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     }
   }
   let TimePrint = TimePrintInc;  // VB6: TimePrint = TimePrintInc (line 918)
+  let Shift2PrintTime: number | undefined = undefined;  // VB6 line 1071 - set ONCE when ShiftFlag transitions 1→2
   
   const vb6Env: VB6EnvParams = {
     rho: rho_lbm_ft3,
@@ -1032,13 +1033,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vb6Env.iDist = distPrintIdx + 1;  // Convert 0-based to 1-based like VB6
     vb6Env.TimePrint = TimePrint;
     
-    // VB6 TIMESLIP.FRM:1071 - Set Shift2PrintTime when gear change is active
-    // Shift2PrintTime = time(L) + DTShift (set at top of gear change loop)
-    if (state.ShiftFlag === 2) {
-      vb6Env.Shift2PrintTime = state.time_s + vb6Vehicle.DTShift;
-    } else {
-      vb6Env.Shift2PrintTime = undefined;
-    }
+    // VB6 TIMESLIP.FRM:1071 - Shift2PrintTime is set by the simulation loop
+    // It's set ONCE when ShiftFlag transitions 1→2 (see below after step)
+    // Pass the current value to the step function
+    vb6Env.Shift2PrintTime = Shift2PrintTime;
     
     // Run one VB6 step (pass throttle stop params for bracket racing)
     // Track previous state for interpolation when shift fallback occurs
@@ -1345,10 +1343,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // ShiftFlag was set this step or earlier - now execute shift
       state.ShiftFlag = 2;
       state.Gear++;
-      // PrevGear will differ from Gear, triggering DTShift in next step
+      // VB6 TIMESLIP.FRM:1071 - Set Shift2PrintTime ONCE when entering gear change loop (section 230)
+      // Shift2PrintTime = time(L) + DTShift
+      Shift2PrintTime = state.time_s + vb6Vehicle.DTShift;
     } else if (state.ShiftFlag === 2) {
-      // Shift complete, reset flag
+      // Shift complete, reset flag and clear Shift2PrintTime
       state.ShiftFlag = 0;
+      Shift2PrintTime = undefined;
     }
     
     // VB6 TIMESLIP.FRM:1421-1422 - Check for time print update (AFTER step completes)
