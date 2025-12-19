@@ -1205,18 +1205,26 @@ export function vb6SimulationStep(
     const TimeTol = 0.002;
     // VB6: If ShiftFlag < 2 Then GoTo 330 (skip this check if ShiftFlag is 0 or 1)
     // Only do Shift2PrintTime revision when ShiftFlag = 2 (shift in progress)
+    let skipSection330 = false;  // VB6: After doOpt, GoTo 340 skips Section 330
     if (state.ShiftFlag === 2 && env.Shift2PrintTime !== undefined) {
       if (Math.abs(env.Shift2PrintTime - time_L) >= TimeTol) {
+        // Time NOT within tolerance - revise velocity and loop back
         const Work_shift = 2 * PQWT * (env.Shift2PrintTime - time_L) + Vel_L * Vel_L;
         if (Work_shift > 0) {
           Vel_L = Math.sqrt(Work_shift);
           continue;  // GoTo 270 - re-run full physics
         }
+      } else {
+        // Time IS within tolerance - VB6 calls doOpt then GoTo 340, SKIPPING Section 330
+        // VB6 line 1293: PrintFlag = 1: GoTo 340
+        skipSection330 = true;
       }
     }
     
     // ========================================================================
     // TIMESLIP.FRM:1295-1352 - Velocity revision checks (ALL FOUR)
+    // VB6: When ShiftFlag = 2 AND time is within TimeTol of Shift2PrintTime,
+    // Section 330 is SKIPPED via GoTo 340 after doOpt call
     // VB6 checks multiple conditions and loops back (GoTo 270) with revised velocity
     // This is now a proper loop - we use 'continue' to re-run full physics
     // ========================================================================
@@ -1232,6 +1240,12 @@ export function vb6SimulationStep(
       DistTol_rev = 0.1;    // After rollout, before 330ft
     } else {
       DistTol_rev = 0.008;  // After 330ft
+    }
+    
+    // VB6: Skip Section 330 when doOpt was called (ShiftFlag=2 and time within tolerance)
+    // VB6 line 1293: PrintFlag = 1: GoTo 340 (skips all velocity revision checks)
+    if (skipSection330) {
+      break;  // Exit velocity revision loop - VB6 goes directly to Section 340
     }
     
     // VB6 lines 1296-1310: Check for DISTANCE overshoot (VelDistMatch)
