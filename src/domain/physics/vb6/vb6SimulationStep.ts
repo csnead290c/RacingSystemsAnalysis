@@ -766,8 +766,10 @@ export function vb6SimulationStep(
   // ========================================================================
   const ShiftRPM_gear = vehicle.ShiftRPM[iGear - 1] ?? 9000;
   
-  if (!gearChanged) {
-    // Only apply timestep limits when NOT in a gear change (ShiftFlag < 2)
+  // VB6: If ShiftFlag = 2 Then GoTo 270 (skip timestep limiting during shift)
+  // CRITICAL FIX: Use ShiftFlag === 2, NOT gearChanged (which is only true for 1 iteration)
+  if (state.ShiftFlag !== 2) {
+    // Only apply timestep limits when NOT in a gear shift (ShiftFlag < 2)
     // TIMESLIP.FRM:1111-1120 - Limit timestep (in VB6 ORDER)
     
     // VB6 constant K7 = 9.5 for Quarter Pro, 5.5 for Bonneville Pro
