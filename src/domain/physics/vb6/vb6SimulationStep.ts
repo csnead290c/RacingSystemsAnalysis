@@ -1029,10 +1029,11 @@ export function vb6InitState(
   // HP = gc_HPTQMult.Value * HP / hpc
   // TQ = Z6 * HP / EngRPM(L)
   // TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
+  // NOTE: Z6 = (60 / (2 * PI)) * 550 = 5252.113... (imported from constants.ts)
   const HP_launch = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, launchRPM);
   const HP_corrected = vehicle.HPTQMult * HP_launch / env.hpc;
-  const Z6 = 5252;
-  let TQ = Z6 * HP_corrected / launchRPM;
+  const Z6_local = (60 / (2 * PI)) * 550;  // VB6 exact formula: DECLARES.BAS:12
+  let TQ = Z6_local * HP_corrected / launchRPM;
   const TGR_1 = vehicle.TGR[0] ?? 1;
   const TGEff_1 = vehicle.TGEff[0] ?? 0.99;
   TQ = TQ * vehicle.TorqueMult * TGR_1 * TGEff_1;
