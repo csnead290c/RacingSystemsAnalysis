@@ -1072,7 +1072,20 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Two ways to trigger: (1) within tolerance, OR (2) during shift AND past target
     const currentTarget = distPrintPoints[distPrintIdx];
     const DistStep = Math.abs(currentTarget - state.Dist_ft);
-    const DistTol = 0.1;  // VB6 line 1379: DistTol = 0.1 for rollout, stays 0.1 until case 4
+    // VB6 DistTol is dynamic, updated AFTER each distance target is reached:
+    // - Initial (iDist=1): 0.005 (TIMESLIP.FRM:997)
+    // - After rollout Case 1 (iDist=2,3,4): 0.1 (TIMESLIP.FRM:1379)
+    // - After 330ft Case 4 (iDist>=5): 0.008 (TIMESLIP.FRM:1387)
+    // distPrintIdx is 0-based, so vb6iDist = distPrintIdx + 1
+    const vb6iDist_check = distPrintIdx + 1;
+    let DistTol: number;
+    if (vb6iDist_check <= 1) {
+      DistTol = 0.005;  // Initial value for rollout
+    } else if (vb6iDist_check <= 4) {
+      DistTol = 0.1;    // After rollout, before 330ft
+    } else {
+      DistTol = 0.008;  // After 330ft
+    }
     const TimeTol = 0.002;
     
     // VB6's two conditions for recording distance print:
