@@ -836,108 +836,97 @@ export function vb6SimulationStep(
     Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
     
     // ========================================================================
-    // TIMESLIP.FRM:1282-1293 - Shift2PrintTime handling (during gear shift)
-    // VB6: If ShiftFlag < 2 Then GoTo 330  (skip to main velocity revisions)
+    // TIMESLIP.FRM:1282-1287 - Shift2PrintTime velocity revision (during gear shift)
+    // VB6: If ShiftFlag < 2 Then GoTo 330
     //      If Abs(Shift2PrintTime - time(L)) >= TimeTol Then
     //          Work = 2 * PQWT * (Shift2PrintTime - time(L)) + Vel(L) ^ 2
     //          If Work > 0 Then Vel(L) = Sqr(Work): GoTo 270
-    //      End If
-    //      ' If within tolerance, falls through to:
-    //      ASV(1) = time(L)... doOpt... PrintFlag = 1: GoTo 340
-    //      ' This SKIPS section 330 (main velocity revisions) entirely!
+    // NOTE: VB6 skips section 330 after this IF within tolerance, but we need
+    // section 330 for distance targeting. The skip is only for printing logic.
     // ========================================================================
     const TimeTol = 0.002;
-    let skipSection330 = false;  // VB6: GoTo 340 skips section 330
-    
     if (gearChanged && env.Shift2PrintTime !== undefined) {
       if (Math.abs(env.Shift2PrintTime - time_L) >= TimeTol) {
-        // NOT within tolerance - do velocity revision
         const Work_shift = 2 * PQWT * (env.Shift2PrintTime - time_L) + Vel_L * Vel_L;
         if (Work_shift > 0) {
           Vel_L = Math.sqrt(Work_shift);
           continue;  // GoTo 270 - re-run full physics
         }
       }
-      // WITHIN tolerance - VB6 skips section 330 entirely (GoTo 340)
-      skipSection330 = true;
     }
     
     // ========================================================================
     // TIMESLIP.FRM:1295-1352 - Velocity revision checks (ALL FOUR)
-    // VB6: Section 330 - SKIPPED when ShiftFlag >= 2 and within Shift2PrintTime tolerance
     // VB6 checks multiple conditions and loops back (GoTo 270) with revised velocity
     // This is now a proper loop - we use 'continue' to re-run full physics
     // ========================================================================
-    // VB6: Section 330 is SKIPPED when ShiftFlag >= 2 and within Shift2PrintTime tolerance
-    if (!skipSection330) {
-      const TimeTol_rev = 0.002;
-      const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
+    const TimeTol_rev = 0.002;
+    const DistTol_rev = env.iDist !== undefined && env.iDist >= 4 ? 0.008 : 0.1;
+    
+    // VB6 lines 1296-1310: Check for DISTANCE overshoot (VelDistMatch)
+    let VelDistMatch = 0;
+    if (env.nextDistPrint !== undefined) {
+      const targetDist = env.nextDistPrint;
+      const DistStep_rev = Math.abs(targetDist - Dist_L);
       
-      // VB6 lines 1296-1310: Check for DISTANCE overshoot (VelDistMatch)
-      let VelDistMatch = 0;
-      if (env.nextDistPrint !== undefined) {
-        const targetDist = env.nextDistPrint;
-        const DistStep_rev = Math.abs(targetDist - Dist_L);
-        
-        if (!(DistStep_rev < DistTol_rev && (DistStep_rev / Vel_L) < TimeTol_rev)) {
-          if (Dist_L > targetDist) {
-            // VB6 line 1306: Work = 3 * PQWT * (DistToPrint(iDist) - Dist(L)) + Vel(L) ^ 3
-            const Work_dist = 3 * PQWT * (targetDist - Dist_L) + Math.pow(Vel_L, 3);
-            if (Work_dist > 0) {
-              VelDistMatch = Math.pow(Work_dist, 1/3);
-            }
+      if (!(DistStep_rev < DistTol_rev && (DistStep_rev / Vel_L) < TimeTol_rev)) {
+        if (Dist_L > targetDist) {
+          // VB6 line 1306: Work = 3 * PQWT * (DistToPrint(iDist) - Dist(L)) + Vel(L) ^ 3
+          const Work_dist = 3 * PQWT * (targetDist - Dist_L) + Math.pow(Vel_L, 3);
+          if (Work_dist > 0) {
+            VelDistMatch = Math.pow(Work_dist, 1/3);
           }
         }
       }
-      
-      // VB6 lines 1312-1321: Check for TIME overshoot (VelTimeMatch)
-      let VelTimeMatch = 0;
-      if (env.TimePrint !== undefined) {
-        if (Math.abs(env.TimePrint - time_L) >= TimeTol_rev) {
-          if (time_L > env.TimePrint) {
-            // VB6 line 1318: Work = 2 * PQWT * (TimePrint - time(L)) + Vel(L) ^ 2
-            const Work_time = 2 * PQWT * (env.TimePrint - time_L) + Vel_L * Vel_L;
-            if (Work_time > 0) {
-              VelTimeMatch = Math.sqrt(Work_time);
-            }
+    }
+    
+    // VB6 lines 1312-1321: Check for TIME overshoot (VelTimeMatch)
+    let VelTimeMatch = 0;
+    if (env.TimePrint !== undefined) {
+      if (Math.abs(env.TimePrint - time_L) >= TimeTol_rev) {
+        if (time_L > env.TimePrint) {
+          // VB6 line 1318: Work = 2 * PQWT * (TimePrint - time(L)) + Vel(L) ^ 2
+          const Work_time = 2 * PQWT * (env.TimePrint - time_L) + Vel_L * Vel_L;
+          if (Work_time > 0) {
+            VelTimeMatch = Math.sqrt(Work_time);
           }
         }
       }
-      
-      // VB6 lines 1323-1331: Check for MPH overshoot (VelMPHMatch)
-      // VB6 uses MPHtoPrint array for speed matching - we skip this for now
-      // as it's primarily for display purposes and not physics-critical
-      let VelMPHMatch = 0;
-      
-      // VB6 lines 1333-1341: Check for SHIFT RPM overshoot (VelShiftMatch)
-      let VelShiftMatch = 0;
-      const ShiftRPMTol = 50;  // VB6 tolerance for shift RPM matching
-      if (iGear < vehicle.NGR && env.shiftRPMs !== undefined) {
-        const targetShiftRPM = env.shiftRPMs[iGear - 1];
-        if (targetShiftRPM !== undefined) {
-          if (Math.abs(targetShiftRPM - EngRPM_L) >= ShiftRPMTol) {
-            if (EngRPM_L > targetShiftRPM) {
-              // VB6 line 1339: VelShiftMatch = Vel(L) * ShiftRPM(iGear) / EngRPM(L)
-              VelShiftMatch = Vel_L * targetShiftRPM / EngRPM_L;
-            }
+    }
+    
+    // VB6 lines 1323-1331: Check for MPH overshoot (VelMPHMatch)
+    // VB6 uses MPHtoPrint array for speed matching - we skip this for now
+    // as it's primarily for display purposes and not physics-critical
+    let VelMPHMatch = 0;
+    
+    // VB6 lines 1333-1341: Check for SHIFT RPM overshoot (VelShiftMatch)
+    let VelShiftMatch = 0;
+    const ShiftRPMTol = 50;  // VB6 tolerance for shift RPM matching
+    if (iGear < vehicle.NGR && env.shiftRPMs !== undefined) {
+      const targetShiftRPM = env.shiftRPMs[iGear - 1];
+      if (targetShiftRPM !== undefined) {
+        if (Math.abs(targetShiftRPM - EngRPM_L) >= ShiftRPMTol) {
+          if (EngRPM_L > targetShiftRPM) {
+            // VB6 line 1339: VelShiftMatch = Vel(L) * ShiftRPM(iGear) / EngRPM(L)
+            VelShiftMatch = Vel_L * targetShiftRPM / EngRPM_L;
           }
         }
       }
-      
-      // VB6 lines 1344-1348: Find minimum valid NextVel from all four checks
-      let NextVel = Vel_L;
-      if (VelDistMatch > 0 && VelDistMatch < NextVel) NextVel = VelDistMatch;
-      if (VelTimeMatch > 0 && VelTimeMatch < NextVel) NextVel = VelTimeMatch;
-      if (VelMPHMatch > 0 && VelMPHMatch < NextVel) NextVel = VelMPHMatch;
-      if (VelShiftMatch > 0 && VelShiftMatch < NextVel) NextVel = VelShiftMatch;
-      
-      // VB6 line 1352: If NextVel > Vel0 And NextVel < Vel(L) Then Vel(L) = NextVel: GoTo 270
-      if (NextVel > state.Vel0_ftps && NextVel < Vel_L) {
-        // Revise velocity and LOOP BACK to re-run full physics (GoTo 270)
-        Vel_L = NextVel;
-        continue;  // This loops back to recalculate DSRPM, EngRPM, HP, PQWT, etc.
-      }
-    } // end if (!skipSection330)
+    }
+    
+    // VB6 lines 1344-1348: Find minimum valid NextVel from all four checks
+    let NextVel = Vel_L;
+    if (VelDistMatch > 0 && VelDistMatch < NextVel) NextVel = VelDistMatch;
+    if (VelTimeMatch > 0 && VelTimeMatch < NextVel) NextVel = VelTimeMatch;
+    if (VelMPHMatch > 0 && VelMPHMatch < NextVel) NextVel = VelMPHMatch;
+    if (VelShiftMatch > 0 && VelShiftMatch < NextVel) NextVel = VelShiftMatch;
+    
+    // VB6 line 1352: If NextVel > Vel0 And NextVel < Vel(L) Then Vel(L) = NextVel: GoTo 270
+    if (NextVel > state.Vel0_ftps && NextVel < Vel_L) {
+      // Revise velocity and LOOP BACK to re-run full physics (GoTo 270)
+      Vel_L = NextVel;
+      continue;  // This loops back to recalculate DSRPM, EngRPM, HP, PQWT, etc.
+    }
     
     // No velocity revision needed - break out of the outer loop
     break;
