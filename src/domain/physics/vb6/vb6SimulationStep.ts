@@ -273,6 +273,360 @@ export function calcAX(isLandSpeed?: boolean): number {
 }
 
 // ============================================================================
+// VB6 doOpt Subroutine and Related Functions
+// TIMESLIP.FRM:1609-1756
+// ============================================================================
+
+/**
+ * VB6 ASV array - saved values for interpolation during doOpt
+ */
+export interface VB6ASV {
+  time: number;    // ASV(1)
+  dist: number;    // ASV(2)
+  vel: number;     // ASV(3)
+  ags: number;     // ASV(4)
+  slip: number;    // ASV(5)
+  engRPM: number;  // ASV(6)
+  gear: number;    // ASV(7)
+}
+
+/**
+ * VB6 doOpt context - all variables needed for doOpt interpolation
+ */
+export interface VB6DoOptContext {
+  ASV: VB6ASV;
+  Time0: number;
+  Dist0: number;
+  Vel0: number;
+  Ags0: number;
+  RPM0: number;
+  DistToPrint: number;
+  TimePrint: number;
+  MPHtoPrint: number;
+  iDist: number;
+  iMPH: number;
+  DistTol: number;
+  TimeTol: number;
+  KV: number;
+  ShiftFlag: number;
+  isLandSpeed: boolean;
+  Z5: number;
+  SaveTime: number;
+}
+
+/**
+ * VB6 doOpt result - interpolated values
+ */
+export interface VB6DoOptResult {
+  time: number;
+  dist: number;
+  vel: number;
+  ags: number;
+  slip: number;
+  engRPM: number;
+  gear: number;
+  TIMESLIP: number[];  // Updated TIMESLIP array
+  SaveTime: number;    // Updated SaveTime
+  didInterpolate: boolean;
+}
+
+/**
+ * VB6 sub310 - DISTANCE INTERPOLATION
+ * TIMESLIP.FRM:1609-1640
+ */
+function vb6Sub310(ctx: VB6DoOptContext, factor1: number, TIMESLIP: number[], SaveTime: number): { 
+  time: number; dist: number; vel: number; TIMESLIP: number[]; SaveTime: number 
+} {
+  const factor = factor1;
+  const time = ctx.Time0 + factor * (ctx.ASV.time - ctx.Time0);
+  const dist = ctx.DistToPrint;
+  const vel = ctx.Vel0 + factor * (ctx.ASV.vel - ctx.Vel0);
+  
+  const Z5 = ctx.Z5;
+  const newTIMESLIP = [...TIMESLIP];
+  let newSaveTime = SaveTime;
+  
+  if (!ctx.isLandSpeed) {
+    // Quarter Jr and Quarter Pro
+    switch (ctx.iDist) {
+      case 3: newTIMESLIP[1] = time; break;  // 60 ft
+      case 4: newTIMESLIP[2] = time; break;  // 330 ft
+      case 5: newSaveTime = time; break;      // 594 ft
+      case 6:
+        newTIMESLIP[3] = time;  // 660 ft
+        newTIMESLIP[4] = Z5 * 66 / (newTIMESLIP[3] - newSaveTime);
+        newSaveTime = 0;
+        break;
+      case 7: newTIMESLIP[5] = time; break;  // 1000 ft
+      case 8: newSaveTime = time; break;      // 1254 ft
+      case 9:
+        newTIMESLIP[6] = time;  // 1320 ft
+        newTIMESLIP[7] = Z5 * 66 / (newTIMESLIP[6] - newSaveTime);
+        newSaveTime = 0;
+        break;
+    }
+  } else {
+    // Bonneville Pro
+    switch (ctx.iDist) {
+      case 3: newTIMESLIP[1] = vel * Z5; break;
+      case 4: newTIMESLIP[2] = vel * Z5; break;
+      case 5: newTIMESLIP[3] = vel * Z5; break;
+      case 6: newTIMESLIP[4] = vel * Z5; break;
+      case 7: newTIMESLIP[5] = vel * Z5; break;
+      case 8: newTIMESLIP[6] = vel * Z5; break;
+      case 9: newTIMESLIP[7] = vel * Z5; break;
+    }
+  }
+  
+  return { time, dist, vel, TIMESLIP: newTIMESLIP, SaveTime: newSaveTime };
+}
+
+/**
+ * VB6 sub315 - TIME INTERPOLATION
+ * TIMESLIP.FRM:1642-1648
+ */
+function vb6Sub315(ctx: VB6DoOptContext, factor2: number): { time: number; dist: number; vel: number } {
+  const factor = factor2;
+  const time = ctx.TimePrint;
+  const dist = ctx.Dist0 + factor * (ctx.ASV.dist - ctx.Dist0);
+  const vel = ctx.Vel0 + factor * (ctx.ASV.vel - ctx.Vel0);
+  return { time, dist, vel };
+}
+
+/**
+ * VB6 sub320 - VELOCITY INTERPOLATION
+ * TIMESLIP.FRM:1650-1656
+ */
+function vb6Sub320(ctx: VB6DoOptContext, factor3: number): { time: number; dist: number; vel: number } {
+  const factor = factor3;
+  const time = ctx.Time0 + factor * (ctx.ASV.time - ctx.Time0);
+  const dist = ctx.Dist0 + factor * (ctx.ASV.dist - ctx.Dist0);
+  const vel = ctx.MPHtoPrint;
+  return { time, dist, vel };
+}
+
+/**
+ * VB6 sub325 - COMMON INTERPOLATION
+ * TIMESLIP.FRM:1658-1681
+ */
+function vb6Sub325(
+  ctx: VB6DoOptContext, 
+  factor: number, 
+  _interpolated: { time: number; dist: number; vel: number },
+  prevSlip: number
+): { ags: number; slip: number; engRPM: number; gear: number } {
+  // VB6: factor = factor ^ 0.7
+  const factorAdj = Math.pow(factor, 0.7);
+  const ags = ctx.Ags0 + factorAdj * (ctx.ASV.ags - ctx.Ags0);
+  
+  // VB6: SLIP(L) = 0: If SLIP(L - 1) = 1 And ASV(5) = 1 Then SLIP(L) = 1
+  let slip = 0;
+  if (prevSlip === 1 && ctx.ASV.slip === 1) slip = 1;
+  
+  const engRPM = ctx.RPM0 + factorAdj * (ctx.ASV.engRPM - ctx.RPM0);
+  const gear = ctx.ASV.gear;
+  
+  return { ags, slip, engRPM, gear };
+}
+
+/**
+ * VB6 doOpt - Optimized interpolation during gear shifts
+ * TIMESLIP.FRM:1683-1756
+ * 
+ * Called when ShiftFlag >= 2 AND time is within TimeTol of Shift2PrintTime.
+ * Handles three overshoot conditions: distance, time, and velocity.
+ */
+export function vb6DoOpt(ctx: VB6DoOptContext, prevSlip: number, TIMESLIP: number[], SaveTime: number): VB6DoOptResult {
+  let opt1 = 0, opt2 = 0, opt3 = 0;
+  let factor1 = 0, factor2 = 0, factor3 = 0;
+  
+  // Check distance overshoot (opt1)
+  // VB6: If Dist(L) >= DistToPrint(iDist) + DistTol Then
+  if (ctx.ASV.dist >= ctx.DistToPrint + ctx.DistTol) {
+    opt1 = 1;
+    factor1 = (ctx.DistToPrint - ctx.Dist0) / (ctx.ASV.dist - ctx.Dist0);
+    if (factor1 <= 0 || factor1 >= 1) { factor1 = 0; opt1 = 0; }
+  }
+  
+  // Check time overshoot (opt2)
+  // VB6: If time(L) >= TimePrint + TimeTol Then
+  if (ctx.ASV.time >= ctx.TimePrint + ctx.TimeTol) {
+    opt2 = 1;
+    factor2 = (ctx.TimePrint - ctx.Time0) / (ctx.ASV.time - ctx.Time0);
+    if (factor2 <= 0 || factor2 >= 1) { factor2 = 0; opt2 = 0; }
+  }
+  
+  // Check velocity overshoot (opt3)
+  // VB6: If iMPH <= 2 Then If Vel(L) >= MPHtoPrint(iMPH) + KV Then
+  if (ctx.iMPH <= 2) {
+    if (ctx.ASV.vel >= ctx.MPHtoPrint + ctx.KV) {
+      opt3 = 1;
+      factor3 = (ctx.MPHtoPrint - ctx.Vel0) / (ctx.ASV.vel - ctx.Vel0);
+      if (factor3 <= 0 || factor3 >= 1) { factor3 = 0; opt3 = 0; }
+    }
+  }
+  
+  const opt = opt1 + opt2 + opt3;
+  
+  // If no interpolation needed, return original values
+  if (opt === 0) {
+    return {
+      time: ctx.ASV.time,
+      dist: ctx.ASV.dist,
+      vel: ctx.ASV.vel,
+      ags: ctx.ASV.ags,
+      slip: ctx.ASV.slip,
+      engRPM: ctx.ASV.engRPM,
+      gear: ctx.ASV.gear,
+      TIMESLIP,
+      SaveTime,
+      didInterpolate: false,
+    };
+  }
+  
+  let result: { time: number; dist: number; vel: number } = { 
+    time: ctx.ASV.time, dist: ctx.ASV.dist, vel: ctx.ASV.vel 
+  };
+  let usedFactor = 0;
+  let newTIMESLIP = [...TIMESLIP];
+  let newSaveTime = SaveTime;
+  
+  // VB6 Select Case opt
+  switch (opt) {
+    case 1:
+      if (opt1 === 1) {
+        const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+        result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+        newTIMESLIP = sub310Result.TIMESLIP;
+        newSaveTime = sub310Result.SaveTime;
+        usedFactor = factor1;
+      } else if (opt2 === 1) {
+        result = vb6Sub315(ctx, factor2);
+        usedFactor = factor2;
+      } else if (opt3 === 1) {
+        result = vb6Sub320(ctx, factor3);
+        usedFactor = factor3;
+      }
+      break;
+      
+    case 2:
+      if (opt1 === 0) {
+        // Time and velocity only
+        if (factor2 === factor3) {
+          result = vb6Sub315(ctx, factor2);
+          usedFactor = factor2;
+        } else if (factor2 < factor3) {
+          result = vb6Sub315(ctx, factor2);
+          usedFactor = factor2;
+          // VB6 would call sub320 after sub315, but we take the first
+        } else {
+          result = vb6Sub320(ctx, factor3);
+          usedFactor = factor3;
+        }
+      } else if (opt2 === 0) {
+        // Distance and velocity only
+        if (factor1 === factor3) {
+          const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+          result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+          newTIMESLIP = sub310Result.TIMESLIP;
+          newSaveTime = sub310Result.SaveTime;
+          usedFactor = factor1;
+        } else if (factor1 < factor3) {
+          const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+          result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+          newTIMESLIP = sub310Result.TIMESLIP;
+          newSaveTime = sub310Result.SaveTime;
+          usedFactor = factor1;
+        } else {
+          result = vb6Sub320(ctx, factor3);
+          usedFactor = factor3;
+        }
+      } else if (opt3 === 0) {
+        // Distance and time only
+        if (factor1 === factor2) {
+          const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+          result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+          newTIMESLIP = sub310Result.TIMESLIP;
+          newSaveTime = sub310Result.SaveTime;
+          usedFactor = factor1;
+        } else if (factor1 < factor2) {
+          const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+          result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+          newTIMESLIP = sub310Result.TIMESLIP;
+          newSaveTime = sub310Result.SaveTime;
+          usedFactor = factor1;
+        } else {
+          result = vb6Sub315(ctx, factor2);
+          usedFactor = factor2;
+        }
+      }
+      break;
+      
+    case 3:
+      // All three overshoot - pick smallest factor first
+      if (factor1 === factor2 && factor2 === factor3) {
+        const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+        result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+        newTIMESLIP = sub310Result.TIMESLIP;
+        newSaveTime = sub310Result.SaveTime;
+        usedFactor = factor1;
+      } else if (factor1 < factor2 && factor1 < factor3) {
+        const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+        result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+        newTIMESLIP = sub310Result.TIMESLIP;
+        newSaveTime = sub310Result.SaveTime;
+        usedFactor = factor1;
+      } else if (factor2 < factor1 && factor2 < factor3) {
+        result = vb6Sub315(ctx, factor2);
+        usedFactor = factor2;
+      } else if (factor3 < factor1 && factor3 < factor2) {
+        result = vb6Sub320(ctx, factor3);
+        usedFactor = factor3;
+      } else if (factor1 === factor2) {
+        if (factor1 < factor3) {
+          const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+          result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+          newTIMESLIP = sub310Result.TIMESLIP;
+          newSaveTime = sub310Result.SaveTime;
+          usedFactor = factor1;
+        } else {
+          result = vb6Sub320(ctx, factor3);
+          usedFactor = factor3;
+        }
+      } else {
+        // factor1 === factor3 or factor2 === factor3
+        if (factor1 < factor2) {
+          const sub310Result = vb6Sub310(ctx, factor1, newTIMESLIP, newSaveTime);
+          result = { time: sub310Result.time, dist: sub310Result.dist, vel: sub310Result.vel };
+          newTIMESLIP = sub310Result.TIMESLIP;
+          newSaveTime = sub310Result.SaveTime;
+          usedFactor = factor1;
+        } else {
+          result = vb6Sub315(ctx, factor2);
+          usedFactor = factor2;
+        }
+      }
+      break;
+  }
+  
+  // Apply sub325 common interpolation
+  const sub325Result = vb6Sub325(ctx, usedFactor, result, prevSlip);
+  
+  return {
+    time: result.time,
+    dist: result.dist,
+    vel: result.vel,
+    ags: sub325Result.ags,
+    slip: sub325Result.slip,
+    engRPM: sub325Result.engRPM,
+    gear: sub325Result.gear,
+    TIMESLIP: newTIMESLIP,
+    SaveTime: newSaveTime,
+    didInterpolate: true,
+  };
+}
+
+// ============================================================================
 // Main Simulation Step Function
 // ============================================================================
 

@@ -17,9 +17,12 @@ import {
   vb6InitState, 
   vb6CalcTSMaxInit,
   TABY,
+  vb6DoOpt,
   type VB6VehicleParams,
   type VB6EnvParams,
   type ThrottleStopParams,
+  type VB6DoOptContext,
+  type VB6ASV,
 } from '../vb6/vb6SimulationStep';
 import { airDensityVB6, type FuelSystemType } from '../vb6/air';
 import { gc, FPS_TO_MPH } from '../vb6/constants';
@@ -969,6 +972,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   let saveTime_594ft: number | null = null;  // Time at 594ft (66ft before 660ft)
   let saveTime_1254ft: number | null = null; // Time at 1254ft (66ft before 1320ft)
   
+  // VB6 doOpt SaveTime - used for interpolation during gear shifts
+  // TIMESLIP.FRM:1619,1624 - SaveTime is used in sub310 for trap speed calculation
+  let doOptSaveTime = 0;
+  
   // Add initial trace entry at t=0 with Launch RPM (before first simulation step)
   // VB6 shows this as the first line: 0.00 0 0.0 Ags0 1 LaunchRPM
   trace.push({
@@ -1052,7 +1059,74 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Track previous state for interpolation when shift fallback occurs
     const prevDist_ft = state.Dist0_ft;
     const prevTime_s = state.Time0_s;
+    const prevVel_ftps = state.Vel0_ftps;
+    const prevAgs_g = state.Ags0_g;
+    const prevRPM = state.RPM0;
+    const prevSlip = state.SLIP ? 1 : 0;
     const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
+    
+    // VB6 TIMESLIP.FRM:1283-1291 - doOpt during gear shift completion
+    // When ShiftFlag >= 2 AND time is within TimeTol of Shift2PrintTime, call doOpt
+    const TimeTol_doOpt = 0.002;
+    if (state.ShiftFlag === 2 && Shift2PrintTime !== undefined) {
+      if (Math.abs(Shift2PrintTime - state.time_s) < TimeTol_doOpt) {
+        // VB6 lines 1289-1291: Save ASV and call doOpt
+        const ASV: VB6ASV = {
+          time: state.time_s,
+          dist: state.Dist_ft,
+          vel: state.Vel_ftps,
+          ags: state.AGS_g,
+          slip: state.SLIP ? 1 : 0,
+          engRPM: state.EngRPM,
+          gear: state.Gear,
+        };
+        
+        // Get current distance print target and tolerances
+        const currentDistTarget = distPrintPoints[distPrintIdx] ?? 1320;
+        const vb6iDist_doOpt = distPrintIdx + 1;
+        let DistTol_doOpt: number;
+        if (vb6iDist_doOpt <= 1) DistTol_doOpt = 0.005;
+        else if (vb6iDist_doOpt <= 4) DistTol_doOpt = 0.1;
+        else DistTol_doOpt = 0.008;
+        
+        const KV_doOpt = isLandSpeed ? (0.05 / Z5) : (0.02 / Z5);
+        const MPHtoPrint_current = iMPH <= 2 ? MPHtoPrint[iMPH - 1] : 0;
+        
+        const doOptCtx: VB6DoOptContext = {
+          ASV,
+          Time0: prevTime_s,
+          Dist0: prevDist_ft,
+          Vel0: prevVel_ftps,
+          Ags0: prevAgs_g,
+          RPM0: prevRPM,
+          DistToPrint: currentDistTarget,
+          TimePrint: TimePrint,
+          MPHtoPrint: MPHtoPrint_current,
+          iDist: vb6iDist_doOpt,
+          iMPH: iMPH,
+          DistTol: DistTol_doOpt,
+          TimeTol: TimeTol_doOpt,
+          KV: KV_doOpt,
+          ShiftFlag: state.ShiftFlag,
+          isLandSpeed,
+          Z5,
+          SaveTime: doOptSaveTime,
+        };
+        
+        // Create TIMESLIP array for doOpt (8 elements, 0-indexed but VB6 uses 1-7)
+        const TIMESLIP_arr = [0, 0, 0, 0, 0, 0, 0, 0];
+        
+        const doOptResult = vb6DoOpt(doOptCtx, prevSlip, TIMESLIP_arr, doOptSaveTime);
+        
+        if (doOptResult.didInterpolate) {
+          // Update SaveTime from doOpt result
+          doOptSaveTime = doOptResult.SaveTime;
+          
+          // doOpt may have recorded TIMESLIP values - we handle this in the distance print section
+          console.log(`[vb6Exact] doOpt interpolation at step ${step}: dist=${doOptResult.dist.toFixed(2)}, time=${doOptResult.time.toFixed(4)}, vel=${doOptResult.vel.toFixed(2)}`);
+        }
+      }
+    }
     
     // VB6 TIMESLIP.FRM:1355 - Check for shift TRIGGER (before distance check!)
     // This sets ShiftFlag = 1 when at shift point, BEFORE the distance check
