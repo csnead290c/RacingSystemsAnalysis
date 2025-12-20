@@ -714,29 +714,29 @@ export function vb6SimulationStep(
   
   if (gearChanged) {
     // VB6: TIMESLIP.FRM:1072 - TimeStep = DTShift at gear change
-    TimeStep = vehicle.DTShift;
+    TimeStep = f(vehicle.DTShift);
     state.PrevGear = state.Gear;
   } else {
     // ========================================================================
     // TIMESLIP.FRM:1082 - Calculate adaptive timestep
     // VB6: TimeStep = TSMax * (AgsMax / Ags0) ^ 4
     // ========================================================================
-    TimeStep = TSMax;
+    TimeStep = f(TSMax);
     if (state.Ags0_g > 0 && state.L > 1) {
-      TimeStep = TSMax * Math.pow(state.AgsMax_g / state.Ags0_g, 4);
+      TimeStep = M.mul(f(TSMax), M.pow(M.div(f(state.AgsMax_g), f(state.Ags0_g)), f(4)));
     }
   }
   
   // ========================================================================
   // TIMESLIP.FRM:1084-1088 - Calculate jerk from previous step
   // ========================================================================
-  let Jerk = 0;
-  const Work_time = state.time_s - state.Time0_s;
+  let Jerk = f(0);
+  const Work_time = M.sub(f(state.time_s), f(state.Time0_s));
   if (Work_time > 0) {
-    Jerk = (state.AGS_g - state.Ags0_g) / Work_time;
+    Jerk = M.div(M.sub(f(state.AGS_g), f(state.Ags0_g)), f(Work_time));
   }
-  if (Jerk < JMin) Jerk = JMin;
-  if (Jerk > JMax) Jerk = JMax;
+  if (Jerk < JMin) Jerk = f(JMin);
+  if (Jerk > JMax) Jerk = f(JMax);
   
   // ========================================================================
   // TIMESLIP.FRM:1090-1096 - Save previous values
@@ -753,11 +753,11 @@ export function vb6SimulationStep(
   //     RPM0 = Stall: Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
   // This happens BEFORE the iteration loop, so Time0 = spinUpTime is used in time calculation
   // Use tolerance for floating point comparison
-  const isFirstStep = Math.abs(state.RPM0 - vehicle.LaunchRPM) < 1 && state.Time0_s === 0;
+  const isFirstStep = M.abs(M.sub(f(state.RPM0), f(vehicle.LaunchRPM))) < 1 && state.Time0_s === 0;
   if (isFirstStep) {
-    state.RPM0 = vehicle.Stall;
+    state.RPM0 = f(vehicle.Stall);
     if (vehicle.LaunchRPM < vehicle.Stall) {
-      state.Time0_s = vehicle.EnginePMI * (vehicle.Stall - vehicle.LaunchRPM) / 250000;
+      state.Time0_s = M.div(M.mul(f(vehicle.EnginePMI), M.sub(f(vehicle.Stall), f(vehicle.LaunchRPM))), f(250000));
     }
   }
   
@@ -944,7 +944,7 @@ export function vb6SimulationStep(
   let k = 0;
   let dt_final = 0;
   let Dist_L = 0;
-  const Vel0_cubed = Math.pow(state.Vel0_ftps, 3);
+  // Vel0_cubed now calculated inline with Float32 precision in distance calculation
   
   // VB6 velocity revision loop - equivalent to GoTo 270
   const MAX_VEL_REVISIONS = 10;
@@ -1133,7 +1133,7 @@ export function vb6SimulationStep(
     const kp21_const = env.isLandSpeed ? KP21_BV : KP21;
     const kp22_const = env.isLandSpeed ? KP22_BV : KP22;
     
-    EngAccHP = vehicle.EnginePMI * EngRPM_L * (EngRPM_L - state.RPM0);
+    EngAccHP = M.mul(M.mul(f(vehicle.EnginePMI), f(EngRPM_L)), M.sub(f(EngRPM_L), f(state.RPM0)));
     
     // Debug: Show EngAccHP calculation on first step
     if (state.L <= 2) {
@@ -1142,14 +1142,14 @@ export function vb6SimulationStep(
     
     if (EngAccHP < 0) {
       if (vehicle.isClutch) {
-        EngAccHP = kp21_const * EngAccHP;
+        EngAccHP = M.mul(f(kp21_const), f(EngAccHP));
       } else {
-        EngAccHP = kp22_const * EngAccHP;
+        EngAccHP = M.mul(f(kp22_const), f(EngAccHP));
       }
     }
     
-    ChasAccHP = ChassisPMI * DSRPM * (DSRPM - state.DSRPM0);
-    if (ChasAccHP < 0) ChasAccHP = 0;
+    ChasAccHP = M.mul(M.mul(f(ChassisPMI), f(DSRPM)), M.sub(f(DSRPM), f(state.DSRPM0)));
+    if (ChasAccHP < 0) ChasAccHP = f(0);
     
     // ========================================================================
     // TIMESLIP.FRM:1244-1276 - ITERATION LOOP
@@ -1159,36 +1159,36 @@ export function vb6SimulationStep(
     k = 0;
   
     for (k = 1; k <= 12; k++) {
-      const dtk1 = time_L - state.Time0_s;
+      const dtk1 = M.sub(f(time_L), f(state.Time0_s));
       // VB6 doesn't have a dtk1 <= 0 check - it proceeds with the calculation
       
       // TIMESLIP.FRM:1247-1248
-      const Work = Math.pow(2 * PI / 60, 2) / (12 * 550 * dtk1);
-      HPEngPMI = EngAccHP * Work;
-      HPChasPMI = ChasAccHP * Work;
+      const Work = M.div(M.pow(M.div(M.mul(f(2), f(PI)), f(60)), f(2)), M.mul(M.mul(f(12), f(550)), f(dtk1)));
+      HPEngPMI = M.mul(f(EngAccHP), f(Work));
+      HPChasPMI = M.mul(f(ChasAccHP), f(Work));
       
       // TIMESLIP.FRM:1250-1253
       // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
       // VB6: HP = ((HP * TGEff(iGear) * Efficiency - HPChasPMI) / TireSlip) - DragHP
-      HP = (HPSave - HPEngPMI) * ClutchSlip;
-      HP = ((HP * TGEff_gear * vehicle.Efficiency - HPChasPMI) / TireSlip) - DragHP;
-      PQWT = 550 * gc * HP / vehicle.Weight_lbf;
-      AGS_g = PQWT / (Vel_L * gc);
+      HP = M.mul(M.sub(f(HPSave), f(HPEngPMI)), f(ClutchSlip));
+      HP = M.sub(M.div(M.sub(M.mul(M.mul(f(HP), TGEff_gear), f(vehicle.Efficiency)), f(HPChasPMI)), f(TireSlip)), f(DragHP));
+      PQWT = M.div(M.mul(M.mul(f(550), f(gc)), f(HP)), f(vehicle.Weight_lbf));
+      AGS_g = M.div(f(PQWT), M.mul(f(Vel_L), f(gc)));
       
       // TIMESLIP.FRM:1255-1258 - Jerk limits
-      let Jerk_iter = 0;
+      let Jerk_iter = f(0);
       if (dtk1 !== 0) {
-        Jerk_iter = (AGS_g - state.Ags0_g) / dtk1;
+        Jerk_iter = M.div(M.sub(f(AGS_g), f(state.Ags0_g)), f(dtk1));
       }
       if (Jerk_iter < JMin) {
-        Jerk_iter = JMin;
-        AGS_g = state.Ags0_g + Jerk_iter * dtk1;
-        PQWT = AGS_g * gc * Vel_L;
+        Jerk_iter = f(JMin);
+        AGS_g = M.add(f(state.Ags0_g), M.mul(f(Jerk_iter), f(dtk1)));
+        PQWT = M.mul(M.mul(f(AGS_g), f(gc)), f(Vel_L));
       }
       if (Jerk_iter > JMax) {
-        Jerk_iter = JMax;
-        AGS_g = state.Ags0_g + Jerk_iter * dtk1;
-        PQWT = AGS_g * gc * Vel_L;
+        Jerk_iter = f(JMax);
+        AGS_g = M.add(f(state.Ags0_g), M.mul(f(Jerk_iter), f(dtk1)));
+        PQWT = M.mul(M.mul(f(AGS_g), f(gc)), f(Vel_L));
       }
       
       // TIMESLIP.FRM:1260-1266 - AMin/AMax clamps
@@ -1197,45 +1197,46 @@ export function vb6SimulationStep(
       SLIP = false;
       if (AGS_g > AMax_g) {
         SLIP = true;
-        PQWT = PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g;
-        AGS_g = AMax_g - (AGS_g - AMax_g);
+        PQWT = M.div(M.mul(f(PQWT), M.sub(f(AMax_g), M.sub(f(AGS_g), f(AMax_g)))), f(AGS_g));
+        AGS_g = M.sub(f(AMax_g), M.sub(f(AGS_g), f(AMax_g)));
       }
       if (AGS_g < AMin) {
         // VB6: TIMESLIP.FRM:1266 - Scale PQWT proportionally, then clamp AGS
         // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
-        PQWT = PQWT * AMin / AGS_g;
-        AGS_g = AMin;
+        PQWT = M.div(M.mul(f(PQWT), f(AMin)), f(AGS_g));
+        AGS_g = f(AMin);
       }
       
       // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
       // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-      const dtk2_time = VelSqrd / (2 * PQWT) + state.Time0_s;
-      const dtk2 = dtk2_time - state.Time0_s;
+      const dtk2_time = M.add(M.div(f(VelSqrd), M.mul(f(2), f(PQWT))), f(state.Time0_s));
+      const dtk2 = M.sub(f(dtk2_time), f(state.Time0_s));
       
       // Debug: Log iteration values
       if (state.L <= 2 && k <= 3) {
         console.log(`[vb6Step] L=${state.L} iter k=${k}: HP=${HP.toFixed(1)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, dtk1=${dtk1.toFixed(5)}, dtk2=${dtk2.toFixed(5)}`);
       }
       
-      if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
+      if (k === 12 || M.abs(M.div(M.mul(f(100), M.sub(f(dtk2), f(dtk1))), f(dtk2))) <= 0.01) {
         time_L = dtk2_time;
         break;
       }
       
       // TIMESLIP.FRM:1272-1275 - Relaxation for next iteration
-      let z = HP / HPSave;
-      if (z < K6) z = K6;
-      if (z > K61) z = K61;
-      time_L = state.Time0_s + dtk1 + z * (dtk2 - dtk1);
+      let z = M.div(f(HP), f(HPSave));
+      if (z < K6) z = f(K6);
+      if (z > K61) z = f(K61);
+      time_L = M.add(M.add(f(state.Time0_s), f(dtk1)), M.mul(f(z), M.sub(f(dtk2), f(dtk1))));
     }
     
     // ========================================================================
     // TIMESLIP.FRM:1280 - Calculate distance after convergence
     // VB6: Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
     // ========================================================================
-    dt_final = time_L - state.Time0_s;
-    let term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
-    Dist_L = (Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft;
+    dt_final = M.sub(f(time_L), f(state.Time0_s));
+    let term = M.add(M.mul(M.mul(f(2), f(PQWT)), f(dt_final)), M.mul(f(state.Vel0_ftps), f(state.Vel0_ftps)));
+    const Vel0_cubed_f32 = M.mul(M.mul(f(state.Vel0_ftps), f(state.Vel0_ftps)), f(state.Vel0_ftps));
+    Dist_L = M.add(M.div(M.sub(M.pow(f(term), f(1.5)), f(Vel0_cubed_f32)), M.mul(f(3), f(PQWT))), f(state.Dist0_ft));
     
     // ========================================================================
     // TIMESLIP.FRM:1282-1287 - Shift2PrintTime velocity revision (during gear shift)
@@ -1449,21 +1450,21 @@ export function vb6InitState(
   // TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
   // NOTE: Z6 = (60 / (2 * PI)) * 550 = 5252.113... (imported from constants.ts)
   const HP_launch = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, launchRPM);
-  const HP_corrected = vehicle.HPTQMult * HP_launch / env.hpc;
-  const Z6_local = (60 / (2 * PI)) * 550;  // VB6 exact formula: DECLARES.BAS:12
-  let TQ = Z6_local * HP_corrected / launchRPM;
-  const TGR_1 = vehicle.TGR[0] ?? 1;
-  const TGEff_1 = vehicle.TGEff[0] ?? 0.99;
-  TQ = TQ * vehicle.TorqueMult * TGR_1 * TGEff_1;
+  const HP_corrected = M.div(M.mul(f(vehicle.HPTQMult), f(HP_launch)), f(env.hpc));
+  const Z6_local = M.mul(M.div(f(60), M.mul(f(2), f(PI))), f(550));  // VB6 exact formula: DECLARES.BAS:12
+  let TQ = M.div(M.mul(f(Z6_local), f(HP_corrected)), f(launchRPM));
+  const TGR_1 = f(vehicle.TGR[0] ?? 1);
+  const TGEff_1 = f(vehicle.TGEff[0] ?? 0.99);
+  TQ = M.mul(M.mul(M.mul(f(TQ), f(vehicle.TorqueMult)), TGR_1), TGEff_1);
   
   // VB6: TIMESLIP.FRM:1016-1019 - Calculate drag force at launch (Vel=0)
   // WindFPS = Sqr(Vel(L)^2 + ...) = WindSpeed/Z5 at Vel=0
   // q = Sgn(WindFPS) * rho * Abs(WindFPS)^2 / (2*gc)
   // DragForce = CMU * Weight + DragCoef * RefArea * q
-  const cmu_launch = env.isLandSpeed ? CMU_BV : CMU;
-  const WindFPS_launch = env.WindSpeed_mph / Z5;
-  const q_launch = Math.sign(WindFPS_launch) * env.rho * Math.pow(Math.abs(WindFPS_launch), 2) / (2 * gc);
-  const DragForce_launch = cmu_launch * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch;
+  const cmu_launch = f(env.isLandSpeed ? CMU_BV : CMU);
+  const WindFPS_launch = M.div(f(env.WindSpeed_mph), f(Z5));
+  const q_launch = M.div(M.mul(M.mul(f(Math.sign(WindFPS_launch)), f(env.rho)), M.mul(M.abs(WindFPS_launch), M.abs(WindFPS_launch))), M.mul(f(2), f(gc)));
+  const DragForce_launch = M.add(M.mul(cmu_launch, f(vehicle.Weight_lbf)), M.mul(M.mul(f(vehicle.DragCoef), f(vehicle.RefArea_ft2)), f(q_launch)));
   
   // VB6: TIMESLIP.FRM:872-875 - Initial tire slip
   // Different formulas for Quarter Pro vs Bonneville Pro
@@ -1471,42 +1472,41 @@ export function vb6InitState(
   if (env.isLandSpeed) {
     // Bonneville Pro: TIMESLIP.FRM:875
     // TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
-    TireSlip_init = 1.01 + (env.TractionIndex - 1) * 0.01;
+    TireSlip_init = M.add(f(1.01), M.mul(M.sub(f(env.TractionIndex), f(1)), f(0.01)));
   } else {
     // Quarter Pro: TIMESLIP.FRM:872
     // TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
-    TireSlip_init = 1.02 + (env.TractionIndex - 1) * 0.005 + (env.TrackTempEffect - 1) * 3;
+    TireSlip_init = M.add(M.add(f(1.02), M.mul(M.sub(f(env.TractionIndex), f(1)), f(0.005))), M.mul(M.sub(f(env.TrackTempEffect), f(1)), f(3)));
   }
   
   // VB6: TIMESLIP.FRM:1020 - Calculate wheel force
   // force = TQ * GearRatio * Efficiency / (TireSlip * TireDia / 24) - DragForce
-  const force = TQ * vehicle.GearRatio * vehicle.Efficiency / (TireSlip_init * vehicle.TireDia_in / 24) - DragForce_launch;
+  const force = M.sub(M.div(M.mul(M.mul(f(TQ), f(vehicle.GearRatio)), f(vehicle.Efficiency)), M.div(M.mul(f(TireSlip_init), f(vehicle.TireDia_in)), f(24))), f(DragForce_launch));
   
   // VB6: TIMESLIP.FRM:1022-1027 - Estimate initial acceleration
   // If gc_TransType.Value Then (converter)
   //     Ags0 = 0.96 * force / Weight  '4% misc losses
   // Else (clutch)
   //     Ags0 = 0.88 * force / Weight  '12% misc losses
-  const lossFactor = vehicle.isClutch ? 0.88 : 0.96;
-  let Ags0_g = lossFactor * force / vehicle.Weight_lbf;
+  const lossFactor = f(vehicle.isClutch ? 0.88 : 0.96);
+  let Ags0_g = M.div(M.mul(lossFactor, f(force)), f(vehicle.Weight_lbf));
   
   // VB6: TIMESLIP.FRM:1046-1054 - Calculate AMAX and clamp Ags0
   // StaticRWT = DownForce - StaticFWt: If StaticRWT < 0 Then StaticRWT = Weight
-  const DownForce_init = vehicle.Weight_lbf;
-  let StaticRWT = DownForce_init - vehicle.StaticFWt_lbf;
-  if (StaticRWT < 0) StaticRWT = vehicle.Weight_lbf;
+  const DownForce_init = f(vehicle.Weight_lbf);
+  let StaticRWT = M.sub(f(DownForce_init), f(vehicle.StaticFWt_lbf));
+  if (StaticRWT < 0) StaticRWT = f(vehicle.Weight_lbf);
   
   // CAXI = (1 - (TractionIndex - 1) * 0.01) / (TrackTempEffect ^ 0.25)
   const CAXI_init = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-  const AX_init = calcAX(env.isLandSpeed);
+  const AX_init = f(calcAX(env.isLandSpeed));
   
   // CRTF = CAXI * AX * TireDia * (TireWidth + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ^ 2.15)
-  let CRTF_init = CAXI_init * AX_init * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * 
-                  (0.92 + 0.08 * Math.pow(StaticRWT / 1900, 2.15));
-  if (vehicle.BodyStyle === 8) CRTF_init = 0.5 * CRTF_init;
+  let CRTF_init = M.mul(M.mul(M.mul(M.mul(f(CAXI_init), AX_init), f(vehicle.TireDia_in)), M.add(f(vehicle.TireWidth_in), f(1))), M.add(f(0.92), M.mul(f(0.08), M.pow(M.div(f(StaticRWT), f(1900)), f(2.15)))));
+  if (vehicle.BodyStyle === 8) CRTF_init = M.mul(f(0.5), f(CRTF_init));
   
   // AMAX = (CRTF - DragForce) / Weight
-  const AMax_init = (CRTF_init - DragForce_launch) / vehicle.Weight_lbf;
+  const AMax_init = M.div(M.sub(f(CRTF_init), f(DragForce_launch)), f(vehicle.Weight_lbf));
   
   // VB6: TIMESLIP.FRM:1055-1056 - Clamp Ags0 to AMax/AMin
   // If Ags0 > AMAX Then Ags0 = AMAX: SLIP(L) = 1
