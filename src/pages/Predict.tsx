@@ -10,7 +10,7 @@ import type { Env } from '../domain/schemas/env.schema';
 import type { SimResult } from '../domain/physics';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
 import { assertComplete, fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
-import { useFlag, useFlagsStore } from '../domain/flags/store.tsx';
+import { useFlag, useFlagsStore, useFlags } from '../domain/flags/store.tsx';
 import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
@@ -72,6 +72,7 @@ function Predict() {
     }
   })();
   const { setFlag } = useFlagsStore();
+  const flags = useFlags();
   
   // Vehicle selection state (when no vehicle passed via location state)
   const [availableVehicles, setAvailableVehicles] = useState<VehicleLite[]>([]);
@@ -325,6 +326,13 @@ function Predict() {
             throttlePct: throttleStopPct,
           };
         }
+        
+        // Apply VB6-style rounding if dev flag is enabled
+        (simInputs as any).applyVB6Rounding = flags.vb6Rounding;
+        (simInputs as any).etDecimals = flags.etDecimals;
+        (simInputs as any).mphDecimals = flags.mphDecimals;
+        // Apply VB6 32-bit precision if dev flag is enabled
+        (simInputs as any).vb6Strict = flags.vb6Strict;
         
         simulate('VB6Exact', simInputs)
           .then((result) => {
@@ -865,25 +873,25 @@ function Predict() {
                 {/* Drag racing splits */}
                 <div className="et-slip-row">
                   <span className="et-slip-label">60'</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
                 </div>
                 <div className="et-slip-row">
                   <span className="et-slip-label">330'</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(3)}</span>
+                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
                 </div>
                 {raceLength === 'QUARTER' && (
                   <>
                     <div className="et-slip-row">
                       <span className="et-slip-label">1/8</span>
-                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(3)}</span>
+                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
                     </div>
                     <div className="et-slip-row">
                       <span className="et-slip-label">MPH</span>
-                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(2)}</span>
+                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(flags.mphDecimals)}</span>
                     </div>
                     <div className="et-slip-row">
                       <span className="et-slip-label">1000'</span>
-                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(3)}</span>
+                      <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1000)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
                     </div>
                   </>
                 )}
@@ -915,11 +923,11 @@ function Predict() {
             {/* Final ET/MPH - inline with splits */}
             <div className="et-slip-row" style={{ marginTop: '6px', paddingTop: '6px' }}>
               <span className="et-slip-label">{RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Time' : 'ET'}</span>
-              <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseET.toFixed(3)}</span>
+              <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseET.toFixed(flags.etDecimals)}</span>
             </div>
             <div className="et-slip-row">
               <span className="et-slip-label">{RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Top Speed' : 'MPH'}</span>
-              <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(2)}</span>
+              <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(flags.mphDecimals)}</span>
             </div>
             
             {/* Vehicle selector dropdown with edit button */}
@@ -1002,12 +1010,12 @@ function Predict() {
 ${vehicle.name}
 ${new Date().toLocaleDateString()}
 
-ET: ${baseET.toFixed(3)}
-MPH: ${baseMPH.toFixed(2)}
+ET: ${baseET.toFixed(flags.etDecimals)}
+MPH: ${baseMPH.toFixed(flags.mphDecimals)}
 
-60': ${(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(3)}
-330': ${(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(3)}
-${raceLength === 'QUARTER' ? `1/8: ${(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(3)} @ ${(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(1)} mph` : ''}
+60': ${(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(flags.etDecimals)}
+330': ${(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(flags.etDecimals)}
+${raceLength === 'QUARTER' ? `1/8: ${(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(flags.etDecimals)} @ ${(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(flags.mphDecimals)} mph` : ''}
 
 racingsystemsanalysis.com`;
                   navigator.clipboard.writeText(text);

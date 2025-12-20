@@ -122,6 +122,19 @@ export interface SimInputs {
   
   // Optional throttle stop for bracket racing
   throttleStop?: ThrottleStopConfig;
+  
+  // Apply VB6-style rounding to ET and MPH
+  // VB6 uses "round half up": Int((Value + increment/2) / increment) * increment
+  applyVB6Rounding?: boolean;
+  
+  // Decimal places for ET rounding (VB6 default: 2)
+  etDecimals?: number;
+  
+  // Decimal places for MPH rounding (VB6 default: 1)
+  mphDecimals?: number;
+  
+  // Force Float32 (32-bit) precision to match VB6 Single type
+  vb6Strict?: boolean;
 }
 
 /**

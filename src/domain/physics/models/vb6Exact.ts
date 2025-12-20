@@ -25,7 +25,9 @@ import {
   type VB6ASV,
 } from '../vb6/vb6SimulationStep';
 import { airDensityVB6, type FuelSystemType } from '../vb6/air';
-import { gc, FPS_TO_MPH } from '../vb6/constants';
+import { gc, FPS_TO_MPH, roundET, roundMPH } from '../vb6/constants';
+// TODO: Import Float32 math helpers when implementing full VB6 32-bit precision mode
+// import { f32, F } from '../vb6/exactMath';
 import { buildEngineCurve, convertToZeroIndexed } from '../vb6/engineCurve';
 import { 
   calcBodyStyle, 
@@ -375,6 +377,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const vehicle = input.vehicle;
   const env = input.env;
   
+  // VB6 32-bit precision mode - when enabled, use Float32 for key calculations
+  const vb6Strict = (input as any).vb6Strict ?? false;
+  if (vb6Strict) {
+    console.log('[vb6Exact] VB6 32-bit precision mode enabled');
+  }
+  
   // Race length - default to quarter mile (1320 ft)
   // Support all track types from raceLengths.ts
   const raceLength = (input as any).raceLength ?? 'QUARTER';
@@ -467,7 +475,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   // VB6 Quarter Jr: trackTemp = temperature + 30 when not specified
   // See MDI.FRM lines 883-885: gc_TrackTemp.Value = degf + 30
-  const trackTempF = env.trackTempF ?? (env.temperatureF + 30);
+  const trackTempF = env.trackTempF ?? (temperatureF + 30);
   
   // VB6 uses rho in lbm/ft³ (multiply slugs by gc)
   const rho_lbm_ft3 = airResult.rho_slug_per_ft3 * gc;
@@ -1488,8 +1496,18 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   // Get final ET and MPH from target distance (or last point)
   const finalResult = timeslip.find(t => t.d_ft === raceLengthFt);
-  const et_s = finalResult?.t_s ?? state.time_s;
-  const mph = finalResult?.v_mph ?? (state.Vel_ftps * FPS_TO_MPH);
+  const applyRounding = (input as any).applyVB6Rounding ?? false;
+  const etDecimals = (input as any).etDecimals ?? 2;   // VB6 default: 2 decimals
+  const mphDecimals = (input as any).mphDecimals ?? 1; // VB6 default: 1 decimal
+  
+  // Raw values before rounding
+  const et_s_raw = finalResult?.t_s ?? state.time_s;
+  const mph_raw = finalResult?.v_mph ?? (state.Vel_ftps * FPS_TO_MPH);
+  
+  // Apply VB6-style rounding if enabled
+  // VB6 uses "round half up": Int((Value + increment/2) / increment) * increment
+  const et_s = applyRounding ? roundET(et_s_raw, etDecimals) : et_s_raw;
+  const mph = applyRounding ? roundMPH(mph_raw, mphDecimals) : mph_raw;
   
   // Convert trace to SimResult format (include all data logger fields)
   const traces = trace.map(t => ({
@@ -1570,10 +1588,19 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     runTrace: generateRunTrace(trace, rolloutIn, timerStartTime_s ?? 0),
   };
   
+  // Apply rounding to timeslip entries if enabled
+  const roundedTimeslip = applyRounding 
+    ? timeslip.map(t => ({
+        d_ft: t.d_ft,
+        t_s: roundET(t.t_s, etDecimals),
+        v_mph: roundMPH(t.v_mph, mphDecimals),
+      }))
+    : timeslip;
+  
   return {
     et_s,
     mph,
-    timeslip,
+    timeslip: roundedTimeslip,
     traces,
     meta: {
       model: 'VB6Exact' as const,

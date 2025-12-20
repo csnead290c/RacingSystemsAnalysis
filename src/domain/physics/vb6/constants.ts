@@ -127,3 +127,44 @@ export const RANKINE_OFFSET = 459.67;
 
 /** Gravitational acceleration (alias for gc) */
 export const g = gc;
+
+// ===== VB6 Rounding Functions (RSALIB.bas) =====
+
+/**
+ * VB6-style "round half up" rounding.
+ * Matches RSALIB.bas Round() function exactly:
+ *   val = (Value + increment / 2) / increment
+ *   Round = Int(val) * increment
+ * 
+ * @param value - The value to round
+ * @param increment - The rounding increment (e.g., 0.001 for 3 decimals, 0.1 for 1 decimal)
+ * @returns Rounded value using VB6's round-half-up method
+ */
+export function vb6Round(value: number, increment: number): number {
+  const val = (value + increment / 2) / increment;
+  // VB6's Int() truncates toward negative infinity (same as Math.floor for positive numbers)
+  // For consistency with VB6, use Math.floor
+  return Math.floor(val) * increment;
+}
+
+/**
+ * Round ET using VB6 method with configurable decimal places
+ * VB6 default: 2 decimals (RightAlign(5, 2, time))
+ * @param et_s - ET in seconds
+ * @param decimals - Number of decimal places (default: 2 to match VB6)
+ */
+export function roundET(et_s: number, decimals: number = 2): number {
+  const increment = Math.pow(10, -decimals);
+  return vb6Round(et_s, increment);
+}
+
+/**
+ * Round MPH using VB6 method with configurable decimal places
+ * VB6 default: 1 decimal (RightAlign(4, 1, Work))
+ * @param mph - Speed in MPH
+ * @param decimals - Number of decimal places (default: 1 to match VB6)
+ */
+export function roundMPH(mph: number, decimals: number = 1): number {
+  const increment = Math.pow(10, -decimals);
+  return vb6Round(mph, increment);
+}

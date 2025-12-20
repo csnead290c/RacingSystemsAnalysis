@@ -40,6 +40,16 @@ export interface FeatureFlags {
   
   // Step Trace: Log detailed step-by-step simulation data
   enableStepTrace: boolean;
+  
+  // VB6 Rounding: Apply VB6-style rounding to ET and MPH
+  // VB6 uses "round half up": val = Int((Value + increment/2) / increment) * increment
+  vb6Rounding: boolean;
+  
+  // Decimal places for ET rounding (VB6 default: 2)
+  etDecimals: number;
+  
+  // Decimal places for MPH rounding (VB6 default: 1)
+  mphDecimals: number;
 }
 
 interface FlagsStore extends FeatureFlags {
@@ -56,6 +66,9 @@ const DEFAULT_FLAGS: FeatureFlags = {
   showDiagnostics: false,
   enableEnergyLogging: false,
   enableStepTrace: false,
+  vb6Rounding: true, // Default ON - apply VB6-style rounding to ET and MPH
+  etDecimals: 2,      // VB6 default: 2 decimals for ET (RightAlign(5, 2, time))
+  mphDecimals: 1,     // VB6 default: 1 decimal for MPH (RightAlign(4, 1, Work))
 };
 
 const STORAGE_KEY = 'rsa.flags.v1';
@@ -146,6 +159,9 @@ export function useFlags(): FeatureFlags {
     showDiagnostics: store.showDiagnostics,
     enableEnergyLogging: store.enableEnergyLogging,
     enableStepTrace: store.enableStepTrace,
+    vb6Rounding: store.vb6Rounding,
+    etDecimals: store.etDecimals,
+    mphDecimals: store.mphDecimals,
   };
 }
 

@@ -102,6 +102,11 @@ export default function SettingsPanel() {
       description: 'Require complete VB6 fixture for simulation (no defaults)',
     },
     {
+      key: 'vb6Strict' as const,
+      label: 'VB6 32-bit Precision',
+      description: 'Force Float32 (32-bit) precision to match VB6 Single type',
+    },
+    {
       key: 'showDiagnostics' as const,
       label: 'Show Diagnostics',
       description: 'Display debug information in console and UI',
@@ -271,7 +276,101 @@ export default function SettingsPanel() {
         </div>
       </div>
 
-      {/* Section 3: Console Logs */}
+      {/* Section 3: VB6 Rounding Settings */}
+      <div
+        style={{
+          padding: '1rem',
+          backgroundColor: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '1rem',
+        }}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem', fontWeight: '600' }}>
+          VB6 Rounding
+        </h3>
+        
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            padding: '0.75rem',
+            backgroundColor: flags.vb6Rounding ? '#dbeafe' : 'var(--color-bg)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            marginBottom: '1rem',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={flags.vb6Rounding}
+            onChange={(e) => setFlag('vb6Rounding', e.target.checked)}
+            style={{ marginTop: '2px' }}
+          />
+          <div>
+            <div style={{ fontWeight: '500', fontSize: '0.875rem' }}>Enable VB6 Rounding</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              Apply VB6-style "round half up" to ET and MPH values
+            </div>
+          </div>
+        </label>
+
+        <div style={{ display: 'flex', gap: '1rem', opacity: flags.vb6Rounding ? 1 : 0.5 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '500', marginBottom: '0.25rem' }}>
+              ET Decimals
+            </label>
+            <select
+              value={flags.etDecimals}
+              onChange={(e) => setFlag('etDecimals', parseInt(e.target.value))}
+              disabled={!flags.vb6Rounding}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                fontSize: '0.875rem',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--color-bg)',
+              }}
+            >
+              <option value={2}>2 (VB6 default)</option>
+              <option value={3}>3</option>
+            </select>
+            <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+              VB6: RightAlign(5, 2, time)
+            </div>
+          </div>
+          
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '500', marginBottom: '0.25rem' }}>
+              MPH Decimals
+            </label>
+            <select
+              value={flags.mphDecimals}
+              onChange={(e) => setFlag('mphDecimals', parseInt(e.target.value))}
+              disabled={!flags.vb6Rounding}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                fontSize: '0.875rem',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--color-bg)',
+              }}
+            >
+              <option value={1}>1 (VB6 default)</option>
+              <option value={2}>2</option>
+            </select>
+            <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+              VB6: RightAlign(4, 1, Work)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 4: Console Logs */}
       <div
         style={{
           padding: '1rem',
