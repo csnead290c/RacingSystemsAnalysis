@@ -26,8 +26,7 @@ import {
 } from '../vb6/vb6SimulationStep';
 import { airDensityVB6, type FuelSystemType } from '../vb6/air';
 import { gc, FPS_TO_MPH, roundET, roundMPH } from '../vb6/constants';
-// TODO: Import Float32 math helpers when implementing full VB6 32-bit precision mode
-// import { f32, F } from '../vb6/exactMath';
+import { setFloat32Mode } from '../vb6/vb6SimulationStep';
 import { buildEngineCurve, convertToZeroIndexed } from '../vb6/engineCurve';
 import { 
   calcBodyStyle, 
@@ -379,8 +378,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   // VB6 32-bit precision mode - when enabled, use Float32 for key calculations
   const vb6Strict = (input as any).vb6Strict ?? false;
+  setFloat32Mode(vb6Strict);
   if (vb6Strict) {
-    console.log('[vb6Exact] VB6 32-bit precision mode enabled');
+    console.log('[vb6Exact] VB6 32-bit precision mode enabled (Float32)');
   }
   
   // Race length - default to quarter mile (1320 ft)
