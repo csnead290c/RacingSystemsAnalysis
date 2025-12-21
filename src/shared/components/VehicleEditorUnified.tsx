@@ -344,12 +344,17 @@ export default function VehicleEditorUnified({
   // Existing vehicle groups for dropdown
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
   
-  // Load existing groups (would come from vehicles list in real use)
+  // Load existing groups from actual vehicles
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('vehicleGroups');
-      if (stored) setExistingGroups(JSON.parse(stored));
-    } catch { /* ignore */ }
+    const loadGroups = async () => {
+      try {
+        const { loadVehicles } = await import('../../state/vehicles');
+        const vehicles = await loadVehicles();
+        const groups = [...new Set(vehicles.map(v => v.group).filter(Boolean))] as string[];
+        setExistingGroups(groups);
+      } catch { /* ignore */ }
+    };
+    loadGroups();
   }, []);
   
   const styles = useMemo(() => createStyles(compact), [compact]);

@@ -739,14 +739,14 @@ export function vb6SimulationStep(
   if (Jerk > JMax) Jerk = f(JMax);
   
   // ========================================================================
-  // TIMESLIP.FRM:1090-1096 - Save previous values
+  // TIMESLIP.FRM:1090-1096 - Save previous values (truncate to Float32)
   // ========================================================================
-  state.Vel0_ftps = state.Vel_ftps;
-  state.Ags0_g = state.AGS_g;
-  state.Time0_s = state.time_s;
-  state.Dist0_ft = state.Dist_ft;
-  state.RPM0 = state.EngRPM;
-  state.DSRPM0 = state.DSRPM;
+  state.Vel0_ftps = f(state.Vel_ftps);
+  state.Ags0_g = f(state.AGS_g);
+  state.Time0_s = f(state.time_s);
+  state.Dist0_ft = f(state.Dist_ft);
+  state.RPM0 = f(state.EngRPM);
+  state.DSRPM0 = f(state.DSRPM);
   
   // TIMESLIP.FRM:1093-1094 - Special handling for first step at launch
   // VB6: If RPM0 = LaunchRPM And Time0 = 0 Then
@@ -1384,15 +1384,15 @@ export function vb6SimulationStep(
   }
   
   // ========================================================================
-  // Update state
+  // Update state - truncate all values to Float32 if in strict mode
   // ========================================================================
   state.L += 1;
-  state.time_s = time_L;
-  state.Vel_ftps = Vel_L;
-  state.Dist_ft = Dist_L;
-  state.AGS_g = AGS_g;
-  state.EngRPM = EngRPM_L;
-  state.DSRPM = DSRPM;
+  state.time_s = f(time_L);
+  state.Vel_ftps = f(Vel_L);
+  state.Dist_ft = f(Dist_L);
+  state.AGS_g = f(AGS_g);
+  state.EngRPM = f(EngRPM_L);
+  state.DSRPM = f(DSRPM);
   state.SLIP = SLIP;
   
   // VB6: AgsMax is set ONCE at launch (line 1028) and never updated
@@ -1530,31 +1530,32 @@ export function vb6InitState(
     DragForce_launch,
   }));
   
+  // Return initial state with all values truncated to Float32 if in strict mode
   return {
     L: 1,
-    time_s: 0,
-    Vel_ftps: 0, // VB6: TIMESLIP.FRM:1003 - Vel(L) = 0
-    Dist_ft: 0,
-    AGS_g: Ags0_g,
-    EngRPM: launchRPM,
-    DSRPM: 0,
+    time_s: f(0),
+    Vel_ftps: f(0), // VB6: TIMESLIP.FRM:1003 - Vel(L) = 0
+    Dist_ft: f(0),
+    AGS_g: f(Ags0_g),
+    EngRPM: f(launchRPM),
+    DSRPM: f(0),
     Gear: 1,
     SLIP: false,
     
-    Vel0_ftps: 0,
-    Ags0_g: Ags0_g,
-    Dist0_ft: 0,
-    DSRPM0: 0,
+    Vel0_ftps: f(0),
+    Ags0_g: f(Ags0_g),
+    Dist0_ft: f(0),
+    DSRPM0: f(0),
     
     // VB6: TIMESLIP.FRM:1003 - Initial values before first step
     // RPM0 and Time0 are set DURING the step (lines 1092-1095), not at init
     // Initialize to values that will trigger the first-step special handling
-    RPM0: launchRPM,
-    Time0_s: 0,
+    RPM0: f(launchRPM),
+    Time0_s: f(0),
     
-    AgsMax_g: Ags0_g,
-    TireGrowth: tireResult.TireGrowth,
-    TireCirFt: tireResult.TireCirFt,
+    AgsMax_g: f(Ags0_g),
+    TireGrowth: f(tireResult.TireGrowth),
+    TireCirFt: f(tireResult.TireCirFt),
     
     // Shift tracking
     ShiftFlag: 0,

@@ -128,11 +128,13 @@ function RPMHistogram({ data, targetBins = 15, compact = false }: RPMHistogramPr
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: 'var(--color-bg)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--color-text)',
-            fontSize: '0.75rem',
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderRadius: '6px',
+            color: '#fff',
+            fontSize: '0.85rem',
+            padding: '8px 12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
           formatter={(value: number) => [`${value.toFixed(2)}s`, 'Time']}
           labelFormatter={(_label: string, payload: any[]) => {

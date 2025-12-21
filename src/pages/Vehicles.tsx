@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, saveVehicle, deleteVehicle, type VehicleLite } from '../state/vehicles';
@@ -16,6 +16,7 @@ import {
   TireRolloutWorksheet,
 } from '../shared/components/WorksheetModal';
 import { TOOLTIPS } from '../domain/config/tooltips';
+import { importDatFile } from '../domain/import';
 
 type TransType = 'clutch' | 'converter';
 
@@ -132,6 +133,10 @@ function Vehicles() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('basic'); // Used by disabled tabbed code
   const [filterGroup, setFilterGroup] = useState<string>(''); // Group filter
+  const [importing, setImporting] = useState(false);
+  
+  // File input ref for .dat import
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Get unique groups from vehicles
   const vehicleGroups = [...new Set(vehicles.map(v => v.group).filter(Boolean))] as string[];
@@ -357,6 +362,58 @@ function Vehicles() {
     }
   };
 
+  // Handle .dat file import
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Check vehicle limit before importing
+    if (!canCreateVehicle(vehicles.length)) {
+      alert(`You've reached your vehicle limit (${vehicleLimit}). Upgrade to ${tier === 'racer' ? 'Pro' : 'a higher plan'} for more vehicles.`);
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    
+    setImporting(true);
+    try {
+      const result = await importDatFile(file);
+      
+      if (!result.success || !result.vehicle) {
+        alert(`Import failed: ${result.error || 'Unknown error'}`);
+        return;
+      }
+      
+      // Show warnings if any
+      if (result.warnings.length > 0) {
+        console.warn('[Import] Warnings:', result.warnings);
+      }
+      
+      // Validate with zod
+      const validation = VehicleSchema.safeParse(result.vehicle);
+      if (!validation.success) {
+        const errors = validation.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('\n');
+        alert(`Imported vehicle has validation issues:\n${errors}\n\nThe vehicle will be saved but may need adjustments.`);
+      }
+      
+      // Save the imported vehicle
+      const vehicleToSave = validation.success ? validation.data : result.vehicle as Vehicle;
+      await saveVehicle(vehicleToSave);
+      await loadData();
+      
+      // Show success message
+      const formatName = result.format === 'quarterJr' ? 'QuarterJr' : 'QuarterPro';
+      alert(`Successfully imported "${vehicleToSave.name}" from ${formatName} format (v${result.version})`);
+      
+    } catch (error) {
+      alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setImporting(false);
+      // Reset file input so same file can be imported again
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   // Vehicle limit info for display
   const isAtLimit = !canCreateVehicle(vehicles.length);
   const limitDisplay = vehicleLimit === Infinity ? '∞' : vehicleLimit;
@@ -383,6 +440,27 @@ function Vehicles() {
                 </span>
               )}
             </span>
+            {/* Hidden file input for .dat import (Pro feature only) */}
+            {isPro && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".dat,.DAT"
+                  onChange={handleImport}
+                  style={{ display: 'none' }}
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  className="btn btn-secondary"
+                  disabled={isAtLimit || importing}
+                  style={(isAtLimit || importing) ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                  title="Import a QuarterJr or QuarterPro .dat file"
+                >
+                  {importing ? 'Importing...' : '↑ Import .dat'}
+                </button>
+              </>
+            )}
             <button 
               onClick={handleNew} 
               className="btn"
@@ -1288,7 +1366,7 @@ function Vehicles() {
               {saving ? 'Saving...' : 'Save Vehicle'}
             </button>
             <button onClick={handleCancel} className="btn btn-secondary" disabled={saving}>
-              Cancel
+              ← Back to All Vehicles
             </button>
           </div>
         </div>
@@ -1349,11 +1427,7 @@ function Vehicles() {
                 <tr>
                   <th>Name</th>
                   <th>Group</th>
-                  <th>Default Race</th>
-                  <th className="align-right">Weight (lb)</th>
-                  <th className="align-right">Power (HP)</th>
-                  <th className="align-right">Tire Dia (in)</th>
-                  <th className="align-right">Rear Gear</th>
+                  <th>Notes</th>
                   <th className="align-right">Actions</th>
                 </tr>
               </thead>
@@ -1388,11 +1462,9 @@ function Vehicles() {
                   <td style={{ color: vehicle.group ? 'var(--color-text)' : 'var(--color-muted)', fontSize: '0.85rem' }}>
                     {vehicle.group || '—'}
                   </td>
-                  <td>{vehicle.defaultRaceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'}</td>
-                  <td className="align-right mono">{vehicle.weightLb}</td>
-                  <td className="align-right mono">{vehicle.powerHP}</td>
-                  <td className="align-right mono">{vehicle.tireDiaIn}</td>
-                  <td className="align-right mono">{vehicle.rearGear}</td>
+                  <td style={{ color: vehicle.notes ? 'var(--color-text)' : 'var(--color-muted)', fontSize: '0.85rem', maxWidth: '300px' }}>
+                    {vehicle.notes ? (vehicle.notes.length > 50 ? vehicle.notes.slice(0, 50) + '...' : vehicle.notes) : '—'}
+                  </td>
                   <td className="align-right">
                     <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
                       <button

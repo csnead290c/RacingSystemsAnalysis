@@ -105,22 +105,21 @@ function Predict() {
   });
   
   
-  // Initialize from location state or show vehicle selector
+  // Initialize from location state, sessionStorage, or show vehicle selector
   useEffect(() => {
     const state = location.state as LocationState | null;
+    
+    // Check sessionStorage FIRST (from "Run Sim" button in Vehicle Manager)
+    const storedVehicleId = sessionStorage.getItem('selectedVehicleId');
+    const storedRaceLength = sessionStorage.getItem('selectedRaceLength') as RaceLength | null;
+    
+    // Clear sessionStorage immediately to prevent re-use on refresh
+    if (storedVehicleId) {
+      sessionStorage.removeItem('selectedVehicleId');
+      sessionStorage.removeItem('selectedRaceLength');
+    }
 
-    // Always load available vehicles for the dropdown
-    const loadAvailableVehiclesForDropdown = async () => {
-      try {
-        const vehicles = await loadVehicles();
-        setAvailableVehicles(vehicles);
-      } catch (error) {
-        console.error('Failed to load vehicles for dropdown:', error);
-      }
-    };
-    loadAvailableVehiclesForDropdown();
-
-    // If we have state, use it
+    // If we have state from navigation, use it
     if (state?.vehicle && state?.raceLength) {
       setVehicle(state.vehicle);
       setRaceLength(state.raceLength);
@@ -137,22 +136,14 @@ function Predict() {
       return;
     }
 
-    // Otherwise, load vehicles and show selector
-    const loadAvailableVehicles = async () => {
+    // Load vehicles and either auto-select from sessionStorage or show selector
+    const loadAndSelectVehicle = async () => {
       try {
         const vehicles = await loadVehicles();
         setAvailableVehicles(vehicles);
         
-        // Check sessionStorage for vehicle ID from "Run Sim" button in Vehicle Manager
-        const storedVehicleId = sessionStorage.getItem('selectedVehicleId');
-        const storedRaceLength = sessionStorage.getItem('selectedRaceLength') as RaceLength | null;
-        
+        // If we have a stored vehicle ID from "Run Sim" button, use it
         if (storedVehicleId) {
-          // Clear sessionStorage after reading
-          sessionStorage.removeItem('selectedVehicleId');
-          sessionStorage.removeItem('selectedRaceLength');
-          
-          // Find the vehicle and auto-select it
           const foundVehicle = vehicles.find(v => v.id === storedVehicleId);
           if (foundVehicle) {
             setVehicle(foundVehicle as Vehicle);
@@ -169,6 +160,7 @@ function Predict() {
           }
         }
         
+        // No stored vehicle, show selector
         if (vehicles.length > 0) {
           setSelectedVehicleId(vehicles[0].id);
         }
@@ -179,7 +171,7 @@ function Predict() {
         setLoading(false);
       }
     };
-    loadAvailableVehicles();
+    loadAndSelectVehicle();
   }, [location.state]);
 
   // Debounce timer ref
@@ -615,9 +607,22 @@ function Predict() {
     setRaceLength(newLength);
   };
 
-  // Save current run to history
+  // Save current run to history (Pro feature - includes traces for overlay)
   const handleSaveRun = () => {
     if (!vehicle || !env || !simResult) return;
+    
+    // Include traces for chart overlay (Pro feature)
+    const tracesToSave = features.quarterProFields && simResult.traces 
+      ? simResult.traces.map((t: any) => ({
+          t_s: t.t_s,
+          s_ft: t.s_ft,
+          v_mph: t.v_mph,
+          a_g: t.a_g,
+          rpm: t.rpm,
+          gear: t.gear,
+          hp: t.hp,
+        }))
+      : undefined;
     
     saveRun({
       vehicleName: vehicle.name,
@@ -630,6 +635,7 @@ function Predict() {
       },
       hpAdjust,
       weightAdjust,
+      traces: tracesToSave,
     });
     
     setShowSaveConfirm(true);
@@ -854,11 +860,8 @@ function Predict() {
           {/* ET Slip Style Results */}
           <div className="et-slip" style={{ opacity: (isDebouncing || loading) ? 0.7 : 1 }}>
             <div className="et-slip-header">
-              <img src="/rsa-icon.png" alt="RSA" style={{ height: '48px', marginBottom: '4px' }} />
-              <div style={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: '1px' }}>RSA</div>
-              <div style={{ fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px', marginTop: '2px' }}>
-                {RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? 'Bonneville Pro' : strictMode ? 'Quarter Pro' : 'Quarter Jr'}
-              </div>
+              <img src="/rsa-icon.png" alt="RSA" style={{ height: '48px', marginBottom: '4px', mixBlendMode: 'multiply' }} />
+
               <div style={{ fontSize: '8px', color: '#666', marginTop: '4px' }}>
                 {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
@@ -988,22 +991,41 @@ function Predict() {
             
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-              <button
-                onClick={handleSaveRun}
-                style={{
-                  flex: 1,
-                  padding: '6px 8px',
-                  fontSize: '0.7rem',
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: showSaveConfirm ? '#22c55e' : '#333',
-                  color: 'white',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {showSaveConfirm ? '✓ Saved!' : 'Save'}
-              </button>
+              {features.quarterProFields ? (
+                <button
+                  onClick={handleSaveRun}
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    fontSize: '0.7rem',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: showSaveConfirm ? '#22c55e' : '#333',
+                    color: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  title="Save run for comparison overlay"
+                >
+                  {showSaveConfirm ? '✓ Saved!' : 'Save'}
+                </button>
+              ) : (
+                <span
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    fontSize: '0.7rem',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#222',
+                    color: '#666',
+                    textAlign: 'center',
+                  }}
+                  title="Save & Compare - Pro feature"
+                >
+                  🔒 Save
+                </span>
+              )}
               <button
                 onClick={() => {
                   const text = `RSA ${strictMode ? 'Quarter Pro' : 'Quarter Jr'} Prediction
@@ -1085,6 +1107,31 @@ racingsystemsanalysis.com`;
                 </button>
               </div>
             )}
+            
+            {/* Recent Runs - Pro feature for chart overlay comparison */}
+            {features.quarterProFields && (
+              <div style={{ marginTop: '8px', borderTop: '1px solid var(--color-border)', paddingTop: '8px' }}>
+                <div style={{ fontWeight: '600', marginBottom: '6px', color: 'var(--color-text)', fontSize: '0.7rem' }}>Saved Runs</div>
+                <div style={{ fontSize: '0.65rem', maxHeight: '80px', overflowY: 'auto' }}>
+                  {getRecentRuns(5).length === 0 ? (
+                    <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No saved runs</div>
+                  ) : (
+                    getRecentRuns(5).map(run => (
+                      <button key={run.id} onClick={() => handleLoadComparison(run)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '3px 5px', marginBottom: '2px',
+                          borderRadius: '3px', border: comparisonRun?.id === run.id ? '1px solid #3b82f6' : '1px solid var(--color-border)',
+                          backgroundColor: comparisonRun?.id === run.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-bg-secondary)',
+                          color: 'var(--color-text)', cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 600 }}>{run.result.et_s.toFixed(3)}s</span>
+                          <span style={{ color: 'var(--color-text-muted)' }}>{run.result.mph.toFixed(1)}</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Data Logger Chart */}
@@ -1097,7 +1144,12 @@ racingsystemsanalysis.com`;
             <Suspense fallback={<div className="text-center text-muted" style={{ padding: 'var(--space-4)' }}>Loading chart...</div>}>
               {simResult?.traces && simResult.traces.length > 0 ? (
                 <div style={{ flex: 1, minHeight: '200px', height: '100%' }}>
-                  <DataLoggerChart data={simResult.traces as any} raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320} />
+                  <DataLoggerChart 
+                    data={simResult.traces as any} 
+                    raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
+                    comparisonData={comparisonRun?.traces as any}
+                    comparisonLabel={comparisonRun ? `${comparisonRun.vehicleName} (${comparisonRun.result.et_s.toFixed(3)}s)` : undefined}
+                  />
                 </div>
               ) : (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
@@ -1108,49 +1160,48 @@ racingsystemsanalysis.com`;
           </div>
         </div>
 
-        {/* BOTTOM ROW: Simplified - Environment + Race Length + Quick Tools */}
-        <div className="et-sim-bottom-row" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
-          {/* Environment - Combined with Race Length */}
-          <div className="card" style={{ flex: '1 1 300px', padding: '12px 16px', display: 'flex', flexDirection: 'column', minWidth: '280px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Environment</span>
-              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                {/* Race Length Selector */}
-                <select
-                  value={raceLength}
-                  onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.65rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' 
-                      ? 'rgba(139, 92, 246, 0.2)' 
-                      : 'var(--color-bg-secondary)',
-                    color: 'var(--color-text)',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    marginRight: '8px',
-                  }}
-                >
-                  <optgroup label="Drag Racing">
+        {/* BOTTOM ROW: Environment + What-If/Tools + RPM */}
+        <div className="et-sim-bottom-row" style={{ flexWrap: 'wrap', overflow: 'visible', alignItems: 'stretch' }}>
+          {/* Environment - Compact horizontal layout */}
+          <div className="card" style={{ flex: '0 0 auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 10 }}>
+            {/* Header row with selectors */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.75rem' }}>Environment</span>
+              <select
+                value={raceLength}
+                onChange={(e) => handleRaceLengthChange(e.target.value as RaceLength)}
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  borderRadius: '4px',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' 
+                    ? 'rgba(139, 92, 246, 0.2)' 
+                    : 'var(--color-bg-secondary)',
+                  color: 'var(--color-text)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                <optgroup label="Drag Racing">
+                  {allowedRaceLengths
+                    .filter(key => RACE_LENGTH_INFO[key].category === 'drag')
+                    .map(key => (
+                      <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
+                    ))}
+                </optgroup>
+                {features.trackBonneville && (
+                  <optgroup label="Land Speed">
                     {allowedRaceLengths
-                      .filter(key => RACE_LENGTH_INFO[key].category === 'drag')
+                      .filter(key => RACE_LENGTH_INFO[key].category === 'landspeed')
                       .map(key => (
                         <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
                       ))}
                   </optgroup>
-                  {features.trackBonneville && (
-                    <optgroup label="Land Speed">
-                      {allowedRaceLengths
-                        .filter(key => RACE_LENGTH_INFO[key].category === 'landspeed')
-                        .map(key => (
-                          <option key={key} value={key}>{RACE_LENGTH_INFO[key].label}</option>
-                        ))}
-                    </optgroup>
-                  )}
-                </select>
-                {features.liveWeather ? (
+                )}
+              </select>
+              {features.liveWeather ? (
+                <>
                   <select
                     value={selectedTrack?.id || ''}
                     onChange={(e) => {
@@ -1158,36 +1209,30 @@ racingsystemsanalysis.com`;
                       if (track) handleFetchWeather(track);
                     }}
                     style={{
-                      padding: '3px 6px',
-                      fontSize: '0.65rem',
+                      padding: '2px 4px',
+                      fontSize: '0.6rem',
                       borderRadius: '4px',
                       border: '1px solid var(--color-border)',
                       backgroundColor: 'var(--color-bg-secondary)',
                       color: 'var(--color-text)',
                       cursor: 'pointer',
-                      maxWidth: '120px',
+                      maxWidth: '90px',
                     }}
                     disabled={weatherLoading}
                   >
                     <option value="">Track...</option>
                     {getAllTracks().map(track => (
                       <option key={track.id} value={track.id}>
-                        {track.name.length > 18 ? track.name.slice(0, 16) + '...' : track.name}
+                        {track.name.length > 12 ? track.name.slice(0, 10) + '...' : track.name}
                       </option>
                     ))}
                   </select>
-                ) : (
-                  <span style={{ fontSize: '0.65rem', color: 'var(--color-muted)' }}>
-                    🔒 Live Weather (Pro)
-                  </span>
-                )}
-                {features.liveWeather ? (
                   <button
                     onClick={() => handleFetchWeather()}
                     disabled={weatherLoading}
                     style={{
-                      padding: '3px 8px',
-                      fontSize: '0.65rem',
+                      padding: '2px 6px',
+                      fontSize: '0.6rem',
                       borderRadius: '4px',
                       border: '1px solid var(--color-border)',
                       backgroundColor: 'var(--color-bg-secondary)',
@@ -1198,153 +1243,125 @@ racingsystemsanalysis.com`;
                   >
                     📍
                   </button>
-                ) : (
-                  <span
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '0.65rem',
-                      borderRadius: '4px',
-                      border: '1px solid var(--color-border)',
-                      backgroundColor: 'var(--color-surface)',
-                      color: 'var(--color-muted)',
-                      cursor: 'not-allowed',
-                    }}
-                    title="Upgrade to Pro for live weather"
-                  >
-                    🔒
-                  </span>
-                )}
-              </div>
+                </>
+              ) : (
+                <span style={{ fontSize: '0.6rem', color: 'var(--color-muted)' }}>🔒 Weather</span>
+              )}
+              {weatherError && <span style={{ fontSize: '0.55rem', color: '#ef4444' }}>{weatherError}</span>}
+              {lastWeatherUpdate && !weatherError && (
+                <span style={{ fontSize: '0.55rem', color: 'var(--color-muted)' }}>
+                  {lastWeatherUpdate.toLocaleTimeString().slice(0, -3)}
+                  {selectedTrack && ` • ${selectedTrack.city}`}
+                </span>
+              )}
             </div>
-            {weatherError && (
-              <div style={{ fontSize: '0.65rem', color: '#ef4444', marginBottom: '4px' }}>{weatherError}</div>
-            )}
-            {lastWeatherUpdate && !weatherError && (
-              <div style={{ fontSize: '0.6rem', color: 'var(--color-muted)', marginBottom: '4px' }}>
-                Updated {lastWeatherUpdate.toLocaleTimeString()}
-                {selectedTrack && ` • ${selectedTrack.city}`}
-              </div>
-            )}
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
 
-          {/* What-If Adjustments - Compact */}
-          <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', minWidth: '160px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>What-If</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.75rem' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>HP</span>
-                  <span style={{ fontWeight: 600, color: hpAdjust !== 0 ? (hpAdjust > 0 ? '#22c55e' : '#ef4444') : 'var(--color-text)' }}>
-                    {hpAdjust >= 0 ? '+' : ''}{hpAdjust}
-                  </span>
+          {/* What-If & Tools - Pro features combined in one card */}
+          {features.quarterProFields ? (
+            <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px' }}>
+              <div style={{ display: 'flex', gap: '20px' }}>
+                {/* What-If Column */}
+                <div style={{ minWidth: '120px' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>What-If</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>HP</span>
+                        <span style={{ fontWeight: 600, color: hpAdjust !== 0 ? (hpAdjust > 0 ? '#22c55e' : '#ef4444') : 'var(--color-text)' }}>
+                          {hpAdjust >= 0 ? '+' : ''}{hpAdjust}
+                        </span>
+                      </div>
+                      <input type="range" min="-200" max="200" step="10" value={hpAdjust}
+                        onChange={(e) => setHpAdjust(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>Weight</span>
+                        <span style={{ fontWeight: 600, color: weightAdjust !== 0 ? (weightAdjust < 0 ? '#22c55e' : '#ef4444') : 'var(--color-text)' }}>
+                          {weightAdjust >= 0 ? '+' : ''}{weightAdjust}
+                        </span>
+                      </div>
+                      <input type="range" min="-500" max="500" step="25" value={weightAdjust}
+                        onChange={(e) => setWeightAdjust(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
+                    </div>
+                    {(hpAdjust !== 0 || weightAdjust !== 0) && (
+                      <button onClick={() => { setHpAdjust(0); setWeightAdjust(0); }}
+                        style={{ padding: '3px 6px', fontSize: '0.65rem', borderRadius: '4px', border: '1px solid var(--color-border)',
+                          backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                        Reset
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <input type="range" min="-200" max="200" step="10" value={hpAdjust}
-                  onChange={(e) => setHpAdjust(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
+                {/* Divider */}
+                <div style={{ width: '1px', backgroundColor: 'var(--color-border)' }} />
+                {/* Tools Column */}
+                <div style={{ minWidth: '140px' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Tools</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
+                      style={{ padding: '6px 10px', fontSize: '0.7rem', borderRadius: '4px', border: '1px solid var(--color-accent)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
+                      ⚡ Optimize
+                    </button>
+                    {/* Throttle Stop */}
+                    <div style={{ fontSize: '0.7rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', marginBottom: '6px' }}>
+                        <input type="checkbox" checked={throttleStopEnabled} onChange={(e) => setThrottleStopEnabled(e.target.checked)} />
+                        <span style={{ color: throttleStopEnabled ? '#f59e0b' : 'var(--color-text-muted)' }}>Throttle Stop</span>
+                      </label>
+                      {throttleStopEnabled && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center', fontSize: '0.65rem' }}>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Activate</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <input type="number" min="0" max="15" step="0.1" value={throttleStopActivate}
+                              onChange={(e) => setThrottleStopActivate(Number(e.target.value) || 0)}
+                              style={{ width: '50px', padding: '2px 4px', fontSize: '0.65rem', borderRadius: '3px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text)', textAlign: 'center' }} />
+                            <span>sec</span>
+                          </div>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Duration</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <input type="number" min="0" max="10" step="0.1" value={throttleStopDuration}
+                              onChange={(e) => setThrottleStopDuration(Number(e.target.value) || 0)}
+                              style={{ width: '50px', padding: '2px 4px', fontSize: '0.65rem', borderRadius: '3px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text)', textAlign: 'center' }} />
+                            <span>sec</span>
+                          </div>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Throttle</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <input type="number" min="0" max="100" step="5" value={throttleStopPct}
+                              onChange={(e) => setThrottleStopPct(Number(e.target.value) || 0)}
+                              style={{ width: '50px', padding: '2px 4px', fontSize: '0.65rem', borderRadius: '3px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-secondary)', color: '#f59e0b', textAlign: 'center', fontWeight: 600 }} />
+                            <span>%</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Weight</span>
-                  <span style={{ fontWeight: 600, color: weightAdjust !== 0 ? (weightAdjust < 0 ? '#22c55e' : '#ef4444') : 'var(--color-text)' }}>
-                    {weightAdjust >= 0 ? '+' : ''}{weightAdjust}
-                  </span>
-                </div>
-                <input type="range" min="-500" max="500" step="25" value={weightAdjust}
-                  onChange={(e) => setWeightAdjust(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
-              </div>
-              {(hpAdjust !== 0 || weightAdjust !== 0) && (
-                <button onClick={() => { setHpAdjust(0); setWeightAdjust(0); }}
-                  style={{ padding: '3px 6px', fontSize: '0.65rem', borderRadius: '4px', border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                  Reset
-                </button>
-              )}
             </div>
-          </div>
+          ) : (
+            /* Non-Pro: Show locked placeholder */
+            <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '1.5rem' }}>🔒</div>
+              <div style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>What-If & Tools</div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', textAlign: 'center' }}>Upgrade to Pro</div>
+            </div>
+          )}
 
-          {/* Quick Tools - Compact buttons */}
-          <div className="card" style={{ flex: '1 1 220px', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px', maxWidth: '280px' }}>
-            <div style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>Tools</div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {features.gearOptimizer ? (
-                <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
-                  style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-accent)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
-                  ⚡ Optimize
-                </button>
-              ) : (
-                <span style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-border)',
-                  backgroundColor: 'var(--color-surface)', color: 'var(--color-muted)', cursor: 'not-allowed' }}
-                  title="Upgrade to Pro for optimizer">
-                  🔒 Optimize
-                </span>
-              )}
-            </div>
-            {/* Throttle Stop - expandable (Pro feature) */}
-            <div style={{ fontSize: '0.75rem' }}>
-              {features.throttleStop ? (
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={throttleStopEnabled} onChange={(e) => setThrottleStopEnabled(e.target.checked)} />
-                  <span style={{ color: throttleStopEnabled ? '#f59e0b' : 'var(--color-text-muted)' }}>Throttle Stop</span>
-                </label>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-muted)' }}>
-                  🔒 Throttle Stop <span style={{ fontSize: '0.65rem' }}>(Pro)</span>
-                </span>
-              )}
-              {throttleStopEnabled && (
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: 'var(--color-text-muted)', width: '28px', fontSize: '0.7rem' }}>At</span>
-                    <input type="range" min="0.1" max="5" step="0.1" value={throttleStopActivate}
-                      onChange={(e) => setThrottleStopActivate(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
-                    <span style={{ width: '36px', textAlign: 'right', fontSize: '0.7rem' }}>{throttleStopActivate.toFixed(1)}s</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: 'var(--color-text-muted)', width: '28px', fontSize: '0.7rem' }}>For</span>
-                    <input type="range" min="0.1" max="5" step="0.1" value={throttleStopDuration}
-                      onChange={(e) => setThrottleStopDuration(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
-                    <span style={{ width: '36px', textAlign: 'right', fontSize: '0.7rem' }}>{throttleStopDuration.toFixed(1)}s</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: 'var(--color-text-muted)', width: '28px', fontSize: '0.7rem' }}>%</span>
-                    <input type="range" min="0" max="100" step="5" value={throttleStopPct}
-                      onChange={(e) => setThrottleStopPct(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
-                    <span style={{ width: '36px', textAlign: 'right', fontSize: '0.7rem', color: '#f59e0b' }}>{throttleStopPct}%</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Runs - Compact */}
-          <div className="card" style={{ flex: '0 0 auto', padding: '12px 16px', minWidth: '140px', maxWidth: '180px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Recent</div>
-            <div style={{ fontSize: '0.7rem', maxHeight: '100px', overflowY: 'auto' }}>
-              {getRecentRuns(3).length === 0 ? (
-                <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No saved runs</div>
-              ) : (
-                getRecentRuns(3).map(run => (
-                  <button key={run.id} onClick={() => handleLoadComparison(run)}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 6px', marginBottom: '3px',
-                      borderRadius: '3px', border: comparisonRun?.id === run.id ? '1px solid #3b82f6' : '1px solid var(--color-border)',
-                      backgroundColor: comparisonRun?.id === run.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-bg-secondary)',
-                      color: 'var(--color-text)', cursor: 'pointer', fontSize: '0.65rem' }}>
-                    <div style={{ fontWeight: 600 }}>{run.result.et_s.toFixed(3)}s</div>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{run.result.mph.toFixed(1)} mph</div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* RPM Distribution - Compact */}
-          <div className="card" style={{ flex: '1 1 200px', padding: '12px 16px', minWidth: '180px', maxWidth: '300px' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '6px' }}>RPM</div>
+          {/* RPM Distribution - fills remaining space */}
+          <div className="card" style={{ flex: '1 1 200px', padding: '12px 16px', minWidth: '180px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text)', marginBottom: '6px' }}>RPM Distribution</div>
             <Suspense fallback={null}>
-              {simResult?.traces && simResult.traces.length > 0 && (
-                <div style={{ height: '80px' }}>
+              {simResult?.traces && simResult.traces.length > 0 ? (
+                <div style={{ flex: 1, minHeight: '100px' }}>
                   <RPMHistogram data={simResult.traces as any} compact />
+                </div>
+              ) : (
+                <div style={{ flex: 1, minHeight: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                  Run simulation to see RPM data
                 </div>
               )}
             </Suspense>

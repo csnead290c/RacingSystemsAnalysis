@@ -2,6 +2,17 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 import type { Env } from '../../domain/schemas/env.schema';
 import type { RaceLength } from '../../domain/config/raceLengths';
 
+/** Trace data point for chart overlay */
+export interface TracePoint {
+  t_s: number;
+  s_ft: number;
+  v_mph: number;
+  a_g: number;
+  rpm: number;
+  gear: number;
+  hp?: number;
+}
+
 /** A saved simulation run */
 export interface SavedRun {
   id: string;
@@ -17,6 +28,8 @@ export interface SavedRun {
   hpAdjust: number;
   weightAdjust: number;
   notes?: string;
+  /** Trace data for chart overlay (Pro feature) */
+  traces?: TracePoint[];
 }
 
 interface RunHistoryContextValue {
