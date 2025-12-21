@@ -130,8 +130,10 @@ export default function Register() {
 
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '24px',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '20px',
+            maxWidth: '700px',
+            margin: '0 auto',
           }}>
             {tiers.map(tier => (
               <div
