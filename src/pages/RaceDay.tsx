@@ -13,6 +13,7 @@ import { storage } from '../state/storage';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import { calculateWeatherImpact, type WeatherConditions } from '../domain/physics/calculations/weatherImpact';
+import type { SimResult } from '../domain/physics';
 
 // Standard baseline conditions for weather impact comparison
 const BASELINE_WEATHER: WeatherConditions = {
@@ -132,6 +133,7 @@ export default function RaceDay() {
   
   const [simulating, setSimulating] = useState(false);
   const [manualWeather, setManualWeather] = useState(false);
+  const [lastSimResult, setLastSimResult] = useState<SimResult | null>(null);
   
   // Quick entry for last run - full incrementals
   const [quickRoundType, setQuickRoundType] = useState('Test');
@@ -249,6 +251,9 @@ export default function RaceDay() {
         const result = await simulate('VB6Exact', simInputs);
         const predictedET = result.et_s;
         
+        // Store the simulation result for run completion
+        setLastSimResult(result);
+        
         setRaceState(prev => ({
           ...prev,
           predictedET,
@@ -323,8 +328,14 @@ export default function RaceDay() {
             eighthMileET: raceLength === 'EIGHTH' ? roundResult.et : roundResult.sixSixtyFt,
             eighthMileMPH: raceLength === 'EIGHTH' ? roundResult.mph : undefined,
             thousandFt: roundResult.thousandFt,
-            prediction: { et_s: raceState.predictedET, mph: 0 },
+            prediction: { et_s: raceState.predictedET, mph: lastSimResult?.mph ?? 0 },
             outcome: { slipET_s: roundResult.et, slipMPH: roundResult.mph },
+            // Include predicted timeslip for run completion matching
+            increments: lastSimResult?.timeslip?.map(t => ({
+              d_ft: t.d_ft,
+              t_s: t.t_s,
+              v_mph: t.v_mph,
+            })),
           };
           await storage.saveRun(run);
         } catch (err) {
@@ -580,7 +591,7 @@ export default function RaceDay() {
               </div>
             </div>
             {manualWeather ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', fontSize: '0.75rem' }}>
                 <div>
                   <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Temp °F</label>
                   <input
@@ -610,11 +621,51 @@ export default function RaceDay() {
                   />
                 </div>
                 <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Elev ft</label>
+                  <input
+                    type="number"
+                    value={env.elevation ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, elevation: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Track °F</label>
+                  <input
+                    type="number"
+                    value={env.trackTempF ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, trackTempF: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    placeholder="—"
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Grip</label>
+                  <input
+                    type="number"
+                    value={env.tractionIndex ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, tractionIndex: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    placeholder="—"
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
                   <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind mph</label>
                   <input
                     type="number"
                     value={env.windMph ?? ''}
-                    onChange={(e) => setEnv(prev => ({ ...prev, windMph: parseFloat(e.target.value) || 0 }))}
+                    onChange={(e) => setEnv(prev => ({ ...prev, windMph: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    placeholder="—"
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind Angle</label>
+                  <input
+                    type="number"
+                    value={env.windAngleDeg ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, windAngleDeg: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    placeholder="—"
                     style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
                   />
                 </div>

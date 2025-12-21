@@ -9,7 +9,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth, useClerkRSA, ClerkSignUp, isClerkConfigured } from '../domain/auth';
 import Page from '../shared/components/Page';
 
-type SelectedTier = 'racer' | 'pro' | 'team';
+type SelectedTier = 'free' | 'racer' | 'pro' | 'team';
 
 interface TierInfo {
   id: SelectedTier;
@@ -21,11 +21,18 @@ interface TierInfo {
 
 const tiers: TierInfo[] = [
   {
+    id: 'free',
+    name: 'Free',
+    price: '$0',
+    description: 'Get started with calculators',
+    features: ['All Calculators', 'Weather Correction', 'Weight Transfer', 'Gear Ratio'],
+  },
+  {
     id: 'racer',
     name: 'Racer',
     price: '$9.99/mo',
     description: 'For weekend bracket racers',
-    features: ['ET Simulator', 'Weather Integration', 'Run Logbook', '5 Vehicles'],
+    features: ['Everything in Free', 'ET Simulator', 'Run Logbook', '5 Vehicles'],
   },
   {
     id: 'pro',
@@ -52,7 +59,7 @@ export default function Register() {
   const tierParam = searchParams.get('tier') as SelectedTier | null;
   
   const [step, setStep] = useState<'tier' | 'account' | 'complete'>(tierParam ? 'account' : 'tier');
-  const [selectedTier, setSelectedTier] = useState<SelectedTier>(tierParam || 'pro');
+  const [selectedTier, setSelectedTier] = useState<SelectedTier>(tierParam || 'free');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

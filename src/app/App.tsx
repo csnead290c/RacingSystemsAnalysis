@@ -203,10 +203,11 @@ function Navigation() {
   // Check access for each nav item
   const canAccessVehicles = isLoggedIn && hasFeature('save_vehicles');
   const canAccessETSim = isLoggedIn && hasProduct('quarter_jr');
-  const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
-  const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
-  const canAccessEngineSim = isLoggedIn && hasProduct('engine_pro');
-  const canAccessLog = isLoggedIn && hasFeature('save_runs');
+  // Hidden simulators - uncomment when built out:
+  // const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
+  // const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
+  // const canAccessEngineSim = isLoggedIn && hasProduct('engine_pro');
+  // const canAccessLog = isLoggedIn && hasFeature('save_runs');
   const canAccessHistory = isLoggedIn && hasFeature('save_runs');
 
   const navLinks = (
@@ -224,6 +225,7 @@ function Navigation() {
           ET Sim
         </Link>
       )}
+      {/* Hidden for now - these simulators are not yet built out:
       {canAccessSuspSim && (
         <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))} onClick={() => setMobileMenuOpen(false)}>
           Susp Sim
@@ -244,14 +246,10 @@ function Navigation() {
           Engine Sim
         </Link>
       )}
+      */}
       <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))} onClick={() => setMobileMenuOpen(false)}>
         Calcs
       </Link>
-      {canAccessLog && (
-        <Link to="/log" style={navLinkStyle(isActive('/log'))} onClick={() => setMobileMenuOpen(false)}>
-          Log
-        </Link>
-      )}
       {canAccessHistory && (
         <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={() => setMobileMenuOpen(false)}>
           History

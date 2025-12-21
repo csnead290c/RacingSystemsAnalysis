@@ -16,9 +16,9 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Home', icon: '🏠' },
   { path: '/predict', label: 'Sim', icon: '🏎️' },
-  { path: '/log', label: 'Log', icon: '📝' },
-  { path: '/dial-in', label: 'Dial', icon: '🎯' },
+  { path: '/history', label: 'Runs', icon: '📝' },
   { path: '/race-day', label: 'Race', icon: '🏁' },
+  { path: '/calculators', label: 'Calcs', icon: '🔢' },
 ];
 
 export default function MobileNav() {
