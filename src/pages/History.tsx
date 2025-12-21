@@ -1,14 +1,158 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import PredictionReportCard from '../shared/components/PredictionReportCard';
 import QuickRunEntry from '../shared/components/QuickRunEntry';
 import { storage } from '../state/storage';
+import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { hasFeature, CURRENT_TIER } from '../domain/config/entitlements';
 import { runsToCsv, downloadCsv } from '../shared/utils/csv';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
+
+// Edit Run Modal Component
+interface EditRunModalProps {
+  run: RunRecordV1;
+  vehicleName: string;
+  onClose: () => void;
+  onSave: (run: RunRecordV1) => void;
+}
+
+function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) {
+  const [formData, setFormData] = useState({
+    reactionTime: run.reactionTime?.toString() || '',
+    sixtyFt: run.sixtyFt?.toString() || '',
+    threeThirtyFt: run.threeThirtyFt?.toString() || '',
+    eighthMileET: run.eighthMileET?.toString() || '',
+    eighthMileMPH: run.eighthMileMPH?.toString() || '',
+    thousandFt: run.thousandFt?.toString() || '',
+    quarterMileET: run.quarterMileET?.toString() || '',
+    quarterMileMPH: run.quarterMileMPH?.toString() || '',
+    dialIn: run.dialIn?.toString() || '',
+    notes: run.notes || '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedRun: RunRecordV1 = {
+      ...run,
+      reactionTime: parseFloat(formData.reactionTime) || undefined,
+      sixtyFt: parseFloat(formData.sixtyFt) || undefined,
+      threeThirtyFt: parseFloat(formData.threeThirtyFt) || undefined,
+      eighthMileET: parseFloat(formData.eighthMileET) || undefined,
+      eighthMileMPH: parseFloat(formData.eighthMileMPH) || undefined,
+      thousandFt: parseFloat(formData.thousandFt) || undefined,
+      quarterMileET: parseFloat(formData.quarterMileET) || undefined,
+      quarterMileMPH: parseFloat(formData.quarterMileMPH) || undefined,
+      dialIn: parseFloat(formData.dialIn) || undefined,
+      notes: formData.notes || undefined,
+      outcome: {
+        slipET_s: run.raceLength === 'QUARTER' 
+          ? parseFloat(formData.quarterMileET) || undefined 
+          : parseFloat(formData.eighthMileET) || undefined,
+        slipMPH: run.raceLength === 'QUARTER'
+          ? parseFloat(formData.quarterMileMPH) || undefined
+          : parseFloat(formData.eighthMileMPH) || undefined,
+      },
+    };
+    onSave(updatedRun);
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '8px',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-border)',
+    backgroundColor: 'var(--color-surface)',
+    color: 'var(--color-text)',
+    fontFamily: 'monospace',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+    }}>
+      <div className="card" style={{
+        maxWidth: '600px',
+        width: '95%',
+        maxHeight: '90vh',
+        overflow: 'auto',
+        padding: 'var(--space-4)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+          <h3 style={{ margin: 0 }}>Edit Run - {vehicleName}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--color-text)' }}>×</button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Dial-In</label>
+              <input type="number" step="0.001" value={formData.dialIn} onChange={(e) => setFormData(f => ({ ...f, dialIn: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>RT</label>
+              <input type="number" step="0.001" value={formData.reactionTime} onChange={(e) => setFormData(f => ({ ...f, reactionTime: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>60'</label>
+              <input type="number" step="0.001" value={formData.sixtyFt} onChange={(e) => setFormData(f => ({ ...f, sixtyFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>330'</label>
+              <input type="number" step="0.001" value={formData.threeThirtyFt} onChange={(e) => setFormData(f => ({ ...f, threeThirtyFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/8 ET</label>
+              <input type="number" step="0.001" value={formData.eighthMileET} onChange={(e) => setFormData(f => ({ ...f, eighthMileET: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/8 MPH</label>
+              <input type="number" step="0.01" value={formData.eighthMileMPH} onChange={(e) => setFormData(f => ({ ...f, eighthMileMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1000'</label>
+              <input type="number" step="0.001" value={formData.thousandFt} onChange={(e) => setFormData(f => ({ ...f, thousandFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/4 ET</label>
+              <input type="number" step="0.001" value={formData.quarterMileET} onChange={(e) => setFormData(f => ({ ...f, quarterMileET: e.target.value }))} style={inputStyle} placeholder="0.000" />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/4 MPH</label>
+              <input type="number" step="0.01" value={formData.quarterMileMPH} onChange={(e) => setFormData(f => ({ ...f, quarterMileMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
+            </div>
+          </div>
+          
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Notes</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData(f => ({ ...f, notes: e.target.value }))}
+              style={{ ...inputStyle, minHeight: '60px', fontFamily: 'inherit' }}
+              placeholder="Run notes..."
+            />
+          </div>
+          
+          <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
+            <button type="submit" className="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function History() {
   const [runs, setRuns] = useState<RunRecordV1[]>([]);
@@ -19,6 +163,8 @@ function History() {
   const [showReportCard, setShowReportCard] = useState(false);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [showQuickEntry, setShowQuickEntry] = useState(false);
+  const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
+  const [editingRun, setEditingRun] = useState<RunRecordV1 | null>(null);
 
   const loadRuns = async () => {
     setLoading(true);
@@ -37,7 +183,20 @@ function History() {
 
   useEffect(() => {
     loadRuns();
+    // Load vehicles for name lookup
+    loadVehicles().then(setVehicles).catch(console.error);
   }, []);
+
+  // Create vehicle name lookup map
+  const vehicleNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    vehicles.forEach(v => { map[v.id] = v.name; });
+    return map;
+  }, [vehicles]);
+
+  const getVehicleName = useCallback((vehicleId: string) => {
+    return vehicleNameMap[vehicleId] || vehicleId;
+  }, [vehicleNameMap]);
 
   useEffect(() => {
     let filtered = runs;
@@ -290,7 +449,7 @@ function History() {
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {formatDate(run.createdAt)}
                   </td>
-                  <td>{run.vehicleId}</td>
+                  <td>{getVehicleName(run.vehicleId)}</td>
                   <td>{run.raceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'}</td>
                   <td className="align-right mono">
                     {run.prediction?.et_s?.toFixed(3) || '—'}
@@ -305,16 +464,28 @@ function History() {
                     {run.outcome?.slipMPH?.toFixed(2) || '—'}
                   </td>
                   <td className="align-right">
-                    <button
-                      onClick={() => handleDelete(run.id)}
-                      className="btn btn-secondary"
-                      style={{
-                        padding: 'var(--space-2) var(--space-3)',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      Delete
-                    </button>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => setEditingRun(run)}
+                        className="btn btn-secondary"
+                        style={{
+                          padding: 'var(--space-2) var(--space-3)',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(run.id)}
+                        className="btn btn-secondary"
+                        style={{
+                          padding: 'var(--space-2) var(--space-3)',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -377,6 +548,25 @@ function History() {
             />
           </div>
         </div>
+      )}
+
+      {/* Edit Run Modal */}
+      {editingRun && (
+        <EditRunModal
+          run={editingRun}
+          vehicleName={getVehicleName(editingRun.vehicleId)}
+          onClose={() => setEditingRun(null)}
+          onSave={async (updatedRun) => {
+            try {
+              await storage.saveRun(updatedRun);
+              await loadRuns();
+              setEditingRun(null);
+            } catch (err) {
+              console.error('Failed to save run:', err);
+              alert('Failed to save run');
+            }
+          }}
+        />
       )}
     </Page>
   );

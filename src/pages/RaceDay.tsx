@@ -25,12 +25,33 @@ interface RaceDayState {
   roundHistory: RoundResult[];
 }
 
+// Round type options
+const ROUND_TYPES = [
+  { value: 'Test', label: 'Test' },
+  { value: 'TT', label: 'Time Trial' },
+  { value: 'Q1', label: 'Q1' },
+  { value: 'Q2', label: 'Q2' },
+  { value: 'Q3', label: 'Q3' },
+  { value: 'E1', label: 'E1' },
+  { value: 'E2', label: 'E2' },
+  { value: 'E3', label: 'E3' },
+  { value: 'E4', label: 'E4' },
+  { value: 'E5', label: 'E5' },
+  { value: 'E6', label: 'E6' },
+  { value: 'Final', label: 'Final' },
+] as const;
+
 interface RoundResult {
   id: string;
-  round: number;
+  roundType: string;
+  roundNumber: number;
   lane: 'left' | 'right';
   dialIn: number;
   rt: number;
+  sixtyFt?: number;
+  threeThirtyFt?: number;
+  sixSixtyFt?: number;
+  thousandFt?: number;
   et: number;
   mph: number;
   result: 'win' | 'loss' | 'bye';
@@ -99,14 +120,19 @@ export default function RaceDay() {
   });
   
   const [simulating, setSimulating] = useState(false);
-  const [safetyMargin, setSafetyMargin] = useState(0.02);
-  const [manualAdjust, setManualAdjust] = useState(0);
+  const [manualWeather, setManualWeather] = useState(false);
   
-  // Quick entry for last run
+  // Quick entry for last run - full incrementals
+  const [quickRoundType, setQuickRoundType] = useState('Test');
+  const [quickLane, setQuickLane] = useState<'left' | 'right'>('left');
+  const [quickDialIn, setQuickDialIn] = useState('');
   const [quickRT, setQuickRT] = useState('');
+  const [quick60, setQuick60] = useState('');
+  const [quick330, setQuick330] = useState('');
+  const [quick660, setQuick660] = useState('');
+  const [quick1000, setQuick1000] = useState('');
   const [quickET, setQuickET] = useState('');
   const [quickMPH, setQuickMPH] = useState('');
-  const [quickLane, setQuickLane] = useState<'left' | 'right'>('left');
   const [quickResult, setQuickResult] = useState<'win' | 'loss' | 'bye'>('win');
   const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
   
@@ -211,12 +237,11 @@ export default function RaceDay() {
         
         const result = await simulate('VB6Exact', simInputs);
         const predictedET = result.et_s;
-        const dialIn = predictedET + safetyMargin + manualAdjust;
         
         setRaceState(prev => ({
           ...prev,
           predictedET,
-          dialIn: Math.round(dialIn * 1000) / 1000,
+          dialIn: Math.round(predictedET * 1000) / 1000,
         }));
       } catch (err) {
         console.error('Simulation failed:', err);
@@ -225,7 +250,7 @@ export default function RaceDay() {
     };
     
     runSim();
-  }, [selectedVehicle, env, safetyMargin, manualAdjust, raceLength, features.quarterProFields]);
+  }, [selectedVehicle, env, raceLength, features.quarterProFields]);
   
   // Log a round result
   const logRound = async () => {
@@ -233,10 +258,15 @@ export default function RaceDay() {
     
     const roundResult: RoundResult = {
       id: crypto.randomUUID(),
-      round: editingRoundId ? raceState.roundHistory.find(r => r.id === editingRoundId)?.round || raceState.currentRound : raceState.currentRound,
+      roundType: quickRoundType,
+      roundNumber: editingRoundId ? raceState.roundHistory.find(r => r.id === editingRoundId)?.roundNumber || raceState.currentRound : raceState.currentRound,
       lane: quickLane,
-      dialIn: raceState.dialIn,
+      dialIn: parseFloat(quickDialIn) || raceState.dialIn,
       rt: parseFloat(quickRT) || 0,
+      sixtyFt: parseFloat(quick60) || undefined,
+      threeThirtyFt: parseFloat(quick330) || undefined,
+      sixSixtyFt: parseFloat(quick660) || undefined,
+      thousandFt: parseFloat(quick1000) || undefined,
       et: parseFloat(quickET),
       mph: parseFloat(quickMPH) || 0,
       result: quickResult,
@@ -271,14 +301,17 @@ export default function RaceDay() {
             env,
             runDate: new Date().toISOString().split('T')[0],
             runTime: new Date().toTimeString().slice(0, 5),
-            round: `R${roundResult.round}`,
+            round: roundResult.roundType,
             lane: roundResult.lane,
             reactionTime: roundResult.rt,
             dialIn: roundResult.dialIn,
+            sixtyFt: roundResult.sixtyFt,
+            threeThirtyFt: roundResult.threeThirtyFt,
             quarterMileET: raceLength === 'QUARTER' ? roundResult.et : undefined,
             quarterMileMPH: raceLength === 'QUARTER' ? roundResult.mph : undefined,
-            eighthMileET: raceLength === 'EIGHTH' ? roundResult.et : undefined,
+            eighthMileET: raceLength === 'EIGHTH' ? roundResult.et : roundResult.sixSixtyFt,
             eighthMileMPH: raceLength === 'EIGHTH' ? roundResult.mph : undefined,
+            thousandFt: roundResult.thousandFt,
             prediction: { et_s: raceState.predictedET, mph: 0 },
             outcome: { slipET_s: roundResult.et, slipMPH: roundResult.mph },
           };
@@ -290,7 +323,12 @@ export default function RaceDay() {
     }
     
     // Clear quick entry
+    setQuickDialIn('');
     setQuickRT('');
+    setQuick60('');
+    setQuick330('');
+    setQuick660('');
+    setQuick1000('');
     setQuickET('');
     setQuickMPH('');
   };
@@ -306,10 +344,16 @@ export default function RaceDay() {
   // Edit a round (populate form with round data)
   const editRound = (round: RoundResult) => {
     setEditingRoundId(round.id);
+    setQuickRoundType(round.roundType);
+    setQuickLane(round.lane);
+    setQuickDialIn(round.dialIn.toString());
     setQuickRT(round.rt.toString());
+    setQuick60(round.sixtyFt?.toString() || '');
+    setQuick330(round.threeThirtyFt?.toString() || '');
+    setQuick660(round.sixSixtyFt?.toString() || '');
+    setQuick1000(round.thousandFt?.toString() || '');
     setQuickET(round.et.toString());
     setQuickMPH(round.mph.toString());
-    setQuickLane(round.lane);
     setQuickResult(round.result);
   };
   
@@ -467,46 +511,103 @@ export default function RaceDay() {
                 <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <input
                     type="checkbox"
-                    checked={autoRefreshWeather}
-                    onChange={(e) => setAutoRefreshWeather(e.target.checked)}
+                    checked={manualWeather}
+                    onChange={(e) => {
+                      setManualWeather(e.target.checked);
+                      if (!e.target.checked) setAutoRefreshWeather(false);
+                    }}
                   />
-                  Auto
+                  Manual
                 </label>
-                <button
-                  onClick={fetchWeather}
-                  disabled={weatherLoading}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '0.7rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    cursor: weatherLoading ? 'wait' : 'pointer',
-                  }}
-                >
-                  {weatherLoading ? '...' : '🔄'}
-                </button>
+                {!manualWeather && (
+                  <>
+                    <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input
+                        type="checkbox"
+                        checked={autoRefreshWeather}
+                        onChange={(e) => setAutoRefreshWeather(e.target.checked)}
+                      />
+                      Auto
+                    </label>
+                    <button
+                      onClick={fetchWeather}
+                      disabled={weatherLoading}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.7rem',
+                        borderRadius: '4px',
+                        border: '1px solid var(--color-border)',
+                        backgroundColor: 'var(--color-surface)',
+                        color: 'var(--color-text)',
+                        cursor: weatherLoading ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {weatherLoading ? '...' : '🔄'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem' }}>
-              <div>
-                <span style={{ color: 'var(--color-text-muted)' }}>Temp:</span>{' '}
-                <span style={{ fontWeight: 600 }}>{env.temperatureF?.toFixed(0)}°F</span>
+            {manualWeather ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Temp °F</label>
+                  <input
+                    type="number"
+                    value={env.temperatureF ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, temperatureF: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Baro inHg</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={env.barometerInHg ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, barometerInHg: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Humidity %</label>
+                  <input
+                    type="number"
+                    value={env.humidityPct ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, humidityPct: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind mph</label>
+                  <input
+                    type="number"
+                    value={env.windMph ?? ''}
+                    onChange={(e) => setEnv(prev => ({ ...prev, windMph: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                  />
+                </div>
               </div>
-              <div>
-                <span style={{ color: 'var(--color-text-muted)' }}>Baro:</span>{' '}
-                <span style={{ fontWeight: 600 }}>{env.barometerInHg?.toFixed(2)}"</span>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem' }}>
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Temp:</span>{' '}
+                  <span style={{ fontWeight: 600 }}>{env.temperatureF?.toFixed(0)}°F</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Baro:</span>{' '}
+                  <span style={{ fontWeight: 600 }}>{env.barometerInHg?.toFixed(2)}"</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Humidity:</span>{' '}
+                  <span style={{ fontWeight: 600 }}>{env.humidityPct?.toFixed(0)}%</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Wind:</span>{' '}
+                  <span style={{ fontWeight: 600 }}>{env.windMph?.toFixed(0)} mph</span>
+                </div>
               </div>
-              <div>
-                <span style={{ color: 'var(--color-text-muted)' }}>Humidity:</span>{' '}
-                <span style={{ fontWeight: 600 }}>{env.humidityPct?.toFixed(0)}%</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--color-text-muted)' }}>Wind:</span>{' '}
-                <span style={{ fontWeight: 600 }}>{env.windMph?.toFixed(0)} mph</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
         
@@ -514,14 +615,14 @@ export default function RaceDay() {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--space-4)' }}>
           {/* Left Column - Big Numbers */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {/* Dial-In Display */}
+            {/* Predicted ET Display */}
             <div className="card" style={{ 
               padding: 'var(--space-4)', 
               textAlign: 'center',
               background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(59, 130, 246, 0.1))',
             }}>
               <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)' }}>
-                DIAL-IN
+                PREDICTED ET
               </div>
               <div style={{ 
                 fontSize: '4rem', 
@@ -530,61 +631,10 @@ export default function RaceDay() {
                 color: 'var(--color-accent)',
                 letterSpacing: '2px',
               }}>
-                {raceState.dialIn > 0 ? raceState.dialIn.toFixed(3) : '—.———'}
+                {raceState.predictedET > 0 ? raceState.predictedET.toFixed(3) : '—.———'}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--space-4)', marginTop: 'var(--space-3)', fontSize: '0.85rem' }}>
-                <div>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Predicted:</span>{' '}
-                  <span style={{ fontWeight: 600 }}>{raceState.predictedET > 0 ? raceState.predictedET.toFixed(3) : '—'}</span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Safety:</span>{' '}
-                  <span style={{ fontWeight: 600, color: '#22c55e' }}>+{(safetyMargin * 1000).toFixed(0)}ms</span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Adjust:</span>{' '}
-                  <span style={{ fontWeight: 600, color: manualAdjust !== 0 ? '#f59e0b' : 'inherit' }}>
-                    {manualAdjust >= 0 ? '+' : ''}{(manualAdjust * 1000).toFixed(0)}ms
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Adjustments */}
-            <div className="card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.8rem' }}>
-                    <span>Safety Margin</span>
-                    <span style={{ fontWeight: 600, color: '#22c55e' }}>+{(safetyMargin * 1000).toFixed(0)}ms</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="0.1"
-                    step="0.005"
-                    value={safetyMargin}
-                    onChange={(e) => setSafetyMargin(parseFloat(e.target.value))}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.8rem' }}>
-                    <span>Manual Adjust</span>
-                    <span style={{ fontWeight: 600, color: manualAdjust !== 0 ? '#f59e0b' : 'inherit' }}>
-                      {manualAdjust >= 0 ? '+' : ''}{(manualAdjust * 1000).toFixed(0)}ms
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="-0.1"
-                    max="0.1"
-                    step="0.005"
-                    value={manualAdjust}
-                    onChange={(e) => setManualAdjust(parseFloat(e.target.value))}
-                    style={{ width: '100%' }}
-                  />
-                </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: 'var(--space-2)' }}>
+                {selectedVehicle ? selectedVehicle.name : 'Select a vehicle to see prediction'}
               </div>
             </div>
             
@@ -629,13 +679,18 @@ export default function RaceDay() {
             <div className="card" style={{ padding: 'var(--space-3)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                  {editingRoundId ? 'Edit Round' : `Log Round ${raceState.currentRound}`}
+                  {editingRoundId ? 'Edit Round' : 'Log Run'}
                 </span>
                 {editingRoundId && (
                   <button
                     onClick={() => {
                       setEditingRoundId(null);
+                      setQuickDialIn('');
                       setQuickRT('');
+                      setQuick60('');
+                      setQuick330('');
+                      setQuick660('');
+                      setQuick1000('');
                       setQuickET('');
                       setQuickMPH('');
                     }}
@@ -645,7 +700,28 @@ export default function RaceDay() {
                   </button>
                 )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(4, 1fr) auto auto', gap: 'var(--space-2)', alignItems: 'end' }}>
+              
+              {/* Row 1: Round Type, Lane, Dial-In, Result */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr 1fr', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', alignItems: 'end' }}>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Round</label>
+                  <select
+                    value={quickRoundType}
+                    onChange={(e) => setQuickRoundType(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    {ROUND_TYPES.map(rt => (
+                      <option key={rt.value} value={rt.value}>{rt.label}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Lane</label>
                   <div style={{ display: 'flex', gap: '2px' }}>
@@ -682,12 +758,74 @@ export default function RaceDay() {
                   </div>
                 </div>
                 <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dial-In</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={quickDialIn}
+                    onChange={(e) => setQuickDialIn(e.target.value)}
+                    placeholder={raceState.predictedET > 0 ? raceState.predictedET.toFixed(3) : '0.000'}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Result</label>
+                  <select
+                    value={quickResult}
+                    onChange={(e) => setQuickResult(e.target.value as 'win' | 'loss' | 'bye')}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    <option value="win">Win</option>
+                    <option value="loss">Loss</option>
+                    <option value="bye">Bye</option>
+                  </select>
+                </div>
+              </div>
+              
+              {/* Row 2: Full incrementals */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr) auto', gap: 'var(--space-2)', alignItems: 'end' }}>
+                <div>
                   <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>RT</label>
                   <input
                     type="number"
                     step="0.001"
                     value={quickRT}
                     onChange={(e) => setQuickRT(e.target.value)}
+                    placeholder=".000"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>60'</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={quick60}
+                    onChange={(e) => setQuick60(e.target.value)}
                     placeholder="0.000"
                     style={{
                       width: '100%',
@@ -701,7 +839,64 @@ export default function RaceDay() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>ET</label>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>330'</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={quick330}
+                    onChange={(e) => setQuick330(e.target.value)}
+                    placeholder="0.000"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>660'</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={quick660}
+                    onChange={(e) => setQuick660(e.target.value)}
+                    placeholder="0.000"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>1000'</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={quick1000}
+                    onChange={(e) => setQuick1000(e.target.value)}
+                    placeholder="0.000"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>ET *</label>
                   <input
                     type="number"
                     step="0.001"
@@ -739,33 +934,16 @@ export default function RaceDay() {
                     }}
                   />
                 </div>
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Result</label>
-                  <select
-                    value={quickResult}
-                    onChange={(e) => setQuickResult(e.target.value as 'win' | 'loss' | 'bye')}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--color-border)',
-                      backgroundColor: 'var(--color-surface)',
-                      color: 'var(--color-text)',
-                    }}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <button
+                    onClick={logRound}
+                    disabled={!quickET}
+                    className="btn btn-primary"
+                    style={{ padding: '8px 24px', width: '100%' }}
                   >
-                    <option value="win">Win</option>
-                    <option value="loss">Loss</option>
-                    <option value="bye">Bye</option>
-                  </select>
+                    {editingRoundId ? 'Update' : 'Log Run'}
+                  </button>
                 </div>
-                <button
-                  onClick={logRound}
-                  disabled={!quickET}
-                  className="btn"
-                  style={{ padding: '8px 16px' }}
-                >
-                  {editingRoundId ? 'Update' : 'Log'}
-                </button>
               </div>
             </div>
           </div>
@@ -833,7 +1011,7 @@ export default function RaceDay() {
                     <tbody>
                       {[...raceState.roundHistory].reverse().map((r) => (
                         <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          <td style={{ padding: '6px 8px' }}>R{r.round}</td>
+                          <td style={{ padding: '6px 8px' }}>{r.roundType}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '0.7rem' }}>{r.lane === 'left' ? 'L' : 'R'}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{r.rt.toFixed(3)}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{r.et.toFixed(3)}</td>
