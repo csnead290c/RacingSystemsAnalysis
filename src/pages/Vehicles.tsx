@@ -135,6 +135,10 @@ function Vehicles() {
   const [filterGroup, setFilterGroup] = useState<string>(''); // Group filter
   const [importing, setImporting] = useState(false);
   
+  // Duplicate vehicle modal state
+  const [duplicateVehicle, setDuplicateVehicle] = useState<Vehicle | null>(null);
+  const [duplicateName, setDuplicateName] = useState('');
+  
   // File input ref for .dat import
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -343,20 +347,29 @@ function Vehicles() {
     }
   };
 
-  const handleDuplicate = async (vehicle: Vehicle) => {
+  const handleDuplicateClick = (vehicle: Vehicle) => {
     // Check vehicle limit before duplicating
     if (!canCreateVehicle(vehicles.length)) {
       alert(`You've reached your vehicle limit (${vehicleLimit}). Upgrade to ${tier === 'racer' ? 'Pro' : 'a higher plan'} for more vehicles.`);
       return;
     }
+    // Show name prompt modal
+    setDuplicateVehicle(vehicle);
+    setDuplicateName(`${vehicle.name} (Copy)`);
+  };
+
+  const handleDuplicateConfirm = async () => {
+    if (!duplicateVehicle || !duplicateName.trim()) return;
     try {
       const duplicated: Vehicle = {
-        ...vehicle,
+        ...duplicateVehicle,
         id: crypto.randomUUID(),
-        name: `${vehicle.name} (Copy)`,
+        name: duplicateName.trim(),
       };
       await saveVehicle(duplicated);
       await loadData();
+      setDuplicateVehicle(null);
+      setDuplicateName('');
     } catch (error) {
       alert('Failed to duplicate vehicle');
     }
@@ -1495,7 +1508,7 @@ function Vehicles() {
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDuplicate(vehicle)}
+                        onClick={() => handleDuplicateClick(vehicle)}
                         className="btn btn-secondary"
                         style={{
                           padding: 'var(--space-2) var(--space-3)',
@@ -1556,6 +1569,70 @@ function Vehicles() {
         tireDiameter={form.tireDiaIn}
         mode="diameter"
       />
+      
+      {/* Duplicate Vehicle Name Prompt */}
+      {duplicateVehicle && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: 'var(--color-surface)',
+            borderRadius: '8px',
+            padding: 'var(--space-4)',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+          }}>
+            <h3 style={{ margin: '0 0 var(--space-3) 0' }}>Duplicate Vehicle</h3>
+            <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem', margin: '0 0 var(--space-3) 0' }}>
+              Enter a name for the new vehicle:
+            </p>
+            <input
+              type="text"
+              className="input"
+              value={duplicateName}
+              onChange={(e) => setDuplicateName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && duplicateName.trim()) {
+                  handleDuplicateConfirm();
+                } else if (e.key === 'Escape') {
+                  setDuplicateVehicle(null);
+                  setDuplicateName('');
+                }
+              }}
+              autoFocus
+              style={{ marginBottom: 'var(--space-3)' }}
+            />
+            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setDuplicateVehicle(null);
+                  setDuplicateName('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleDuplicateConfirm}
+                disabled={!duplicateName.trim()}
+              >
+                Create Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Page>
   );
 }

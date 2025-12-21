@@ -14,6 +14,7 @@ import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import { parseCsv, mapWeatherRow, csvToObjects } from '../shared/utils/csvImport';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { RoundTypes, type RunRecordV1 } from '../domain/schemas/run.schema';
+import { calculateMOV, formatMOV, describeRaceOutcome } from '../domain/physics/calculations/marginOfVictory';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { PredictResult, PredictRequest } from '../domain/quarter/types';
@@ -73,6 +74,20 @@ function Log() {
   const [lane, setLane] = useState<'left' | 'right'>('left');
   const [reactionTime, setReactionTime] = useState('');
   const [dialIn, setDialIn] = useState('');
+  
+  // Timing splits
+  const [sixtyFt, setSixtyFt] = useState('');
+  const [threeThirtyFt, setThreeThirtyFt] = useState('');
+  const [eighthET, setEighthET] = useState('');
+  const [eighthMPH, setEighthMPH] = useState('');
+  const [thousandFt, setThousandFt] = useState('');
+  
+  // Opponent Information
+  const [opponentName, setOpponentName] = useState('');
+  const [opponentDialIn, setOpponentDialIn] = useState('');
+  const [opponentRT, setOpponentRT] = useState('');
+  const [opponentET, setOpponentET] = useState('');
+  const [opponentMPH, setOpponentMPH] = useState('');
 
   const handleImportWeatherCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -246,6 +261,15 @@ function Log() {
       }
 
       // Build and save run record
+      // Build opponent info if provided
+      const opponent = opponentName || opponentET ? {
+        name: opponentName || undefined,
+        dialIn: opponentDialIn ? parseFloat(opponentDialIn) : undefined,
+        reactionTime: opponentRT ? parseFloat(opponentRT) : undefined,
+        et: opponentET ? parseFloat(opponentET) : undefined,
+        mph: opponentMPH ? parseFloat(opponentMPH) : undefined,
+      } : undefined;
+
       const run: RunRecordV1 = {
         id: crypto.randomUUID(),
         createdAt: Date.now(),
@@ -259,11 +283,15 @@ function Log() {
         lane,
         reactionTime: reactionTime ? parseFloat(reactionTime) : undefined,
         dialIn: dialIn ? parseFloat(dialIn) : undefined,
+        // Timing splits
+        sixtyFt: sixtyFt ? parseFloat(sixtyFt) : undefined,
+        threeThirtyFt: threeThirtyFt ? parseFloat(threeThirtyFt) : undefined,
         // Timing data from actual results
         quarterMileET: raceLength === 'QUARTER' ? actualETValue : undefined,
         quarterMileMPH: raceLength === 'QUARTER' ? actualMPHValue : undefined,
-        eighthMileET: raceLength === 'EIGHTH' ? actualETValue : undefined,
-        eighthMileMPH: raceLength === 'EIGHTH' ? actualMPHValue : undefined,
+        eighthMileET: raceLength === 'EIGHTH' ? actualETValue : (eighthET ? parseFloat(eighthET) : undefined),
+        eighthMileMPH: raceLength === 'EIGHTH' ? actualMPHValue : (eighthMPH ? parseFloat(eighthMPH) : undefined),
+        thousandFt: thousandFt ? parseFloat(thousandFt) : undefined,
         // Prediction
         prediction: {
           et_s: baselineResult.baseET_s,
@@ -275,6 +303,8 @@ function Log() {
         },
         increments: baselineResult.timeslip,
         notes: notes.trim() || undefined,
+        // Opponent
+        opponent,
       };
 
       await storage.saveRun(run);
@@ -621,23 +651,42 @@ function Log() {
         </div>
       )}
 
-      {/* Section C: Actual Result & Save */}
+      {/* Section C: Timing Splits */}
       {baselineResult && (
         <div className="card mb-6">
           <h2 className="mb-4" style={{ fontSize: '1.25rem', color: 'var(--color-text)' }}>
-            C) Actual Result & Save
+            C) Timing Data
           </h2>
-
-          {saveError && (
-            <div className="error mb-4">
-              <p style={{ margin: 0 }}>{saveError}</p>
+          
+          <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+            <div>
+              <label className="label">60 ft</label>
+              <input type="number" step="0.001" className="input" value={sixtyFt} onChange={(e) => setSixtyFt(e.target.value)} placeholder="1.250" />
             </div>
-          )}
+            <div>
+              <label className="label">330 ft</label>
+              <input type="number" step="0.001" className="input" value={threeThirtyFt} onChange={(e) => setThreeThirtyFt(e.target.value)} placeholder="3.500" />
+            </div>
+            <div>
+              <label className="label">1/8 ET</label>
+              <input type="number" step="0.001" className="input" value={eighthET} onChange={(e) => setEighthET(e.target.value)} placeholder="6.800" />
+            </div>
+            <div>
+              <label className="label">1/8 MPH</label>
+              <input type="number" step="0.01" className="input" value={eighthMPH} onChange={(e) => setEighthMPH(e.target.value)} placeholder="105.5" />
+            </div>
+            {raceLength === 'QUARTER' && (
+              <div>
+                <label className="label">1000 ft</label>
+                <input type="number" step="0.001" className="input" value={thousandFt} onChange={(e) => setThousandFt(e.target.value)} placeholder="7.600" />
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-2 gap-4 mb-4">
             <div>
               <label className="label" htmlFor="actualET">
-                Actual ET (s) *
+                {raceLength === 'QUARTER' ? '1/4 Mile' : '1/8 Mile'} ET (s) *
               </label>
               <input
                 id="actualET"
@@ -646,13 +695,13 @@ function Log() {
                 className="input"
                 value={actualET}
                 onChange={(e) => setActualET(e.target.value)}
-                placeholder="11.500"
+                placeholder={raceLength === 'QUARTER' ? '11.500' : '6.800'}
                 required
               />
             </div>
             <div>
               <label className="label" htmlFor="actualMPH">
-                Actual MPH
+                {raceLength === 'QUARTER' ? '1/4 Mile' : '1/8 Mile'} MPH
               </label>
               <input
                 id="actualMPH"
@@ -661,10 +710,87 @@ function Log() {
                 className="input"
                 value={actualMPH}
                 onChange={(e) => setActualMPH(e.target.value)}
-                placeholder="120.50"
+                placeholder={raceLength === 'QUARTER' ? '120.50' : '105.50'}
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Section D: Opponent Information */}
+      {baselineResult && (
+        <div className="card mb-6">
+          <h2 className="mb-4" style={{ fontSize: '1.25rem', color: 'var(--color-text)' }}>
+            D) Opponent Information (Optional)
+          </h2>
+          
+          <div className="grid grid-2 gap-4 mb-4">
+            <div>
+              <label className="label">Opponent Name</label>
+              <input type="text" className="input" value={opponentName} onChange={(e) => setOpponentName(e.target.value)} placeholder="John Doe" />
+            </div>
+            <div>
+              <label className="label">Opponent Dial-In</label>
+              <input type="number" step="0.001" className="input" value={opponentDialIn} onChange={(e) => setOpponentDialIn(e.target.value)} placeholder="9.500" />
+            </div>
+          </div>
+          
+          <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div>
+              <label className="label">Opponent RT</label>
+              <input type="number" step="0.001" className="input" value={opponentRT} onChange={(e) => setOpponentRT(e.target.value)} placeholder="0.015" />
+            </div>
+            <div>
+              <label className="label">Opponent ET</label>
+              <input type="number" step="0.001" className="input" value={opponentET} onChange={(e) => setOpponentET(e.target.value)} placeholder="9.520" />
+            </div>
+            <div>
+              <label className="label">Opponent MPH</label>
+              <input type="number" step="0.01" className="input" value={opponentMPH} onChange={(e) => setOpponentMPH(e.target.value)} placeholder="142.50" />
+            </div>
+          </div>
+
+          {/* Margin of Victory Display */}
+          {dialIn && reactionTime && actualET && opponentDialIn && opponentRT && opponentET && (
+            <div className="card card-compact" style={{ backgroundColor: 'var(--color-surface)', marginTop: 'var(--space-4)' }}>
+              <h3 className="mb-3" style={{ fontSize: '1rem', fontWeight: '600', color: '#10b981' }}>
+                Margin of Victory
+              </h3>
+              {(() => {
+                const mov = calculateMOV(
+                  { dialIn: parseFloat(dialIn), reactionTime: parseFloat(reactionTime), et: parseFloat(actualET) },
+                  { dialIn: parseFloat(opponentDialIn), reactionTime: parseFloat(opponentRT), et: parseFloat(opponentET) }
+                );
+                const youWon = mov.winner === 'racer1';
+                const outcome = describeRaceOutcome(mov, 'You', opponentName || 'Opponent');
+                return (
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: youWon ? '#10b981' : '#ef4444' }}>
+                      {youWon ? 'WIN' : 'LOSS'} by {formatMOV(mov)}
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--color-muted)', marginTop: 'var(--space-2)' }}>
+                      {outcome}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section E: Notes & Save */}
+      {baselineResult && (
+        <div className="card mb-6">
+          <h2 className="mb-4" style={{ fontSize: '1.25rem', color: 'var(--color-text)' }}>
+            E) Save Run
+          </h2>
+
+          {saveError && (
+            <div className="error mb-4">
+              <p style={{ margin: 0 }}>{saveError}</p>
+            </div>
+          )}
 
           <div className="mb-4">
             <label className="label" htmlFor="notes">

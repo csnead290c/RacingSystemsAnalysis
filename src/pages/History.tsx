@@ -657,14 +657,7 @@ function History() {
       actions={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setShowQuickEntry(true)}
-              className="btn btn-primary"
-              style={{ fontWeight: 'bold' }}
-            >
-              ⚡ Quick Log
-            </button>
-            <Link to="/log" className="btn">
+            <Link to="/log" className="btn btn-primary" style={{ fontWeight: 'bold' }}>
               + Full Log
             </Link>
             <button
@@ -692,7 +685,7 @@ function History() {
               >
                 <option value="">📊 Report Card...</option>
                 {vehicleIds.map(id => (
-                  <option key={id} value={id}>{id}</option>
+                  <option key={id} value={id}>{getVehicleName(id)}</option>
                 ))}
               </select>
             )}
@@ -993,7 +986,7 @@ function History() {
             overflow: 'auto',
           }}>
             <PredictionReportCard
-              vehicleName={selectedVehicleId}
+              vehicleName={getVehicleName(selectedVehicleId)}
               runs={reportCardRuns}
               onClose={() => {
                 setShowReportCard(false);
