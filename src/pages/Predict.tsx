@@ -19,6 +19,7 @@ import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 import { useSubscription } from '../domain/config/useSubscription';
 import { useSharedEnv } from '../shared/state/useSharedEnv';
+import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
 
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -1082,38 +1083,74 @@ racingsystemsanalysis.com`;
               </button>
             </div>
             
-            {/* Comparison indicator */}
+            {/* Comparison indicator with weather impact */}
             {comparisonRun && (
               <div style={{ 
                 marginTop: '6px', 
-                padding: '4px 6px', 
+                padding: '6px 8px', 
                 backgroundColor: 'rgba(59, 130, 246, 0.1)', 
                 borderRadius: '4px',
                 fontSize: '0.65rem',
-                color: '#3b82f6',
               }}>
-                <div style={{ fontWeight: 600 }}>vs {comparisonRun.vehicleName}</div>
-                <div>
-                  ET: {(baseET - comparisonRun.result.et_s) >= 0 ? '+' : ''}{(baseET - comparisonRun.result.et_s).toFixed(3)}s
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 600, color: '#3b82f6' }}>vs {comparisonRun.vehicleName}</div>
+                  <button 
+                    onClick={() => setComparisonRun(null)}
+                    style={{ padding: '1px 4px', fontSize: '0.55rem', border: '1px solid #3b82f6', borderRadius: '2px', backgroundColor: 'transparent', color: '#3b82f6', cursor: 'pointer' }}
+                  >×</button>
                 </div>
-                <div>
-                  MPH: {(baseMPH - comparisonRun.result.mph) >= 0 ? '+' : ''}{(baseMPH - comparisonRun.result.mph).toFixed(2)}
+                
+                {/* Weather Impact Breakdown */}
+                {comparisonRun.env && env && (() => {
+                  const impact = calculateWeatherImpact(
+                    { temperatureF: comparisonRun.env.temperatureF ?? 70, humidityPct: comparisonRun.env.humidityPct ?? 50, barometerInHg: comparisonRun.env.barometerInHg ?? 29.92, elevation: comparisonRun.env.elevation, windMph: comparisonRun.env.windMph, windAngleDeg: comparisonRun.env.windAngleDeg },
+                    { temperatureF: env.temperatureF ?? 70, humidityPct: env.humidityPct ?? 50, barometerInHg: env.barometerInHg ?? 29.92, elevation: env.elevation, windMph: env.windMph, windAngleDeg: env.windAngleDeg },
+                    comparisonRun.result.et_s
+                  );
+                  return (
+                    <div style={{ fontSize: '0.6rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr 50px', gap: '2px', marginBottom: '4px', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', paddingBottom: '2px' }}>
+                        <span>Factor</span><span>Base</span><span>Now</span><span>ET Δ</span>
+                      </div>
+                      {impact.impacts.map(i => (
+                        <div key={i.factor} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr 50px', gap: '2px', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--color-text)' }}>{i.factor}</span>
+                          <span style={{ color: 'var(--color-text-muted)' }}>{i.baselineValue.toFixed(1)}</span>
+                          <span style={{ color: 'var(--color-text)' }}>{i.currentValue.toFixed(1)}</span>
+                          <span style={{ 
+                            fontWeight: 600, 
+                            color: i.direction === 'faster' ? '#10b981' : i.direction === 'slower' ? '#ef4444' : 'var(--color-text-muted)'
+                          }}>
+                            {i.etChange >= 0 ? '+' : ''}{(i.etChange * 1000).toFixed(0)}ms
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--color-text)' }}>Predicted ET:</span>
+                        <span style={{ fontWeight: 700, color: impact.totalETChange < 0 ? '#10b981' : impact.totalETChange > 0 ? '#ef4444' : 'var(--color-text)' }}>
+                          {impact.predictedET.toFixed(3)}s ({impact.totalETChange >= 0 ? '+' : ''}{(impact.totalETChange * 1000).toFixed(0)}ms)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.55rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                        DA: {impact.densityAltitudeChange >= 0 ? '+' : ''}{impact.densityAltitudeChange}ft
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* Actual vs Predicted */}
+                <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text)' }}>
+                    <span>Actual ET:</span>
+                    <span style={{ fontWeight: 600 }}>{baseET.toFixed(3)}s</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)', fontSize: '0.55rem' }}>
+                    <span>vs baseline:</span>
+                    <span style={{ color: (baseET - comparisonRun.result.et_s) < 0 ? '#10b981' : '#ef4444' }}>
+                      {(baseET - comparisonRun.result.et_s) >= 0 ? '+' : ''}{((baseET - comparisonRun.result.et_s) * 1000).toFixed(0)}ms
+                    </span>
+                  </div>
                 </div>
-                <button 
-                  onClick={() => setComparisonRun(null)}
-                  style={{ 
-                    marginTop: '4px',
-                    padding: '2px 6px',
-                    fontSize: '0.6rem',
-                    border: '1px solid #3b82f6',
-                    borderRadius: '3px',
-                    backgroundColor: 'transparent',
-                    color: '#3b82f6',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Clear
-                </button>
               </div>
             )}
             
