@@ -14,6 +14,7 @@ import type { RaceLength } from '../domain/config/raceLengths';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import { calculateWeatherImpact, type WeatherConditions } from '../domain/physics/calculations/weatherImpact';
 import type { SimResult } from '../domain/physics';
+import { useSharedEnv } from '../shared/state/useSharedEnv';
 
 // Standard baseline conditions for weather impact comparison
 const BASELINE_WEATHER: WeatherConditions = {
@@ -115,7 +116,20 @@ export default function RaceDay() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const [env, setEnv] = useState<Env>(DEFAULT_ENV);
+  
+  // Use shared environment state (persists between ET Sim and Race Day)
+  const { env: sharedEnv, setEnv: setSharedEnv } = useSharedEnv();
+  const [env, setEnvLocal] = useState<Env>({ ...DEFAULT_ENV, ...sharedEnv });
+  
+  // Sync local env changes to shared storage
+  const setEnv = useCallback((updater: Env | ((prev: Env) => Env)) => {
+    setEnvLocal(prev => {
+      const newEnv = typeof updater === 'function' ? updater(prev) : updater;
+      setSharedEnv(newEnv as any);
+      return newEnv;
+    });
+  }, [setSharedEnv]);
+  
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [lastWeatherUpdate, setLastWeatherUpdate] = useState<Date | null>(null);
   const [autoRefreshWeather, setAutoRefreshWeather] = useState(false);
@@ -630,13 +644,15 @@ export default function RaceDay() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Track °F</label>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Track °F {!features.quarterProFields && '🔒'}</label>
                   <input
                     type="number"
                     value={env.trackTempF ?? ''}
                     onChange={(e) => setEnv(prev => ({ ...prev, trackTempF: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     placeholder="—"
-                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                    disabled={!features.quarterProFields}
+                    title={!features.quarterProFields ? 'Pro feature' : undefined}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace', opacity: features.quarterProFields ? 1 : 0.5 }}
                   />
                 </div>
                 <div>
@@ -650,23 +666,27 @@ export default function RaceDay() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind mph</label>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind mph {!features.quarterProFields && '🔒'}</label>
                   <input
                     type="number"
                     value={env.windMph ?? ''}
                     onChange={(e) => setEnv(prev => ({ ...prev, windMph: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     placeholder="—"
-                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                    disabled={!features.quarterProFields}
+                    title={!features.quarterProFields ? 'Pro feature' : undefined}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace', opacity: features.quarterProFields ? 1 : 0.5 }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind Angle</label>
+                  <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Wind Angle {!features.quarterProFields && '🔒'}</label>
                   <input
                     type="number"
                     value={env.windAngleDeg ?? ''}
                     onChange={(e) => setEnv(prev => ({ ...prev, windAngleDeg: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     placeholder="—"
-                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                    disabled={!features.quarterProFields}
+                    title={!features.quarterProFields ? 'Pro feature' : undefined}
+                    style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', fontFamily: 'monospace', opacity: features.quarterProFields ? 1 : 0.5 }}
                   />
                 </div>
               </div>

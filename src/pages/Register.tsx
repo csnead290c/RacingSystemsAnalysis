@@ -128,14 +128,15 @@ export default function Register() {
             </p>
           </div>
 
+          {/* Main paid tiers - 3 columns */}
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '20px',
-            maxWidth: '700px',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '16px',
+            maxWidth: '900px',
             margin: '0 auto',
           }}>
-            {tiers.map(tier => (
+            {tiers.filter(t => t.id !== 'free').map(tier => (
               <div
                 key={tier.id}
                 onClick={() => handleTierSelect(tier.id)}
@@ -210,7 +211,35 @@ export default function Register() {
             ))}
           </div>
 
-          <p style={{ textAlign: 'center', marginTop: '24px', color: 'var(--color-text-muted)' }}>
+          {/* Free tier - subtle option */}
+          <div style={{ 
+            textAlign: 'center', 
+            marginTop: '24px', 
+            padding: '16px',
+            backgroundColor: 'var(--color-bg)',
+            borderRadius: '8px',
+            border: '1px solid var(--color-border)',
+          }}>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              Just want to try the calculators?{' '}
+              <button
+                onClick={() => handleTierSelect('free')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-accent)',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontSize: '0.9rem',
+                  padding: 0,
+                }}
+              >
+                Start free
+              </button>
+            </span>
+          </div>
+
+          <p style={{ textAlign: 'center', marginTop: '16px', color: 'var(--color-text-muted)' }}>
             Already have an account? <Link to="/login" style={{ color: 'var(--color-accent)' }}>Sign in</Link>
           </p>
         </div>

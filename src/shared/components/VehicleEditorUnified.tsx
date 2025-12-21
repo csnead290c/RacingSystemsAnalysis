@@ -225,11 +225,15 @@ function NumericInput({ value, onChange, step, style, placeholder, min, max }: N
   const [isFocused, setIsFocused] = useState(false);
   
   // Sync from external value when not focused
+  // Round to avoid floating point display issues (e.g., 0.9900000000000002)
   useEffect(() => {
     if (!isFocused && value !== undefined) {
-      setLocalValue(value.toString());
+      // Round to reasonable precision based on step
+      const precision = step ? Math.max(0, -Math.floor(Math.log10(parseFloat(step)))) : 6;
+      const rounded = Number(value.toFixed(precision));
+      setLocalValue(rounded.toString());
     }
-  }, [value, isFocused]);
+  }, [value, isFocused, step]);
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -913,7 +917,12 @@ export default function VehicleEditorUnified({
                   type="radio"
                   name="tireMode"
                   checked={tireMode === 'diameter'}
-                  onChange={() => updateField('tireRolloutMode', 'diameter')}
+                  onChange={() => {
+                    // Convert rollout to diameter when switching
+                    const currentRollout = vehicle.tireRolloutIn ?? (vehicle.tireDiaIn ?? 28) * Math.PI;
+                    const calculatedDia = Math.round((currentRollout / Math.PI) * 100) / 100;
+                    onChange({ ...vehicle, tireRolloutMode: 'diameter', tireDiaIn: calculatedDia });
+                  }}
                 />
                 Diameter
               </label>
@@ -922,7 +931,12 @@ export default function VehicleEditorUnified({
                   type="radio"
                   name="tireMode"
                   checked={tireMode === 'circumference'}
-                  onChange={() => updateField('tireRolloutMode', 'circumference')}
+                  onChange={() => {
+                    // Convert diameter to rollout when switching
+                    const currentDia = vehicle.tireDiaIn ?? 28;
+                    const calculatedRollout = Math.round(currentDia * Math.PI * 100) / 100;
+                    onChange({ ...vehicle, tireRolloutMode: 'circumference', tireRolloutIn: calculatedRollout });
+                  }}
                 />
                 Rollout
               </label>

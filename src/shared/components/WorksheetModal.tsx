@@ -332,11 +332,11 @@ interface PMIWorksheetProps {
   type: 'engine' | 'trans' | 'tires';
 }
 
-// Transmission types from VB6
+// Transmission types from VB6 (Qmain.bas gc_WSTransType)
 const TRANS_TYPES = [
-  { value: 1, label: 'Powerglide / Lenco' },
-  { value: 2, label: 'TH400 / C6 / 4L80E' },
-  { value: 3, label: 'TH350 / C4 / 700R4' },
+  { value: 1, label: 'Production Automatic' },
+  { value: 2, label: 'Manual Gears, Shafts' },
+  { value: 3, label: 'Planetary Style' },
 ] as const;
 
 export function PMIWorksheet({ isOpen, onClose, onApply, type }: PMIWorksheetProps) {

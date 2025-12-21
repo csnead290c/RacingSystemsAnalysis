@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Env } from '../../domain/schemas/env.schema';
+import { useSubscription } from '../../domain/config/useSubscription';
 
 
 interface EnvironmentFormProps {
@@ -12,6 +13,10 @@ interface EnvironmentFormProps {
 function EnvironmentForm({ value, onChange, compact = false, disabled = false }: EnvironmentFormProps) {
   const [showOptional, setShowOptional] = useState(true); // Show track conditions by default
   const [useElevation, setUseElevation] = useState(true); // Toggle between elevation and barometer input
+  const { features } = useSubscription();
+  
+  // Track temp and wind are Pro features only
+  const hasAdvancedWeather = features.liveWeather || features.quarterProFields;
 
   const handleChange = (field: keyof Env, inputValue: string) => {
     const numValue = parseFloat(inputValue) || 0;
@@ -115,23 +120,50 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
               <input type="number" style={inputStyle} className="input" value={value.humidityPct} onChange={(e) => handleChange('humidityPct', e.target.value)} />
             </div>
           </div>
-          {/* Row 2: Optional fields */}
+          {/* Row 2: Optional fields - Track temp and wind are Pro only */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
             <div style={groupStyle}>
-              <label style={labelStyle}>Track °F</label>
-              <input type="number" style={optInputStyle} className="input" value={value.trackTempF ?? ''} onChange={(e) => handleOptionalChange('trackTempF', e.target.value)} placeholder="—" />
+              <label style={labelStyle}>Track °F {!hasAdvancedWeather && '🔒'}</label>
+              <input 
+                type="number" 
+                style={{ ...optInputStyle, opacity: hasAdvancedWeather ? 1 : 0.5 }} 
+                className="input" 
+                value={value.trackTempF ?? ''} 
+                onChange={(e) => handleOptionalChange('trackTempF', e.target.value)} 
+                placeholder="—" 
+                disabled={!hasAdvancedWeather}
+                title={!hasAdvancedWeather ? 'Pro feature' : undefined}
+              />
             </div>
             <div style={groupStyle}>
               <label style={labelStyle}>Grip</label>
               <input type="number" style={optInputStyle} className="input" value={value.tractionIndex ?? ''} onChange={(e) => handleOptionalChange('tractionIndex', e.target.value)} placeholder="—" />
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Wind</label>
-              <input type="number" style={optInputStyle} className="input" value={value.windMph ?? ''} onChange={(e) => handleOptionalChange('windMph', e.target.value)} placeholder="—" />
+              <label style={labelStyle}>Wind {!hasAdvancedWeather && '🔒'}</label>
+              <input 
+                type="number" 
+                style={{ ...optInputStyle, opacity: hasAdvancedWeather ? 1 : 0.5 }} 
+                className="input" 
+                value={value.windMph ?? ''} 
+                onChange={(e) => handleOptionalChange('windMph', e.target.value)} 
+                placeholder="—" 
+                disabled={!hasAdvancedWeather}
+                title={!hasAdvancedWeather ? 'Pro feature' : undefined}
+              />
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Angle</label>
-              <input type="number" style={optInputStyle} className="input" value={value.windAngleDeg ?? ''} onChange={(e) => handleOptionalChange('windAngleDeg', e.target.value)} placeholder="—" />
+              <label style={labelStyle}>Angle {!hasAdvancedWeather && '🔒'}</label>
+              <input 
+                type="number" 
+                style={{ ...optInputStyle, opacity: hasAdvancedWeather ? 1 : 0.5 }} 
+                className="input" 
+                value={value.windAngleDeg ?? ''} 
+                onChange={(e) => handleOptionalChange('windAngleDeg', e.target.value)} 
+                placeholder="—" 
+                disabled={!hasAdvancedWeather}
+                title={!hasAdvancedWeather ? 'Pro feature' : undefined}
+              />
             </div>
           </div>
         </div>

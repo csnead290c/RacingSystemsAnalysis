@@ -18,6 +18,7 @@ import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 import { useSubscription } from '../domain/config/useSubscription';
+import { useSharedEnv } from '../shared/state/useSharedEnv';
 
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -36,8 +37,16 @@ function Predict() {
   const { features } = useSubscription();
   
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [env, setEnv] = useState<Env | null>(null);
+  const { env: sharedEnv, setEnv: setSharedEnv } = useSharedEnv();
+  const [env, setEnv] = useState<Env | null>(sharedEnv as Env);
   const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
+  
+  // Sync local env with shared env
+  useEffect(() => {
+    if (env) {
+      setSharedEnv(env as any);
+    }
+  }, [env, setSharedEnv]);
   // Always use VB6Exact - works for both QuarterPro (full HP curve) and QuarterJr (peak HP/RPM)
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [debugData, setDebugData] = useState<DebugData | null>(null);
