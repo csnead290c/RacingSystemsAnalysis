@@ -9,6 +9,11 @@ import type { Vehicle } from '../domain/schemas/vehicle.schema';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useSubscription } from '../domain/config/useSubscription';
 import { fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
+import { storage } from '../state/storage';
+import type { RaceLength } from '../domain/config/raceLengths';
+import type { RunRecordV1 } from '../domain/schemas/run.schema';
+
+const RACE_DAY_STORAGE_KEY = 'rsa_race_day_session';
 
 interface RaceDayState {
   currentRound: number;
@@ -21,6 +26,7 @@ interface RaceDayState {
 }
 
 interface RoundResult {
+  id: string;
   round: number;
   lane: 'left' | 'right';
   dialIn: number;
@@ -29,6 +35,8 @@ interface RoundResult {
   mph: number;
   result: 'win' | 'loss' | 'bye';
   opponentName?: string;
+  timestamp: number;
+  savedToHistory?: boolean;
 }
 
 // Calculate density altitude
@@ -78,6 +86,7 @@ export default function RaceDay() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [lastWeatherUpdate, setLastWeatherUpdate] = useState<Date | null>(null);
   const [autoRefreshWeather, setAutoRefreshWeather] = useState(false);
+  const [raceLength, setRaceLength] = useState<RaceLength>('QUARTER');
   
   const [raceState, setRaceState] = useState<RaceDayState>({
     currentRound: 1,
@@ -97,7 +106,53 @@ export default function RaceDay() {
   const [quickRT, setQuickRT] = useState('');
   const [quickET, setQuickET] = useState('');
   const [quickMPH, setQuickMPH] = useState('');
+  const [quickLane, setQuickLane] = useState<'left' | 'right'>('left');
   const [quickResult, setQuickResult] = useState<'win' | 'loss' | 'bye'>('win');
+  const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
+  
+  // Load session from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RACE_DAY_STORAGE_KEY);
+      if (saved) {
+        const session = JSON.parse(saved);
+        // Only restore if from today
+        const today = new Date().toDateString();
+        if (session.date === today) {
+          setRaceState(prev => ({
+            ...prev,
+            currentRound: session.currentRound || 1,
+            roundHistory: session.roundHistory || [],
+          }));
+          if (session.vehicleId) {
+            // Will be set after vehicles load
+            sessionStorage.setItem('raceday_vehicle_id', session.vehicleId);
+          }
+          if (session.trackId) {
+            sessionStorage.setItem('raceday_track_id', session.trackId);
+          }
+          if (session.raceLength) {
+            setRaceLength(session.raceLength);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+  
+  // Save session to localStorage when state changes
+  useEffect(() => {
+    if (raceState.roundHistory.length > 0 || selectedVehicle) {
+      const session = {
+        date: new Date().toDateString(),
+        currentRound: raceState.currentRound,
+        roundHistory: raceState.roundHistory,
+        vehicleId: selectedVehicle?.id,
+        trackId: selectedTrack?.id,
+        raceLength,
+      };
+      localStorage.setItem(RACE_DAY_STORAGE_KEY, JSON.stringify(session));
+    }
+  }, [raceState.currentRound, raceState.roundHistory, selectedVehicle, selectedTrack, raceLength]);
   
   // Load vehicles and tracks
   useEffect(() => {
@@ -140,7 +195,7 @@ export default function RaceDay() {
         const vb6Fixture = fromVehicleToVB6Fixture(selectedVehicle as any, { 
           forceQuarterJr: !features.quarterProFields 
         });
-        const simInputs = fixtureToSimInputs(vb6Fixture, 'QUARTER');
+        const simInputs = fixtureToSimInputs(vb6Fixture, raceLength);
         // VB6 Quarter Jr default: trackTemp = temperature + 30 when not specified
         const tempF = env.temperatureF ?? 75;
         simInputs.env = {
@@ -170,34 +225,108 @@ export default function RaceDay() {
     };
     
     runSim();
-  }, [selectedVehicle, env, safetyMargin, manualAdjust]);
+  }, [selectedVehicle, env, safetyMargin, manualAdjust, raceLength, features.quarterProFields]);
   
   // Log a round result
-  const logRound = () => {
+  const logRound = async () => {
     if (!quickET) return;
     
-    const result: RoundResult = {
-      round: raceState.currentRound,
-      lane: raceState.currentLane || 'left',
+    const roundResult: RoundResult = {
+      id: crypto.randomUUID(),
+      round: editingRoundId ? raceState.roundHistory.find(r => r.id === editingRoundId)?.round || raceState.currentRound : raceState.currentRound,
+      lane: quickLane,
       dialIn: raceState.dialIn,
       rt: parseFloat(quickRT) || 0,
       et: parseFloat(quickET),
       mph: parseFloat(quickMPH) || 0,
       result: quickResult,
+      timestamp: Date.now(),
     };
     
-    setRaceState(prev => ({
-      ...prev,
-      currentRound: prev.currentRound + 1,
-      lastRT: result.rt,
-      lastET: result.et,
-      roundHistory: [...prev.roundHistory, result],
-    }));
+    if (editingRoundId) {
+      // Update existing round
+      setRaceState(prev => ({
+        ...prev,
+        roundHistory: prev.roundHistory.map(r => r.id === editingRoundId ? roundResult : r),
+      }));
+      setEditingRoundId(null);
+    } else {
+      // Add new round
+      setRaceState(prev => ({
+        ...prev,
+        currentRound: prev.currentRound + 1,
+        lastRT: roundResult.rt,
+        lastET: roundResult.et,
+        roundHistory: [...prev.roundHistory, roundResult],
+      }));
+      
+      // Save to run history if vehicle selected
+      if (selectedVehicle) {
+        try {
+          const run: RunRecordV1 = {
+            id: crypto.randomUUID(),
+            createdAt: Date.now(),
+            vehicleId: selectedVehicle.id,
+            raceLength,
+            env,
+            runDate: new Date().toISOString().split('T')[0],
+            runTime: new Date().toTimeString().slice(0, 5),
+            round: `R${roundResult.round}`,
+            lane: roundResult.lane,
+            reactionTime: roundResult.rt,
+            dialIn: roundResult.dialIn,
+            quarterMileET: raceLength === 'QUARTER' ? roundResult.et : undefined,
+            quarterMileMPH: raceLength === 'QUARTER' ? roundResult.mph : undefined,
+            eighthMileET: raceLength === 'EIGHTH' ? roundResult.et : undefined,
+            eighthMileMPH: raceLength === 'EIGHTH' ? roundResult.mph : undefined,
+            prediction: { et_s: raceState.predictedET, mph: 0 },
+            outcome: { slipET_s: roundResult.et, slipMPH: roundResult.mph },
+          };
+          await storage.saveRun(run);
+        } catch (err) {
+          console.error('Failed to save run to history:', err);
+        }
+      }
+    }
     
     // Clear quick entry
     setQuickRT('');
     setQuickET('');
     setQuickMPH('');
+  };
+  
+  // Delete a round
+  const deleteRound = (id: string) => {
+    setRaceState(prev => ({
+      ...prev,
+      roundHistory: prev.roundHistory.filter(r => r.id !== id),
+    }));
+  };
+  
+  // Edit a round (populate form with round data)
+  const editRound = (round: RoundResult) => {
+    setEditingRoundId(round.id);
+    setQuickRT(round.rt.toString());
+    setQuickET(round.et.toString());
+    setQuickMPH(round.mph.toString());
+    setQuickLane(round.lane);
+    setQuickResult(round.result);
+  };
+  
+  // Clear current session
+  const clearSession = () => {
+    if (confirm('Clear all rounds from today\'s session?')) {
+      setRaceState({
+        currentRound: 1,
+        currentLane: null,
+        dialIn: raceState.dialIn,
+        predictedET: raceState.predictedET,
+        lastRT: null,
+        lastET: null,
+        roundHistory: [],
+      });
+      localStorage.removeItem(RACE_DAY_STORAGE_KEY);
+    }
   };
   
   // Calculated values
@@ -239,7 +368,7 @@ export default function RaceDay() {
         </div>
         
         {/* Top Row - Setup */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
           {/* Vehicle Selection */}
           <div className="card" style={{ padding: 'var(--space-3)' }}>
             <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>Vehicle</div>
@@ -263,6 +392,43 @@ export default function RaceDay() {
                 <option key={v.id} value={v.id}>{v.name}</option>
               ))}
             </select>
+          </div>
+          
+          {/* Race Length */}
+          <div className="card" style={{ padding: 'var(--space-3)' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>Distance</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setRaceLength('EIGHTH')}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: 'var(--radius-md)',
+                  border: `2px solid ${raceLength === 'EIGHTH' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  backgroundColor: raceLength === 'EIGHTH' ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontWeight: raceLength === 'EIGHTH' ? 600 : 400,
+                  cursor: 'pointer',
+                }}
+              >
+                1/8
+              </button>
+              <button
+                onClick={() => setRaceLength('QUARTER')}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: 'var(--radius-md)',
+                  border: `2px solid ${raceLength === 'QUARTER' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  backgroundColor: raceLength === 'QUARTER' ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontWeight: raceLength === 'QUARTER' ? 600 : 400,
+                  cursor: 'pointer',
+                }}
+              >
+                1/4
+              </button>
+            </div>
           </div>
           
           {/* Track Selection */}
@@ -461,8 +627,60 @@ export default function RaceDay() {
             
             {/* Quick Log */}
             <div className="card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>Quick Log Round {raceState.currentRound}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) auto', gap: 'var(--space-2)', alignItems: 'end' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                  {editingRoundId ? 'Edit Round' : `Log Round ${raceState.currentRound}`}
+                </span>
+                {editingRoundId && (
+                  <button
+                    onClick={() => {
+                      setEditingRoundId(null);
+                      setQuickRT('');
+                      setQuickET('');
+                      setQuickMPH('');
+                    }}
+                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text)', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(4, 1fr) auto auto', gap: 'var(--space-2)', alignItems: 'end' }}>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Lane</label>
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    <button
+                      onClick={() => setQuickLane('left')}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                        border: `1px solid ${quickLane === 'left' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        backgroundColor: quickLane === 'left' ? 'rgba(59, 130, 246, 0.2)' : 'var(--color-surface)',
+                        color: 'var(--color-text)',
+                        fontWeight: quickLane === 'left' ? 600 : 400,
+                        fontSize: '0.75rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      L
+                    </button>
+                    <button
+                      onClick={() => setQuickLane('right')}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '0 var(--radius-md) var(--radius-md) 0',
+                        border: `1px solid ${quickLane === 'right' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        backgroundColor: quickLane === 'right' ? 'rgba(59, 130, 246, 0.2)' : 'var(--color-surface)',
+                        color: 'var(--color-text)',
+                        fontWeight: quickLane === 'right' ? 600 : 400,
+                        fontSize: '0.75rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      R
+                    </button>
+                  </div>
+                </div>
                 <div>
                   <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>RT</label>
                   <input
@@ -546,7 +764,7 @@ export default function RaceDay() {
                   className="btn"
                   style={{ padding: '8px 16px' }}
                 >
-                  Log
+                  {editingRoundId ? 'Update' : 'Log'}
                 </button>
               </div>
             </div>
@@ -584,8 +802,16 @@ export default function RaceDay() {
             
             {/* Round History */}
             <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: 'var(--space-3)', borderBottom: '1px solid var(--color-border)', fontWeight: 600, fontSize: '0.85rem' }}>
-                Today's Rounds ({raceState.roundHistory.length})
+              <div style={{ padding: 'var(--space-3)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Today's Rounds ({raceState.roundHistory.length})</span>
+                {raceState.roundHistory.length > 0 && (
+                  <button
+                    onClick={clearSession}
+                    style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
               <div style={{ flex: 1, overflowY: 'auto' }}>
                 {raceState.roundHistory.length === 0 ? (
@@ -597,17 +823,18 @@ export default function RaceDay() {
                     <thead>
                       <tr style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
                         <th style={{ padding: '6px 8px', textAlign: 'left' }}>Rd</th>
-                        <th style={{ padding: '6px 8px', textAlign: 'right' }}>Dial</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'center' }}>Ln</th>
                         <th style={{ padding: '6px 8px', textAlign: 'right' }}>RT</th>
                         <th style={{ padding: '6px 8px', textAlign: 'right' }}>ET</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'center' }}></th>
                         <th style={{ padding: '6px 8px', textAlign: 'center' }}></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {[...raceState.roundHistory].reverse().map((r, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      {[...raceState.roundHistory].reverse().map((r) => (
+                        <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                           <td style={{ padding: '6px 8px' }}>R{r.round}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{r.dialIn.toFixed(2)}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '0.7rem' }}>{r.lane === 'left' ? 'L' : 'R'}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{r.rt.toFixed(3)}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{r.et.toFixed(3)}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'center' }}>
@@ -624,6 +851,24 @@ export default function RaceDay() {
                             }}>
                               {r.result.toUpperCase()}
                             </span>
+                          </td>
+                          <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '2px' }}>
+                              <button
+                                onClick={() => editRound(r)}
+                                style={{ padding: '2px 4px', fontSize: '0.6rem', borderRadius: '2px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                                title="Edit"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => deleteRound(r.id)}
+                                style={{ padding: '2px 4px', fontSize: '0.6rem', borderRadius: '2px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                                title="Delete"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

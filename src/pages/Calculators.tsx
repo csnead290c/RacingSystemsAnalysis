@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
+import { useAuth } from '../domain/auth';
 import {
   calculateWeather,
   defaultWeatherInput,
@@ -22,6 +24,7 @@ import {
 type CalculatorTab = 'weather' | 'converter' | 'dragdyno';
 
 function Calculators() {
+  const { isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<CalculatorTab>('weather');
   
   // Weather calculator state
@@ -76,6 +79,38 @@ function Calculators() {
     paddingBottom: 'var(--space-1)',
     borderBottom: '1px solid var(--color-border)',
   };
+
+  // Show registration prompt if not authenticated
+  if (!isLoading && !isAuthenticated) {
+    return (
+      <Page title="Calculators">
+        <div className="card" style={{ maxWidth: '500px', margin: '0 auto', textAlign: 'center', padding: 'var(--space-6)' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>🔧</div>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: 'var(--space-3)' }}>Free Racing Calculators</h2>
+          <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)', lineHeight: 1.6 }}>
+            Access our free Weather Correction, Converter Slip, and Drag Dyno calculators. 
+            Create a free account to get started - no credit card required.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', maxWidth: '280px', margin: '0 auto' }}>
+            <Link to="/register" className="btn btn-primary" style={{ padding: 'var(--space-3)', fontSize: '1rem' }}>
+              Create Free Account
+            </Link>
+            <Link to="/login" className="btn btn-secondary" style={{ padding: 'var(--space-3)' }}>
+              Sign In
+            </Link>
+          </div>
+          <div style={{ marginTop: 'var(--space-5)', padding: 'var(--space-4)', backgroundColor: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>Included Calculators:</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              <div>🌤️ <strong>Weather Correction</strong> - Density altitude & HP correction</div>
+              <div>⚙️ <strong>Converter Slip</strong> - Calculate torque converter slip %</div>
+              <div>🏁 <strong>Drag Dyno</strong> - Estimate ET from HP & weight</div>
+            </div>
+          </div>
+        </div>
+      </Page>
+    );
+  }
 
   return (
     <Page title="Calculators">
