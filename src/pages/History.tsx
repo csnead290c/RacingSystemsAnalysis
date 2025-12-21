@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
@@ -10,6 +10,9 @@ import { hasFeature, CURRENT_TIER } from '../domain/config/entitlements';
 import { runsToCsv, downloadCsv } from '../shared/utils/csv';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import type { RaceLength } from '../domain/config/raceLengths';
+import { calculateMOV, formatMOV, describeRaceOutcome } from '../domain/physics/calculations/marginOfVictory';
+import { calculateRunCompletion, calculateSplitIntervals } from '../domain/physics/calculations/runCompletion';
+import { calculateDensityAltitude } from '../domain/physics/calculations/weatherImpact';
 
 // Edit Run Modal Component
 interface EditRunModalProps {
@@ -20,6 +23,7 @@ interface EditRunModalProps {
 }
 
 function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) {
+  const [activeTab, setActiveTab] = useState<'timing' | 'opponent' | 'completion'>('timing');
   const [formData, setFormData] = useState({
     reactionTime: run.reactionTime?.toString() || '',
     sixtyFt: run.sixtyFt?.toString() || '',
@@ -31,7 +35,55 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
     quarterMileMPH: run.quarterMileMPH?.toString() || '',
     dialIn: run.dialIn?.toString() || '',
     notes: run.notes || '',
+    // Opponent data
+    opponentName: run.opponent?.name || '',
+    opponentDialIn: run.opponent?.dialIn?.toString() || '',
+    opponentRT: run.opponent?.reactionTime?.toString() || '',
+    opponentET: run.opponent?.et?.toString() || '',
+    opponentMPH: run.opponent?.mph?.toString() || '',
   });
+
+  // Calculate MOV when opponent data is available
+  const movResult = useMemo(() => {
+    const myDialIn = parseFloat(formData.dialIn);
+    const myRT = parseFloat(formData.reactionTime);
+    const myET = run.raceLength === 'QUARTER' 
+      ? parseFloat(formData.quarterMileET) 
+      : parseFloat(formData.eighthMileET);
+    const oppDialIn = parseFloat(formData.opponentDialIn);
+    const oppRT = parseFloat(formData.opponentRT);
+    const oppET = parseFloat(formData.opponentET);
+
+    if (myDialIn && myRT && myET && oppDialIn && oppRT && oppET) {
+      return calculateMOV(
+        { dialIn: myDialIn, reactionTime: myRT, et: myET },
+        { dialIn: oppDialIn, reactionTime: oppRT, et: oppET }
+      );
+    }
+    return null;
+  }, [formData, run.raceLength]);
+
+  // Calculate run completion for brake runs
+  const completionResult = useMemo(() => {
+    const actualET = run.raceLength === 'QUARTER' 
+      ? parseFloat(formData.quarterMileET) 
+      : parseFloat(formData.eighthMileET);
+    
+    return calculateRunCompletion(
+      {
+        sixtyFt: parseFloat(formData.sixtyFt) || undefined,
+        threeThirtyFt: parseFloat(formData.threeThirtyFt) || undefined,
+        eighthMileET: parseFloat(formData.eighthMileET) || undefined,
+        eighthMileMPH: parseFloat(formData.eighthMileMPH) || undefined,
+        thousandFt: parseFloat(formData.thousandFt) || undefined,
+        quarterMileET: parseFloat(formData.quarterMileET) || undefined,
+        quarterMileMPH: parseFloat(formData.quarterMileMPH) || undefined,
+      },
+      actualET,
+      undefined,
+      run.raceLength as 'QUARTER' | 'EIGHTH'
+    );
+  }, [formData, run.raceLength]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +107,29 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
           ? parseFloat(formData.quarterMileMPH) || undefined
           : parseFloat(formData.eighthMileMPH) || undefined,
       },
+      // Opponent data
+      opponent: formData.opponentName || formData.opponentDialIn ? {
+        name: formData.opponentName || undefined,
+        dialIn: parseFloat(formData.opponentDialIn) || undefined,
+        reactionTime: parseFloat(formData.opponentRT) || undefined,
+        et: parseFloat(formData.opponentET) || undefined,
+        mph: parseFloat(formData.opponentMPH) || undefined,
+      } : undefined,
+      // MOV calculation
+      marginOfVictory: movResult ? {
+        winner: movResult.winner === 'racer1' ? 'you' : 'opponent',
+        marginSeconds: movResult.marginSeconds,
+        marginFeet: movResult.marginFeet,
+        marginInches: movResult.marginInches,
+        breakout: movResult.racer1Breakout || movResult.racer2Breakout,
+      } : undefined,
+      // Run completion
+      runCompletion: completionResult ? {
+        didBrake: completionResult.etLost > 0.05,
+        brakePoint: completionResult.brakePoint,
+        completedET: completionResult.completedET,
+        completedMPH: completionResult.completedMPH,
+      } : undefined,
     };
     onSave(updatedRun);
   };
@@ -94,55 +169,223 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--color-text)' }}>×</button>
         </div>
         
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '2px', marginBottom: 'var(--space-4)', borderBottom: '1px solid var(--color-border)' }}>
+          {(['timing', 'opponent', 'completion'] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '8px 16px',
+                border: 'none',
+                background: activeTab === tab ? 'var(--color-surface)' : 'transparent',
+                borderBottom: activeTab === tab ? '2px solid var(--color-primary)' : '2px solid transparent',
+                color: activeTab === tab ? 'var(--color-text)' : 'var(--color-text-muted)',
+                fontWeight: activeTab === tab ? 600 : 400,
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              {tab === 'timing' ? 'Timing' : tab === 'opponent' ? 'Opponent & MOV' : 'Run Completion'}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Dial-In</label>
-              <input type="number" step="0.001" value={formData.dialIn} onChange={(e) => setFormData(f => ({ ...f, dialIn: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>RT</label>
-              <input type="number" step="0.001" value={formData.reactionTime} onChange={(e) => setFormData(f => ({ ...f, reactionTime: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>60'</label>
-              <input type="number" step="0.001" value={formData.sixtyFt} onChange={(e) => setFormData(f => ({ ...f, sixtyFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>330'</label>
-              <input type="number" step="0.001" value={formData.threeThirtyFt} onChange={(e) => setFormData(f => ({ ...f, threeThirtyFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/8 ET</label>
-              <input type="number" step="0.001" value={formData.eighthMileET} onChange={(e) => setFormData(f => ({ ...f, eighthMileET: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/8 MPH</label>
-              <input type="number" step="0.01" value={formData.eighthMileMPH} onChange={(e) => setFormData(f => ({ ...f, eighthMileMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1000'</label>
-              <input type="number" step="0.001" value={formData.thousandFt} onChange={(e) => setFormData(f => ({ ...f, thousandFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/4 ET</label>
-              <input type="number" step="0.001" value={formData.quarterMileET} onChange={(e) => setFormData(f => ({ ...f, quarterMileET: e.target.value }))} style={inputStyle} placeholder="0.000" />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/4 MPH</label>
-              <input type="number" step="0.01" value={formData.quarterMileMPH} onChange={(e) => setFormData(f => ({ ...f, quarterMileMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
-            </div>
-          </div>
-          
-          <div style={{ marginBottom: 'var(--space-4)' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Notes</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData(f => ({ ...f, notes: e.target.value }))}
-              style={{ ...inputStyle, minHeight: '60px', fontFamily: 'inherit' }}
-              placeholder="Run notes..."
-            />
-          </div>
+          {/* Timing Tab */}
+          {activeTab === 'timing' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Dial-In</label>
+                  <input type="number" step="0.001" value={formData.dialIn} onChange={(e) => setFormData(f => ({ ...f, dialIn: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>RT</label>
+                  <input type="number" step="0.001" value={formData.reactionTime} onChange={(e) => setFormData(f => ({ ...f, reactionTime: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>60'</label>
+                  <input type="number" step="0.001" value={formData.sixtyFt} onChange={(e) => setFormData(f => ({ ...f, sixtyFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>330'</label>
+                  <input type="number" step="0.001" value={formData.threeThirtyFt} onChange={(e) => setFormData(f => ({ ...f, threeThirtyFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/8 ET</label>
+                  <input type="number" step="0.001" value={formData.eighthMileET} onChange={(e) => setFormData(f => ({ ...f, eighthMileET: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/8 MPH</label>
+                  <input type="number" step="0.01" value={formData.eighthMileMPH} onChange={(e) => setFormData(f => ({ ...f, eighthMileMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1000'</label>
+                  <input type="number" step="0.001" value={formData.thousandFt} onChange={(e) => setFormData(f => ({ ...f, thousandFt: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/4 ET</label>
+                  <input type="number" step="0.001" value={formData.quarterMileET} onChange={(e) => setFormData(f => ({ ...f, quarterMileET: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>1/4 MPH</label>
+                  <input type="number" step="0.01" value={formData.quarterMileMPH} onChange={(e) => setFormData(f => ({ ...f, quarterMileMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
+                </div>
+              </div>
+              
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData(f => ({ ...f, notes: e.target.value }))}
+                  style={{ ...inputStyle, minHeight: '60px', fontFamily: 'inherit' }}
+                  placeholder="Run notes..."
+                />
+              </div>
+            </>
+          )}
+
+          {/* Opponent & MOV Tab */}
+          {activeTab === 'opponent' && (
+            <>
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-3)', color: 'var(--color-text-muted)' }}>Opponent Information</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)' }}>
+                  <div style={{ gridColumn: 'span 3' }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Opponent Name/Number</label>
+                    <input type="text" value={formData.opponentName} onChange={(e) => setFormData(f => ({ ...f, opponentName: e.target.value }))} style={{...inputStyle, fontFamily: 'inherit'}} placeholder="Car #123 / Driver Name" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>Dial-In</label>
+                    <input type="number" step="0.001" value={formData.opponentDialIn} onChange={(e) => setFormData(f => ({ ...f, opponentDialIn: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>RT</label>
+                    <input type="number" step="0.001" value={formData.opponentRT} onChange={(e) => setFormData(f => ({ ...f, opponentRT: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>ET</label>
+                    <input type="number" step="0.001" value={formData.opponentET} onChange={(e) => setFormData(f => ({ ...f, opponentET: e.target.value }))} style={inputStyle} placeholder="0.000" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block' }}>MPH</label>
+                    <input type="number" step="0.01" value={formData.opponentMPH} onChange={(e) => setFormData(f => ({ ...f, opponentMPH: e.target.value }))} style={inputStyle} placeholder="0.00" />
+                  </div>
+                </div>
+              </div>
+
+              {/* MOV Display */}
+              {movResult && (
+                <div style={{ 
+                  padding: 'var(--space-4)', 
+                  borderRadius: 'var(--radius-md)', 
+                  backgroundColor: movResult.winner === 'racer1' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  border: `1px solid ${movResult.winner === 'racer1' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  marginBottom: 'var(--space-4)',
+                }}>
+                  <h4 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-2)', color: movResult.winner === 'racer1' ? '#22c55e' : '#ef4444' }}>
+                    {movResult.winner === 'racer1' ? '🏆 WIN' : '❌ LOSS'}
+                  </h4>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'monospace', marginBottom: 'var(--space-2)' }}>
+                    {formatMOV(movResult)}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                    {describeRaceOutcome(movResult, 'You', formData.opponentName || 'Opponent')}
+                  </div>
+                  {(movResult.racer1Breakout || movResult.racer2Breakout) && (
+                    <div style={{ marginTop: 'var(--space-2)', fontSize: '0.8rem', color: '#f59e0b' }}>
+                      ⚠️ {movResult.racer1Breakout && 'You broke out! '}{movResult.racer2Breakout && 'Opponent broke out!'}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!movResult && formData.opponentDialIn && (
+                <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: 'var(--space-4)' }}>
+                  Enter your dial-in, RT, ET and opponent's dial-in, RT, ET to calculate Margin of Victory
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Run Completion Tab */}
+          {activeTab === 'completion' && (
+            <>
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-3)', color: 'var(--color-text-muted)' }}>Run Completion Analysis</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+                  Calculates what your ET would have been if you hadn't braked or lifted.
+                </p>
+                
+                {completionResult ? (
+                  <div style={{ 
+                    padding: 'var(--space-4)', 
+                    borderRadius: 'var(--radius-md)', 
+                    backgroundColor: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-4)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Completed ET</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                          {completionResult.completedET.toFixed(3)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Completed MPH</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'monospace' }}>
+                          {completionResult.completedMPH.toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Brake Point</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 600 }}>
+                          ~{completionResult.brakePoint} ft
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Confidence</div>
+                        <div style={{ 
+                          fontSize: '0.85rem', 
+                          fontWeight: 600,
+                          color: completionResult.confidence === 'high' ? '#22c55e' : completionResult.confidence === 'medium' ? '#f59e0b' : '#ef4444',
+                        }}>
+                          {completionResult.confidence.toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {completionResult.etLost > 0.05 && (
+                      <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2)', backgroundColor: 'rgba(245, 158, 11, 0.1)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem' }}>
+                        ⚡ <strong>Brake run detected:</strong> ~{completionResult.etLost.toFixed(3)}s lost from braking
+                      </div>
+                    )}
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (run.raceLength === 'QUARTER') {
+                          setFormData(f => ({ ...f, quarterMileET: completionResult.completedET.toString(), quarterMileMPH: completionResult.completedMPH.toString() }));
+                        } else {
+                          setFormData(f => ({ ...f, eighthMileET: completionResult.completedET.toString(), eighthMileMPH: completionResult.completedMPH.toString() }));
+                        }
+                      }}
+                      className="btn btn-secondary"
+                      style={{ marginTop: 'var(--space-3)', width: '100%' }}
+                    >
+                      Use Completed ET for Predictions
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    Enter incremental times (60', 330', 1/8, 1000') in the Timing tab to calculate run completion
+                  </div>
+                )}
+              </div>
+            </>
+          )}
           
           <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
@@ -165,6 +408,8 @@ function History() {
   const [showQuickEntry, setShowQuickEntry] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [editingRun, setEditingRun] = useState<RunRecordV1 | null>(null);
+  const [similarRunsTarget, setSimilarRunsTarget] = useState<RunRecordV1 | null>(null);
+  const [showSplitAnalysis, setShowSplitAnalysis] = useState<string | null>(null);
 
   const loadRuns = async () => {
     setLoading(true);
@@ -285,6 +530,46 @@ function History() {
     setSelectedVehicleId(vehicleId);
     setShowReportCard(true);
   };
+
+  // Calculate similar runs by density altitude
+  const similarRuns = useMemo(() => {
+    if (!similarRunsTarget?.env) return [];
+    
+    const targetDA = calculateDensityAltitude(
+      similarRunsTarget.env.temperatureF ?? 70,
+      similarRunsTarget.env.barometerInHg ?? 29.92,
+      similarRunsTarget.env.humidityPct ?? 50,
+      similarRunsTarget.env.elevation ?? 0
+    );
+    
+    return runs
+      .filter(r => r.id !== similarRunsTarget.id && r.vehicleId === similarRunsTarget.vehicleId && r.env)
+      .map(r => {
+        const da = calculateDensityAltitude(
+          r.env!.temperatureF ?? 70,
+          r.env!.barometerInHg ?? 29.92,
+          r.env!.humidityPct ?? 50,
+          r.env!.elevation ?? 0
+        );
+        return { run: r, da, diff: Math.abs(da - targetDA) };
+      })
+      .filter(r => r.diff <= 500) // Within 500ft DA
+      .sort((a, b) => a.diff - b.diff)
+      .slice(0, 10);
+  }, [similarRunsTarget, runs]);
+
+  // Get split intervals for a run
+  const getSplitIntervals = useCallback((run: RunRecordV1) => {
+    return calculateSplitIntervals({
+      sixtyFt: run.sixtyFt,
+      threeThirtyFt: run.threeThirtyFt,
+      eighthMileET: run.eighthMileET,
+      eighthMileMPH: run.eighthMileMPH,
+      thousandFt: run.thousandFt,
+      quarterMileET: run.quarterMileET,
+      quarterMileMPH: run.quarterMileMPH,
+    });
+  }, []);
 
   const handleExportFiltered = () => {
     if (!hasDataExport) {
@@ -445,49 +730,128 @@ function History() {
             </thead>
             <tbody>
               {filteredRuns.map((run) => (
-                <tr key={run.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {formatDate(run.createdAt)}
-                  </td>
-                  <td>{getVehicleName(run.vehicleId)}</td>
-                  <td>{run.raceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'}</td>
-                  <td className="align-right mono">
-                    {run.prediction?.et_s?.toFixed(3) || '—'}
-                  </td>
-                  <td className="align-right mono">
-                    {run.prediction?.mph?.toFixed(2) || '—'}
-                  </td>
-                  <td className="align-right mono">
-                    {run.outcome?.slipET_s?.toFixed(3) || '—'}
-                  </td>
-                  <td className="align-right mono">
-                    {run.outcome?.slipMPH?.toFixed(2) || '—'}
-                  </td>
-                  <td className="align-right">
-                    <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-                      <button
-                        onClick={() => setEditingRun(run)}
-                        className="btn btn-secondary"
-                        style={{
-                          padding: 'var(--space-2) var(--space-3)',
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(run.id)}
-                        className="btn btn-secondary"
-                        style={{
-                          padding: 'var(--space-2) var(--space-3)',
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <React.Fragment key={run.id}>
+                  <tr>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {formatDate(run.createdAt)}
+                    </td>
+                    <td>{getVehicleName(run.vehicleId)}</td>
+                    <td>{run.raceLength === 'EIGHTH' ? '1/8 Mile' : '1/4 Mile'}</td>
+                    <td className="align-right mono">
+                      {run.prediction?.et_s?.toFixed(3) || '—'}
+                    </td>
+                    <td className="align-right mono">
+                      {run.prediction?.mph?.toFixed(2) || '—'}
+                    </td>
+                    <td className="align-right mono">
+                      {run.outcome?.slipET_s?.toFixed(3) || '—'}
+                    </td>
+                    <td className="align-right mono">
+                      {run.outcome?.slipMPH?.toFixed(2) || '—'}
+                    </td>
+                    <td className="align-right">
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        {run.sixtyFt && (
+                          <button
+                            onClick={() => setShowSplitAnalysis(showSplitAnalysis === run.id ? null : run.id)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: 'var(--space-1) var(--space-2)',
+                              fontSize: '0.75rem',
+                              backgroundColor: showSplitAnalysis === run.id ? 'var(--color-primary)' : undefined,
+                              color: showSplitAnalysis === run.id ? 'white' : undefined,
+                            }}
+                            title="Show split time intervals"
+                          >
+                            Splits
+                          </button>
+                        )}
+                        {run.env && (
+                          <button
+                            onClick={() => setSimilarRunsTarget(similarRunsTarget?.id === run.id ? null : run)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: 'var(--space-1) var(--space-2)',
+                              fontSize: '0.75rem',
+                              backgroundColor: similarRunsTarget?.id === run.id ? 'var(--color-primary)' : undefined,
+                              color: similarRunsTarget?.id === run.id ? 'white' : undefined,
+                            }}
+                            title="Find similar runs by density altitude"
+                          >
+                            Similar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setEditingRun(run)}
+                          className="btn btn-secondary"
+                          style={{
+                            padding: 'var(--space-1) var(--space-2)',
+                            fontSize: '0.75rem',
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(run.id)}
+                          className="btn btn-secondary"
+                          style={{
+                            padding: 'var(--space-1) var(--space-2)',
+                            fontSize: '0.75rem',
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {/* Split Analysis Row */}
+                  {showSplitAnalysis === run.id && (
+                    <tr>
+                      <td colSpan={8} style={{ backgroundColor: 'var(--color-surface)', padding: 'var(--space-3)' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>Split Time Intervals</div>
+                        <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+                          {(() => {
+                            const splits = getSplitIntervals(run);
+                            return (
+                              <>
+                                {splits.zeroToSixty !== undefined && (
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>0-60'</div>
+                                    <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{splits.zeroToSixty.toFixed(3)}s</div>
+                                  </div>
+                                )}
+                                {splits.sixtyToThreeThirty !== undefined && (
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>60'-330'</div>
+                                    <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{splits.sixtyToThreeThirty.toFixed(3)}s</div>
+                                  </div>
+                                )}
+                                {splits.threeThirtyToEighth !== undefined && (
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>330'-1/8</div>
+                                    <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{splits.threeThirtyToEighth.toFixed(3)}s</div>
+                                  </div>
+                                )}
+                                {splits.eighthToThousand !== undefined && (
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>1/8-1000'</div>
+                                    <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{splits.eighthToThousand.toFixed(3)}s</div>
+                                  </div>
+                                )}
+                                {splits.thousandToQuarter !== undefined && (
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>1000'-1/4</div>
+                                    <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{splits.thousandToQuarter.toFixed(3)}s</div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -497,6 +861,58 @@ function History() {
       {filteredRuns.length > 0 && (
         <div className="mt-4 text-muted text-center" style={{ fontSize: '0.875rem' }}>
           Showing {filteredRuns.length} of {runs.length} run{runs.length !== 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* Similar Runs Panel */}
+      {similarRunsTarget && similarRuns.length > 0 && (
+        <div className="card mt-4" style={{ padding: 'var(--space-4)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>
+              Similar Runs (within 500ft Density Altitude)
+            </h3>
+            <button
+              onClick={() => setSimilarRunsTarget(null)}
+              style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: 'var(--color-text)' }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+            Target run DA: {calculateDensityAltitude(
+              similarRunsTarget.env?.temperatureF ?? 70,
+              similarRunsTarget.env?.barometerInHg ?? 29.92,
+              similarRunsTarget.env?.humidityPct ?? 50,
+              similarRunsTarget.env?.elevation ?? 0
+            ).toFixed(0)} ft
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            {similarRuns.map(({ run, da, diff }) => (
+              <div key={run.id} style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: 'var(--space-2) var(--space-3)',
+                backgroundColor: 'var(--color-surface)',
+                borderRadius: 'var(--radius-md)',
+              }}>
+                <div>
+                  <div style={{ fontWeight: 500 }}>{new Date(run.createdAt).toLocaleDateString()}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    DA: {da.toFixed(0)} ft ({diff > 0 ? '+' : ''}{diff.toFixed(0)} ft)
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                    {run.outcome?.slipET_s?.toFixed(3) || run.quarterMileET?.toFixed(3) || run.eighthMileET?.toFixed(3) || '—'}s
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    {run.outcome?.slipMPH?.toFixed(2) || run.quarterMileMPH?.toFixed(2) || run.eighthMileMPH?.toFixed(2) || '—'} mph
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

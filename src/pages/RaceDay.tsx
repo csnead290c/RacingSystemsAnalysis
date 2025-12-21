@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Page from '../shared/components/Page';
 import { fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 import { getAllTracks, type Track } from '../domain/config/tracks';
@@ -12,6 +12,17 @@ import { fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
 import { storage } from '../state/storage';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
+import { calculateWeatherImpact, type WeatherConditions } from '../domain/physics/calculations/weatherImpact';
+
+// Standard baseline conditions for weather impact comparison
+const BASELINE_WEATHER: WeatherConditions = {
+  temperatureF: 70,
+  humidityPct: 50,
+  barometerInHg: 29.92,
+  elevation: 0,
+  windMph: 0,
+  windAngleDeg: 0,
+};
 
 const RACE_DAY_STORAGE_KEY = 'rsa_race_day_session';
 
@@ -387,6 +398,26 @@ export default function RaceDay() {
     env.humidityPct ?? 50
   );
   
+  // Calculate weather impact breakdown (how each factor affects ET)
+  const weatherImpact = useMemo(() => {
+    if (!raceState.predictedET || raceState.predictedET <= 0) return null;
+    
+    const currentWeather: WeatherConditions = {
+      temperatureF: env.temperatureF ?? 70,
+      humidityPct: env.humidityPct ?? 50,
+      barometerInHg: env.barometerInHg ?? 29.92,
+      elevation: env.elevation ?? 0,
+      windMph: env.windMph ?? 0,
+      windAngleDeg: env.windAngleDeg ?? 0,
+    };
+    
+    // Calculate what ET would be at baseline conditions
+    // Use current ET as reference, work backwards
+    return calculateWeatherImpact(BASELINE_WEATHER, currentWeather, raceState.predictedET);
+  }, [env, raceState.predictedET]);
+  
+  const [showWeatherBreakdown, setShowWeatherBreakdown] = useState(false);
+  
   // Calculate trend from history
   const etTrend = raceState.roundHistory.length >= 2
     ? raceState.roundHistory[raceState.roundHistory.length - 1].et - 
@@ -640,7 +671,25 @@ export default function RaceDay() {
             
             {/* Air Quality */}
             <div className="card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>Air Conditions</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Air Conditions</span>
+                {weatherImpact && (
+                  <button
+                    onClick={() => setShowWeatherBreakdown(!showWeatherBreakdown)}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: showWeatherBreakdown ? 'var(--color-primary)' : 'transparent',
+                      color: showWeatherBreakdown ? 'white' : 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showWeatherBreakdown ? 'Hide' : 'Show'} ET Impact
+                  </button>
+                )}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', textAlign: 'center' }}>
                 <div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Density Altitude</div>
@@ -673,6 +722,69 @@ export default function RaceDay() {
                   </div>
                 </div>
               </div>
+              
+              {/* Weather Impact Breakdown */}
+              {showWeatherBreakdown && weatherImpact && (
+                <div style={{ 
+                  marginTop: 'var(--space-3)', 
+                  paddingTop: 'var(--space-3)', 
+                  borderTop: '1px solid var(--color-border)',
+                }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: 'var(--space-2)', color: 'var(--color-text-muted)' }}>
+                    ET Change Breakdown (vs 70°F, 29.92", 50% humidity)
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {weatherImpact.impacts.map((impact, idx) => (
+                      <div key={idx} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '4px 8px',
+                        backgroundColor: 'var(--color-surface)',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 500 }}>{impact.factor}</span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                            {impact.baselineValue.toFixed(impact.factor === 'Barometer' ? 2 : 0)} → {impact.currentValue.toFixed(impact.factor === 'Barometer' ? 2 : 0)}
+                            {impact.factor === 'Temperature' && '°F'}
+                            {impact.factor === 'Humidity' && '%'}
+                            {impact.factor === 'Barometer' && '"'}
+                            {impact.factor === 'Wind' && ' mph'}
+                          </span>
+                        </div>
+                        <span style={{ 
+                          fontWeight: 600, 
+                          fontFamily: 'monospace',
+                          color: impact.direction === 'faster' ? '#22c55e' : impact.direction === 'slower' ? '#ef4444' : 'inherit',
+                        }}>
+                          {impact.etChange > 0 ? '+' : ''}{impact.etChange.toFixed(3)}s
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      padding: '6px 8px',
+                      backgroundColor: weatherImpact.totalETChange > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      marginTop: '4px',
+                    }}>
+                      <span>Total Weather Effect</span>
+                      <span style={{ 
+                        fontFamily: 'monospace',
+                        color: weatherImpact.totalETChange > 0 ? '#ef4444' : '#22c55e',
+                      }}>
+                        {weatherImpact.totalETChange > 0 ? '+' : ''}{weatherImpact.totalETChange.toFixed(3)}s
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Quick Log */}

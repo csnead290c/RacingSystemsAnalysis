@@ -41,6 +41,33 @@ export const RunRecordSchema = z.object({
   // Dial-in / Index (for bracket racing)
   dialIn: z.number().optional(),            // Dial-in time
   
+  // Opponent information (for MOV calculation)
+  opponent: z.object({
+    name: z.string().optional(),            // Opponent name/car number
+    dialIn: z.number().optional(),          // Opponent dial-in
+    reactionTime: z.number().optional(),    // Opponent RT
+    et: z.number().optional(),              // Opponent ET
+    mph: z.number().optional(),             // Opponent MPH
+    lane: z.enum(['left', 'right']).optional(),
+  }).optional(),
+  
+  // Margin of Victory calculation
+  marginOfVictory: z.object({
+    winner: z.enum(['you', 'opponent']).optional(),
+    marginSeconds: z.number().optional(),   // Time difference at finish
+    marginFeet: z.number().optional(),      // Distance in feet
+    marginInches: z.number().optional(),    // Distance in inches
+    breakout: z.boolean().optional(),       // Did winner break out?
+  }).optional(),
+  
+  // Run completion (for brake runs)
+  runCompletion: z.object({
+    didBrake: z.boolean().optional(),       // Did driver lift/brake?
+    brakePoint: z.number().optional(),      // Distance (ft) where braking started
+    completedET: z.number().optional(),     // Calculated full-pass ET
+    completedMPH: z.number().optional(),    // Calculated full-pass MPH
+  }).optional(),
+  
   prediction: z
     .object({ et_s: z.number(), mph: z.number() })
     .optional(),
