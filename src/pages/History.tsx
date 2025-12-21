@@ -64,10 +64,23 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
   }, [formData, run.raceLength]);
 
   // Calculate run completion for brake runs
+  // Uses VB6 physics model matching when predicted timeslip is available
   const completionResult = useMemo(() => {
     const actualET = run.raceLength === 'QUARTER' 
       ? parseFloat(formData.quarterMileET) 
       : parseFloat(formData.eighthMileET);
+    
+    // Extract predicted timeslip from run's increments array (from simulation)
+    // Standard VB6 checkpoints: 60ft, 330ft, 660ft (1/8), 1000ft, 1320ft (1/4)
+    const predictedTimeslip = run.increments ? {
+      sixtyFt: run.increments.find(i => i.d_ft === 60)?.t_s,
+      threeThirtyFt: run.increments.find(i => i.d_ft === 330)?.t_s,
+      eighthMileET: run.increments.find(i => i.d_ft === 660)?.t_s,
+      eighthMileMPH: run.increments.find(i => i.d_ft === 660)?.v_mph,
+      thousandFt: run.increments.find(i => i.d_ft === 1000)?.t_s,
+      quarterMileET: run.increments.find(i => i.d_ft === 1320)?.t_s,
+      quarterMileMPH: run.increments.find(i => i.d_ft === 1320)?.v_mph,
+    } : undefined;
     
     return calculateRunCompletion(
       {
@@ -81,9 +94,10 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
       },
       actualET,
       undefined,
-      run.raceLength as 'QUARTER' | 'EIGHTH'
+      run.raceLength as 'QUARTER' | 'EIGHTH',
+      predictedTimeslip  // Pass predicted timeslip for simulation matching
     );
-  }, [formData, run.raceLength]);
+  }, [formData, run.raceLength, run.increments]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -355,6 +369,30 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
                           {completionResult.confidence.toUpperCase()}
                         </div>
                       </div>
+                    </div>
+                    
+                    {/* Show calculation method and fit factor */}
+                    <div style={{ 
+                      marginTop: 'var(--space-2)', 
+                      padding: 'var(--space-2)', 
+                      backgroundColor: completionResult.method === 'simulation' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(100, 100, 100, 0.1)', 
+                      borderRadius: 'var(--radius-sm)', 
+                      fontSize: '0.75rem',
+                      color: 'var(--color-text-muted)',
+                    }}>
+                      {completionResult.method === 'simulation' ? (
+                        <>
+                          ✓ <strong>Physics Model Match:</strong> Using VB6 simulation data
+                          {completionResult.matchedIncremental && (
+                            <span> • Matched at {completionResult.matchedIncremental}</span>
+                          )}
+                          {completionResult.fitFactor && (
+                            <span> • Fit: {((completionResult.fitFactor - 1) * 100).toFixed(1)}% {completionResult.fitFactor > 1 ? 'slower' : 'faster'}</span>
+                          )}
+                        </>
+                      ) : (
+                        <>⚠ Using ratio estimation (no simulation data available)</>
+                      )}
                     </div>
                     
                     {completionResult.etLost > 0.05 && (

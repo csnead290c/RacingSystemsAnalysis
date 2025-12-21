@@ -1,6 +1,19 @@
 /**
  * Run Completion Calculator
- * Estimates what a run would have been if the driver hadn't braked
+ * 
+ * Estimates what a run would have been if the driver hadn't braked.
+ * 
+ * APPROACH: Uses the VB6 exact physics model to match simulated incrementals
+ * to actual run incrementals. This ensures consistency with run prediction.
+ * 
+ * Algorithm:
+ * 1. If we have a simulation result (predicted timeslip), compare predicted
+ *    incrementals to actual incrementals
+ * 2. Find the best "fit factor" - how much faster/slower the actual run is
+ *    vs predicted, using the most reliable early incremental
+ * 3. Apply that factor to the predicted full-pass ET to estimate completion
+ * 
+ * Fallback: If no simulation data available, use empirical split ratios.
  */
 
 export interface IncrementalTimes {
@@ -13,122 +26,257 @@ export interface IncrementalTimes {
   quarterMileMPH?: number;
 }
 
+/**
+ * Predicted timeslip from VB6 simulation
+ * Standard VB6 checkpoints: 60ft, 330ft, 660ft (1/8), 1000ft, 1320ft (1/4)
+ */
+export interface PredictedTimeslip {
+  sixtyFt?: number;
+  threeThirtyFt?: number;
+  eighthMileET?: number;
+  eighthMileMPH?: number;
+  thousandFt?: number;
+  quarterMileET?: number;
+  quarterMileMPH?: number;
+}
+
 export interface RunCompletionResult {
   completedET: number;
   completedMPH: number;
-  brakePoint: number;        // Estimated distance where braking started
-  etLost: number;            // How much ET was lost due to braking
+  brakePoint: number;        // Estimated distance where braking started (ft)
+  etLost: number;            // How much ET was lost due to braking (positive = slower)
   confidence: 'high' | 'medium' | 'low';
+  method: 'simulation' | 'ratio';  // Which method was used
+  fitFactor?: number;        // Ratio of actual to predicted (e.g., 0.98 = 2% faster)
+  matchedIncremental?: string; // Which incremental was matched
 }
 
 /**
- * Standard split time ratios for a typical bracket car
- * These represent typical relationships between incremental times
+ * Standard split time ratios for fallback (typical bracket car)
+ * Used only when no simulation data is available
  */
 const SPLIT_RATIOS = {
-  // 60ft to 1/8 mile ratio
   sixtyToEighth: 2.15,
-  // 330 to 1/8 mile ratio  
   threeThirtyToEighth: 1.38,
-  // 1/8 to 1/4 mile ratio
   eighthToQuarter: 1.55,
-  // 1000ft to 1/4 mile ratio
   thousandToQuarter: 1.10,
-  // 1/8 MPH to 1/4 MPH ratio
   eighthMPHToQuarterMPH: 1.18,
 };
 
 /**
- * Calculate completed run from incremental times
- * Uses the last good incremental to project the full pass
+ * Calculate completed run using VB6 physics model matching
+ * 
+ * @param incrementals - Actual run incremental times
+ * @param predictedTimeslip - Predicted timeslip from VB6 simulation (optional)
+ * @param actualET - Actual (brake) ET if available
+ * @param actualMPH - Actual (brake) MPH if available  
+ * @param raceLength - Race distance
+ * @returns Estimated full-pass result
  */
 export function calculateRunCompletion(
   incrementals: IncrementalTimes,
   actualET?: number,
   _actualMPH?: number,
-  raceLength: 'QUARTER' | 'EIGHTH' = 'QUARTER'
+  raceLength: 'QUARTER' | 'EIGHTH' = 'QUARTER',
+  predictedTimeslip?: PredictedTimeslip
 ): RunCompletionResult | null {
   // Need at least some incremental data
   if (!incrementals.sixtyFt && !incrementals.threeThirtyFt && !incrementals.eighthMileET) {
     return null;
   }
 
+  // If we have simulation data, use the matching approach
+  if (predictedTimeslip) {
+    const result = calculateWithSimulationMatching(
+      incrementals, 
+      predictedTimeslip, 
+      actualET, 
+      raceLength
+    );
+    if (result) return result;
+  }
+
+  // Fallback to ratio-based estimation
+  return calculateWithRatios(incrementals, actualET, raceLength);
+}
+
+/**
+ * Calculate run completion by matching actual incrementals to simulated incrementals
+ * This is the preferred method - uses the exact same physics model as prediction
+ */
+function calculateWithSimulationMatching(
+  actual: IncrementalTimes,
+  predicted: PredictedTimeslip,
+  actualET: number | undefined,
+  raceLength: 'QUARTER' | 'EIGHTH'
+): RunCompletionResult | null {
+  // Find the best match point - use the latest available incremental for highest accuracy
+  // Priority: 1000ft > 1/8 mile > 330ft > 60ft
+  
+  let fitFactor: number;
+  let matchedIncremental: string;
+  let brakePoint: number;
+  let confidence: 'high' | 'medium' | 'low';
+  
+  if (raceLength === 'QUARTER') {
+    // Quarter mile run
+    if (actual.thousandFt && predicted.thousandFt && predicted.thousandFt > 0) {
+      fitFactor = actual.thousandFt / predicted.thousandFt;
+      matchedIncremental = '1000ft';
+      brakePoint = 1100;
+      confidence = 'high';
+    } else if (actual.eighthMileET && predicted.eighthMileET && predicted.eighthMileET > 0) {
+      fitFactor = actual.eighthMileET / predicted.eighthMileET;
+      matchedIncremental = '1/8 mile';
+      brakePoint = 800;
+      confidence = 'high';
+    } else if (actual.threeThirtyFt && predicted.threeThirtyFt && predicted.threeThirtyFt > 0) {
+      fitFactor = actual.threeThirtyFt / predicted.threeThirtyFt;
+      matchedIncremental = '330ft';
+      brakePoint = 500;
+      confidence = 'medium';
+    } else if (actual.sixtyFt && predicted.sixtyFt && predicted.sixtyFt > 0) {
+      fitFactor = actual.sixtyFt / predicted.sixtyFt;
+      matchedIncremental = '60ft';
+      brakePoint = 200;
+      confidence = 'low';
+    } else {
+      return null; // No matching data
+    }
+    
+    // Apply fit factor to predicted quarter mile
+    if (!predicted.quarterMileET || predicted.quarterMileET <= 0) return null;
+    
+    const completedET = predicted.quarterMileET * fitFactor;
+    const completedMPH = predicted.quarterMileMPH 
+      ? predicted.quarterMileMPH / Math.pow(fitFactor, 0.3) // MPH scales inversely with time
+      : estimateMPHFromET(completedET, 1320);
+    
+    return {
+      completedET: Math.round(completedET * 1000) / 1000,
+      completedMPH: Math.round(completedMPH * 100) / 100,
+      brakePoint,
+      etLost: actualET ? Math.round((actualET - completedET) * 1000) / 1000 : 0,
+      confidence,
+      method: 'simulation',
+      fitFactor: Math.round(fitFactor * 10000) / 10000,
+      matchedIncremental,
+    };
+    
+  } else {
+    // Eighth mile run
+    if (actual.threeThirtyFt && predicted.threeThirtyFt && predicted.threeThirtyFt > 0) {
+      fitFactor = actual.threeThirtyFt / predicted.threeThirtyFt;
+      matchedIncremental = '330ft';
+      brakePoint = 500;
+      confidence = 'high';
+    } else if (actual.sixtyFt && predicted.sixtyFt && predicted.sixtyFt > 0) {
+      fitFactor = actual.sixtyFt / predicted.sixtyFt;
+      matchedIncremental = '60ft';
+      brakePoint = 200;
+      confidence = 'medium';
+    } else {
+      return null;
+    }
+    
+    if (!predicted.eighthMileET || predicted.eighthMileET <= 0) return null;
+    
+    const completedET = predicted.eighthMileET * fitFactor;
+    const completedMPH = predicted.eighthMileMPH 
+      ? predicted.eighthMileMPH / Math.pow(fitFactor, 0.3)
+      : estimateMPHFromET(completedET, 660);
+    
+    return {
+      completedET: Math.round(completedET * 1000) / 1000,
+      completedMPH: Math.round(completedMPH * 100) / 100,
+      brakePoint,
+      etLost: actualET ? Math.round((actualET - completedET) * 1000) / 1000 : 0,
+      confidence,
+      method: 'simulation',
+      fitFactor: Math.round(fitFactor * 10000) / 10000,
+      matchedIncremental,
+    };
+  }
+}
+
+/**
+ * Fallback: Calculate run completion using empirical split ratios
+ * Used when no simulation data is available
+ */
+function calculateWithRatios(
+  incrementals: IncrementalTimes,
+  actualET: number | undefined,
+  raceLength: 'QUARTER' | 'EIGHTH'
+): RunCompletionResult | null {
   let completedET: number;
   let completedMPH: number;
   let brakePoint: number;
   let confidence: 'high' | 'medium' | 'low';
 
   if (raceLength === 'EIGHTH') {
-    // For 1/8 mile, use 60ft or 330ft to project
     if (incrementals.threeThirtyFt) {
       completedET = incrementals.threeThirtyFt * SPLIT_RATIOS.threeThirtyToEighth;
-      brakePoint = 500; // Braked after 330
+      brakePoint = 500;
       confidence = 'high';
     } else if (incrementals.sixtyFt) {
       completedET = incrementals.sixtyFt * SPLIT_RATIOS.sixtyToEighth;
-      brakePoint = 200; // Braked early
+      brakePoint = 200;
       confidence = 'medium';
     } else {
       return null;
     }
-    
-    // Estimate 1/8 MPH from ET (rough approximation)
-    completedMPH = 660 / completedET * 0.68; // Rough conversion
+    completedMPH = estimateMPHFromET(completedET, 660);
     
   } else {
-    // For 1/4 mile
     if (incrementals.thousandFt && incrementals.eighthMileET) {
-      // Best case: have 1000ft time
       completedET = incrementals.thousandFt * SPLIT_RATIOS.thousandToQuarter;
-      brakePoint = 1100; // Braked after 1000ft
+      brakePoint = 1100;
       confidence = 'high';
-      
-      // Use 1/8 MPH to estimate 1/4 MPH
-      if (incrementals.eighthMileMPH) {
-        completedMPH = incrementals.eighthMileMPH * SPLIT_RATIOS.eighthMPHToQuarterMPH;
-      } else {
-        completedMPH = 1320 / completedET * 0.68;
-      }
+      completedMPH = incrementals.eighthMileMPH 
+        ? incrementals.eighthMileMPH * SPLIT_RATIOS.eighthMPHToQuarterMPH
+        : estimateMPHFromET(completedET, 1320);
     } else if (incrementals.eighthMileET) {
-      // Have 1/8 mile time
       completedET = incrementals.eighthMileET * SPLIT_RATIOS.eighthToQuarter;
-      brakePoint = 800; // Braked after 1/8
+      brakePoint = 800;
       confidence = 'high';
-      
-      if (incrementals.eighthMileMPH) {
-        completedMPH = incrementals.eighthMileMPH * SPLIT_RATIOS.eighthMPHToQuarterMPH;
-      } else {
-        completedMPH = 1320 / completedET * 0.68;
-      }
+      completedMPH = incrementals.eighthMileMPH 
+        ? incrementals.eighthMileMPH * SPLIT_RATIOS.eighthMPHToQuarterMPH
+        : estimateMPHFromET(completedET, 1320);
     } else if (incrementals.threeThirtyFt) {
-      // Only have 330ft
       const estimatedEighth = incrementals.threeThirtyFt * SPLIT_RATIOS.threeThirtyToEighth;
       completedET = estimatedEighth * SPLIT_RATIOS.eighthToQuarter;
       brakePoint = 500;
       confidence = 'medium';
-      completedMPH = 1320 / completedET * 0.68;
+      completedMPH = estimateMPHFromET(completedET, 1320);
     } else if (incrementals.sixtyFt) {
-      // Only have 60ft - lowest confidence
       const estimatedEighth = incrementals.sixtyFt * SPLIT_RATIOS.sixtyToEighth;
       completedET = estimatedEighth * SPLIT_RATIOS.eighthToQuarter;
       brakePoint = 200;
       confidence = 'low';
-      completedMPH = 1320 / completedET * 0.68;
+      completedMPH = estimateMPHFromET(completedET, 1320);
     } else {
       return null;
     }
   }
 
-  // Calculate ET lost
-  const etLost = actualET ? actualET - completedET : 0;
-
   return {
     completedET: Math.round(completedET * 1000) / 1000,
     completedMPH: Math.round(completedMPH * 100) / 100,
     brakePoint,
-    etLost: Math.round(etLost * 1000) / 1000,
+    etLost: actualET ? Math.round((actualET - completedET) * 1000) / 1000 : 0,
     confidence,
+    method: 'ratio',
   };
+}
+
+/**
+ * Estimate MPH from ET using empirical formula
+ * Based on relationship: MPH ≈ distance / ET * conversion_factor
+ */
+function estimateMPHFromET(et_s: number, distance_ft: number): number {
+  // Empirical factor for drag racing (accounts for acceleration profile)
+  const factor = distance_ft === 660 ? 0.68 : 0.68;
+  return distance_ft / et_s * factor;
 }
 
 /**
