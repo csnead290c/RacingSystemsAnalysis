@@ -681,8 +681,8 @@ export interface ThrottleStopParams {
   rampTime_s?: number;       // Time to ramp (default: instant)
 }
 
-// NOTE: Throttle stop functionality removed from VB6-exact mode to match original VB6 code.
-// The ThrottleStopParams interface is kept for API compatibility but not used in physics.
+// RSA Extension: Throttle stop reduces HP during the specified time window.
+// This is NOT part of original VB6 code - it's an RSA addition for bracket racing.
 
 /**
  * Execute one VB6 simulation step with full iteration loop.
@@ -701,7 +701,7 @@ export function vb6SimulationStep(
   vehicle: VB6VehicleParams,
   env: VB6EnvParams,
   TSMax: number,
-  _throttleStop?: ThrottleStopParams  // RSA extension - not used in VB6-exact mode
+  throttleStop?: ThrottleStopParams  // RSA extension for bracket racing
 ): VB6StepComputed {
   const iGear = state.Gear;
   
@@ -1014,7 +1014,22 @@ export function vb6SimulationStep(
     // ========================================================================
     HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
     HP = M.div(M.mul(f(vehicle.HPTQMult), f(HP)), f(env.hpc));
-    HPSave = HP;  // VB6: HPSave = HP (BEFORE ClutchSlip, BEFORE any RSA additions)
+    
+    // RSA Extension: Apply throttle stop HP reduction
+    // throttlePct is the throttle opening percentage (0-100)
+    // 0% = idle (no power), 100% = full throttle (no reduction)
+    if (throttleStop?.enabled) {
+      const currentTime = state.time_s;
+      const stopStart = throttleStop.activateTime_s;
+      const stopEnd = stopStart + throttleStop.duration_s;
+      
+      if (currentTime >= stopStart && currentTime < stopEnd) {
+        // Apply throttle reduction: HP * (throttlePct / 100)
+        HP = M.mul(f(HP), f(throttleStop.throttlePct / 100));
+      }
+    }
+    
+    HPSave = HP;  // VB6: HPSave = HP (BEFORE ClutchSlip, AFTER throttle stop)
     HP = M.mul(f(HP), f(ClutchSlip));
     
     // ========================================================================
