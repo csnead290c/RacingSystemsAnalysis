@@ -630,3 +630,128 @@ export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
   'track': 'Track',
   'other': 'Other',
 };
+
+// ============================================================================
+// PROMOTED EVENTS (Admin-Approved, Community Events)
+// ============================================================================
+
+export const PromotedEventStatusEnum = z.enum([
+  'pending',     // Awaiting admin approval
+  'approved',    // Approved and visible to all users
+  'rejected',    // Rejected by admin
+  'expired',     // Event date has passed
+]);
+
+export type PromotedEventStatus = z.infer<typeof PromotedEventStatusEnum>;
+
+export const PromotedEventSchema = z.object({
+  id: z.string(),
+  
+  // Event Details
+  name: z.string().min(1),
+  description: z.string().optional(),
+  trackName: z.string().min(1),
+  trackLocation: z.string().optional(), // City, State
+  
+  // Dates
+  startDate: z.number(),
+  endDate: z.number().optional(),
+  registrationDeadline: z.number().optional(),
+  
+  // Event Info
+  eventType: z.enum(['bracket', 'index', 'heads-up', 'test-n-tune', 'points-race', 'special']),
+  classes: z.array(z.string()).optional(), // Classes available
+  entryFee: z.number().nonnegative().optional(),
+  
+  // Contact & Links
+  contactName: z.string().optional(),
+  contactEmail: z.string().email().optional(),
+  contactPhone: z.string().optional(),
+  website: z.string().url().optional(),
+  registrationUrl: z.string().url().optional(),
+  
+  // Promotion Details
+  isPromoted: z.boolean().default(false), // Paid promotion
+  promotionTier: z.enum(['basic', 'featured', 'spotlight']).optional(),
+  promotionExpires: z.number().optional(),
+  
+  // Admin
+  status: PromotedEventStatusEnum.default('pending'),
+  submittedBy: z.string(), // User ID who submitted
+  submittedAt: z.number(),
+  reviewedBy: z.string().optional(), // Admin who approved/rejected
+  reviewedAt: z.number().optional(),
+  rejectionReason: z.string().optional(),
+  
+  // Tracking
+  viewCount: z.number().default(0),
+  addedToCalendarCount: z.number().default(0),
+  
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export type PromotedEvent = z.infer<typeof PromotedEventSchema>;
+
+export function createPromotedEvent(data: {
+  name: string;
+  trackName: string;
+  startDate: number;
+  submittedBy: string;
+  description?: string;
+  trackLocation?: string;
+  endDate?: number;
+  registrationDeadline?: number;
+  eventType?: PromotedEvent['eventType'];
+  classes?: string[];
+  entryFee?: number;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  website?: string;
+  registrationUrl?: string;
+}): PromotedEvent {
+  const now = Date.now();
+  return {
+    id: crypto.randomUUID(),
+    name: data.name,
+    trackName: data.trackName,
+    startDate: data.startDate,
+    submittedBy: data.submittedBy,
+    description: data.description,
+    trackLocation: data.trackLocation,
+    endDate: data.endDate,
+    registrationDeadline: data.registrationDeadline,
+    eventType: data.eventType || 'bracket',
+    classes: data.classes,
+    entryFee: data.entryFee,
+    contactName: data.contactName,
+    contactEmail: data.contactEmail,
+    contactPhone: data.contactPhone,
+    website: data.website,
+    registrationUrl: data.registrationUrl,
+    isPromoted: false,
+    status: 'pending',
+    submittedAt: now,
+    viewCount: 0,
+    addedToCalendarCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export const PROMOTED_EVENT_TYPE_LABELS: Record<PromotedEvent['eventType'], string> = {
+  'bracket': 'Bracket Racing',
+  'index': 'Index Racing',
+  'heads-up': 'Heads-Up',
+  'test-n-tune': 'Test & Tune',
+  'points-race': 'Points Race',
+  'special': 'Special Event',
+};
+
+export const PROMOTED_EVENT_STATUS_LABELS: Record<PromotedEventStatus, string> = {
+  'pending': 'Pending Review',
+  'approved': 'Approved',
+  'rejected': 'Rejected',
+  'expired': 'Expired',
+};

@@ -14,10 +14,11 @@ import type {
   Checklist,
   ChecklistCompletion,
   Budget,
+  PromotedEvent,
 } from '../domain/schemas/teamManagement.schema';
 
 const DB_NAME = 'rsa-team-management';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped for promotedEvents store
 
 interface TeamManagementDB {
   parts: Part;
@@ -29,6 +30,7 @@ interface TeamManagementDB {
   checklists: Checklist;
   checklistCompletions: ChecklistCompletion;
   budgets: Budget;
+  promotedEvents: PromotedEvent;
 }
 
 let dbPromise: Promise<IDBPDatabase<TeamManagementDB>> | null = null;
@@ -102,6 +104,14 @@ function getDB(): Promise<IDBPDatabase<TeamManagementDB>> {
         if (!db.objectStoreNames.contains('budgets')) {
           const budgetsStore = db.createObjectStore('budgets', { keyPath: 'id' });
           budgetsStore.createIndex('by-season', 'season');
+        }
+
+        // Promoted Events store (v2)
+        if (!db.objectStoreNames.contains('promotedEvents')) {
+          const promotedStore = db.createObjectStore('promotedEvents', { keyPath: 'id' });
+          promotedStore.createIndex('by-status', 'status');
+          promotedStore.createIndex('by-submitter', 'submittedBy');
+          promotedStore.createIndex('by-date', 'startDate');
         }
       },
     });
@@ -594,5 +604,102 @@ export const teamAnalytics = {
       otherExpenses,
       totalInvestment: partsCost + maintenanceCost + otherExpenses,
     };
+  },
+};
+
+// ============================================================================
+// PROMOTED EVENTS STORAGE (Community Events with Admin Approval)
+// ============================================================================
+
+export const promotedEventsStorage = {
+  async getAll(): Promise<PromotedEvent[]> {
+    const db = await getDB();
+    // Check if store exists (may not in older DB versions)
+    if (!db.objectStoreNames.contains('promotedEvents')) {
+      return [];
+    }
+    return db.getAll('promotedEvents');
+  },
+
+  async getApproved(): Promise<PromotedEvent[]> {
+    const all = await this.getAll();
+    const now = Date.now();
+    return all.filter(e => e.status === 'approved' && e.startDate >= now);
+  },
+
+  async getPending(): Promise<PromotedEvent[]> {
+    const all = await this.getAll();
+    return all.filter(e => e.status === 'pending');
+  },
+
+  async getBySubmitter(userId: string): Promise<PromotedEvent[]> {
+    const all = await this.getAll();
+    return all.filter(e => e.submittedBy === userId);
+  },
+
+  async get(id: string): Promise<PromotedEvent | undefined> {
+    const db = await getDB();
+    if (!db.objectStoreNames.contains('promotedEvents')) {
+      return undefined;
+    }
+    return db.get('promotedEvents', id);
+  },
+
+  async save(event: PromotedEvent): Promise<void> {
+    const db = await getDB();
+    // Create store if it doesn't exist (for DB migrations)
+    if (!db.objectStoreNames.contains('promotedEvents')) {
+      // Store will be created on next DB version upgrade
+      console.warn('promotedEvents store not found - upgrade DB version');
+      return;
+    }
+    await db.put('promotedEvents', event);
+  },
+
+  async delete(id: string): Promise<void> {
+    const db = await getDB();
+    if (!db.objectStoreNames.contains('promotedEvents')) {
+      return;
+    }
+    await db.delete('promotedEvents', id);
+  },
+
+  async approve(id: string, adminId: string): Promise<void> {
+    const event = await this.get(id);
+    if (!event) return;
+    
+    event.status = 'approved';
+    event.reviewedBy = adminId;
+    event.reviewedAt = Date.now();
+    event.updatedAt = Date.now();
+    await this.save(event);
+  },
+
+  async reject(id: string, adminId: string, reason?: string): Promise<void> {
+    const event = await this.get(id);
+    if (!event) return;
+    
+    event.status = 'rejected';
+    event.reviewedBy = adminId;
+    event.reviewedAt = Date.now();
+    event.rejectionReason = reason;
+    event.updatedAt = Date.now();
+    await this.save(event);
+  },
+
+  async incrementViewCount(id: string): Promise<void> {
+    const event = await this.get(id);
+    if (!event) return;
+    
+    event.viewCount = (event.viewCount || 0) + 1;
+    await this.save(event);
+  },
+
+  async incrementAddedCount(id: string): Promise<void> {
+    const event = await this.get(id);
+    if (!event) return;
+    
+    event.addedToCalendarCount = (event.addedToCalendarCount || 0) + 1;
+    await this.save(event);
   },
 };

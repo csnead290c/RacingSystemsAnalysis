@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Page from '../shared/components/Page';
+import PromotedEvents from '../shared/components/PromotedEvents';
 import { eventsStorage } from '../state/teamManagement';
 import {
   type RaceEvent,
@@ -785,6 +786,14 @@ function Events({ embedded = false }: EventsProps) {
           </div>
         </div>
       )}
+      
+      {/* Community Promoted Events Section */}
+      <div className="card" style={{ marginTop: '24px', padding: '20px' }}>
+        <PromotedEvents onEventAdded={() => {
+          // Refresh events list when user adds a promoted event to their calendar
+          eventsStorage.getAll().then(setEvents);
+        }} />
+      </div>
     </>
   );
   
