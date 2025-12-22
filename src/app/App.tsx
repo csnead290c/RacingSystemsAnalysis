@@ -29,6 +29,8 @@ import Ladder from '../pages/Ladder';
 import Pricing from '../pages/Pricing';
 import Register from '../pages/Register';
 import TeamManagement from '../pages/TeamManagement';
+import PartsInventory from '../pages/PartsInventory';
+import Events from '../pages/Events';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -254,6 +256,16 @@ function Navigation() {
         <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={() => setMobileMenuOpen(false)}>
           History
         </Link>
+      )}
+      {isLoggedIn && (
+        <>
+          <Link to="/parts" style={navLinkStyle(isActive('/parts'))} onClick={() => setMobileMenuOpen(false)}>
+            Parts
+          </Link>
+          <Link to="/events" style={navLinkStyle(isActive('/events'))} onClick={() => setMobileMenuOpen(false)}>
+            Events
+          </Link>
+        </>
       )}
       <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={() => setMobileMenuOpen(false)}>
         About
@@ -496,6 +508,20 @@ function App() {
             <Route path="/team" element={
               <ProtectedRoute>
                 <TeamManagement />
+              </ProtectedRoute>
+            } />
+            
+            {/* Team Management - Parts & Inventory */}
+            <Route path="/parts" element={
+              <ProtectedRoute>
+                <PartsInventory />
+              </ProtectedRoute>
+            } />
+            
+            {/* Team Management - Events Calendar */}
+            <Route path="/events" element={
+              <ProtectedRoute>
+                <Events />
               </ProtectedRoute>
             } />
             
