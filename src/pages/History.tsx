@@ -435,6 +435,8 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
   );
 }
 
+type ViewMode = 'table' | 'logbook';
+
 function History() {
   const [runs, setRuns] = useState<RunRecordV1[]>([]);
   const [filteredRuns, setFilteredRuns] = useState<RunRecordV1[]>([]);
@@ -448,6 +450,7 @@ function History() {
   const [editingRun, setEditingRun] = useState<RunRecordV1 | null>(null);
   const [similarRunsTarget, setSimilarRunsTarget] = useState<RunRecordV1 | null>(null);
   const [showSplitAnalysis, setShowSplitAnalysis] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const loadRuns = async () => {
     setLoading(true);
@@ -729,6 +732,25 @@ function History() {
               <option value="QUARTER">1/4 Mile</option>
             </select>
           </div>
+          <div>
+            <label className="label">View Mode</label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                className={`btn btn-small ${viewMode === 'table' ? '' : 'btn-secondary'}`}
+                onClick={() => setViewMode('table')}
+                title="Table view"
+              >
+                Table
+              </button>
+              <button
+                className={`btn btn-small ${viewMode === 'logbook' ? '' : 'btn-secondary'}`}
+                onClick={() => setViewMode('logbook')}
+                title="Event Logbook (spreadsheet)"
+              >
+                Logbook
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -743,6 +765,91 @@ function History() {
               ? 'No runs logged yet. Click "Log New Run" to get started.'
               : 'No runs match your filters.'}
           </p>
+        </div>
+      ) : viewMode === 'logbook' ? (
+        /* Event Logbook Spreadsheet View - CCP Style */
+        <div className="card" style={{ padding: '16px', overflowX: 'auto' }}>
+          <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '12px', color: 'var(--color-accent)' }}>
+            Event Logbook - {filteredRuns.length} Runs
+          </div>
+          <div style={{ display: 'flex', gap: '2px', overflowX: 'auto' }}>
+            {/* Row Labels Column */}
+            <div style={{ minWidth: '120px', flexShrink: 0, fontSize: '0.7rem' }}>
+              <div style={{ height: '28px', display: 'flex', alignItems: 'center', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Field</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>Date</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>Time</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>Vehicle</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', fontWeight: 600, marginTop: '4px', borderTop: '1px solid var(--color-border)' }}>Timing</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>R/T</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>60 ft</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>330 ft</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>1/8 ET</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>1/8 MPH</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>1000 ft</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>1/4 ET</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>1/4 MPH</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', fontWeight: 600, marginTop: '4px', borderTop: '1px solid var(--color-border)' }}>Weather</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>Temp °F</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>Humid %</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>Baro</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>DA</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', fontWeight: 600, marginTop: '4px', borderTop: '1px solid var(--color-border)' }}>Splits</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>60-330</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>330-660</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-surface)' }}>660-1000</div>
+              <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>1000-1320</div>
+            </div>
+            
+            {/* Run Columns */}
+            {filteredRuns.slice(0, 10).map((run, idx) => {
+              const splits = getSplitIntervals(run);
+              const da = run.env ? calculateDensityAltitude(
+                run.env.temperatureF ?? 70,
+                run.env.barometerInHg ?? 29.92,
+                run.env.humidityPct ?? 50,
+                run.env.elevation ?? 0
+              ) : null;
+              
+              return (
+                <div key={run.id} style={{ 
+                  minWidth: '90px', 
+                  flexShrink: 0, 
+                  fontSize: '0.7rem',
+                  borderLeft: '1px solid var(--color-border)',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>Run {idx + 1}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)' }}>{new Date(run.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{new Date(run.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getVehicleName(run.vehicleId).substring(0, 10)}</div>
+                  <div style={{ height: '24px', marginTop: '4px', borderTop: '1px solid var(--color-border)' }}></div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', fontFamily: 'monospace' }}>{run.reactionTime?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>{run.sixtyFt?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', fontFamily: 'monospace' }}>{run.threeThirtyFt?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>{run.eighthMileET?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', fontFamily: 'monospace' }}>{run.eighthMileMPH?.toFixed(2) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>{run.thousandFt?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', fontFamily: 'monospace', fontWeight: 600, color: '#10b981' }}>{run.quarterMileET?.toFixed(3) || run.outcome?.slipET_s?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>{run.quarterMileMPH?.toFixed(2) || run.outcome?.slipMPH?.toFixed(2) || '—'}</div>
+                  <div style={{ height: '24px', marginTop: '4px', borderTop: '1px solid var(--color-border)' }}></div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)' }}>{run.env?.temperatureF?.toFixed(0) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{run.env?.humidityPct?.toFixed(0) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)' }}>{run.env?.barometerInHg?.toFixed(2) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{da?.toFixed(0) || '—'}</div>
+                  <div style={{ height: '24px', marginTop: '4px', borderTop: '1px solid var(--color-border)' }}></div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', fontFamily: 'monospace' }}>{splits.sixtyToThreeThirty?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>{splits.threeThirtyToEighth?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', fontFamily: 'monospace' }}>{splits.eighthToThousand?.toFixed(3) || '—'}</div>
+                  <div style={{ height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>{splits.thousandToQuarter?.toFixed(3) || '—'}</div>
+                </div>
+              );
+            })}
+          </div>
+          {filteredRuns.length > 10 && (
+            <div style={{ marginTop: '12px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+              Showing 10 of {filteredRuns.length} runs. Use filters to narrow results.
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
