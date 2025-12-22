@@ -751,8 +751,51 @@ function History() {
               </button>
             </div>
           </div>
+          {/* Print Button */}
+          <button
+            className="btn btn-small btn-secondary"
+            onClick={() => window.print()}
+            title="Print current view"
+            style={{ marginLeft: '8px' }}
+          >
+            🖨️ Print
+          </button>
         </div>
       </div>
+      
+      {/* Print Styles */}
+      <style>{`
+        @media print {
+          /* Hide non-essential elements */
+          nav, header, footer, .btn, select, input, 
+          .mobile-menu-btn, .mobile-nav { display: none !important; }
+          
+          /* Reset background colors for printing */
+          body, .card, * { 
+            background: white !important; 
+            color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* Show logbook view nicely */
+          .logbook-print-area {
+            width: 100% !important;
+            overflow: visible !important;
+          }
+          
+          /* Page setup */
+          @page {
+            size: landscape;
+            margin: 0.5in;
+          }
+          
+          /* Make monospace font darker */
+          [style*="monospace"] {
+            font-weight: bold !important;
+          }
+        }
+      `}</style>
 
       {loading ? (
         <div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>
