@@ -15,6 +15,7 @@ import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
+import { getAverage60ft } from '../state/storage';
 import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 import { useSubscription } from '../domain/config/useSubscription';
@@ -101,6 +102,14 @@ function Predict() {
   // Vehicle editor popup state
   const [showVehicleEditor, setShowVehicleEditor] = useState(false);
   
+  // Average 60ft from database (CCP-style feature)
+  const [avg60ftStats, setAvg60ftStats] = useState<{
+    average: number | null;
+    count: number;
+    best: number | null;
+    worst: number | null;
+  } | null>(null);
+  
   // Filter race lengths based on subscription tier
   const allowedRaceLengths = (Object.keys(DISTANCES) as RaceLength[]).filter(key => {
     const info = RACE_LENGTH_INFO[key];
@@ -183,6 +192,15 @@ function Predict() {
     };
     loadAndSelectVehicle();
   }, [location.state]);
+
+  // Load average 60ft stats when vehicle changes
+  useEffect(() => {
+    if (vehicle?.id) {
+      getAverage60ft(vehicle.id).then(setAvg60ftStats).catch(console.error);
+    } else {
+      setAvg60ftStats(null);
+    }
+  }, [vehicle?.id]);
 
   // Debounce timer ref
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -888,6 +906,21 @@ function Predict() {
                   <span className="et-slip-label">60'</span>
                   <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
                 </div>
+                {/* Average 60ft from database - CCP feature */}
+                {avg60ftStats && avg60ftStats.average && (
+                  <div style={{ 
+                    fontSize: '7px', 
+                    color: '#666', 
+                    textAlign: 'center', 
+                    marginTop: '-2px', 
+                    marginBottom: '4px',
+                    padding: '2px 4px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderRadius: '2px',
+                  }}>
+                    DB Avg: {avg60ftStats.average.toFixed(3)}s ({avg60ftStats.count} runs) | Best: {avg60ftStats.best?.toFixed(3)}s
+                  </div>
+                )}
                 <div className="et-slip-row">
                   <span className="et-slip-label">330'</span>
                   <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
