@@ -31,6 +31,8 @@ import Register from '../pages/Register';
 import TeamManagement from '../pages/TeamManagement';
 import PartsInventory from '../pages/PartsInventory';
 import Events from '../pages/Events';
+import Maintenance from '../pages/Maintenance';
+import Expenses from '../pages/Expenses';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -262,8 +264,14 @@ function Navigation() {
           <Link to="/parts" style={navLinkStyle(isActive('/parts'))} onClick={() => setMobileMenuOpen(false)}>
             Parts
           </Link>
+          <Link to="/maintenance" style={navLinkStyle(isActive('/maintenance'))} onClick={() => setMobileMenuOpen(false)}>
+            Service
+          </Link>
           <Link to="/events" style={navLinkStyle(isActive('/events'))} onClick={() => setMobileMenuOpen(false)}>
             Events
+          </Link>
+          <Link to="/expenses" style={navLinkStyle(isActive('/expenses'))} onClick={() => setMobileMenuOpen(false)}>
+            $$$
           </Link>
         </>
       )}
@@ -522,6 +530,20 @@ function App() {
             <Route path="/events" element={
               <ProtectedRoute>
                 <Events />
+              </ProtectedRoute>
+            } />
+            
+            {/* Team Management - Maintenance Log */}
+            <Route path="/maintenance" element={
+              <ProtectedRoute>
+                <Maintenance />
+              </ProtectedRoute>
+            } />
+            
+            {/* Team Management - Expenses */}
+            <Route path="/expenses" element={
+              <ProtectedRoute>
+                <Expenses />
               </ProtectedRoute>
             } />
             
