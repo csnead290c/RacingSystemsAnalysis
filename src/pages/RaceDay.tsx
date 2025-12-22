@@ -9,7 +9,7 @@ import type { Vehicle } from '../domain/schemas/vehicle.schema';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
 import { useSubscription } from '../domain/config/useSubscription';
 import { fixtureToSimInputs } from '../domain/physics/vb6/fixtures';
-import { storage } from '../state/storage';
+import { storage, getAverage60ft } from '../state/storage';
 import type { RaceLength } from '../domain/config/raceLengths';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import { calculateWeatherImpact, type WeatherConditions } from '../domain/physics/calculations/weatherImpact';
@@ -149,6 +149,14 @@ export default function RaceDay() {
   const [manualWeather, setManualWeather] = useState(false);
   const [lastSimResult, setLastSimResult] = useState<SimResult | null>(null);
   
+  // Average 60ft from database (CCP-style feature)
+  const [avg60ftStats, setAvg60ftStats] = useState<{
+    average: number | null;
+    count: number;
+    best: number | null;
+    worst: number | null;
+  } | null>(null);
+  
   // Quick entry for last run - full incrementals
   const [quickRoundType, setQuickRoundType] = useState('Test');
   const [quickLane, setQuickLane] = useState<'left' | 'right'>('left');
@@ -212,6 +220,15 @@ export default function RaceDay() {
     loadVehicles().then(setVehicles);
     setTracks(getAllTracks());
   }, []);
+  
+  // Load average 60ft stats when vehicle changes
+  useEffect(() => {
+    if (selectedVehicle?.id) {
+      getAverage60ft(selectedVehicle.id).then(setAvg60ftStats).catch(console.error);
+    } else {
+      setAvg60ftStats(null);
+    }
+  }, [selectedVehicle?.id]);
   
   // Fetch weather
   const fetchWeather = useCallback(async () => {
@@ -738,6 +755,79 @@ export default function RaceDay() {
               <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: 'var(--space-2)' }}>
                 {selectedVehicle ? selectedVehicle.name : 'Select a vehicle to see prediction'}
               </div>
+              
+              {/* Full Timeslip Prediction */}
+              {lastSimResult?.timeslip && lastSimResult.timeslip.length > 0 && (
+                <div style={{ 
+                  marginTop: 'var(--space-3)', 
+                  paddingTop: 'var(--space-3)',
+                  borderTop: '1px solid var(--color-border)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '8px',
+                  textAlign: 'center',
+                }}>
+                  {/* 60ft */}
+                  <div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>60'</div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem' }}>
+                      {lastSimResult.timeslip.find(t => t.d_ft === 60)?.t_s.toFixed(3) || '—'}
+                    </div>
+                  </div>
+                  {/* 330ft */}
+                  <div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>330'</div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem' }}>
+                      {lastSimResult.timeslip.find(t => t.d_ft === 330)?.t_s.toFixed(3) || '—'}
+                    </div>
+                  </div>
+                  {/* 1/8 */}
+                  <div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>1/8</div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem' }}>
+                      {lastSimResult.timeslip.find(t => t.d_ft === 660)?.t_s.toFixed(3) || '—'}
+                    </div>
+                  </div>
+                  {raceLength === 'QUARTER' && (
+                    <>
+                      {/* 1000ft */}
+                      <div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>1000'</div>
+                        <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem' }}>
+                          {lastSimResult.timeslip.find(t => t.d_ft === 1000)?.t_s.toFixed(3) || '—'}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {/* MPH */}
+                  <div style={{ gridColumn: raceLength === 'QUARTER' ? 'span 4' : 'span 1' }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>MPH</div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: '#22c55e' }}>
+                      {lastSimResult.mph?.toFixed(2) || '—'}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Average 60ft from Database */}
+              {avg60ftStats && avg60ftStats.average && (
+                <div style={{ 
+                  marginTop: 'var(--space-3)', 
+                  padding: '8px 12px',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8rem',
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-accent)' }}>
+                    Your Avg 60' from {avg60ftStats.count} Runs
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+                    <span>Avg: <strong style={{ fontFamily: 'monospace' }}>{avg60ftStats.average.toFixed(3)}s</strong></span>
+                    <span>Best: <strong style={{ fontFamily: 'monospace', color: '#22c55e' }}>{avg60ftStats.best?.toFixed(3)}s</strong></span>
+                    <span>Worst: <strong style={{ fontFamily: 'monospace', color: '#ef4444' }}>{avg60ftStats.worst?.toFixed(3)}s</strong></span>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Air Quality */}

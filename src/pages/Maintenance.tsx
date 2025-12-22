@@ -37,7 +37,11 @@ const MAINTENANCE_CATEGORY_LABELS: Record<MaintenanceCategory, string> = {
   'inspection': 'Inspection',
 };
 
-function Maintenance() {
+interface MaintenanceProps {
+  embedded?: boolean;
+}
+
+function Maintenance({ embedded = false }: MaintenanceProps) {
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [schedules, setSchedules] = useState<ServiceSchedule[]>([]);
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
@@ -209,17 +213,16 @@ function Maintenance() {
   };
 
   if (loading) {
-    return (
-      <Page title="Maintenance Log">
-        <div className="text-center" style={{ padding: '4rem' }}>
-          <p>Loading maintenance records...</p>
-        </div>
-      </Page>
+    const loadingContent = (
+      <div className="text-center" style={{ padding: '4rem' }}>
+        <p>Loading maintenance records...</p>
+      </div>
     );
+    return embedded ? loadingContent : <Page title="Maintenance Log">{loadingContent}</Page>;
   }
 
-  return (
-    <Page title="Maintenance Log">
+  const content = (
+    <>
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="card card-compact" style={{ textAlign: 'center' }}>
@@ -615,8 +618,11 @@ function Maintenance() {
           </div>
         </div>
       )}
-    </Page>
+    </>
   );
+  
+  if (embedded) return content;
+  return <Page title="Maintenance Log">{content}</Page>;
 }
 
 export default Maintenance;

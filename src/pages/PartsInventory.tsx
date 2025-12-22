@@ -19,7 +19,11 @@ import {
 type ViewMode = 'grid' | 'list';
 type FilterCategory = PartCategory | 'all';
 
-function PartsInventory() {
+interface PartsInventoryProps {
+  embedded?: boolean;
+}
+
+function PartsInventory({ embedded = false }: PartsInventoryProps) {
   const [parts, setParts] = useState<Part[]>([]);
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,17 +176,16 @@ function PartsInventory() {
   };
 
   if (loading) {
-    return (
-      <Page title="Parts & Inventory">
-        <div className="text-center" style={{ padding: '4rem' }}>
-          <p>Loading parts...</p>
-        </div>
-      </Page>
+    const loadingContent = (
+      <div className="text-center" style={{ padding: '4rem' }}>
+        <p>Loading parts...</p>
+      </div>
     );
+    return embedded ? loadingContent : <Page title="Parts & Inventory">{loadingContent}</Page>;
   }
 
-  return (
-    <Page title="Parts & Inventory">
+  const content = (
+    <>
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="card card-compact" style={{ textAlign: 'center' }}>
@@ -639,6 +642,17 @@ function PartsInventory() {
           </div>
         </div>
       )}
+    </>
+  );
+  
+  // Return without Page wrapper when embedded in TeamHub
+  if (embedded) {
+    return content;
+  }
+  
+  return (
+    <Page title="Parts & Inventory">
+      {content}
     </Page>
   );
 }

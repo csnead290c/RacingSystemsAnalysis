@@ -14,7 +14,11 @@ import {
   createExpense,
 } from '../domain/schemas/teamManagement.schema';
 
-function Expenses() {
+interface ExpensesProps {
+  embedded?: boolean;
+}
+
+function Expenses({ embedded = false }: ExpensesProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,17 +197,16 @@ function Expenses() {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   if (loading) {
-    return (
-      <Page title="Expenses">
-        <div className="text-center" style={{ padding: '4rem' }}>
-          <p>Loading expenses...</p>
-        </div>
-      </Page>
+    const loadingContent = (
+      <div className="text-center" style={{ padding: '4rem' }}>
+        <p>Loading expenses...</p>
+      </div>
     );
+    return embedded ? loadingContent : <Page title="Expenses">{loadingContent}</Page>;
   }
 
-  return (
-    <Page title="Expenses">
+  const content = (
+    <>
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* Total */}
@@ -567,8 +570,11 @@ function Expenses() {
           </div>
         </div>
       )}
-    </Page>
+    </>
   );
+  
+  if (embedded) return content;
+  return <Page title="Expenses">{content}</Page>;
 }
 
 export default Expenses;

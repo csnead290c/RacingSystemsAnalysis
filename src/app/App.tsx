@@ -28,11 +28,7 @@ import TechCard from '../pages/TechCard';
 import Ladder from '../pages/Ladder';
 import Pricing from '../pages/Pricing';
 import Register from '../pages/Register';
-import TeamManagement from '../pages/TeamManagement';
-import PartsInventory from '../pages/PartsInventory';
-import Events from '../pages/Events';
-import Maintenance from '../pages/Maintenance';
-import Expenses from '../pages/Expenses';
+import TeamHub from '../pages/TeamHub';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
@@ -260,20 +256,9 @@ function Navigation() {
         </Link>
       )}
       {isLoggedIn && (
-        <>
-          <Link to="/parts" style={navLinkStyle(isActive('/parts'))} onClick={() => setMobileMenuOpen(false)}>
-            Parts
-          </Link>
-          <Link to="/maintenance" style={navLinkStyle(isActive('/maintenance'))} onClick={() => setMobileMenuOpen(false)}>
-            Service
-          </Link>
-          <Link to="/events" style={navLinkStyle(isActive('/events'))} onClick={() => setMobileMenuOpen(false)}>
-            Events
-          </Link>
-          <Link to="/expenses" style={navLinkStyle(isActive('/expenses'))} onClick={() => setMobileMenuOpen(false)}>
-            $$$
-          </Link>
-        </>
+        <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={() => setMobileMenuOpen(false)}>
+          Team
+        </Link>
       )}
       <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={() => setMobileMenuOpen(false)}>
         About
@@ -512,38 +497,32 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* Team Management - requires Team tier */}
+            {/* Team Hub - Tabbed Team Management (Pro feature) */}
             <Route path="/team" element={
               <ProtectedRoute>
-                <TeamManagement />
+                <TeamHub />
               </ProtectedRoute>
             } />
             
-            {/* Team Management - Parts & Inventory */}
+            {/* Legacy routes redirect to team hub */}
             <Route path="/parts" element={
               <ProtectedRoute>
-                <PartsInventory />
+                <TeamHub />
               </ProtectedRoute>
             } />
-            
-            {/* Team Management - Events Calendar */}
             <Route path="/events" element={
               <ProtectedRoute>
-                <Events />
+                <TeamHub />
               </ProtectedRoute>
             } />
-            
-            {/* Team Management - Maintenance Log */}
             <Route path="/maintenance" element={
               <ProtectedRoute>
-                <Maintenance />
+                <TeamHub />
               </ProtectedRoute>
             } />
-            
-            {/* Team Management - Expenses */}
             <Route path="/expenses" element={
               <ProtectedRoute>
-                <Expenses />
+                <TeamHub />
               </ProtectedRoute>
             } />
             

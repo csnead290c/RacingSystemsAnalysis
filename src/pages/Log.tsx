@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
+
+// Lazy load time slip scanner
+const TimeslipScanner = lazy(() => import('../shared/components/TimeslipScanner'));
 import EnvironmentForm from '../shared/components/EnvironmentForm';
 import { simulate } from '../workerBridge';
 import { completeRun, type CompletionResult } from '../domain/quarter/completion';
@@ -88,6 +91,72 @@ function Log() {
   const [opponentRT, setOpponentRT] = useState('');
   const [opponentET, setOpponentET] = useState('');
   const [opponentMPH, setOpponentMPH] = useState('');
+  
+  // Time Slip Scanner
+  const [showScanner, setShowScanner] = useState(false);
+  
+  // Handle import from time slip scanner
+  const handleTimeslipImport = (data: {
+    user: {
+      reactionTime?: number;
+      sixtyFt?: number;
+      threeThirtyFt?: number;
+      eighthMileET?: number;
+      eighthMileMPH?: number;
+      thousandFt?: number;
+      quarterMileET?: number;
+      quarterMileMPH?: number;
+      dialIn?: number;
+    };
+    opponent: {
+      name?: string;
+      reactionTime?: number;
+      et?: number;
+      mph?: number;
+      dialIn?: number;
+    };
+    raceInfo: {
+      date?: string;
+      time?: string;
+      trackName?: string;
+      round?: string;
+      runNumber?: number;
+      userWon?: boolean | null;
+      margin?: number;
+    };
+  }) => {
+    // Import user timing data
+    if (data.user.reactionTime) setReactionTime(data.user.reactionTime.toString());
+    if (data.user.dialIn) setDialIn(data.user.dialIn.toString());
+    if (data.user.sixtyFt) setSixtyFt(data.user.sixtyFt.toString());
+    if (data.user.threeThirtyFt) setThreeThirtyFt(data.user.threeThirtyFt.toString());
+    if (data.user.eighthMileET) setEighthET(data.user.eighthMileET.toString());
+    if (data.user.eighthMileMPH) setEighthMPH(data.user.eighthMileMPH.toString());
+    if (data.user.thousandFt) setThousandFt(data.user.thousandFt.toString());
+    
+    // Set actual ET/MPH based on race length
+    if (raceLength === 'QUARTER') {
+      if (data.user.quarterMileET) setActualET(data.user.quarterMileET.toString());
+      if (data.user.quarterMileMPH) setActualMPH(data.user.quarterMileMPH.toString());
+    } else {
+      if (data.user.eighthMileET) setActualET(data.user.eighthMileET.toString());
+      if (data.user.eighthMileMPH) setActualMPH(data.user.eighthMileMPH.toString());
+    }
+    
+    // Import opponent data
+    if (data.opponent.name) setOpponentName(data.opponent.name);
+    if (data.opponent.reactionTime) setOpponentRT(data.opponent.reactionTime.toString());
+    if (data.opponent.et) setOpponentET(data.opponent.et.toString());
+    if (data.opponent.mph) setOpponentMPH(data.opponent.mph.toString());
+    if (data.opponent.dialIn) setOpponentDialIn(data.opponent.dialIn.toString());
+    
+    // Import race info
+    if (data.raceInfo.date) setRunDate(data.raceInfo.date);
+    if (data.raceInfo.time) setRunTime(data.raceInfo.time);
+    if (data.raceInfo.trackName) {
+      setNotes(prev => prev ? `${prev}\nTrack: ${data.raceInfo.trackName}` : `Track: ${data.raceInfo.trackName}`);
+    }
+  };
 
   const handleImportWeatherCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -330,6 +399,37 @@ function Log() {
 
   return (
     <Page title="Log Run">
+      {/* Time Slip Scanner Modal */}
+      <Suspense fallback={null}>
+        <TimeslipScanner
+          isOpen={showScanner}
+          onClose={() => setShowScanner(false)}
+          onImport={handleTimeslipImport}
+        />
+      </Suspense>
+      
+      {/* Quick Actions Bar */}
+      <div className="card mb-4" style={{ padding: '12px 16px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowScanner(true)}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px',
+              backgroundColor: 'var(--color-accent)',
+              padding: '10px 16px',
+            }}
+          >
+            📸 Scan Time Slip
+          </button>
+          <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+            Take a photo of your time slip to auto-fill all timing data
+          </span>
+        </div>
+      </div>
+      
       {/* Section A: Run Context */}
       <div className="card mb-6">
         <h2 className="mb-4" style={{ fontSize: '1.25rem', color: 'var(--color-text)' }}>

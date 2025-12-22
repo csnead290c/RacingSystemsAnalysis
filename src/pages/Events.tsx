@@ -15,7 +15,11 @@ import {
 
 type ViewMode = 'calendar' | 'list';
 
-function Events() {
+interface EventsProps {
+  embedded?: boolean;
+}
+
+function Events({ embedded = false }: EventsProps) {
   const [events, setEvents] = useState<RaceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -250,17 +254,16 @@ function Events() {
   }, []);
 
   if (loading) {
-    return (
-      <Page title="Race Events">
-        <div className="text-center" style={{ padding: '4rem' }}>
-          <p>Loading events...</p>
-        </div>
-      </Page>
+    const loadingContent = (
+      <div className="text-center" style={{ padding: '4rem' }}>
+        <p>Loading events...</p>
+      </div>
     );
+    return embedded ? loadingContent : <Page title="Race Events">{loadingContent}</Page>;
   }
 
-  return (
-    <Page title="Race Events">
+  const content = (
+    <>
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
         <div className="card card-compact" style={{ textAlign: 'center' }}>
@@ -782,8 +785,11 @@ function Events() {
           </div>
         </div>
       )}
-    </Page>
+    </>
   );
+  
+  if (embedded) return content;
+  return <Page title="Race Events">{content}</Page>;
 }
 
 export default Events;
