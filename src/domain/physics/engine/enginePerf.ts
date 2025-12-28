@@ -24,9 +24,10 @@ function calcEFF(effCR: number, GAM: number): number {
   return eff;
 }
 
-function rpmToFPS(rpm: number, flrqs: number, stroke: number): number {
-  return (rpm / 60) * (CONSTANTS.PI * flrqs * stroke / 12);
-}
+// Note: rpmToFPS is defined but not used in CalcEngPerf - may be used in future recommendations port
+// function rpmToFPS(rpm: number, flrqs: number, stroke: number): number {
+//   return (rpm / 60) * (CONSTANTS.PI * flrqs * stroke / 12);
+// }
 
 function fpsToRPM(fps: number, flrqs: number, stroke: number): number {
   return (fps * 60) / (CONSTANTS.PI * flrqs * stroke / 12);

@@ -59,18 +59,13 @@ export function parseEngFile(content: string): EngFileData {
   const line5 = lines[4].split(/\s+/).map(parseFloat);
   const inCamDur = line5[0];
   
-  // Line 6: Deck, Gasket, calculated values
-  const line6 = lines[5].split(/\s+/).map(parseFloat);
-  // These are duplicates or calculated values, we already have deck and gasket
-  
+  // Line 6: Deck, Gasket, calculated values (duplicates, skip)
   // Line 7: NoInValves, InValveDia, ExValveDia, Curved, ExFlow
   const line7 = lines[6].split(/\s+/).map(parseFloat);
   const noInValves = line7[0];
   const curved = line7[3] === 1;
   
-  // Line 8: Additional parameters (chamber, dome, etc.)
-  const line8 = lines[7].split(/\s+/).map(parseFloat);
-  // These appear to be additional calculated values
+  // Line 8: Additional parameters (chamber, dome, etc.) - calculated values, skip
   
   // Determine inline type and cam type from context
   // For now, assume defaults from BASECASE.ENG

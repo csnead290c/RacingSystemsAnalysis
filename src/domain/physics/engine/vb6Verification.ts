@@ -129,8 +129,3 @@ export function runVerification(): void {
     console.log('\n⚠️  Some tests failed. Review discrepancies above.');
   }
 }
-
-// Run verification if this file is executed directly
-if (typeof require !== 'undefined' && require.main === module) {
-  runVerification();
-}

@@ -98,8 +98,3 @@ function displayResults(name: string, results: EngineOutputs): void {
   console.log(`  Shift: ${results.shift} RPM`);
   console.log(`  Redline: ${results.redline} RPM`);
 }
-
-// Run tests if this file is executed directly
-if (require.main === module) {
-  testEnginePerf();
-}
