@@ -21,7 +21,7 @@ import {
 import type { EngineOutputs } from '../domain/physics/engine/engineTypes';
 
 export default function EngineSim() {
-  const { tier, features } = useSubscription();
+  const { features } = useSubscription();
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
   const [config, setConfig] = useState<EngineSimConfig>(createDefaultEngineJrConfig());
 

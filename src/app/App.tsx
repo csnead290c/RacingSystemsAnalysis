@@ -12,7 +12,7 @@ import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
 import ClutchSim from '../pages/ClutchSim';
 import ConverterSim from '../pages/ConverterSim';
-import EngineSim from '../pages/EngineProSim';
+import EngineSim from '../pages/EngineSim';
 import Calculators from '../pages/Calculators';
 import Log from '../pages/Log';
 import History from '../pages/History';
@@ -203,10 +203,10 @@ function Navigation() {
   // Check access for each nav item
   const canAccessVehicles = isLoggedIn && hasFeature('save_vehicles');
   const canAccessETSim = isLoggedIn && hasProduct('quarter_jr');
+  const canAccessEngineSim = isLoggedIn; // Engine sim available to all logged-in users
   // Hidden simulators - uncomment when built out:
   // const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
   // const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
-  // const canAccessEngineSim = isLoggedIn && hasProduct('engine_pro');
   // const canAccessLog = isLoggedIn && hasFeature('save_runs');
   const canAccessHistory = isLoggedIn && hasFeature('save_runs');
 
@@ -225,6 +225,11 @@ function Navigation() {
           ET Sim
         </Link>
       )}
+      {canAccessEngineSim && (
+        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))} onClick={() => setMobileMenuOpen(false)}>
+          Engine Sim
+        </Link>
+      )}
       {/* Hidden for now - these simulators are not yet built out:
       {canAccessSuspSim && (
         <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))} onClick={() => setMobileMenuOpen(false)}>
@@ -239,11 +244,6 @@ function Navigation() {
       {canAccessClutchSim && (
         <Link to="/converter-sim" style={navLinkStyle(isActive('/converter-sim'))} onClick={() => setMobileMenuOpen(false)}>
           Conv Sim
-        </Link>
-      )}
-      {canAccessEngineSim && (
-        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          Engine Sim
         </Link>
       )}
       */}
@@ -483,9 +483,9 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* Engine Pro features */}
+            {/* Engine Sim - available to all logged-in users (simple/advanced mode based on tier) */}
             <Route path="/engine-sim" element={
-              <ProtectedRoute requireProduct="engine_pro">
+              <ProtectedRoute>
                 <EngineSim />
               </ProtectedRoute>
             } />
