@@ -29,27 +29,56 @@ export function bisc(
   const X1 = X[0];
   const XN = X[N - 1];
   
-  // Check if XVAL is outside the range
-  if (XVAL <= X1) {
+  // Determine if array is ascending or descending (VB6: S = XN - X1)
+  const S = XN > X1 ? 1 : -1;
+  
+  // VB6 lines 27-29: Check first element with exact match handling
+  const SX1 = S * (XVAL - X1);
+  if (SX1 < 0) {
+    // XVAL is below X(1)
     JJ = 1;
-    KTOP = 1;
+    KTOP = Math.min(1, N - 1);
+    return { KBOTM, KTOP, JJ };
+  }
+  if (SX1 === 0) {
+    // VB6 B600: XVAL equals X(1) - exact match
+    KBOTM = 0;
+    KTOP = 0;
     return { KBOTM, KTOP, JJ };
   }
   
-  if (XVAL >= XN) {
+  // VB6 lines 31-35: Check last element with exact match handling
+  const SXN = S * (XVAL - XN);
+  if (SXN > 0) {
+    // XVAL is above X(N)
     JJ = 1;
-    KBOTM = N - 2;
+    KBOTM = Math.max(0, N - 2);
+    KTOP = N - 1;
+    return { KBOTM, KTOP, JJ };
+  }
+  if (SXN === 0) {
+    // VB6 B600: XVAL equals X(N) - exact match
+    KBOTM = N - 1;
     KTOP = N - 1;
     return { KBOTM, KTOP, JJ };
   }
   
-  // Binary search
+  // Binary search with exact match handling (VB6 lines 45-61)
   while (KTOP - KBOTM > 1) {
     const KMID = Math.floor((KBOTM + KTOP) / 2);
-    if (XVAL < X[KMID]) {
-      KTOP = KMID;
-    } else {
+    const SX = S * (XVAL - X[KMID]);
+    
+    if (SX === 0) {
+      // VB6 B600: XVAL equals X(KMID) - exact match
       KBOTM = KMID;
+      KTOP = KMID;
+      return { KBOTM, KTOP, JJ };
+    }
+    
+    if (SX > 0) {
+      KBOTM = KMID;
+    } else {
+      KTOP = KMID;
     }
   }
   

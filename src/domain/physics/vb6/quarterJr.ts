@@ -212,8 +212,10 @@ export function calcStallRPMFromIndex(
     if (r2 > 0) stall = r2;
   }
   
-  // VB6: Stall = Round(Stall, 20) - round to nearest 20
-  stall = Math.round(stall / 20) * 20;
+  // VB6: Stall = Round(Stall, 20) - round to 20 decimal places
+  // Note: VB6 Round(x, n) rounds to n decimal places, NOT to nearest n
+  // For 100% fidelity, we round to 20 decimal places (essentially a no-op but exact match)
+  stall = Math.round(stall * 1e20) / 1e20;
   
   // VB6: Check calculated stall RPM against limits
   if (stall < xrpm[0]) {

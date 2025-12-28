@@ -8,6 +8,9 @@ import './shared/ui/tokens.css';
 import './shared/ui/atoms.css';
 import './shared/ui/layout.css';
 
+// VB6 Interpreter test - exposes testVB6Interpreter() to console
+import './domain/physics/vb6/testVB6Console';
+
 // Register service worker for PWA functionality (production only)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

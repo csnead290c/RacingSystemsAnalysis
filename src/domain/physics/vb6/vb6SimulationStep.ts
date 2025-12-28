@@ -109,6 +109,7 @@ export interface VB6VehicleParams {
   TireDia_in: number;
   TireWidth_in: number;
   Rollout_in: number;
+  Overhang_in?: number;       // Overhang distance (inches) for distance adjustment
   
   // Drivetrain
   GearRatio: number;        // Final drive ratio
@@ -172,6 +173,7 @@ export interface VB6EnvParams {
   Shift2PrintTime?: number; // VB6 TIMESLIP.FRM:1071 - Target time for shift completion
   iMPH?: number;            // VB6 iMPH - current MPH print index (1-based, 1 or 2)
   MPHtoPrint?: number[];    // VB6 MPHtoPrint array [60/Z5, 100/Z5] in ft/s for VelMPHMatch
+  ovradj?: number;          // VB6 TIMESLIP.FRM:812-813,1381 - Overhang adjustment (ft)
 }
 
 /**
@@ -712,6 +714,20 @@ export function vb6SimulationStep(
   let TimeStep: number;
   const gearChanged = state.Gear !== state.PrevGear;
   
+  // VB6 TIMESLIP.FRM order:
+  // - Line 1082: TimeStep = TSMax * (AgsMax / Ags0) ^ 4  (uses Ags0 from PREVIOUS iteration's line 1090)
+  // - Line 1090: Ags0 = AGS(L)  (updates Ags0 for use in velocity calc and next iteration)
+  // 
+  // At line 1082, Ags0 has the value set at line 1090 of the PREVIOUS iteration.
+  // At that previous line 1090, Ags0 = AGS(L), where AGS(L) was set at line 1221 of the iteration BEFORE that.
+  // So at line 1082, Ags0 = AGS from TWO iterations ago.
+  //
+  // In RSA, state.Ags0_g is set at line 767 (equivalent to VB6's 1090) from state.AGS_g.
+  // state.AGS_g at that point is from the PREVIOUS step's final calculation.
+  // So state.Ags0_g at the start of step N = AGS from step N-2 (set during step N-1).
+  // This matches VB6! state.Ags0_g IS the correct value for timestep.
+  const Ags0_for_timestep = f(state.Ags0_g);  // Use AGS from TWO steps ago (matches VB6)
+  
   if (gearChanged) {
     // VB6: TIMESLIP.FRM:1072 - TimeStep = DTShift at gear change
     TimeStep = f(vehicle.DTShift);
@@ -720,19 +736,36 @@ export function vb6SimulationStep(
     // ========================================================================
     // TIMESLIP.FRM:1082 - Calculate adaptive timestep
     // VB6: TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+    // 
+    // CRITICAL: VB6 normal iterations enter at label 240 (via GoTo 240 at line 1437).
+    // Line 1082 is ALWAYS executed for normal iterations - there's no L check.
+    // The L > 1 check at line 1076 only affects shift iterations (entering at 230).
     // ========================================================================
     TimeStep = f(TSMax);
-    if (state.Ags0_g > 0 && state.L > 1) {
-      TimeStep = M.mul(f(TSMax), M.pow(M.div(f(state.AgsMax_g), f(state.Ags0_g)), f(4)));
+    if (Ags0_for_timestep > 0) {
+      TimeStep = M.mul(f(TSMax), M.pow(M.div(f(state.AgsMax_g), f(Ags0_for_timestep)), f(4)));
     }
   }
   
   // ========================================================================
   // TIMESLIP.FRM:1084-1088 - Calculate jerk from previous step
+  // VB6: Jerk = (AGS(L) - Ags0) / Work
+  // At line 1086, Ags0 is the SAME value used in line 1082 (timestep calculation).
+  // Both use Ags0 BEFORE it's updated at line 1090.
+  // So we use Ags0_for_timestep (previous step's AGS) here too.
   // ========================================================================
   let Jerk = f(0);
   const Work_time = M.sub(f(state.time_s), f(state.Time0_s));
   if (Work_time > 0) {
+    // VB6: Jerk = (AGS(L) - Ags0) / Work
+    // AGS(L) at this point = state.AGS_g (previous step's result)
+    // Ags0 at this point = Ags0_for_timestep (also previous step's AGS, same value)
+    // So jerk = (AGS_g - Ags0_for_timestep) / time = (AGS_{N-1} - AGS_{N-1}) / time = 0 for same step?
+    // Wait, need to re-check. In VB6, AGS(L) is the array element, Ags0 is a scalar.
+    // At line 1086, AGS(L) = value from PREVIOUS iteration's line 1221
+    // Ags0 = value from PREVIOUS iteration's line 1090 = AGS(L) from TWO iterations ago
+    // So VB6 jerk = (AGS_{N-1} - AGS_{N-2}) / Work
+    // This matches using state.AGS_g and state.Ags0_g!
     Jerk = M.div(M.sub(f(state.AGS_g), f(state.Ags0_g)), f(Work_time));
   }
   if (Jerk < JMin) Jerk = f(JMin);
@@ -1359,12 +1392,19 @@ export function vb6SimulationStep(
     }
     
     // VB6 lines 1333-1341: Check for SHIFT RPM overshoot (VelShiftMatch)
-    // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
+    // VB6 EXACT CODE:
+    //   If Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then
+    //       PrintFlag = 1
+    //   Else
+    //       If EngRPM(L) > ShiftRPM(iGear) Then VelShiftMatch = Vel(L) * ShiftRPM(iGear) / EngRPM(L)
+    //   End If
+    // VelShiftMatch only activates in the ELSE branch (when diff >= tolerance)
     let VelShiftMatch = 0;
     const ShiftRPMTol = (vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
     if (iGear < vehicle.NGR && env.shiftRPMs !== undefined) {
       const targetShiftRPM = env.shiftRPMs[iGear - 1];
       if (targetShiftRPM !== undefined) {
+        // VB6 EXACT: Only set VelShiftMatch in ELSE branch (diff >= tolerance)
         if (Math.abs(targetShiftRPM - EngRPM_L) >= ShiftRPMTol) {
           if (EngRPM_L > targetShiftRPM) {
             // VB6 line 1339: VelShiftMatch = Vel(L) * ShiftRPM(iGear) / EngRPM(L)
@@ -1401,7 +1441,13 @@ export function vb6SimulationStep(
   // ========================================================================
   // Update state - truncate all values to Float32 if in strict mode
   // ========================================================================
-  state.L += 1;
+  // VB6 TIMESLIP.FRM:1104 - L = L + LAdd
+  // In VB6, LAdd is normally 0 (L doesn't change), and is set to 1 during shifts/prints.
+  // When GoTo 230 (shift recalculation) happens, it skips line 1104, so L doesn't increment.
+  // In RSA, gearChanged=true indicates this is a shift recalculation step - DON'T increment L.
+  if (!gearChanged) {
+    state.L += 1;
+  }
   state.time_s = f(time_L);
   state.Vel_ftps = f(Vel_L);
   state.Dist_ft = f(Dist_L);

@@ -325,18 +325,22 @@ export function fromVehicleToVB6Fixture(v: Vehicle, options: FromVehicleOptions 
   // Defaults - handle both snake_case and camelCase field names
   const weightLb = v.weightLb ?? vAny.weight_lb ?? 2400;
   
-  // Tire diameter: check tireRolloutMode to determine how to interpret tire size
-  // If tireRolloutMode === 'circumference', convert tireRolloutIn to diameter
+  // Tire diameter: prioritize explicit diameter, then convert from circumference if needed
   let tireDiaIn: number;
   const tireRolloutMode = vAny.tireRolloutMode;
-  if (tireRolloutMode === 'circumference' && vAny.tireRolloutIn) {
+  
+  // First check if we have an explicit diameter
+  if (v.tireDiaIn || vAny.tire_dia_in) {
+    tireDiaIn = v.tireDiaIn ?? vAny.tire_dia_in;
+  } else if (tireRolloutMode === 'circumference' && vAny.tireRolloutIn) {
     // Convert circumference to diameter: diameter = circumference / π
     tireDiaIn = vAny.tireRolloutIn / Math.PI;
-  } else if (vAny.tireRolloutIn && !v.tireDiaIn && !vAny.tire_dia_in) {
+  } else if (vAny.tireRolloutIn) {
     // If only tireRolloutIn is provided (no diameter), assume it's circumference
     tireDiaIn = vAny.tireRolloutIn / Math.PI;
   } else {
-    tireDiaIn = v.tireDiaIn ?? vAny.tire_dia_in ?? 28;
+    // Default fallback
+    tireDiaIn = 28;
   }
   
   const tireWidthIn = v.tireWidthIn ?? vAny.tire_width_in ?? 14;
@@ -525,7 +529,9 @@ export function fromVehicleToVB6Fixture(v: Vehicle, options: FromVehicleOptions 
   const cd = v.cd ?? vAny.dragCoef ?? 0.35;
   const liftCoeff = v.liftCoeff ?? vAny.liftCoef ?? 0.1;
   const overhang_in = vAny.overhangIn ?? vAny.overhang_in ?? 30;
-  const overallEff = dt.overallEff ?? dt.overallEfficiency ?? vAny.transEfficiency ?? 0.97;
+  const overallEff = dt.overallEff ?? dt.overallEfficiency ?? 
+                   vAny.finalDriveEfficiency ?? vAny.transEfficiency ?? vAny.transEff ?? 
+                   vAny.vehicle?.transEff ?? vAny.vehicle?.transEfficiency ?? 0.97;
   const perGearEff = buildPerGearEff(gearRatios.length, dt.perGearEff ?? vAny.gearEfficiencies);
   const shiftsRPM = dt.shiftsRPM ?? dt.shiftRPM ?? vAny.shiftRPMs ?? Array(gearRatios.length - 1).fill(9000);
 

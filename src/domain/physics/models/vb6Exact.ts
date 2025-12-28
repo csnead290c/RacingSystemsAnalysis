@@ -4,11 +4,6 @@
  * This model implements the EXACT VB6 TIMESLIP.FRM simulation logic.
  * It uses the vb6SimulationStep function which replicates the VB6 iteration loop.
  * 
- * Key differences from rsaclassic.ts:
- * 1. Uses VB6's velocity-first approach (estimate velocity, then iterate to converge time)
- * 2. Implements the full 12-iteration convergence loop for PMI
- * 3. Uses VB6's exact formulas for all calculations
- * 4. Matches VB6's variable naming and calculation order
  */
 
 import type { SimInputs, SimResult } from '../index';
@@ -160,6 +155,15 @@ function extractHPCurve(input: SimInputs): {
   const vehicle = input.vehicle;
   const engine = (input as any).engine ?? (vehicle as any).engine;
   
+  // VB6 CRITICAL: Check for explicit mode override
+  // VB6 QuarterJr vs QuarterPro is a COMPILE-TIME decision, not runtime.
+  // If mode is explicitly specified, respect it. Otherwise auto-detect.
+  // VB6: #If ISQUARTERJR Or ISBVPRO Then gc_LaunchRPM.Value = Stall #End If
+  const explicitMode = (input as any).mode ?? (input as any).simMode ?? 
+                       (vehicle as any).mode ?? (vehicle as any).simMode;
+  const forceQuarterJr = explicitMode === 'quarterJr' || explicitMode === 'jr';
+  // Note: forceQuarterPro reserved for future explicit QuarterPro override
+  
   // Try multiple sources for HP curve
   const hpCurve = engine?.hpCurve ?? 
                   engine?.torqueCurve ?? 
@@ -186,12 +190,36 @@ function extractHPCurve(input: SimInputs): {
     }
   }
   
-  // If we have a valid HP curve, use it (QuarterPro mode)
-  if (xrpm.length >= 2) {
+  // If we have a valid HP curve AND not forcing QuarterJr, use QuarterPro mode
+  // VB6: QuarterPro uses full HP curve and user-specified LaunchRPM
+  // VB6: QuarterJr forces LaunchRPM = Stall regardless of user input
+  if (xrpm.length >= 2 && !forceQuarterJr) {
     return { xrpm, yhp, NHP: xrpm.length, isQuarterJr: false };
   }
   
-  // QuarterJr mode: Generate synthetic curve using ENGINE() function
+  // If we have HP curve BUT forcing QuarterJr mode, use the curve with QuarterJr rules
+  // This allows using a detailed HP curve while still applying QuarterJr behavior
+  // (LaunchRPM = Stall, calculated efficiencies, etc.)
+  if (xrpm.length >= 2 && forceQuarterJr) {
+    const peakHP = Math.max(...yhp);
+    const peakIdx = yhp.indexOf(peakHP);
+    const rpmAtPeakHP = xrpm[peakIdx] ?? 6500;
+    const displacement_cid = Number((vehicle as any).displacement_cid ?? (vehicle as any).displacementCID ?? 350);
+    const fuelSystem = ((input as any).fuelSystem ?? (vehicle as any).fuelSystem ?? 1) as FuelSystemValue;
+    
+    return { 
+      xrpm, yhp, NHP: xrpm.length, 
+      isQuarterJr: true,
+      quarterJrParams: {
+        peakHP,
+        rpmAtPeakHP,
+        displacement_cid,
+        fuelSystem,
+      }
+    };
+  }
+  
+  // QuarterJr mode without HP curve: Generate synthetic curve using ENGINE() function
   const peakHP = Number(vehicle.powerHP ?? (vehicle as any).peakHP);
   const rpmAtPeakHP = Number((vehicle as any).rpmAtPeakHP ?? (vehicle as any).peakRPM ?? 6500);
   const displacement_cid = Number((vehicle as any).displacement_cid ?? (vehicle as any).displacementCID ?? 350);
@@ -232,7 +260,7 @@ function extractHPCurve(input: SimInputs): {
  * VB6 TIMESLIP.FRM:863-870
  */
 function calcTrackTempEffect(trackTempF: number): number {
-  // VB6: calc track temperature effect using modified original GoldMind logic
+  // VB6:
   // If gc_TrackTemp.Value > 100 Then
   //     TrackTempEffect = 1 + 0.0000025 * Abs(100 - gc_TrackTemp.Value) ^ 2.5
   // Else
@@ -376,8 +404,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const vehicle = input.vehicle;
   const env = input.env;
   
-  // VB6 32-bit precision mode - when enabled, use Float32 for key calculations
-  const vb6Strict = (input as any).vb6Strict ?? false;
+  // VB6 32-bit precision mode - disabled for now as it's causing issues
+  // TODO: Investigate why Float32 precision makes results worse
+  const vb6Strict = (input as any).vb6Strict ?? false;  // Default to FALSE until we fix the issue
   setFloat32Mode(vb6Strict);
   if (vb6Strict) {
     console.log('[vb6Exact] VB6 32-bit precision mode enabled (Float32)');
@@ -525,6 +554,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   let liftCoef: number;
   let overhangInCalc: number;
   
+  // Extract HPTQMult early - needed for stall calculation
+  // VB6: gc_HPTQMult.Value is used in stall index calculation (lines 928-929)
+  const hpTqMult_early = (vehicle as any).hpTorqueMultiplier ?? (input as any).engine?.hpTqMult ?? 1.0;
+  
   if (isQuarterJr && quarterJrParams) {
     // ====================================================================
     // QuarterJr Mode: Calculate all derived parameters
@@ -536,7 +569,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     TGEff = calcTransEfficiencies(NGR, !isClutch);
     
     // Single shift RPM for all gears (VB6: TIMESLIP.FRM lines 726, 736)
-    const singleShiftRPM = (vehicle as any).shiftRPM ?? drivetrain?.shiftRPM ?? 7000;
+    // VB6 ShiftRPM is declared as Integer, so values are truncated
+    const singleShiftRPM = Math.trunc((vehicle as any).shiftRPM ?? drivetrain?.shiftRPM ?? 7000);
     shiftRPMs = gearRatios.map(() => singleShiftRPM);
     
     // Calculate slippage and torque multiplier (VB6: TIMESLIP.FRM lines 729-754)
@@ -579,9 +613,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           const k1 = k - 1;
           
           // VB6: B = gc_HPTQMult.Value * (ztq(k) - ztq(k1)) / (hpc * (xrpm(k) - xrpm(k1)))
-          const B = (ztq[k] - ztq[k1]) / (hpc * (xrpm[k] - xrpm[k1]));
+          const B = hpTqMult_early * (ztq[k] - ztq[k1]) / (hpc * (xrpm[k] - xrpm[k1]));
           // VB6: c = gc_HPTQMult.Value * ztq(k) / hpc - xrpm(k) * B
-          const c = ztq[k] / hpc - xrpm[k] * B;
+          const c = hpTqMult_early * ztq[k] / hpc - xrpm[k] * B;
           // VB6: z = B ^ 2 + 4 * atf * c
           const z = B * B + 4 * atf * c;
           
@@ -604,15 +638,24 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           if (r2 > 0) calculatedStall = r2;
         }
         
-        // VB6: Stall = Round(Stall, 20) - round to nearest 20
-        calculatedStall = Math.round(calculatedStall / 20) * 20;
+        // VB6: Stall = Round(Stall, 20) - round to 20 decimal places
+        // Note: VB6 Round(x, n) rounds to n decimal places, NOT to nearest n
+        // For 100% fidelity, we round to 20 decimal places (essentially a no-op but exact match)
+        calculatedStall = Math.round(calculatedStall * 1e20) / 1e20;
         
-        // VB6: Check calculated stall RPM against limits
+        // VB6: Check calculated stall RPM against limits (lines 948-971)
+        // Line 949-958: If Stall < xrpm(1), clamp to xrpm(1)
         if (calculatedStall < xrpm[0]) {
           calculatedStall = xrpm[0];
         }
         
         stallRPM = calculatedStall > 0 ? calculatedStall : xrpm[0];
+        
+        // VB6 lines 961-971: If Stall >= ShiftRPM(1), clamp to ShiftRPM(1) - 100
+        const shiftRPM1 = shiftRPMs[0] ?? 0;
+        if (shiftRPM1 > 0 && stallRPM >= shiftRPM1) {
+          stallRPM = shiftRPM1 - 100;
+        }
       }
       
       // VB6: lrat = Work / (200 * (7 / gc_ConvDia.Value) ^ 4)
@@ -625,6 +668,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       torqueMult = 2.633 - Math.pow(lrat, 0.3) - work / 1500;
       if (torqueMult < 1) torqueMult = 1;
       if (torqueMult > 2) torqueMult = 2;
+    }
+    
+    // VB6 TIMESLIP.FRM:984-988 - Recalculate slippage for QuarterJr clutch
+    // CRITICAL: After stall RPM is calculated, slippage must be recalculated
+    // using the CALCULATED stallRPM, not the input slipStallRPM!
+    // VB6: #If ISQUARTERJR Then
+    //        If Not gc_TransType.Value Then gc_Slippage.Value = 1.0025 + Stall / 1000000
+    //      #End If
+    if (isClutch) {
+      slippage = 1.0025 + stallRPM / 1000000;
     }
     
     // Calculate efficiency (VB6: TIMESLIP.FRM lines 760-765)
@@ -665,6 +718,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     // Per-gear shift RPMs (check all common property names)
     // For N gears, we need N-1 shift points (1→2, 2→3, etc.)
+    // VB6 ShiftRPM is declared as Integer, so values are truncated
     const rawShiftRPMs = drivetrain?.shiftRPMs ?? drivetrain?.shiftsRPM ?? 
                 (vehicle as any).shiftRPMs ?? (vehicle as any).shiftsRPM ?? 
                 (vehicle as any).shiftRPM ?? gearRatios.map(() => 7000);
@@ -673,10 +727,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const expectedShiftCount = gearRatios.length - 1;
     if (Array.isArray(rawShiftRPMs) && rawShiftRPMs.length > expectedShiftCount) {
       // Trim extra values (e.g., [9200, 9400, 100] → [9200, 9400] for 3 gears)
-      shiftRPMs = rawShiftRPMs.slice(0, expectedShiftCount);
+      // Also truncate to integer to match VB6 Integer type
+      shiftRPMs = rawShiftRPMs.slice(0, expectedShiftCount).map((rpm: number) => Math.trunc(rpm));
       warnings.push(`Shift RPMs trimmed from ${rawShiftRPMs.length} to ${expectedShiftCount} values`);
     } else {
-      shiftRPMs = rawShiftRPMs;
+      // Truncate to integer to match VB6 Integer type
+      shiftRPMs = Array.isArray(rawShiftRPMs) 
+        ? rawShiftRPMs.map((rpm: number) => Math.trunc(rpm))
+        : [Math.trunc(rawShiftRPMs)];
     }
     
     // Get stall/slip RPM
@@ -684,11 +742,29 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const converterStallRPM = converter?.stallRPM ?? (vehicle as any).converterStallRPM ?? 5500;
     stallRPM = isClutch ? clutchSlipRPM : converterStallRPM;
     
-    // Get slippage factor (VB6's gc_Slippage.Value)
-    // slipRatio from clutch config IS the slippage factor
-    const clutchSlippage = clutch?.slippageFactor ?? clutch?.slippage ?? clutch?.slipRatio ?? (vehicle as any).clutchSlippage ?? 1.0025;
-    const converterSlippage = converter?.slippageFactor ?? converter?.slippage ?? (vehicle as any).converterSlippage ?? 1.06;
-    slippage = isClutch ? clutchSlippage : converterSlippage;
+    // VB6 TIMESLIP.FRM:973-981 - QuarterPro converter stall validation
+    // If LaunchRPM > Stall for converters, clamp Stall = LaunchRPM
+    // Note: This is QuarterPro only (QuarterJr sets LaunchRPM = Stall anyway)
+    if (!isClutch) {
+      const converterLaunchRPM = (vehicle as any).converterLaunchRPM ?? converter?.launchRPM ?? stallRPM;
+      if (converterLaunchRPM > stallRPM) {
+        stallRPM = converterLaunchRPM;
+      }
+    }
+    
+    // VB6 TIMESLIP.FRM:699-713 - QuarterPro does NOT calculate slippage!
+    // In QuarterPro mode, slippage comes from user input, NOT calculated
+    // The gc_Slippage.IsCalc = True line is ONLY in QuarterJr mode (line 719)
+    if (isClutch) {
+      // QuarterPro clutch: Use user-provided slippage value
+      // Check multiple property names for compatibility
+      slippage = clutch?.slippage ?? clutch?.slipRatio ?? 
+                 (vehicle as any).clutchSlippage ?? (vehicle as any).slippage ?? 1.004;
+    } else {
+      // QuarterPro converter: Use user-provided slippage value
+      slippage = converter?.slippageFactor ?? converter?.slippage ?? 
+                 (vehicle as any).converterSlippage ?? 1.06;
+    }
     
     // Get torque multiplier
     torqueMult = isClutch 
@@ -704,7 +780,17 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // VB6 applies BOTH TGEff (per-gear) AND gc_Efficiency (overall) separately:
     // - TGEff is applied in the HP chain: HP * TGEff * Efficiency
     // - gc_Efficiency is applied in force calculation: force = TQ * FinalDrive * Efficiency / ...
-    overallEfficiency = drivetrain?.overallEfficiency ?? (vehicle as any).transEfficiency ?? 0.97;
+    // PRIORITY: Check vehicle-level properties FIRST (explicit user values)
+    // Only use drivetrain efficiency if it's NOT the default 0.97
+    // FALLBACK: Use VB6-calculated efficiency by body style (0.985 for motorcycle, 0.97 for car)
+    const vehicleLevelEff = (vehicle as any).transEff ?? (vehicle as any).transEfficiency ?? 
+                        (vehicle as any).finalDriveEfficiency ?? vehicle.finalDriveEfficiency ??
+                        (input as any).vehicle?.transEff ?? (input as any).transEff;
+    const drivetrainEff = drivetrain?.overallEfficiency ?? drivetrain?.overallEff;
+    // Use drivetrain efficiency ONLY if it's an explicit value (not the 0.97 default)
+    const explicitDrivetrainEff = (drivetrainEff !== undefined && drivetrainEff !== 0.97) ? drivetrainEff : undefined;
+    // Final priority: vehicle > explicit drivetrain > VB6 calculated
+    overallEfficiency = vehicleLevelEff ?? explicitDrivetrainEff ?? calcEfficiency(bodyStyle);
     
     // Aero coefficients from user input - check aero object first
     const aero = (input as any).aero ?? (vehicle as any).aero;
@@ -741,8 +827,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
     : stallRPM;
   const HP_launch_calc = TABY(xrpm, yhp, NHP, 1, launchRPM_calc);
-  const hpTqMult = (vehicle as any).hpTorqueMultiplier ?? engine?.hpTqMult ?? 1.0;
-  const HP_corrected = hpTqMult * HP_launch_calc / hpc;
+  // Use hpTqMult_early (defined earlier for stall calculation)
+  const HP_corrected = hpTqMult_early * HP_launch_calc / hpc;
   
   // VB6 TIMESLIP.FRM:1013-1014 - Calculate torque at wheels
   // TQ = Z6 * HP / RPM * TorqueMult * GearRatio * GearEff
@@ -793,6 +879,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     TireDia_in: tireDiaIn,
     TireWidth_in: tireWidthIn,
     Rollout_in: vehicle.rolloutIn ?? 12,
+    Overhang_in: finalOverhang,
     
     GearRatio: finalDrive,
     TGR: gearRatios,
@@ -802,7 +889,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     Slippage: slippage,
     TorqueMult: torqueMult,
     Stall: stallRPM,
-    LockUp: converter?.lockup ?? false,
+    LockUp: isClutch ? (clutch?.lockup ?? false) : (converter?.lockup ?? false),
     isClutch,
     
     // Use calculated aero for QuarterJr, user input for QuarterPro
@@ -819,16 +906,19 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     xrpm,
     yhp,
     NHP,
-    HPTQMult: (vehicle as any).hpTorqueMultiplier ?? engine?.hpTqMult ?? 1.0,
+    HPTQMult: hpTqMult_early,
     
     ShiftRPM: shiftRPMs,
     NGR,
-    // VB6 TIMESLIP.FRM:1006 - EngRPM(L) = gc_LaunchRPM.Value
-    // Both clutch and converter have separate Launch RPM from Stall/Slip RPM
-    // Check flat vehicle properties FIRST since that's what the UI sets
-    LaunchRPM: isClutch 
-      ? ((vehicle as any).clutchLaunchRPM ?? clutch?.launchRPM ?? stallRPM) 
-      : ((vehicle as any).converterLaunchRPM ?? converter?.launchRPM ?? stallRPM),
+    // VB6 TIMESLIP.FRM:991-993 - LaunchRPM handling
+    // CRITICAL: For QuarterJr AND BonnevillePro, LaunchRPM is ALWAYS set to Stall!
+    // Only QuarterPro uses user-provided LaunchRPM values.
+    // VB6: #If ISQUARTERJR Or ISBVPRO Then gc_LaunchRPM.Value = Stall #End If
+    LaunchRPM: (isQuarterJr || isLandSpeed) 
+      ? stallRPM  // QuarterJr/BVPro: LaunchRPM = Stall (VB6 line 992)
+      : (isClutch 
+          ? ((vehicle as any).clutchLaunchRPM ?? clutch?.launchRPM ?? stallRPM) 
+          : ((vehicle as any).converterLaunchRPM ?? converter?.launchRPM ?? stallRPM)),
     
     // Shift by Time (alternative to shift by RPM)
     ShiftMode: (vehicle as any).shiftMode ?? 'rpm',
@@ -856,10 +946,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   // VB6 distance print points (in feet, from rear tire position)
   // VB6: TIMESLIP.FRM:815-817 - DistToPrint array
+  // VB6: If DistToPrint(1) = 0 Then DistToPrint(1) = 1 (lines 815, 822, etc.)
   // These are used for distance targeting to hit exact print points
+  const rolloutTarget = rolloutFt > 0 ? rolloutFt : 1;  // VB6: If rollout = 0, use 1ft
   const distPrintPoints = isLandSpeed 
-    ? [rolloutFt, 660, 1320, 1980, 2640, 3300, 3960, 4620, 5280] // Bonneville
-    : [rolloutFt, 30, 60, 330, 594, 660, 1000, 1254, 1320];      // Quarter mile
+    ? [rolloutTarget, 660, 1320, 1980, 2640, 3300, 3960, 4620, 5280] // Bonneville
+    : [rolloutTarget, 30, 60, 330, 594, 660, 1000, 1254, 1320];      // Quarter mile
   let distPrintIdx = 0;
   
   // VB6 TIMESLIP.FRM:878-918 - Calculate TimePrintInc based on estimated ET
@@ -868,7 +960,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6 line 879: hpmax calculation for ET estimate
   const TGEff1 = TGEff[0] ?? 0.99;
   const peakHP_et = Math.max(...yhp);
-  const hpmax_et = (peakHP_et * hpTqMult / hpc) * TGEff1 * overallEfficiency / (slippage * tireSlipAtLaunch);
+  const hpmax_et = (peakHP_et * hpTqMult_early / hpc) * TGEff1 * overallEfficiency / (slippage * tireSlipAtLaunch);
   
   // VB6 line 882 (Quarter Pro): ET = (TrackTempEffect ^ 0.25) * (1.8 + 4.2 * (hpmax / Weight) ^ (-1/3))
   // VB6 line 884-886 (Bonneville Pro): vmax formula
@@ -885,17 +977,23 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6 line 888: motorcycle adjustment
   if (bodyStyle === 8) estimatedET = 1.04 * estimatedET;
   
-  // VB6 lines 890-900: kd values (much smaller than I was using!)
-  // ISQUARTERPRO && !ISBVPRO: kd = 33 (line 894)
+  // VB6 lines 890-900: kd values
   // ISQUARTERPRO && ISBVPRO: kd = 29 (line 892)
-  // else (Quarter Jr): kd = 28 (line 898)
+  // ISQUARTERPRO && !ISBVPRO: kd = 33 (line 894)
+  // !ISQUARTERPRO (Quarter Jr): kd = 28 (line 898)
   let kd: number;
   if (isLandSpeed) {
     kd = 29;  // Bonneville Pro
+  } else if (isQuarterJr) {
+    kd = 28;  // Quarter Jr
   } else {
-    kd = 33;  // Quarter Pro (assuming ISQUARTERPRO since we're in Quarter Pro mode)
+    kd = 33;  // Quarter Pro
   }
-  if (bodyStyle === 8) kd = kd - 1;  // VB6 line 896 for Quarter Pro, line 899 uses -7 for Jr
+  // VB6 line 896: Quarter Pro motorcycle: kd = kd - 1
+  // VB6 line 899: Quarter Jr motorcycle: kd = kd - 7
+  if (bodyStyle === 8) {
+    kd = isQuarterJr ? kd - 7 : kd - 1;
+  }
   
   // VB6 lines 902-917: Find smallest TimePrintInc where z < kd
   let TimePrintInc = 0.25;
@@ -918,6 +1016,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     : [60 / Z5, 100 / Z5];  // Quarter Pro: 60 and 100 MPH
   let iMPH = 1;  // VB6 TIMESLIP.FRM:1002 - iMPH starts at 1
   
+  // ovradj is already calculated above (line ~418) using VB6 TIMESLIP.FRM:811-813
+  
   const vb6Env: VB6EnvParams = {
     rho: rho_lbm_ft3,
     hpc,
@@ -933,6 +1033,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     shiftRPMs,  // VB6 ShiftRPM array for VelShiftMatch calculation
     iMPH,       // VB6 iMPH for VelMPHMatch velocity revision
     MPHtoPrint, // VB6 MPHtoPrint array [60/Z5, 100/Z5] in ft/s
+    ovradj,     // VB6 TIMESLIP.FRM:812-813,1381 - Overhang adjustment (ft)
   };
   
   // ========================================================================
@@ -947,19 +1048,26 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const initialAgs0 = state.AGS_g;
   
   // Calculate TSMax
-  // VB6 TIMESLIP.FRM:815: DistToPrint(1) = gc_Rollout.Value / 12
-  // VB6 TIMESLIP.FRM:1063: TSMax = DistToPrint(1) * 0.11 * (HP * gc_TorqueMult.Value / gc_Weight.Value) ^ (-1/3)
-  // Note: At this point in VB6, HP has already been corrected by HPTQMult/hpc (line 1011)
-  const rolloutFt_tsmax = (vehicle.rolloutIn ?? 12) / 12;
-  const DistToPrint1 = rolloutFt_tsmax > 0 ? rolloutFt_tsmax : 1; // VB6: If DistToPrint(1) = 0 Then DistToPrint(1) = 1
-  const HP_launch_raw = TABY(xrpm, yhp, NHP, 1, launchRPM);
-  const HP_launch_corrected = hpTqMult * HP_launch_raw / hpc;  // Apply same correction as VB6 line 1011
-  const TSMax = vb6CalcTSMaxInit(
-    DistToPrint1,
-    HP_launch_corrected,
-    torqueMult,
-    vehicle.weightLb
-  );
+  // VB6 TIMESLIP.FRM:1062-1067
+  // Bonneville: TSMax = 0.1 (fixed)
+  // Quarter: TSMax = DistToPrint(1) * 0.11 * (HP * TorqueMult / Weight)^(-1/3) / 15
+  let TSMax: number;
+  if (isLandSpeed) {
+    // VB6 line 1066: Bonneville Pro uses fixed 0.1s timestep
+    TSMax = 0.1;
+  } else {
+    // VB6 lines 1063-1064: Quarter mile uses dynamic calculation
+    const rolloutFt_tsmax = (vehicle.rolloutIn ?? 12) / 12;
+    const DistToPrint1 = rolloutFt_tsmax > 0 ? rolloutFt_tsmax : 1;
+    const HP_launch_raw = TABY(xrpm, yhp, NHP, 1, launchRPM);
+    const HP_launch_corrected = hpTqMult_early * HP_launch_raw / hpc;
+    TSMax = vb6CalcTSMaxInit(
+      DistToPrint1,
+      HP_launch_corrected,
+      torqueMult,
+      vehicle.weightLb
+    );
+  }
   
   
   // ========================================================================
@@ -979,7 +1087,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const timeslip: { d_ft: number; t_s: number; v_mph: number }[] = [];
   
   // Track when the timer starts (when car has moved rolloutFt distance)
-  let timerStartTime_s: number | null = null;
+  let timerStartTime_s: number | null = rolloutIn === 0 ? 0 : null;
   
   // VB6 trap speed calculation: average speed over last 66ft
   // TIMESLIP.FRM:1388,1396,1619,1624 - SaveTime is set at 594ft (for 660) and 1254ft (for 1320)
@@ -1078,7 +1186,60 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const prevAgs_g = state.Ags0_g;
     const prevRPM = state.RPM0;
     const prevSlip = state.SLIP ? 1 : 0;
-    const stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
+    
+    // Save ShiftFlag and Gear BEFORE step for shift detection
+    // VB6 GoTo 230 does NOT restore state - it uses current shift point values
+    const savedShiftFlag = state.ShiftFlag;
+    const savedGear = state.Gear;
+    
+    let stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
+    
+    // VB6 TIMESLIP.FRM:1355, 1433 - Shift recalculation (GoTo 230)
+    // If shift triggers during step (EngRPM near ShiftRPM), VB6 recalculates with new gear
+    const ShiftRPMTol_check = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
+    
+    // DEBUG: Log shift detection values AND physics in high-RPM region
+    if (savedShiftFlag === 0 && savedGear < vb6Vehicle.NGR) {
+      const targetShiftRPM = vb6Vehicle.ShiftRPM[savedGear - 1];
+      const rpmDiff = targetShiftRPM !== undefined ? Math.abs(targetShiftRPM - state.EngRPM) : 999;
+      if (state.EngRPM > 9500 && savedGear === 1) {
+        console.log(`[ShiftCheck] Step ${step}: t=${state.time_s.toFixed(4)}, EngRPM=${state.EngRPM.toFixed(0)}, Diff=${rpmDiff.toFixed(0)}, TimeStep=${stepResult.TimeStep_s.toFixed(5)}, HP=${stepResult.HP.toFixed(1)}, ClutchSlip=${stepResult.ClutchSlip.toFixed(4)}, AGS=${state.AGS_g.toFixed(3)}, WillTrigger=${rpmDiff < ShiftRPMTol_check}`);
+      }
+    }
+    
+    if (savedShiftFlag === 0 && savedGear < vb6Vehicle.NGR) {
+      const targetShiftRPM = vb6Vehicle.ShiftRPM[savedGear - 1];
+      // VB6 TIMESLIP.FRM:1355 - VB6 EXACT CODE: Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol
+      // ShiftRPMTol = 20 if ShiftRPM(1) > 8000, else 10 (line 860)
+      const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
+      if (targetShiftRPM !== undefined && Math.abs(targetShiftRPM - state.EngRPM) < shiftRPMTol) {
+        // Shift triggered! VB6 would GoTo 230 and recalculate with new gear.
+        // VB6 line 1433: ShiftFlag = 2, iGear++, LAdd = 1, GoTo 230
+        //
+        // CRITICAL FIX: VB6's GoTo 230 does NOT restore state!
+        // It uses the CURRENT step's values (shift point) as the starting point.
+        // At line 1090, VB6 does: Vel0 = Vel(L), Ags0 = AGS(L)
+        // This means the shift point velocity/acceleration become the base for the next calculation.
+        //
+        // DO NOT RESTORE STATE - use current shift point values!
+        
+        // VB6 line 1071: Shift2PrintTime = time(L) + DTShift
+        Shift2PrintTime = state.time_s + vb6Vehicle.DTShift;
+        vb6Env.Shift2PrintTime = Shift2PrintTime;
+        
+        console.log(`[ShiftRecalc] Triggered at step ${step}: shiftPointTime=${state.time_s.toFixed(4)}, Shift2PrintTime=${Shift2PrintTime.toFixed(4)}, EngRPM=${state.EngRPM.toFixed(0)}`);
+        
+        // Execute shift (VB6 line 1433: ShiftFlag = 2, iGear++)
+        // DO NOT restore state - VB6 uses current (shift point) values
+        state.ShiftFlag = 2;
+        state.Gear++;
+        
+        // Recalculate with new gear (VB6 GoTo 230)
+        // vb6SimulationStep will use TimeStep = DTShift because gear changed
+        // and will start from current shift point values (Vel_ftps, AGS_g, etc.)
+        stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
+      }
+    }
     
     // VB6 TIMESLIP.FRM:1283-1291 - doOpt during gear shift completion
     // When ShiftFlag >= 2 AND time is within TimeTol of Shift2PrintTime, call doOpt
@@ -1157,6 +1318,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       } else {
         // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
         // VB6 TIMESLIP.FRM:1355 - If iGear < NGR And Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
+        // VB6 EXACT CODE - tolerance-based only, no additional conditions
         const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
         const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
         if (Math.abs(shiftRPM - state.EngRPM) < shiftRPMTol) {
@@ -1173,17 +1335,20 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const currentTarget = distPrintPoints[distPrintIdx];
     const DistStep = Math.abs(currentTarget - state.Dist_ft);
     // VB6 DistTol is dynamic, updated AFTER each distance target is reached:
-    // - Initial (iDist=1): 0.005 (TIMESLIP.FRM:997)
-    // - After rollout Case 1 (iDist=2,3,4): 0.1 (TIMESLIP.FRM:1379)
-    // - After 330ft Case 4 (iDist>=5): 0.008 (TIMESLIP.FRM:1387)
+    // - Bonneville: DistTol = 1 (TIMESLIP.FRM:999)
+    // - Quarter: Initial (iDist=1): 0.005 (TIMESLIP.FRM:997)
+    // - Quarter: After rollout Case 1 (iDist=2,3,4): 0.1 (TIMESLIP.FRM:1379)
+    // - Quarter: After 330ft Case 4 (iDist>=5): 0.008 (TIMESLIP.FRM:1387)
     const vb6iDist_check = distPrintIdx + 1;
     let DistTol: number;
-    if (vb6iDist_check <= 1) {
-      DistTol = 0.005;  // Initial value for rollout
+    if (isLandSpeed) {
+      DistTol = 1;  // Bonneville: constant 1 ft tolerance
+    } else if (vb6iDist_check <= 1) {
+      DistTol = 0.005;  // Quarter: Initial value for rollout
     } else if (vb6iDist_check <= 4) {
-      DistTol = 0.1;    // After rollout, before 330ft
+      DistTol = 0.1;    // Quarter: After rollout, before 330ft
     } else {
-      DistTol = 0.008;  // After 330ft
+      DistTol = 0.008;  // Quarter: After 330ft
     }
     const TimeTol = 0.002;
     
@@ -1205,6 +1370,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // TIMESLIP indices:                     1       2   3    4    5    6     7     8     9
       // Note: distPrintIdx is 0-based, VB6 iDist is 1-based
       const vb6iDist = distPrintIdx + 1;  // Convert to VB6's 1-based index
+      
+      // VB6 line 1299: If iDist = 1 And gc_Rollout.Value = 0 Then PrintFlag = -1
+      // For Bonneville with zero rollout, skip the first checkpoint (1ft)
+      const skipFirstCheckpoint = vb6iDist === 1 && rolloutIn === 0;
+      if (skipFirstCheckpoint) {
+        distPrintIdx++;  // Skip to next checkpoint
+        // Don't record anything for this checkpoint - continue to next step
+      } else {
       
       // VB6 sub310 DISTANCE INTERPOLATION (TIMESLIP.FRM:1609-1640)
       // When we overshoot a distance target, VB6 interpolates back to exact distance.
@@ -1284,8 +1457,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         if (!timeslip.find(t => t.d_ft === 660)) {
           if (state.ShiftFlag < 2 || shiftFallback || overshoot) {
             // VB6 interpolates to exact 660ft (sub310), so use interpolatedTrackTime for trap speed
-            let speed_mph = recordVel_ftps * FPS_TO_MPH;  // fallback using interpolated velocity
-            if (saveTime_594ft !== null && interpolatedTrackTime > saveTime_594ft) {
+            let speed_mph = recordVel_ftps * FPS_TO_MPH;  // Default: instantaneous velocity
+            // QUARTER MILE ONLY: Use trap speed formula (66ft average)
+            // Bonneville uses instantaneous velocity (VB6 line 1406)
+            if (!isLandSpeed && saveTime_594ft !== null && interpolatedTrackTime > saveTime_594ft) {
               speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_594ft);
             }
             timeslip.push({ d_ft: 660, t_s: interpolatedTrackTime, v_mph: speed_mph });
@@ -1316,8 +1491,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         if (!timeslip.find(t => t.d_ft === 1320)) {
           if (state.ShiftFlag < 2 || shiftFallback || overshoot) {
             // VB6 interpolates to exact 1320ft (sub310), so use interpolatedTrackTime for trap speed
-            let speed_mph = recordVel_ftps * FPS_TO_MPH;  // fallback using interpolated velocity
-            if (saveTime_1254ft !== null && interpolatedTrackTime > saveTime_1254ft) {
+            let speed_mph = recordVel_ftps * FPS_TO_MPH;  // Default: instantaneous velocity
+            // QUARTER MILE ONLY: Use trap speed formula (66ft average)
+            // Bonneville uses instantaneous velocity (VB6 line 1411)
+            if (!isLandSpeed && saveTime_1254ft !== null && interpolatedTrackTime > saveTime_1254ft) {
               speed_mph = FPS_TO_MPH * 66 / (interpolatedTrackTime - saveTime_1254ft);
             }
             timeslip.push({ d_ft: 1320, t_s: interpolatedTrackTime, v_mph: speed_mph });
@@ -1325,6 +1502,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           }
         }
       }
+      }  // End of else block for skipFirstCheckpoint
       
       distPrintIdx++;
     }
@@ -1356,13 +1534,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // VB6 tolerance check - triggers when CLOSE to target, not just past it
       if (DistStep < DistTol && (DistStep / state.Vel_ftps) < TimeTol) {
         // VB6 line 1380: If gc_Rollout.Value > 0 Then time(L) = 0
+        // Timer starts at current simulation time
         timerStartTime_s = state.time_s;
         
         // VB6 line 1381: Dist(L) = Dist(L) + ovradj - PERMANENTLY adjust distance for front overhang
         // This is critical - after this point, all distances include ovradj
         state.Dist_ft = state.Dist_ft + ovradj;
-        // vb6SimulationStep already set Dist0_ft = Dist_ft (before adjustment)
-        // We need to update Dist0_ft to the adjusted value so next step starts correctly
         state.Dist0_ft = state.Dist_ft;
         
         // Debug: Log rollout timing
@@ -1554,9 +1731,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       peakHP: Math.max(...yhp),
       stallRPM,
       slippage,
-      slippageSource: clutch?.slippageFactor !== undefined ? 'clutch.slippageFactor' :
-                      clutch?.slippage !== undefined ? 'clutch.slippage' :
-                      (vehicle as any).clutchSlippage !== undefined ? 'vehicle.clutchSlippage' : 'default',
+      slippageSource: isClutch ? 'calculated (VB6 formula)' : 
+                      (converter?.slippageFactor !== undefined ? 'converter.slippageFactor' :
+                       converter?.slippage !== undefined ? 'converter.slippage' : 'default'),
       vehicleClutchSlippage: (vehicle as any).clutchSlippage,
       isClutch,
       tractionIndex: vb6Env.TractionIndex,

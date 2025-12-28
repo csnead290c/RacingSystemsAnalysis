@@ -1,11 +1,12 @@
 /**
  * Data Import Component
  * 
- * Import run logs and vehicle data from CSV files.
+ * Import run logs and vehicle data from CSV files or VB6 .DAT files.
  */
 
 import { useState, useRef } from 'react';
 import { parseCSV, readFileAsText, type RunLogCSV, type VehicleCSV } from '../utils/csvUtils';
+import { readVB6DatFile, isVB6DatFile, type VB6DatFile } from '../utils/vb6DatParser';
 
 type ImportType = 'runs' | 'vehicles';
 
@@ -33,21 +34,48 @@ export default function DataImport({ onImportRuns, onImportVehicles }: DataImpor
     setPreview(null);
 
     try {
-      const csvText = await readFileAsText(file);
-      
-      if (importType === 'runs') {
-        const runs = parseCSV<AnyRecord>(csvText);
-        setPreview(runs.slice(0, 5));
-        
-        if (onImportRuns && runs.length > 0) {
-          // Don't auto-import, wait for confirmation
+      // Check if this is a VB6 .DAT file
+      if (isVB6DatFile(file.name)) {
+        if (importType !== 'vehicles') {
+          setError('VB6 .DAT files can only be imported as vehicles');
+          setImporting(false);
+          return;
         }
+        
+        const datFile: VB6DatFile = await readVB6DatFile(file);
+        console.log('[DataImport] Parsed VB6 .DAT file:', datFile);
+        
+        // Convert to preview format
+        const vehiclePreview = {
+          name: datFile.vehicle.name || datFile.description,
+          version: `VB6 v${datFile.version}`,
+          weight: datFile.vehicle.weightLb,
+          tireDiameter: datFile.vehicle.tireDiaIn,
+          peakHP: datFile.vehicle.powerHP,
+          transmission: datFile.vehicle.transmissionType,
+        };
+        setPreview([vehiclePreview]);
+        
+        // Store the full vehicle data for import
+        (window as any).__vb6DatImport = datFile;
       } else {
-        const vehicles = parseCSV<AnyRecord>(csvText);
-        setPreview(vehicles.slice(0, 5));
+        // CSV file
+        const csvText = await readFileAsText(file);
+        
+        if (importType === 'runs') {
+          const runs = parseCSV<AnyRecord>(csvText);
+          setPreview(runs.slice(0, 5));
+          
+          if (onImportRuns && runs.length > 0) {
+            // Don't auto-import, wait for confirmation
+          }
+        } else {
+          const vehicles = parseCSV<AnyRecord>(csvText);
+          setPreview(vehicles.slice(0, 5));
+        }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to parse CSV file');
+      setError(err instanceof Error ? err.message : 'Failed to parse file');
     }
 
     setImporting(false);
@@ -101,11 +129,13 @@ export default function DataImport({ onImportRuns, onImportVehicles }: DataImpor
 
       {/* File Input */}
       <div style={{ marginBottom: '16px' }}>
-        <label className="label">Select CSV File</label>
+        <label className="label">
+          {importType === 'vehicles' ? 'Select CSV or VB6 .DAT File' : 'Select CSV File'}
+        </label>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,.txt"
+          accept={importType === 'vehicles' ? '.csv,.txt,.dat' : '.csv,.txt'}
           onChange={handleFileSelect}
           disabled={importing}
           style={{
@@ -117,6 +147,11 @@ export default function DataImport({ onImportRuns, onImportVehicles }: DataImpor
             backgroundColor: 'var(--color-bg)',
           }}
         />
+        {importType === 'vehicles' && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            Supports VB6 Quarter Jr/Pro .DAT files (all versions)
+          </div>
+        )}
       </div>
 
       {/* Error Display */}

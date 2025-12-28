@@ -13,6 +13,7 @@ export type FuelType = 'GAS' | 'METHANOL' | 'NITRO';
 export interface ExtendedVehicleConfig {
   name: string;
   fuel?: FuelType;
+  mode?: 'quarterJr' | 'quarterPro';  // VB6 sim mode - affects LaunchRPM and other behaviors
   env: {
     elevation: number;
     barometerInHg: number;
@@ -580,6 +581,7 @@ export const BENCHMARK_CONFIGS: Record<string, ExtendedVehicleConfig> = {
   Motorcycle_Jr: {
     name: 'Motorcycle_Jr',
     fuel: 'GAS',
+    mode: 'quarterJr',  // VB6: Forces LaunchRPM = Stall (compile-time flag)
     // Source: QUARTERjr\MOTORCYC.DAT - test case for QUARTER jr
     env: {
       elevation: 900,

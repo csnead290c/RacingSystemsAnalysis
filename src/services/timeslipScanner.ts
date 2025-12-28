@@ -4,10 +4,10 @@
  * Uses OCR to extract timing data from photographed time slips.
  * Supports both LEFT and RIGHT lane extraction including opponent data.
  * 
- * Common time slip formats:
- * - Standard format: LEFT ... RIGHT columns with Car #, Class, DIAL, R/T, 60', 330, 1/8, MPH, 1000, 1/4, MPH
- * - NHRA format: Entry/BYE columns, DIAL-IN, REACTION, 60 Foot, 330 Foot, etc.
- * - Compulink format: Similar with margin info at bottom
+ * Supported time slip formats:
+ * - Compulink: LABEL ... leftValue    rightValue (dots separator)
+ * - Accutime II: leftValue ----- LABEL ----- rightValue (dashes, label in center)
+ * - Standard: LEFT/RIGHT columns with labeled rows
  */
 
 import Tesseract from 'tesseract.js';
@@ -26,6 +26,8 @@ export interface TimeslipLaneData {
   quarterMileET?: number;
   quarterMileMPH?: number;
   overUnder?: number;
+  finishMargin?: number;
+  offDial?: number;
 }
 
 export interface TimeslipData {
@@ -40,26 +42,207 @@ export interface TimeslipData {
   margin?: number;
   rawText: string;
   confidence: number;
+  format?: 'compulink' | 'accutime' | 'unknown';
 }
 
 export type LaneSelection = 'left' | 'right';
 
 /**
  * Parse a numeric value from text, handling common OCR errors
+ * @param text - raw OCR text
+ * @param expectNegative - if true, small decimals like .007 should be negative (for R/T)
  */
-function parseNumber(text: string | undefined): number | undefined {
+function parseNumber(text: string | undefined, expectNegative: boolean = false): number | undefined {
   if (!text) return undefined;
   
+  let input = text.trim();
+  
+  // Handle "L007" -> ".007" (L mistaken for decimal point, common for R/T)
+  if (/^L\d/i.test(input)) {
+    input = '.' + input.substring(1);
+  }
+  
+  // Handle "01%" -> ".015" (0 at start is decimal, % is 5)
+  // Match patterns like "01%", "015", "0l5" etc
+  if (/^0[1lI]\d*[%5]?$/i.test(input)) {
+    input = '.' + input.substring(1);
+  }
+  
   // Clean up common OCR mistakes
-  let cleaned = text
+  let cleaned = input
     .replace(/[oO]/g, '0')  // O -> 0
-    .replace(/[lI]/g, '1')  // l/I -> 1
-    .replace(/[sS]/g, '5')  // S -> 5 (sometimes)
+    .replace(/[lI|]/g, '1')  // l/I/| -> 1
+    .replace(/[qQ]/g, '5')  // q/Q -> 5 (q.1177 -> 5.1177)
+    .replace(/[sS]/g, '5')  // S -> 5
+    .replace(/[%]/g, '5')   // % -> 5 (1.36% should be 1.365)
     .replace(/[,]/g, '.')   // comma -> decimal
-    .replace(/[^0-9.-]/g, ''); // Remove non-numeric
+    .replace(/\s+/g, '')    // Remove spaces
+    .replace(/[^0-9.\-]/g, ''); // Remove non-numeric except minus and dot
+  
+  // Handle case where minus got separated  
+  if (cleaned.startsWith('.') && text.trim().startsWith('-')) {
+    cleaned = '-' + cleaned;
+  }
+  
+  // If we have something like "007" from L007, ensure it's ".007"
+  if (/^0{1,2}\d$/.test(cleaned) && cleaned.length <= 3) {
+    cleaned = '.' + cleaned;
+  }
   
   const num = parseFloat(cleaned);
-  return isNaN(num) ? undefined : num;
+  if (isNaN(num)) return undefined;
+  
+  // For R/T values, small positive decimals are likely negative
+  if (expectNegative && num > 0 && num < 1) {
+    return -num;
+  }
+  
+  return num;
+}
+
+/**
+ * Detect the time slip format based on text patterns
+ */
+function detectFormat(text: string): 'compulink' | 'accutime' | 'unknown' {
+  // Accutime has centered labels with dashes: "value ----- LABEL ----- value"
+  if (/\d+[\s.]*-{2,}.*-{2,}[\s.]*\d+/i.test(text) || 
+      /ACCUTIME/i.test(text) ||
+      /-{2,}\s*(DIAL|REACTION|60\s*FT|330\s*FT|1\/8)/i.test(text)) {
+    return 'accutime';
+  }
+  
+  // Compulink uses dots: "LABEL ... value value"
+  if (/\.\.\./i.test(text) || /Compulink/i.test(text)) {
+    return 'compulink';
+  }
+  
+  return 'unknown';
+}
+
+/**
+ * Parse Accutime format: "leftValue ----- LABEL ----- rightValue"
+ */
+function parseAccutimeFormat(lines: string[]): { left: TimeslipLaneData; right: TimeslipLaneData } {
+  const left: TimeslipLaneData = {};
+  const right: TimeslipLaneData = {};
+  
+  console.log('=== ACCUTIME PARSER ===');
+  for (const line of lines) {
+    if (!/-{2,}/.test(line)) continue;
+    console.log('Dash line:', line);
+    const parts = line.split(/-{2,}/).map(p => p.trim()).filter(p => p.length > 0);
+    console.log('Parts:', parts);
+    if (parts.length < 2) continue;
+    
+    let leftVal: string | undefined, label: string | undefined, rightVal: string | undefined;
+    if (parts.length >= 3) { leftVal = parts[0]; label = parts[1]; rightVal = parts[2]; }
+    else if (/^[\d.\-]+$/.test(parts[0].replace(/\s/g, ''))) { leftVal = parts[0]; label = parts[1]; }
+    else { label = parts[0]; rightVal = parts[1]; }
+    
+    console.log('Parsed:', { leftVal, label, rightVal });
+    if (!label) continue;
+    const L = label.toUpperCase();
+    
+    if (/DIAL\s*IN/i.test(L)) { left.dialIn = parseNumber(leftVal); right.dialIn = parseNumber(rightVal); }
+    else if (/REACTION/i.test(L)) { left.reactionTime = parseNumber(leftVal); right.reactionTime = parseNumber(rightVal); }
+    else if (/60\s*F/i.test(L)) { left.sixtyFt = parseNumber(leftVal); right.sixtyFt = parseNumber(rightVal); }
+    else if (/330\s*F/i.test(L)) { left.threeThirtyFt = parseNumber(leftVal); right.threeThirtyFt = parseNumber(rightVal); }
+    else if (/1\/8\s*ET/i.test(L)) { left.eighthMileET = parseNumber(leftVal); right.eighthMileET = parseNumber(rightVal); }
+    else if (/1\/8\s*MPH/i.test(L)) { left.eighthMileMPH = parseNumber(leftVal); right.eighthMileMPH = parseNumber(rightVal); }
+    else if (/FINISH\s*MARGIN/i.test(L)) { left.finishMargin = parseNumber(leftVal); right.finishMargin = parseNumber(rightVal); }
+    else if (/OFF\s*DIAL/i.test(L)) { left.offDial = parseNumber(leftVal); right.offDial = parseNumber(rightVal); }
+  }
+  console.log('Accutime result:', { left, right });
+  return { left, right };
+}
+
+/**
+ * Pre-clean a line by fixing common OCR character substitutions
+ */
+function cleanOcrLine(line: string): string {
+  return line
+    // Fix label errors first
+    .replace(/^BO["']/i, "60'")        // BO" -> 60'
+    .replace(/^\$30\.?0?\.?/i, '330')  // $30.0. -> 330
+    .replace(/^RAT\s+/i, 'R/T ')       // RAT ool -> R/T
+    // Fix number errors - be careful with context
+    .replace(/([,\s])L(\d{2,3})/g, '$1.$2')  // L007 -> .007 (L as decimal point)
+    .replace(/(\s)0(\d)%/g, '$1.0$25')  // 01% -> .015 (0 is decimal, % is 5)
+    .replace(/(\d)%/g, '$15')          // 1.36% -> 1.365
+    .replace(/[qQ]\.(\d+)/g, '5.$1')   // q.1177 -> 5.1177
+    .replace(/(\d)\.(\d+)[lI](\d+)/g, '$1.$2$3'); // 5.11l7 -> 5.1177
+}
+
+/**
+ * Parse Compulink format: "LABEL ... leftValue    rightValue"
+ */
+function parseCompulinkFormat(lines: string[]): { left: TimeslipLaneData; right: TimeslipLaneData } {
+  const left: TimeslipLaneData = {};
+  const right: TimeslipLaneData = {};
+  let mphCount = 0;
+  
+  console.log('=== COMPULINK PARSER ===');
+  for (const rawLine of lines) {
+    // Pre-clean the line to fix OCR errors
+    const line = cleanOcrLine(rawLine);
+    
+    // Extract all decimal numbers from cleaned line
+    const numbers = line.match(/-?\d+\.\d+|-?\.\d+/g) || [];
+    
+    // Identify the label from start of line (include digits for 60', 330, 1/8)
+    const labelMatch = line.match(/^([A-Za-z0-9\/\s']+?)(?:\.{2,}|\s{2,}|\s+\d)/);
+    const label = labelMatch ? labelMatch[1].trim().toUpperCase() : '';
+    
+    // Also check the raw line for numeric labels that might be mangled
+    const lineStart = line.substring(0, 10).toUpperCase();
+    
+    if (numbers.length > 0) {
+      console.log('Raw:', rawLine);
+      console.log('Clean:', line, '| Label:', label, '| Numbers:', numbers);
+    }
+    if (numbers.length === 0) continue;
+    
+    // Take last two numbers as left/right values
+    const leftVal = numbers.length >= 2 ? numbers[numbers.length - 2] : numbers[0];
+    const rightVal = numbers.length >= 2 ? numbers[numbers.length - 1] : undefined;
+    
+    // Parse values
+    if (!leftVal) continue;
+    const leftNum = parseFloat(leftVal);
+    const rightNum = rightVal ? parseFloat(rightVal) : undefined;
+    
+    // Match labels to fields (check both extracted label AND line start)
+    if (/DIAL/i.test(label)) { 
+      left.dialIn = leftNum; right.dialIn = rightNum; 
+    }
+    else if (/R\/T/i.test(label) || /^RT$/i.test(label) || /^R\/T/i.test(lineStart)) { 
+      // R/T values are typically negative
+      left.reactionTime = leftNum > 0 && leftNum < 1 ? -leftNum : leftNum;
+      right.reactionTime = rightNum !== undefined && rightNum > 0 && rightNum < 1 ? -rightNum : rightNum;
+    }
+    else if (/^60/i.test(label) || /^60['']?/i.test(lineStart)) { 
+      left.sixtyFt = leftNum; right.sixtyFt = rightNum; 
+    }
+    else if (/^330/i.test(label) || /^330/i.test(lineStart)) { 
+      left.threeThirtyFt = leftNum; right.threeThirtyFt = rightNum; 
+    }
+    else if (/^1\/8/i.test(label) || /^1\/8/i.test(lineStart)) { 
+      left.eighthMileET = leftNum; right.eighthMileET = rightNum; 
+    }
+    else if (/MPH/i.test(label) || /^MPH/i.test(lineStart)) {
+      if (mphCount === 0) { left.eighthMileMPH = leftNum; right.eighthMileMPH = rightNum; }
+      else { left.quarterMileMPH = leftNum; right.quarterMileMPH = rightNum; }
+      mphCount++;
+    }
+    else if (/^1000/i.test(label) || /^1000/i.test(lineStart)) { 
+      left.thousandFt = leftNum; right.thousandFt = rightNum; 
+    }
+    else if (/^E\.?T/i.test(label)) { 
+      left.quarterMileET = leftNum; right.quarterMileET = rightNum; 
+    }
+  }
+  console.log('Compulink result:', { left, right });
+  return { left, right };
 }
 
 /**
@@ -67,203 +250,91 @@ function parseNumber(text: string | undefined): number | undefined {
  */
 function parseTimeslipText(text: string): TimeslipData {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  const result: TimeslipData = {
-    left: {},
-    right: {},
-    rawText: text,
-    confidence: 0,
-  };
-  
-  // Common patterns for field extraction
-  const patterns = {
-    carNumber: /Car\s*#?\s*\.{0,3}\s*(\S+)\s+(\S+)/i,
-    class: /Class\s*\.{0,3}\s*(\S*)\s*(\S*)/i,
-    dialIn: /DIAL(?:-?IN)?\s*\.{0,3}\s*([\d.]+)?\s*([\d.]+)?/i,
-    reactionTime: /R\/T|REACTION\s*\.{0,3}\s*([\d.]+)\s*([\d.]+)?/i,
-    sixtyFt: /60['\s]?(?:Foot)?\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    threeThirty: /330['\s]?(?:Foot)?\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    eighthET: /1\/8(?:\s*ET)?\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    eighthMPH: /(?:1\/8\s*)?MPH\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    thousandFt: /1000['\s]?(?:Foot)?\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    quarterET: /(?:1\/4|E\.?T\.?)\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    quarterMPH: /(?:1\/4\s*)?MPH\s*\.{0,3}\s*-{0,3}\s*([\d.]+)\s*-{0,3}\s*([\d.]+)?/i,
-    winner: /WINNER\s*<?=*>?\s*(LEFT|RIGHT|<<|>>|<=|=>)/i,
-    round: /Round\s*:?\s*(\S+)/i,
-    runNumber: /Run\s*:?\s*(\d+)/i,
-    date: /(\d{1,2}\/\d{1,2}\/\d{2,4})/,
-    time: /(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i,
-    overUnder: /Ov\/Un\s*\.{0,3}\s*([\d.-]+)?\s*([\d.-]+)?/i,
-  };
-  
-  // Process each line looking for patterns
   const fullText = lines.join(' ');
+  const format = detectFormat(text);
   
-  // Extract track name from first few lines
-  if (lines.length > 0) {
-    const trackLine = lines.find(l => 
-      l.includes('Motorsports') || 
-      l.includes('Dragway') || 
-      l.includes('Raceway') ||
-      l.includes('NHRA') ||
-      l.includes('Park')
-    );
-    if (trackLine) {
-      result.trackName = trackLine;
-    }
-  }
+  // Debug: Log raw OCR output
+  console.log('=== TIME SLIP OCR RAW TEXT ===');
+  console.log(text);
+  console.log('=== DETECTED FORMAT:', format, '===');
+  console.log('=== LINES:', lines);
+  
+  const result: TimeslipData = { left: {}, right: {}, rawText: text, confidence: 0, format };
+  
+  // Extract track name
+  const trackLine = lines.find(l => /Motorsports|Dragway|Raceway|NHRA|Park|Valley|Speedway/i.test(l));
+  if (trackLine) result.trackName = trackLine.replace(/[*]+/g, '').trim();
   
   // Extract date/time
-  const dateMatch = fullText.match(patterns.date);
+  const dateMatch = fullText.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
   if (dateMatch) result.date = dateMatch[1];
-  
-  const timeMatch = fullText.match(patterns.time);
+  const timeMatch = fullText.match(/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
   if (timeMatch) result.time = timeMatch[1];
   
-  // Extract round/run info
-  const roundMatch = fullText.match(patterns.round);
+  // Round/run info
+  const roundMatch = fullText.match(/(?:ELIM\s*)?(?:RD#?|Round)\s*:?\s*(\d+)/i);
   if (roundMatch) result.round = roundMatch[1];
-  
-  const runMatch = fullText.match(patterns.runNumber);
+  const runMatch = fullText.match(/RUN\s*:?\s*(\d+)/i);
   if (runMatch) result.runNumber = parseInt(runMatch[1]);
   
-  // Extract car numbers
-  const carMatch = fullText.match(patterns.carNumber);
-  if (carMatch) {
-    result.left.carNumber = carMatch[1];
-    result.right.carNumber = carMatch[2];
+  // Car numbers "LEFT:2 ... RIGHT:162"
+  const laneMatch = fullText.match(/LEFT\s*:?\s*(\d+).*RIGHT\s*:?\s*(\d+)/i);
+  if (laneMatch) { result.left.carNumber = laneMatch[1]; result.right.carNumber = laneMatch[2]; }
+  
+  // Parse timing data based on format
+  let timingData: { left: TimeslipLaneData; right: TimeslipLaneData };
+  if (format === 'accutime') {
+    timingData = parseAccutimeFormat(lines);
+  } else if (format === 'compulink') {
+    timingData = parseCompulinkFormat(lines);
+  } else {
+    // Try both, use the one with more data
+    const accuData = parseAccutimeFormat(lines);
+    const compuData = parseCompulinkFormat(lines);
+    const accuCount = Object.values(accuData.left).filter(v => v !== undefined).length +
+                      Object.values(accuData.right).filter(v => v !== undefined).length;
+    const compuCount = Object.values(compuData.left).filter(v => v !== undefined).length +
+                       Object.values(compuData.right).filter(v => v !== undefined).length;
+    timingData = accuCount >= compuCount ? accuData : compuData;
   }
+  result.left = { ...result.left, ...timingData.left };
+  result.right = { ...result.right, ...timingData.right };
   
-  // Extract class
-  const classMatch = fullText.match(patterns.class);
-  if (classMatch) {
-    result.left.class = classMatch[1] || undefined;
-    result.right.class = classMatch[2] || undefined;
-  }
-  
-  // Extract timing data - look for each field
-  // For two-lane format, first value is left, second is right
-  
-  // Dial-In
-  const dialMatch = fullText.match(patterns.dialIn);
-  if (dialMatch) {
-    result.left.dialIn = parseNumber(dialMatch[1]);
-    result.right.dialIn = parseNumber(dialMatch[2]);
-  }
-  
-  // Reaction Time
-  const rtMatch = fullText.match(patterns.reactionTime);
-  if (rtMatch) {
-    result.left.reactionTime = parseNumber(rtMatch[1]);
-    result.right.reactionTime = parseNumber(rtMatch[2]);
-  }
-  
-  // 60 Foot
-  const sixtyMatch = fullText.match(patterns.sixtyFt);
-  if (sixtyMatch) {
-    result.left.sixtyFt = parseNumber(sixtyMatch[1]);
-    result.right.sixtyFt = parseNumber(sixtyMatch[2]);
-  }
-  
-  // 330 Foot
-  const threeThirtyMatch = fullText.match(patterns.threeThirty);
-  if (threeThirtyMatch) {
-    result.left.threeThirtyFt = parseNumber(threeThirtyMatch[1]);
-    result.right.threeThirtyFt = parseNumber(threeThirtyMatch[2]);
-  }
-  
-  // Parse lines more carefully for the remaining fields
-  // Look for lines that contain the timing values
+  // Determine winner
+  if (/<<\s*WIN/i.test(fullText)) result.winner = 'left';
+  else if (/WIN\s*>>/i.test(fullText)) result.winner = 'right';
   for (const line of lines) {
-    // 1/8 ET (look for line with 1/8 that has ET values, not MPH)
-    if (/1\/8/i.test(line) && !/MPH/i.test(line)) {
-      const values = line.match(/([\d.]+)/g);
-      if (values && values.length >= 1) {
-        if (!result.left.eighthMileET) result.left.eighthMileET = parseNumber(values[0]);
-        if (values.length >= 2 && !result.right.eighthMileET) result.right.eighthMileET = parseNumber(values[1]);
-      }
-    }
-    
-    // 1000 Foot
-    if (/1000/i.test(line)) {
-      const values = line.match(/([\d.]+)/g);
-      if (values && values.length >= 1) {
-        // Skip "1000" itself
-        const filtered = values.filter(v => parseFloat(v) !== 1000);
-        if (filtered.length >= 1 && !result.left.thousandFt) result.left.thousandFt = parseNumber(filtered[0]);
-        if (filtered.length >= 2 && !result.right.thousandFt) result.right.thousandFt = parseNumber(filtered[1]);
-      }
-    }
-    
-    // 1/4 or E.T. line (final ET)
-    if (/1\/4|^E\.?T\.?\s/i.test(line) && !/MPH/i.test(line)) {
-      const values = line.match(/([\d.]+)/g);
-      if (values && values.length >= 1) {
-        // Filter out "4" from "1/4"
-        const filtered = values.filter(v => parseFloat(v) > 1);
-        if (filtered.length >= 1 && !result.left.quarterMileET) result.left.quarterMileET = parseNumber(filtered[0]);
-        if (filtered.length >= 2 && !result.right.quarterMileET) result.right.quarterMileET = parseNumber(filtered[1]);
-      }
+    if (/WINNER/i.test(line)) {
+      const idx = line.toUpperCase().indexOf('WINNER');
+      result.winner = idx > line.length / 2 ? 'right' : 'left';
     }
   }
   
-  // Extract MPH values (usually the last MPH line is 1/4 MPH)
-  const mphLines = lines.filter(l => /MPH/i.test(l));
-  if (mphLines.length >= 1) {
-    // First MPH line is usually 1/8 MPH
-    const firstMphValues = mphLines[0].match(/([\d.]+)/g);
-    if (firstMphValues && firstMphValues.length >= 1) {
-      result.left.eighthMileMPH = parseNumber(firstMphValues[0]);
-      if (firstMphValues.length >= 2) result.right.eighthMileMPH = parseNumber(firstMphValues[1]);
-    }
-  }
-  if (mphLines.length >= 2) {
-    // Last MPH line is usually 1/4 MPH
-    const lastMphValues = mphLines[mphLines.length - 1].match(/([\d.]+)/g);
-    if (lastMphValues && lastMphValues.length >= 1) {
-      result.left.quarterMileMPH = parseNumber(lastMphValues[0]);
-      if (lastMphValues.length >= 2) result.right.quarterMileMPH = parseNumber(lastMphValues[1]);
+  // RED LT means foul - other side wins
+  for (const line of lines) {
+    if (/RED\s*L/i.test(line)) {
+      const idx = line.toUpperCase().indexOf('RED');
+      result.winner = idx < line.length / 3 ? 'right' : 'left';
     }
   }
   
-  // Extract winner
-  const winnerMatch = fullText.match(patterns.winner);
-  if (winnerMatch) {
-    const winnerText = winnerMatch[1].toUpperCase();
-    if (winnerText.includes('LEFT') || winnerText.includes('<<') || winnerText.includes('<=')) {
-      result.winner = 'left';
-    } else if (winnerText.includes('RIGHT') || winnerText.includes('>>') || winnerText.includes('=>')) {
-      result.winner = 'right';
-    }
-  }
-  
-  // Check for BYE run
-  if (/BYE/i.test(fullText)) {
-    result.winner = 'bye';
-  }
-  
-  // Extract margin from "Right 1st X.XXXX" or similar
+  // Margin from "Right 1st .0006"
   const marginMatch = fullText.match(/(?:Left|Right)\s*1st\s*([\d.]+)/i);
   if (marginMatch) {
     result.margin = parseNumber(marginMatch[1]);
-    // Determine winner from margin line
-    if (/Left\s*1st/i.test(fullText)) {
-      result.winner = 'left';
-    } else if (/Right\s*1st/i.test(fullText)) {
-      result.winner = 'right';
-    }
+    result.winner = /Left\s*1st/i.test(fullText) ? 'left' : 'right';
   }
   
-  // Over/Under
-  const overUnderMatch = fullText.match(patterns.overUnder);
-  if (overUnderMatch) {
-    result.left.overUnder = parseNumber(overUnderMatch[1]);
-    result.right.overUnder = parseNumber(overUnderMatch[2]);
-  }
+  // MOV foul
+  if (/Left\s*MOV\s*foul/i.test(fullText)) result.winner = 'right';
+  if (/Right\s*MOV\s*foul/i.test(fullText)) result.winner = 'left';
   
-  // Calculate confidence based on how many fields we extracted
+  // BYE run
+  if (/BYE/i.test(fullText)) result.winner = 'bye';
+  
+  // Calculate confidence
   let fieldsFound = 0;
-  const checkFields = ['reactionTime', 'sixtyFt', 'eighthMileET', 'quarterMileET', 'quarterMileMPH'];
+  const checkFields = ['reactionTime', 'sixtyFt', 'threeThirtyFt', 'eighthMileET', 'eighthMileMPH'];
   for (const field of checkFields) {
     if (result.left[field as keyof TimeslipLaneData] !== undefined) fieldsFound++;
     if (result.right[field as keyof TimeslipLaneData] !== undefined) fieldsFound++;
@@ -328,7 +399,7 @@ export function didUserWin(data: TimeslipData, userLane: LaneSelection): boolean
 
 /**
  * Preprocess image for better OCR results
- * Applies contrast enhancement and grayscale conversion
+ * Applies gentle contrast enhancement - not too aggressive for thermal paper
  */
 export async function preprocessImage(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -352,13 +423,26 @@ export async function preprocessImage(file: File): Promise<Blob> {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
       
-      // Convert to grayscale and enhance contrast
+      // Find min/max for auto-levels (sample every 10th pixel for speed)
+      let min = 255, max = 0;
+      for (let i = 0; i < data.length; i += 40) {
+        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        if (gray < min) min = gray;
+        if (gray > max) max = gray;
+      }
+      
+      // Auto-levels: stretch contrast to use full range
+      const range = max - min || 1;
+      
       for (let i = 0; i < data.length; i += 4) {
         // Grayscale
         const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
         
-        // Contrast enhancement (threshold at 128, stretch to 0-255)
-        const enhanced = gray > 128 ? 255 : (gray < 80 ? 0 : Math.round((gray - 80) * 255 / 48));
+        // Stretch to full range (auto-levels)
+        const stretched = Math.round(((gray - min) / range) * 255);
+        
+        // Gentle threshold - keep more mid-tones
+        const enhanced = stretched < 100 ? 0 : (stretched > 200 ? 255 : stretched);
         
         data[i] = enhanced;
         data[i + 1] = enhanced;

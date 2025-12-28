@@ -533,6 +533,28 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
               {scannedData.confidence < 0.5 && ' — Please verify the data above'}
             </div>
             
+            {/* Raw OCR Text (Debug) */}
+            <details style={{ marginBottom: '16px', fontSize: '0.7rem' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+                Show raw OCR text (debug)
+              </summary>
+              <pre style={{ 
+                backgroundColor: 'var(--color-surface)', 
+                padding: '8px', 
+                borderRadius: 'var(--radius-sm)',
+                overflow: 'auto',
+                maxHeight: '150px',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                marginTop: '8px',
+              }}>
+                {scannedData.rawText || 'No text extracted'}
+              </pre>
+              <div style={{ marginTop: '4px', color: 'var(--color-text-muted)' }}>
+                Format detected: {scannedData.format || 'unknown'}
+              </div>
+            </details>
+            
             {/* Actions */}
             <div style={{ display: 'flex', gap: '8px' }}>
               <button 
