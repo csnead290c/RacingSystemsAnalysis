@@ -22,5 +22,15 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
+  "exclude": [
+    "src/domain/physics/vb6/compare*.ts",
+    "src/domain/physics/vb6/debug*.ts",
+    "src/domain/physics/vb6/diagnose*.ts",
+    "src/domain/physics/vb6/verify*.ts",
+    "src/domain/physics/vb6/test*.ts",
+    "src/domain/physics/vb6/trace*.ts",
+    "src/domain/physics/vb6/quick*.ts",
+    "src/domain/physics/vb6/decode*.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
