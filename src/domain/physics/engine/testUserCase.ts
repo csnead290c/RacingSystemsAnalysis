@@ -22,29 +22,29 @@ import type { EngineInputs } from './engineTypes';
 
 export const USER_TEST_CASE: EngineInputs = {
   noCyl: 8,
-  inline: 0,              // Vee (from screenshot)
+  inline: 0,              // Vee
   bore: 4.03,
   stroke: 3.48,
   rod: 5.85,
   compressionRatio: 12.9,
-  camType: 4,             // Normal Flat Tappet
+  camType: 4,             // Normal Flat Tappet & Solid Lifter
   inCamDur: 264,
   carb: true,
   carbCFM: 750,
   fuel: 1,                // Gasoline
   manifold: 1,            // Common Plenum
-  curved: false,          // Straight runners
+  curved: true,           // CURVED RUNNER (from full test case!)
   manFlow: 96,
   noInValves: 1,
   valveDia: 2.05,
   maxInFlow: 250,
   deltaP: 28,
-  refBore: 4.03,
-  // No compression ratio worksheet values provided in screenshot
-  deck: undefined,
-  gasket: undefined,
-  chamber: undefined,
-  dome: undefined,
+  refBore: 4.0,           // 4.000 from test case
+  // Compression ratio worksheet values from test case
+  deck: 0.015,
+  gasket: 0.039,
+  chamber: 62,
+  dome: 12,
 };
 
 // Run the test

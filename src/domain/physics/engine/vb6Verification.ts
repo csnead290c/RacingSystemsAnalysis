@@ -26,6 +26,7 @@ export interface VB6ExpectedOutput {
 /**
  * Expected VB6 output for Engine Pro BASECASE
  * From VB6 ENGPRO.EXE with EPro3w/BASECASE.ENG
+ * Full test case provided by user with CURVED RUNNERS
  */
 export const EXPECTED_ENGINE_PRO_BASECASE: VB6ExpectedOutput = {
   cid: 355.1,
