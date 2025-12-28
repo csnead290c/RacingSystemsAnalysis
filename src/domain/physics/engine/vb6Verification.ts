@@ -25,36 +25,38 @@ export interface VB6ExpectedOutput {
 
 /**
  * Expected VB6 output for Engine Pro BASECASE
- * TODO: Run ENGPRO.EXE with BASECASE.ENG to get exact values
+ * From VB6 ENGPRO.EXE with EPro3w/BASECASE.ENG
  */
 export const EXPECTED_ENGINE_PRO_BASECASE: VB6ExpectedOutput = {
-  cid: 0,      // TODO: Get from VB6
-  peakHP: 0,   // TODO: Get from VB6
-  peakTQ: 0,   // TODO: Get from VB6
-  rpmPeakHP: 0,
-  rpmPeakTQ: 0,
-  hpPerCID: 0,
-  tqPerCID: 0,
-  shift: 0,
-  redline: 0,
-  lobeSepAng: 0,
-  inLobeCL: 0,
+  cid: 355.1,
+  peakHP: 461,
+  peakTQ: 415,
+  rpmPeakHP: 6650,
+  rpmPeakTQ: 5450,
+  hpPerCID: 1.30,
+  tqPerCID: 1.17,
+  shift: 7200,
+  redline: 8350,
+  lobeSepAng: 108,
+  inLobeCL: 105,
 };
 
 /**
  * Expected VB6 output for Engine Jr BASECASE
- * TODO: Run ENGJR.EXE with BASECASE.ENG to get exact values
+ * From VB6 ENGJR.EXE with Ejr3w/BASECASE.ENG
  */
 export const EXPECTED_ENGINE_JR_BASECASE: VB6ExpectedOutput = {
-  cid: 0,      // TODO: Get from VB6
-  peakHP: 0,   // TODO: Get from VB6
-  peakTQ: 0,   // TODO: Get from VB6
-  rpmPeakHP: 0,
-  rpmPeakTQ: 0,
-  hpPerCID: 0,
-  tqPerCID: 0,
-  shift: 0,
-  redline: 0,
+  cid: 355.1,
+  peakHP: 461,
+  peakTQ: 415,
+  rpmPeakHP: 6650,
+  rpmPeakTQ: 5450,
+  hpPerCID: 1.30,
+  tqPerCID: 1.17,
+  shift: 7200,
+  redline: 8350,
+  lobeSepAng: 108,
+  inLobeCL: 105,
 };
 
 /**
