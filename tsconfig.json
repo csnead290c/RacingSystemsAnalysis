@@ -30,7 +30,13 @@
     "src/domain/physics/vb6/test*.ts",
     "src/domain/physics/vb6/trace*.ts",
     "src/domain/physics/vb6/quick*.ts",
-    "src/domain/physics/vb6/decode*.ts"
+    "src/domain/physics/vb6/decode*.ts",
+    "src/domain/physics/engine/testEnginePerf.ts",
+    "src/domain/physics/engine/vb6Verification.ts",
+    "src/domain/physics/engine/runVerification.ts",
+    "src/domain/physics/engine/traceEnginePerf.ts",
+    "src/domain/physics/engine/testUserCase.ts",
+    "src/domain/physics/engine/debugEnginePerf.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
