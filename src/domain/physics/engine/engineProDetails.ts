@@ -436,11 +436,9 @@ export interface EngineRecommendations {
  */
 export function calcRecommendations(
   config: EngineProConfig | EngineSimConfig,
-  // @ts-ignore - Reserved for future use
-  peakHP: number,
+  _peakHP: number,
   rpmAtPeakHP: number,
-  // @ts-ignore - Reserved for future use
-  peakTQ: number,
+  _peakTQ: number,
   rpmAtPeakTQ: number,
   // REQUIRED calculated values from engine simulation for VB6 accuracy
   calculatedValues: {
