@@ -21,20 +21,17 @@ import {
   type IntakeManifoldType,
   type EngineLayout,
 } from '../domain/physics/engine/engineProSim';
+// Flow details imports removed - not used in this component
 
 // ============================================================================
-// Styles matching original ENGINE Pro VB6 UI
+// Styles matching site's dark theme
 // ============================================================================
 
 const styles = {
-  // Main container - light gray background like Windows forms
   container: {
-    backgroundColor: '#f0f0f0',
-    padding: '8px',
-    fontFamily: 'Segoe UI, Tahoma, sans-serif',
-    fontSize: '12px',
-    color: '#000',
-    minHeight: '100%',
+    maxWidth: '1400px',
+    margin: '0 auto',
+    padding: '20px',
   },
   // Toolbar
   toolbar: {
@@ -517,10 +514,10 @@ export default function EngineProSim() {
                   <option value="overhead_cam">Overhead Cam</option>
                   <option value="roller">Roller Cam & Lifter</option>
                   <option value="mushroom_tappet">Mushroom Tappet</option>
-                  <option value="high_rate_flat_tappet">High Rate Flat Tappet</option>
+                  <option value="high_rate_flat_tappet">High Rate-of-Lift Flat Tappet</option>
                   <option value="normal_flat_tappet">Normal Flat Tappet & Solid Lifter</option>
-                  <option value="hydraulic_roller">Hydraulic Roller</option>
-                  <option value="hydraulic_flat_tappet">Normal Hydraulic</option>
+                  <option value="hydraulic_roller">Hydraulic Roller Cam & Lifter</option>
+                  <option value="hydraulic_flat_tappet">Normal Hydraulic Cam & Lifter</option>
                 </select>
               </div>
               <div style={styles.inputRow}>

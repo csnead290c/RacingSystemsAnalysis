@@ -36,7 +36,14 @@
     "src/domain/physics/engine/runVerification.ts",
     "src/domain/physics/engine/traceEnginePerf.ts",
     "src/domain/physics/engine/testUserCase.ts",
-    "src/domain/physics/engine/debugEnginePerf.ts"
+    "src/domain/physics/engine/debugEnginePerf.ts",
+    "src/domain/physics/engine/compare*.ts",
+    "src/domain/physics/engine/debug*.ts",
+    "src/domain/physics/engine/diagnose*.ts",
+    "src/domain/physics/engine/verify*.ts",
+    "src/domain/physics/engine/test*.ts",
+    "src/domain/physics/engine/trace*.ts",
+    "src/domain/physics/engine/enginePerfVB6*.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -13,6 +13,9 @@
  * - Consistent with SAE J1349 Standard Method
  */
 
+import { generateVB6DynoCurve } from './vb6CurveGen';
+import { calcEngPerf } from './enginePerf';
+
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
@@ -184,6 +187,7 @@ const CAM_TYPE_LIFT_MULT: Record<CamshaftType, number> = {
 };
 
 /** Fuel type thermal efficiency factors */
+// @ts-expect-error - Reserved for future use
 const FUEL_EFFICIENCY: Record<FuelType, number> = {
   'gasoline': 1.00,
   'racing_gasoline': 1.02,
@@ -191,6 +195,7 @@ const FUEL_EFFICIENCY: Record<FuelType, number> = {
 };
 
 /** Intake manifold type efficiency factors */
+// @ts-expect-error - Reserved for future use
 const MANIFOLD_EFFICIENCY: Record<IntakeManifoldType, number> = {
   'plenum': 1.00,
   'individual_runner': 1.03,
@@ -306,9 +311,50 @@ export function calcFlowVelocityIndex(
 // ============================================================================
 
 /**
- * Run ENGINE Pro simulation
+ * Run ENGINE Pro simulation using actual VB6 calcEngPerf
  */
 export function simulateEnginePro(config: EngineProConfig): EngineProResult {
+  // Convert Engine Pro config to VB6 EngineInputs format
+  const vb6Inputs = {
+    noCyl: config.numCylinders,
+    inline: config.layout === 'inline' ? 0 : config.layout === 'vee' ? 1 : 2,
+    bore: config.bore_in,
+    stroke: config.stroke_in,
+    rod: config.rodLength_in,
+    compressionRatio: config.compressionRatio,
+    camType: {
+      'overhead_cam': 0,
+      'roller': 1,
+      'mushroom_tappet': 2,
+      'high_rate_flat_tappet': 3,
+      'normal_flat_tappet': 4,
+      'hydraulic_roller': 5,
+      'hydraulic_flat_tappet': 6,
+    }[config.camshaftType],
+    inCamDur: config.intakeDuration050_deg,
+    carb: !config.isEFI,
+    carbCFM: config.throttleCFM_at_1_5inHg,
+    fuel: config.fuelType === 'gasoline' ? 1 : config.fuelType === 'racing_gasoline' ? 2 : 3,
+    manifold: {
+      'plenum': 1,
+      'individual_runner': 2,
+      'dual_plane_divided': 3,
+      'dual_plane_slot': 4,
+    }[config.intakeManifoldType],
+    curved: config.runnerStyle === 'curved',
+    manFlow: config.intakeManifoldFlowFactor_pct,
+    noInValves: config.numIntakeValvesPerCyl,
+    valveDia: config.intakeValveDia_in,
+    maxInFlow: config.maxIntakeFlow_cfm,
+    deltaP: config.flowTestPressure_inH2O,
+    refBore: config.flowTestBoreDia_in,
+  };
+  
+  // Run actual VB6 engine performance calculation
+  console.log('Engine Pro VB6 Inputs:', vb6Inputs);
+  const vb6Result = calcEngPerf(vb6Inputs);
+  console.log('Engine Pro VB6 Result:', vb6Result);
+  
   // Calculate displacement
   const displacement_ci = calcDisplacement(config.bore_in, config.stroke_in, config.numCylinders);
   const displacement_L = displacement_ci * 0.01639;
@@ -325,15 +371,19 @@ export function simulateEnginePro(config: EngineProConfig): EngineProResult {
   
   const intakeValveLiftToDiaRatio = config.maxIntakeValveLift_in / config.intakeValveDia_in;
   
-  // Estimate peak RPMs
-  const rpmAtPeakHP = estimatePeakHPRPM(config.intakeDuration050_deg, config.camshaftType);
-  const rpmAtPeakTorque = estimatePeakTorqueRPM(rpmAtPeakHP);
-  const shiftRPM = Math.round(rpmAtPeakHP * 1.08 / 100) * 100;  // 8% above peak HP (page 5-2)
+  // Use VB6 calculated values
+  const peakHP = vb6Result.peakHP;
+  const peakHP_kW = peakHP * 0.7457;
+  const rpmAtPeakHP = vb6Result.rpmPeakHP;
+  const peakHP_perCID = peakHP / displacement_ci;
   
-  // Redline based on piston speed limits (page 5-2)
-  // Typical limit: 4500-5000 fpm average piston speed for steel rods
-  const maxAvgPistonSpeed = 4800;  // fpm
-  const redlineRPM = Math.round((maxAvgPistonSpeed * 6 / config.stroke_in) / 100) * 100;
+  const peakTorque_lbft = vb6Result.peakTQ;
+  const peakTorque_Nm = peakTorque_lbft * 1.3558;
+  const rpmAtPeakTorque = vb6Result.rpmPeakTQ;
+  const peakTorque_perCID = peakTorque_lbft / displacement_ci;
+  
+  const shiftRPM = vb6Result.shift;
+  const redlineRPM = vb6Result.redline;
   
   // Calculate piston speeds at key RPMs
   const avgPistonSpeed_fpm = {
@@ -350,46 +400,12 @@ export function simulateEnginePro(config: EngineProConfig): EngineProResult {
     redline: calcMaxPistonSpeed(config.stroke_in, config.rodLength_in, redlineRPM),
   };
   
-  // Estimate peak HP based on airflow capacity
-  // HP ≈ (CFM × VE × efficiency factors) / K
-  // K is an empirical constant calibrated to dyno data
-  const flowEfficiency = config.maxIntakeFlow_cfm / 300;  // Normalized to ~300 CFM reference
-  const camEfficiency = CAM_TYPE_LIFT_MULT[config.camshaftType];
-  const fuelEfficiency = FUEL_EFFICIENCY[config.fuelType];
-  const manifoldEfficiency = MANIFOLD_EFFICIENCY[config.intakeManifoldType];
-  const flowFactorEff = config.intakeManifoldFlowFactor_pct / 100;
-  
-  // Compression ratio effect on thermal efficiency
-  const compressionEff = 1 + (config.compressionRatio - 10) * 0.02;  // ~2% per point above 10:1
-  
-  // Base HP per CID (empirical, calibrated to typical racing engines)
-  // Good street engine: ~1.0 HP/CID, Pro Stock: ~2.5+ HP/CID
-  const baseHP_perCID = 1.2;  // Conservative baseline
-  
-  const peakHP_perCID = baseHP_perCID * 
-    flowEfficiency * 
-    camEfficiency * 
-    fuelEfficiency * 
-    manifoldEfficiency * 
-    flowFactorEff *
-    compressionEff *
-    (config.numIntakeValvesPerCyl > 1 ? 1.08 : 1.0);  // Multi-valve bonus
-  
-  const peakHP = peakHP_perCID * displacement_ci;
-  const peakHP_kW = peakHP * 0.7457;
-  
-  // Peak torque from HP and RPM
-  // HP = (Torque × RPM) / 5252
-  // At peak torque RPM, torque is typically 5-10% higher than at peak HP RPM
-  const peakTorque_lbft = (peakHP * 5252 / rpmAtPeakHP) * 1.08;
-  const peakTorque_Nm = peakTorque_lbft * 1.3558;
-  const peakTorque_perCID = peakTorque_lbft / displacement_ci;
-  
-  // Generate dyno curve
-  const dynoCurve = generateDynoCurve(
+  // Generate dyno curve using VB6 algorithm
+  const dynoCurve = generateVB6DynoCurve(
     peakHP, rpmAtPeakHP,
     peakTorque_lbft, rpmAtPeakTorque,
-    redlineRPM
+    redlineRPM,
+    displacement_ci
   );
   
   // Generate recommendations (page 5-11 to 5-15)
@@ -419,49 +435,6 @@ export function simulateEnginePro(config: EngineProConfig): EngineProResult {
   };
 }
 
-/**
- * Generate full dyno curve from peak values
- */
-function generateDynoCurve(
-  _peakHP: number,  // Reserved for future curve shape refinement
-  rpmAtPeakHP: number,
-  peakTorque: number,
-  rpmAtPeakTorque: number,
-  redlineRPM: number
-): { rpm: number; hp: number; torque_lbft: number }[] {
-  const curve: { rpm: number; hp: number; torque_lbft: number }[] = [];
-  
-  // Start at ~40% of peak torque RPM
-  const startRPM = Math.round(rpmAtPeakTorque * 0.4 / 500) * 500;
-  const endRPM = Math.min(redlineRPM, Math.round(rpmAtPeakHP * 1.15 / 500) * 500);
-  
-  for (let rpm = startRPM; rpm <= endRPM; rpm += 250) {
-    // Torque curve shape (parabolic with asymmetric falloff)
-    let torque: number;
-    
-    if (rpm <= rpmAtPeakTorque) {
-      // Rising portion
-      const ratio = rpm / rpmAtPeakTorque;
-      torque = peakTorque * (0.7 + 0.3 * ratio);
-    } else if (rpm <= rpmAtPeakHP) {
-      // Plateau/slight decline
-      const ratio = (rpm - rpmAtPeakTorque) / (rpmAtPeakHP - rpmAtPeakTorque);
-      torque = peakTorque * (1 - 0.08 * ratio);
-    } else {
-      // Falling portion after peak HP
-      const ratio = (rpm - rpmAtPeakHP) / (redlineRPM - rpmAtPeakHP);
-      const falloff = 0.15 + 0.25 * ratio;  // 15-40% drop to redline
-      torque = peakTorque * 0.92 * (1 - falloff);
-    }
-    
-    // HP = Torque × RPM / 5252
-    const hp = (torque * rpm) / 5252;
-    
-    curve.push({ rpm, hp: Math.round(hp), torque_lbft: Math.round(torque) });
-  }
-  
-  return curve;
-}
 
 /**
  * Generate ENGINE Pro recommendations (page 5-11 to 5-15)

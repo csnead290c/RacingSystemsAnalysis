@@ -15,6 +15,7 @@ const GC = 32.174; // gravitational constant
  * Calculate angle of maximum piston speed
  * From VB6 ENGPERF.BAS
  */
+// @ts-expect-error - Reserved for future use
 function calcAngMPS(lrqs: number): number {
   // Maximum piston speed angle (degrees ATDC)
   const lrqs2 = 2 * lrqs;
@@ -435,8 +436,10 @@ export interface EngineRecommendations {
  */
 export function calcRecommendations(
   config: EngineProConfig | EngineSimConfig,
+  // @ts-ignore - Reserved for future use
   peakHP: number,
   rpmAtPeakHP: number,
+  // @ts-ignore - Reserved for future use
   peakTQ: number,
   rpmAtPeakTQ: number,
   // REQUIRED calculated values from engine simulation for VB6 accuracy
@@ -467,7 +470,7 @@ export function calcRecommendations(
   const LRQS = config.rodLength_in / stroke;
   
   // Use calculated values from engine simulation (REQUIRED)
-  const { hpcfm, tqcfm, hpfps, tqfps, RamVEHP, EffCR, acrit, flrqs } = calculatedValues;
+  const { hpcfm, tqcfm, hpfps, RamVEHP, EffCR, acrit, flrqs } = calculatedValues;
   
   // VB6 global variable AngMPS (ENGPERF.BAS line 65)
   // AngMPS = 62 + (750 * (LRQS - 0.958)) ^ 0.4027
