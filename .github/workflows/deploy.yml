@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -25,10 +25,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript Check
-        run: npx tsc --noEmit
-        continue-on-error: false
-
       - name: Build
         run: npm run build
         env:
@@ -36,77 +32,45 @@ jobs:
           VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
           VITE_API_URL: https://racingsystemsanalysis.com/api
 
-      - name: Verify build output
-        run: |
-          echo "Checking dist directory..."
-          ls -la dist/
-          echo "Build verification complete"
-
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
           tools: composer:v2
 
-      - name: Create .htaccess for SPA routing
+      - name: Create .htaccess
         run: |
           cat > dist/.htaccess << 'EOF'
-          # Cache Control - Prevent stale content
           <IfModule mod_headers.c>
-            # HTML files - no cache (always fetch fresh)
             <FilesMatch "\.(html)$">
               Header set Cache-Control "no-cache, no-store, must-revalidate"
-              Header set Pragma "no-cache"
-              Header set Expires 0
             </FilesMatch>
-            
-            # JS/CSS with hash in filename - cache for 1 year (immutable)
             <FilesMatch "\.(js|css)$">
               Header set Cache-Control "public, max-age=31536000, immutable"
             </FilesMatch>
-            
-            # Images/fonts - cache for 1 month
-            <FilesMatch "\.(ico|jpg|jpeg|png|gif|svg|woff|woff2|ttf|eot)$">
-              Header set Cache-Control "public, max-age=2592000"
-            </FilesMatch>
           </IfModule>
-          
           <IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
-            
-            # Don't rewrite API requests - let PHP handle them
             RewriteRule ^api/ - [L]
-            
-            # Don't rewrite existing files or directories
             RewriteCond %{REQUEST_FILENAME} !-f
             RewriteCond %{REQUEST_FILENAME} !-d
-            
-            # Rewrite everything else to index.html for SPA
             RewriteRule . /index.html [L]
           </IfModule>
           EOF
 
-      - name: Install PHP Composer dependencies
+      - name: Install Composer dependencies
         run: |
           cd api
-          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+          composer install --no-dev --optimize-autoloader --no-interaction
           cd ..
-        continue-on-error: false
 
-      - name: Copy API files to dist
+      - name: Copy API to dist
         run: |
           cp -r api dist/
           rm -f dist/api/config.php
 
-      - name: Verify dist directory before deploy
-        run: |
-          echo "Contents of dist directory:"
-          find dist -type f | head -20
-          echo "Total files in dist:"
-          find dist -type f | wc -l
-
-      - name: Deploy to SiteGround via FTP
+      - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -118,4 +82,3 @@ jobs:
           exclude: |
             **/.git*
             **/node_modules/**
-          timeout: 60000
