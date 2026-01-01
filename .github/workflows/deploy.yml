@@ -10,6 +10,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
       - name: Checkout code
@@ -106,7 +107,7 @@ jobs:
           find dist -type f | wc -l
 
       - name: Deploy to SiteGround via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
@@ -117,4 +118,4 @@ jobs:
           exclude: |
             **/.git*
             **/node_modules/**
-          timeout: 600000
+          timeout: 60000
