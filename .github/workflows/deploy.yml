@@ -89,13 +89,21 @@ jobs:
       - name: Install PHP Composer dependencies
         run: |
           cd api
-          composer install --no-dev --optimize-autoloader
+          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
           cd ..
+        continue-on-error: false
 
       - name: Copy API files to dist
         run: |
           cp -r api dist/
           rm -f dist/api/config.php
+
+      - name: Verify dist directory before deploy
+        run: |
+          echo "Contents of dist directory:"
+          find dist -type f | head -20
+          echo "Total files in dist:"
+          find dist -type f | wc -l
 
       - name: Deploy to SiteGround via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -109,3 +117,4 @@ jobs:
           exclude: |
             **/.git*
             **/node_modules/**
+          timeout: 600000
