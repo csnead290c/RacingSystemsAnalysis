@@ -20,13 +20,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
         run: |
           echo "Installing npm dependencies..."
-          npm ci
+          npm ci --legacy-peer-deps
           echo "Dependencies installed successfully"
+          echo "Verifying lucide-react installation..."
+          ls -la node_modules/lucide-react/ | head -5
+          echo "Checking lucide-react package.json..."
+          cat node_modules/lucide-react/package.json | grep -E '"name"|"version"|"typings"'
 
       - name: Build
         run: |
