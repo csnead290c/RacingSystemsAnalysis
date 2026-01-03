@@ -13,6 +13,7 @@ import SuspensionSim from '../pages/SuspensionSim';
 import ClutchSim from '../pages/ClutchSim';
 import ConverterSim from '../pages/ConverterSim';
 import EngineSim from '../pages/EngineSim';
+import { EngineSimDashboard } from '../pages/EngineSimDashboard';
 import Calculators from '../pages/Calculators';
 import Log from '../pages/Log';
 import History from '../pages/History';
@@ -486,6 +487,13 @@ function App() {
             {/* Engine Sim - available to all logged-in users (simple/advanced mode based on tier) */}
             <Route path="/engine-sim" element={
               <ProtectedRoute>
+                <EngineSimDashboard />
+              </ProtectedRoute>
+            } />
+            
+            {/* Engine Sim (Legacy) - old three-column layout */}
+            <Route path="/engine-sim-legacy" element={
+              <ProtectedRoute>
                 <EngineSim />
               </ProtectedRoute>
             } />
@@ -493,7 +501,7 @@ function App() {
             {/* Engine Pro - VB6-accurate engine performance simulation */}
             <Route path="/engine-pro" element={
               <ProtectedRoute requireProduct="engine_pro">
-                <EngineSim />
+                <EngineSimDashboard />
               </ProtectedRoute>
             } />
             
