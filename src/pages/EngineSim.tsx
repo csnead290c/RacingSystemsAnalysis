@@ -1074,32 +1074,48 @@ export default function EngineSim() {
     </Page>
   );
 }
-
-// ============================================================================
 // Styles
 // ============================================================================
 
 const styles = {
   container: {
-    backgroundColor: 'var(--color-background)',
-    minHeight: '100vh',
     padding: '16px',
-  },
-  mainLayout: {
+    maxWidth: '100%',
+    margin: '0 auto',
+    height: 'calc(100vh - 120px)',
+    overflow: 'hidden',
+  } as React.CSSProperties,
+  header: {
+    marginBottom: '12px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  } as React.CSSProperties,
+  title: {
+    fontSize: '20px',
+    fontWeight: 'bold',
+  } as React.CSSProperties,
+  dashboardGrid: {
     display: 'grid',
-    gridTemplateColumns: '400px 1fr',
-    gap: '16px',
-  },
-  leftColumn: {
-    display: 'flex',
-    flexDirection: 'column' as const,
+    gridTemplateColumns: 'repeat(4, 1fr)',
     gap: '12px',
-  },
-  rightColumn: {
+    height: 'calc(100% - 100px)',
+  } as React.CSSProperties,
+  card: {
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    padding: '12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '12px',
-  },
+    flexDirection: 'column',
+    overflow: 'auto',
+  } as React.CSSProperties,
+  cardLarge: {
+    gridColumn: 'span 2',
+  } as React.CSSProperties,
+  cardTall: {
+    gridRow: 'span 2',
+  } as React.CSSProperties,
   section: {
     backgroundColor: 'var(--color-surface)',
     borderRadius: '8px',
@@ -1116,51 +1132,56 @@ const styles = {
   },
   inputRow: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    marginBottom: '10px',
-  },
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '6px',
+  } as React.CSSProperties,
   label: {
-    fontSize: '12px',
-    fontWeight: '500' as const,
-    marginBottom: '4px',
-    color: 'var(--color-text-secondary)',
-  },
+    fontSize: '11px',
+    color: '#64748b',
+    minWidth: '100px',
+    flex: '0 0 100px',
+  } as React.CSSProperties,
   input: {
-    padding: '6px 10px',
-    fontSize: '13px',
-    border: '1px solid var(--color-border)',
+    padding: '4px 6px',
+    border: '1px solid #cbd5e1',
     borderRadius: '4px',
-    width: '100%',
-    backgroundColor: 'var(--color-input-bg)',
-    color: 'var(--color-text)',
-  },
+    fontSize: '11px',
+    width: '70px',
+  } as React.CSSProperties,
   select: {
-    padding: '6px 10px',
-    fontSize: '13px',
-    border: '1px solid var(--color-border)',
+    padding: '4px 6px',
+    border: '1px solid #cbd5e1',
     borderRadius: '4px',
-    width: '100%',
-    backgroundColor: 'var(--color-input-bg)',
-    color: 'var(--color-text)',
-  },
+    fontSize: '11px',
+    flex: 1,
+  } as React.CSSProperties,
   resultRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    padding: '8px',
-    backgroundColor: 'var(--color-background)',
-    borderRadius: '4px',
-    marginTop: '8px',
-  },
+    alignItems: 'center',
+    padding: '4px 0',
+    borderBottom: '1px solid #f1f5f9',
+  } as React.CSSProperties,
   resultLabel: {
-    fontSize: '12px',
-    fontWeight: '500' as const,
-    color: 'var(--color-text-secondary)',
-  },
+    fontSize: '11px',
+    color: '#64748b',
+  } as React.CSSProperties,
   resultValue: {
-    fontSize: '13px',
-    fontWeight: '600' as const,
-    color: 'var(--color-text)',
-  },
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#1e293b',
+  } as React.CSSProperties,
+  resultValueLarge: {
+    fontSize: '20px',
+    fontWeight: 'bold',
+    color: '#3b82f6',
+  } as React.CSSProperties,
+  resultValueMedium: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#1e293b',
+  } as React.CSSProperties,
   resultsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
