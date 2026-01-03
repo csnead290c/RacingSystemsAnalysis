@@ -484,7 +484,7 @@ export function calcRecommendations(
   
   if ('lobeSeparationAngle_deg' in config && config.lobeSeparationAngle_deg !== undefined) {
     // User provided LSA
-    lobeSepAng = config.lobeSeparationAngle_deg;
+    lobeSepAng = config.lobeSeparationAngle_deg as number;
   } else {
     // Calculate default LSA - pass EffCR from engine simulation
     const defaults = getCalculatedCamDefaults(
@@ -501,7 +501,7 @@ export function calcRecommendations(
   
   if ('intakeLobeCenterline_deg' in config && config.intakeLobeCenterline_deg !== undefined) {
     // User provided ILC
-    inLobeCL = config.intakeLobeCenterline_deg;
+    inLobeCL = config.intakeLobeCenterline_deg as number;
   } else {
     // Calculate default ILC - pass EffCR from engine simulation
     const defaults = getCalculatedCamDefaults(

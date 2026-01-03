@@ -61,7 +61,7 @@ export default function EngineSim() {
       result.redline,
       displacement
     );
-    return vb6Curve.map(p => ({
+    return vb6Curve.map((p: { rpm: number; hp: number; torque_lbft: number }) => ({
       rpm: p.rpm,
       hp: Math.round(p.hp),
       torque: Math.round(p.torque_lbft),
