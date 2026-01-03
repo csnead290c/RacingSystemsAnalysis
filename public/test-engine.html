@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Engine Test</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .result { margin: 10px 0; padding: 10px; background: #2d2d30; border-left: 3px solid #007acc; }
+        .pass { border-left-color: #4ec9b0; }
+        .fail { border-left-color: #f48771; }
+        h2 { color: #4ec9b0; }
+        .diff { color: #ce9178; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Engine Performance Test - User Case</h1>
+    <div id="loading">Loading engine physics module...</div>
+    <div id="results" style="display:none;"></div>
+    
+    <script type="module">
+        try {
+            const { calcEngPerf } = await import('/src/domain/physics/engine/enginePerf.ts');
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+            
+            const inputs = {
+                noCyl: 8,
+                inline: 0,
+                bore: 4.03,
+                stroke: 3.48,
+                rod: 5.85,
+                compressionRatio: 12.9,
+                camType: 4,
+                inCamDur: 264,
+                carb: true,
+                carbCFM: 750,
+                fuel: 1,
+                manifold: 1,
+                curved: false,  // CHANGED: VB6 output suggests straight runners
+                manFlow: 96,
+                noInValves: 1,
+                valveDia: 2.05,
+                maxInFlow: 250,
+                deltaP: 28,
+                refBore: 4.0,
+                deck: 0.015,
+                gasket: 0.039,
+                chamber: 62,
+                dome: 12,
+            };
+            
+            console.log('Running calculation with inputs:', inputs);
+            const result = calcEngPerf(inputs);
+            console.log('Result:', result);
+            
+            const expected = {
+                cid: 355.1,
+                peakHP: 461,
+                peakTQ: 415,
+                rpmPeakHP: 6650,
+                rpmPeakTQ: 5450,
+                hpPerCID: 1.30,
+                tqPerCID: 1.17,
+                shift: 7200,
+                redline: 8350,
+            };
+            
+            let html = '<h2>TypeScript Output:</h2>';
+            html += `<div class="result">CID: ${result.cid.toFixed(1)}</div>`;
+            html += `<div class="result">Peak HP: ${Math.round(result.peakHP)} @ ${result.rpmPeakHP} RPM</div>`;
+            html += `<div class="result">Peak TQ: ${Math.round(result.peakTQ)} @ ${result.rpmPeakTQ} RPM</div>`;
+            html += `<div class="result">HP/CID: ${result.hpPerCID.toFixed(2)}</div>`;
+            html += `<div class="result">TQ/CID: ${result.tqPerCID.toFixed(2)}</div>`;
+            html += `<div class="result">Shift: ${result.shift} RPM</div>`;
+            html += `<div class="result">Redline: ${result.redline} RPM</div>`;
+            
+            html += '<h2>Expected VB6 Output:</h2>';
+            html += `<div class="result">CID: ${expected.cid}</div>`;
+            html += `<div class="result">Peak HP: ${expected.peakHP} @ ${expected.rpmPeakHP} RPM</div>`;
+            html += `<div class="result">Peak TQ: ${expected.peakTQ} @ ${expected.rpmPeakTQ} RPM</div>`;
+            html += `<div class="result">HP/CID: ${expected.hpPerCID}</div>`;
+            html += `<div class="result">TQ/CID: ${expected.tqPerCID}</div>`;
+            html += `<div class="result">Shift: ${expected.shift} RPM</div>`;
+            html += `<div class="result">Redline: ${expected.redline} RPM</div>`;
+            
+            html += '<h2>Discrepancies:</h2>';
+            const hpDiff = Math.round(result.peakHP) - expected.peakHP;
+            const tqDiff = Math.round(result.peakTQ) - expected.peakTQ;
+            const hpRpmDiff = result.rpmPeakHP - expected.rpmPeakHP;
+            const tqRpmDiff = result.rpmPeakTQ - expected.rpmPeakTQ;
+            
+            const hpPass = Math.abs(hpDiff) <= 1;
+            const tqPass = Math.abs(tqDiff) <= 1;
+            const hpRpmPass = Math.abs(hpRpmDiff) <= 50;
+            const tqRpmPass = Math.abs(tqRpmDiff) <= 50;
+            
+            html += `<div class="result ${hpPass ? 'pass' : 'fail'}">HP: <span class="diff">${hpDiff >= 0 ? '+' : ''}${hpDiff}</span></div>`;
+            html += `<div class="result ${tqPass ? 'pass' : 'fail'}">TQ: <span class="diff">${tqDiff >= 0 ? '+' : ''}${tqDiff}</span></div>`;
+            html += `<div class="result ${hpRpmPass ? 'pass' : 'fail'}">HP RPM: <span class="diff">${hpRpmDiff >= 0 ? '+' : ''}${hpRpmDiff}</span></div>`;
+            html += `<div class="result ${tqRpmPass ? 'pass' : 'fail'}">TQ RPM: <span class="diff">${tqRpmDiff >= 0 ? '+' : ''}${tqRpmDiff}</span></div>`;
+            
+            if (hpPass && tqPass && hpRpmPass && tqRpmPass) {
+                html += '<h2 style="color: #4ec9b0;">✓ PASS - Within tolerance!</h2>';
+            } else {
+                html += '<h2 style="color: #f48771;">✗ FAIL - Calculation discrepancies found</h2>';
+                html += '<p>Check browser console for detailed output.</p>';
+            }
+            
+            document.getElementById('results').innerHTML = html;
+            
+        } catch (error) {
+            document.getElementById('loading').innerHTML = `<div style="color: #f48771;">Error: ${error.message}</div>`;
+            console.error('Error loading engine physics:', error);
+        }
+    </script>
+</body>
+</html>

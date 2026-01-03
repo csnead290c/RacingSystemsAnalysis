@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VB6 Precision Test</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        table { border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 8px 12px; text-align: left; border: 1px solid #444; }
+        th { background: #2d2d30; }
+        .pass { color: #4ec9b0; font-weight: bold; }
+        .fail { color: #f48771; }
+        pre { background: #2d2d30; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>VB6 Single Precision Simulation Test</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        const { calcEngPerf } = await import('/src/domain/physics/engine/enginePerf.ts');
+        const { calcEngPerfVB6Precision } = await import('/src/domain/physics/engine/enginePerfVB6Precision.ts');
+        
+        const inputs = {
+            noCyl: 8, inline: 0, bore: 4.03, stroke: 3.48, rod: 5.85,
+            compressionRatio: 12.9, camType: 4, inCamDur: 264,
+            carb: true, carbCFM: 750, fuel: 1, manifold: 1, curved: true,
+            manFlow: 96, noInValves: 1, valveDia: 2.05, maxInFlow: 250,
+            deltaP: 28, refBore: 4.0, deck: 0.015, gasket: 0.039,
+            chamber: 62, dome: 12,
+        };
+        
+        const normalResult = calcEngPerf(inputs);
+        const vb6Result = calcEngPerfVB6Precision(inputs);
+        
+        let html = '<h2>Comparison Results</h2>';
+        html += '<table>';
+        html += '<tr><th>Version</th><th>Peak HP</th><th>HP RPM</th><th>Peak TQ</th><th>TQ RPM</th></tr>';
+        html += '<tr>';
+        html += '<td>TypeScript (double precision)</td>';
+        html += `<td>${Math.round(normalResult.peakHP)}</td>`;
+        html += `<td>${normalResult.rpmPeakHP}</td>`;
+        html += `<td>${Math.round(normalResult.peakTQ)}</td>`;
+        html += `<td>${normalResult.rpmPeakTQ}</td>`;
+        html += '</tr>';
+        html += '<tr>';
+        html += '<td>TypeScript (VB6 Single precision)</td>';
+        html += `<td>${Math.round(vb6Result.peakHP)}</td>`;
+        html += `<td>${vb6Result.rpmPeakHP}</td>`;
+        html += `<td>${Math.round(vb6Result.peakTQ)}</td>`;
+        html += `<td>${vb6Result.rpmPeakTQ}</td>`;
+        html += '</tr>';
+        html += '<tr style="background: #2d2d30;">';
+        html += '<td><strong>VB6 Expected</strong></td>';
+        html += '<td><strong>461</strong></td>';
+        html += '<td><strong>6650</strong></td>';
+        html += '<td><strong>415</strong></td>';
+        html += '<td><strong>5450</strong></td>';
+        html += '</tr>';
+        html += '</table>';
+        
+        html += '<h2>Analysis</h2>';
+        html += '<table>';
+        html += '<tr><th>Metric</th><th>Normal</th><th>VB6 Precision</th><th>VB6 Expected</th><th>Match?</th></tr>';
+        
+        const metrics = [
+            { name: 'Peak HP', normal: Math.round(normalResult.peakHP), vb6: Math.round(vb6Result.peakHP), expected: 461, tol: 1 },
+            { name: 'HP RPM', normal: normalResult.rpmPeakHP, vb6: vb6Result.rpmPeakHP, expected: 6650, tol: 50 },
+            { name: 'Peak TQ', normal: Math.round(normalResult.peakTQ), vb6: Math.round(vb6Result.peakTQ), expected: 415, tol: 1 },
+            { name: 'TQ RPM', normal: normalResult.rpmPeakTQ, vb6: vb6Result.rpmPeakTQ, expected: 5450, tol: 50 },
+        ];
+        
+        metrics.forEach(m => {
+            const match = Math.abs(m.vb6 - m.expected) <= m.tol;
+            html += '<tr>';
+            html += `<td>${m.name}</td>`;
+            html += `<td>${m.normal}</td>`;
+            html += `<td>${m.vb6}</td>`;
+            html += `<td>${m.expected}</td>`;
+            html += `<td class="${match ? 'pass' : 'fail'}">${match ? '✓ YES' : '✗ NO'}</td>`;
+            html += '</tr>';
+        });
+        
+        html += '</table>';
+        
+        html += '<pre>';
+        html += 'Effect of VB6 Single precision simulation:\n';
+        html += `  HP: ${Math.round(normalResult.peakHP)} → ${Math.round(vb6Result.peakHP)} (${Math.round(vb6Result.peakHP) - Math.round(normalResult.peakHP) > 0 ? '+' : ''}${Math.round(vb6Result.peakHP) - Math.round(normalResult.peakHP)})\n`;
+        html += `  HP RPM: ${normalResult.rpmPeakHP} → ${vb6Result.rpmPeakHP} (${vb6Result.rpmPeakHP - normalResult.rpmPeakHP > 0 ? '+' : ''}${vb6Result.rpmPeakHP - normalResult.rpmPeakHP})\n`;
+        html += `  TQ: ${Math.round(normalResult.peakTQ)} → ${Math.round(vb6Result.peakTQ)} (${Math.round(vb6Result.peakTQ) - Math.round(normalResult.peakTQ) > 0 ? '+' : ''}${Math.round(vb6Result.peakTQ) - Math.round(normalResult.peakTQ)})\n`;
+        html += `  TQ RPM: ${normalResult.rpmPeakTQ} → ${vb6Result.rpmPeakTQ} (${vb6Result.rpmPeakTQ - normalResult.rpmPeakTQ > 0 ? '+' : ''}${vb6Result.rpmPeakTQ - normalResult.rpmPeakTQ})\n\n`;
+        
+        const allMatch = metrics.every(m => Math.abs(m.vb6 - m.expected) <= m.tol);
+        
+        if (allMatch) {
+            html += '✓✓✓ 100% VB6 PARITY ACHIEVED! ✓✓✓\n\n';
+            html += 'The issue was VB6 Single precision (32-bit float) vs\n';
+            html += 'JavaScript Number (64-bit double) rounding differences.\n';
+        } else {
+            html += 'VB6 Single precision simulation did not achieve parity.\n';
+            html += 'The issue must be something else.\n';
+        }
+        html += '</pre>';
+        
+        document.getElementById('output').innerHTML = html;
+    </script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import type { EngineInputs } from './engineTypes';
 // User's test case from full VB6 output
 const USER_INPUTS: EngineInputs = {
   noCyl: 8,
-  inline: 0,              // Vee
+  inline: 1,              // Vee (VB6: 0=Inline, 1=Vee, 2=Flat)
   bore: 4.03,
   stroke: 3.48,
   rod: 5.85,
@@ -38,7 +38,7 @@ console.log('ENGINE PERFORMANCE DEBUG - User Test Case');
 console.log('='.repeat(80));
 
 console.log('\nINPUTS:');
-console.log(`  Cylinders: ${USER_INPUTS.noCyl} (${USER_INPUTS.inline === 0 ? 'Vee' : USER_INPUTS.inline === 1 ? 'Inline' : 'Flat'})`);
+console.log(`  Cylinders: ${USER_INPUTS.noCyl} (${USER_INPUTS.inline === 0 ? 'Inline' : USER_INPUTS.inline === 1 ? 'Vee' : 'Flat'})`);
 console.log(`  Bore: ${USER_INPUTS.bore}" × Stroke: ${USER_INPUTS.stroke}"`);
 console.log(`  Rod: ${USER_INPUTS.rod}"`);
 console.log(`  CR: ${USER_INPUTS.compressionRatio}:1`);

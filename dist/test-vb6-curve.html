@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VB6 Curve Generation Test</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .result {
+      margin: 20px 0;
+      padding: 15px;
+      background: #2d2d2d;
+      border: 1px solid #3e3e3e;
+      border-radius: 4px;
+    }
+    .pass { color: #4ec9b0; }
+    .fail { color: #f48771; }
+    table {
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 4px 8px;
+      text-align: right;
+      border: 1px solid #3e3e3e;
+    }
+    th { background: #3e3e3e; }
+  </style>
+</head>
+<body>
+  <h1>VB6 Curve Generation Test</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    import { generateVB6DynoCurve } from '../src/domain/physics/engine/vb6CurveGen.ts';
+
+    const resultsDiv = document.getElementById('results');
+
+    // Test case: 461 HP @ 6650 RPM, 415 TQ @ 5450 RPM, 350 CID
+    const peakHP = 461;
+    const rpmAtPeakHP = 6650;
+    const peakTQ = 415;
+    const rpmAtPeakTQ = 5450;
+    const redlineRPM = 8350;
+    const CID = 350;
+
+    try {
+      const curve = generateVB6DynoCurve(
+        peakHP, rpmAtPeakHP,
+        peakTQ, rpmAtPeakTQ,
+        redlineRPM,
+        CID
+      );
+
+      resultsDiv.innerHTML = `
+        <div class="result">
+          <h2 class="pass">✓ VB6 Curve Generation Success</h2>
+          <p>Generated ${curve.length} curve points</p>
+          <p>HP/CID: ${(peakHP / CID).toFixed(2)}</p>
+          
+          <h3>Curve Data (every 5th point):</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>RPM</th>
+                <th>HP</th>
+                <th>TQ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${curve.filter((_, i) => i % 5 === 0).map(p => `
+                <tr>
+                  <td>${p.rpm}</td>
+                  <td>${p.hp}</td>
+                  <td>${p.torque_lbft}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <h3>Peak Values in Curve:</h3>
+          <p>Max HP in curve: ${Math.max(...curve.map(p => p.hp))} @ ${curve.find(p => p.hp === Math.max(...curve.map(p => p.hp)))?.rpm} RPM</p>
+          <p>Max TQ in curve: ${Math.max(...curve.map(p => p.torque_lbft))} @ ${curve.find(p => p.torque_lbft === Math.max(...curve.map(p => p.torque_lbft)))?.rpm} RPM</p>
+        </div>
+      `;
+    } catch (error) {
+      resultsDiv.innerHTML = `
+        <div class="result">
+          <h2 class="fail">✗ VB6 Curve Generation Failed</h2>
+          <pre>${error.message}\n\n${error.stack}</pre>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

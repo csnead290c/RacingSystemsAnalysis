@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VB6 Curve Debug</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-size: 11px;
+    }
+    table {
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      padding: 3px 6px;
+      text-align: right;
+      border: 1px solid #3e3e3e;
+      font-size: 10px;
+    }
+    th { background: #3e3e3e; }
+    pre { font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>VB6 Curve Generation Debug</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    // Import the VB6 Lagrangian interpolation functions
+    import { DTABY, TABY } from '../src/domain/physics/engine/vb6Interpolation.ts';
+
+    const resultsDiv = document.getElementById('results');
+
+    // VB6 lookup tables (from vb6CurveGen.ts)
+    const SX = [0, 0.68, 0.74, 0.8, 0.86, 0.92, 0.98, 1.04, 1.1, 1.16, 1.22, 1.28, 1.34, 1.4, 1.46, 1.52, 1.58];
+    const sz = [0, 0.9, 1.0, 1.1, 1.2, 1.3];
+    const sy = [
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0, 0.79, 0.85, 0.9, 0.94, 0.97, 0.99, 1.0, 0.99, 0.97, 0.94, 0.9, 0.85, 0.79, 0.72, 0.64, 0.55],
+      [0, 0.76, 0.82, 0.88, 0.93, 0.97, 1.0, 1.01, 1.01, 1.0, 0.97, 0.93, 0.88, 0.82, 0.75, 0.67, 0.58],
+      [0, 0.73, 0.8, 0.86, 0.92, 0.97, 1.0, 1.02, 1.03, 1.02, 1.0, 0.96, 0.91, 0.85, 0.78, 0.7, 0.61],
+      [0, 0.7, 0.77, 0.84, 0.91, 0.97, 1.01, 1.04, 1.05, 1.05, 1.03, 0.99, 0.94, 0.88, 0.81, 0.73, 0.64],
+      [0, 0.67, 0.75, 0.82, 0.9, 0.97, 1.02, 1.06, 1.08, 1.08, 1.06, 1.02, 0.97, 0.91, 0.84, 0.76, 0.67]
+    ];
+
+    const Z6 = 5252;
+    const peakHP = 461;
+    const rpmAtPeakHP = 6650;
+    const peakTQ = 415;
+    const rpmAtPeakTQ = 5450;
+    const CID = 355.1;
+
+    try {
+      let html = '<h2>Step 1: Generate Initial 29-Point Curve</h2>';
+      
+      const TQPHP = Z6 * peakHP / rpmAtPeakHP;
+      let HPCID = peakHP / CID;
+      
+      // Clamp HP/CID
+      if (HPCID < sz[1]) HPCID = sz[1];
+      if (HPCID > sz[5]) HPCID = sz[5];
+      
+      html += `<p>TQPHP = ${TQPHP.toFixed(4)}, HPCID = ${HPCID.toFixed(4)}</p>`;
+      
+      const rpm = new Array(30).fill(0);
+      const tq = new Array(30).fill(0);
+      
+      // Generate odd points
+      for (let n = 1; n <= 29; n += 2) {
+        const idx = (n + 3) / 2;
+        const RPMR = SX[idx];
+        rpm[n] = RPMR * rpmAtPeakHP;
+        const TQR = DTABY(SX, sz, sy, 17, 5, 3, 2, RPMR, HPCID);
+        tq[n] = TQR * TQPHP;
+      }
+      
+      // Generate even points
+      for (let n = 2; n <= 28; n += 2) {
+        const idx1 = (n + 2) / 2;
+        const idx2 = (n + 4) / 2;
+        const RPMR = (SX[idx1] + SX[idx2]) / 2;
+        rpm[n] = RPMR * rpmAtPeakHP;
+        const TQR = DTABY(SX, sz, sy, 17, 5, 3, 2, RPMR, HPCID);
+        tq[n] = TQR * TQPHP;
+      }
+      
+      // Find peak TQ on generated curve
+      let TQMax = 0;
+      let TQRPM = 0;
+      for (let k = 1; k <= 29; k++) {
+        if (tq[k] > TQMax) {
+          TQMax = tq[k];
+          TQRPM = rpm[k];
+        }
+      }
+      
+      html += `<p>Generated curve peak: TQ=${TQMax.toFixed(2)} @ ${TQRPM.toFixed(0)} RPM</p>`;
+      html += `<p>Target peak: TQ=${peakTQ} @ ${rpmAtPeakTQ} RPM</p>`;
+      
+      const DRPM = rpmAtPeakTQ - TQRPM;
+      const DTQ = peakTQ / TQMax - 1;
+      
+      html += `<p>DRPM = ${DRPM.toFixed(2)}, DTQ = ${DTQ.toFixed(6)}</p>`;
+      
+      html += '<h2>Step 2: Adjust Curve (First 10 Points)</h2>';
+      html += '<table><thead><tr>';
+      html += '<th>k</th><th>RPM Before</th><th>TQ Before</th><th>Condition</th>';
+      html += '<th>RPM After</th><th>TQ After</th><th>HP After</th>';
+      html += '</tr></thead><tbody>';
+      
+      const xxrpm = [...rpm];
+      const yytq = [...tq];
+      const yyhp = new Array(30).fill(0);
+      
+      for (let k = 1; k <= Math.min(10, 29); k++) {
+        const rpmBefore = xxrpm[k];
+        const tqBefore = yytq[k];
+        let condition = '';
+        
+        // Adjust TQ
+        if (xxrpm[k] <= TQRPM) {
+          yytq[k] = yytq[k] + (peakTQ - TQMax);
+          condition = 'RPM <= TQRPM';
+        } else if (xxrpm[k] > TQRPM && xxrpm[k] < rpmAtPeakHP) {
+          yytq[k] = yytq[k] * (1 + DTQ * Math.pow((rpmAtPeakHP - xxrpm[k]) / (rpmAtPeakHP - TQRPM), 2));
+          condition = 'TQRPM < RPM < RPMHP';
+        } else if (xxrpm[k] >= rpmAtPeakHP) {
+          yytq[k] = yytq[k] * (1 + 0.8 * DTQ * Math.pow((rpmAtPeakHP - xxrpm[k]) / (rpmAtPeakHP - TQRPM), 2));
+          condition = 'RPM >= RPMHP';
+        }
+        
+        // Adjust RPM
+        if (xxrpm[k] <= TQRPM) {
+          xxrpm[k] = xxrpm[k] + DRPM;
+        } else if (xxrpm[k] > TQRPM && xxrpm[k] < rpmAtPeakHP) {
+          xxrpm[k] = xxrpm[k] + DRPM * (rpmAtPeakHP - xxrpm[k]) / (rpmAtPeakHP - TQRPM);
+        } else if (xxrpm[k] >= rpmAtPeakHP) {
+          xxrpm[k] = xxrpm[k] + 0.8 * DRPM * (rpmAtPeakHP - xxrpm[k]) / (rpmAtPeakHP - TQRPM);
+        }
+        
+        // Calculate HP
+        yyhp[k] = yytq[k] * xxrpm[k] / Z6;
+        if (yyhp[k] > peakHP) {
+          yyhp[k] = peakHP;
+          yytq[k] = yyhp[k] * Z6 / xxrpm[k];
+        }
+        
+        html += `<tr>`;
+        html += `<td>${k}</td>`;
+        html += `<td>${rpmBefore.toFixed(0)}</td>`;
+        html += `<td>${tqBefore.toFixed(1)}</td>`;
+        html += `<td>${condition}</td>`;
+        html += `<td>${xxrpm[k].toFixed(0)}</td>`;
+        html += `<td>${yytq[k].toFixed(1)}</td>`;
+        html += `<td>${yyhp[k].toFixed(1)}</td>`;
+        html += `</tr>`;
+      }
+      
+      html += '</tbody></table>';
+      
+      html += '<h2>Step 3: Interpolate to Final Curve (4500-5500 RPM)</h2>';
+      html += '<table><thead><tr>';
+      html += '<th>RPM</th><th>Interp TQ</th><th>Calc HP</th><th>Final TQ</th><th>Final HP</th>';
+      html += '</tr></thead><tbody>';
+      
+      for (let testRPM = 4500; testRPM <= 5500; testRPM += 250) {
+        let tqInterp = TABY(xxrpm, yytq, 29, 2, testRPM);
+        if (tqInterp > peakTQ) tqInterp = peakTQ;
+        
+        let hpCalc = tqInterp * testRPM / Z6;
+        let tqFinal = tqInterp;
+        let hpFinal = hpCalc;
+        
+        if (hpCalc > peakHP) {
+          hpFinal = peakHP;
+          tqFinal = hpFinal * Z6 / testRPM;
+        }
+        
+        html += `<tr>`;
+        html += `<td>${testRPM}</td>`;
+        html += `<td>${tqInterp.toFixed(2)}</td>`;
+        html += `<td>${hpCalc.toFixed(2)}</td>`;
+        html += `<td>${Math.round(tqFinal)}</td>`;
+        html += `<td>${Math.round(hpFinal)}</td>`;
+        html += `</tr>`;
+      }
+      
+      html += '</tbody></table>';
+      
+      resultsDiv.innerHTML = html;
+    } catch (error) {
+      resultsDiv.innerHTML = `<pre>${error.message}\n\n${error.stack}</pre>`;
+    }
+  </script>
+</body>
+</html>

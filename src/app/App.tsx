@@ -490,6 +490,13 @@ function App() {
               </ProtectedRoute>
             } />
             
+            {/* Engine Pro - VB6-accurate engine performance simulation */}
+            <Route path="/engine-pro" element={
+              <ProtectedRoute requireProduct="engine_pro">
+                <EngineSim />
+              </ProtectedRoute>
+            } />
+            
             {/* Four Link features */}
             <Route path="/suspension-sim" element={
               <ProtectedRoute requireProduct="fourlink">

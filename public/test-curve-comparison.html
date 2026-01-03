@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VB6 Curve Comparison</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-size: 12px;
+    }
+    table {
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      padding: 4px 8px;
+      text-align: right;
+      border: 1px solid #3e3e3e;
+    }
+    th { background: #3e3e3e; }
+    .diff { color: #f48771; font-weight: bold; }
+    .match { color: #4ec9b0; }
+  </style>
+</head>
+<body>
+  <h1>VB6 Curve Comparison Test</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    import { generateVB6DynoCurve } from '../src/domain/physics/engine/vb6CurveGen.ts';
+
+    const resultsDiv = document.getElementById('results');
+
+    // VB6 expected values from screenshot
+    const vb6Data = [
+      { rpm: 4500, hp: 327, tq: 382 },
+      { rpm: 4750, hp: 358, tq: 396 },
+      { rpm: 5000, hp: 387, tq: 407 },
+      { rpm: 5250, hp: 412, tq: 412 },
+      { rpm: 5500, hp: 434, tq: 415 },
+      { rpm: 5750, hp: 448, tq: 409 },
+      { rpm: 6000, hp: 456, tq: 399 },
+      { rpm: 6250, hp: 460, tq: 387 },
+      { rpm: 6500, hp: 461, tq: 373 },
+      { rpm: 6750, hp: 459, tq: 357 },
+      { rpm: 7000, hp: 445, tq: 334 },
+    ];
+
+    try {
+      // Generate curve with same inputs as VB6
+      const curve = generateVB6DynoCurve(
+        461,    // peakHP
+        6650,   // rpmAtPeakHP
+        415,    // peakTQ
+        5450,   // rpmAtPeakTQ
+        8350,   // redlineRPM
+        355.1   // CID (from VB6 screenshot)
+      );
+
+      console.log('Generated curve:', curve);
+
+      // Filter to 250 RPM increments starting at 4500
+      const filtered = curve.filter(p => 
+        p.rpm >= 4500 && p.rpm <= 7000 && (p.rpm - 4500) % 250 === 0
+      );
+
+      let html = '<h2>Curve Comparison (250 RPM increments)</h2>';
+      html += '<table><thead><tr>';
+      html += '<th>RPM</th><th>VB6 HP</th><th>RSA HP</th><th>Diff</th>';
+      html += '<th>VB6 TQ</th><th>RSA TQ</th><th>Diff</th>';
+      html += '</tr></thead><tbody>';
+
+      let totalHPDiff = 0;
+      let totalTQDiff = 0;
+      let count = 0;
+
+      vb6Data.forEach(vb6 => {
+        const rsa = filtered.find(p => p.rpm === vb6.rpm);
+        if (rsa) {
+          const hpDiff = rsa.hp - vb6.hp;
+          const tqDiff = rsa.torque_lbft - vb6.tq;
+          totalHPDiff += Math.abs(hpDiff);
+          totalTQDiff += Math.abs(tqDiff);
+          count++;
+
+          const hpClass = Math.abs(hpDiff) <= 1 ? 'match' : 'diff';
+          const tqClass = Math.abs(tqDiff) <= 1 ? 'match' : 'diff';
+
+          html += `<tr>`;
+          html += `<td>${vb6.rpm}</td>`;
+          html += `<td>${vb6.hp}</td>`;
+          html += `<td class="${hpClass}">${rsa.hp}</td>`;
+          html += `<td class="${hpClass}">${hpDiff > 0 ? '+' : ''}${hpDiff}</td>`;
+          html += `<td>${vb6.tq}</td>`;
+          html += `<td class="${tqClass}">${rsa.torque_lbft}</td>`;
+          html += `<td class="${tqClass}">${tqDiff > 0 ? '+' : ''}${tqDiff}</td>`;
+          html += `</tr>`;
+        }
+      });
+
+      html += '</tbody></table>';
+      html += `<p><strong>Average HP Error:</strong> ${(totalHPDiff / count).toFixed(2)}</p>`;
+      html += `<p><strong>Average TQ Error:</strong> ${(totalTQDiff / count).toFixed(2)}</p>`;
+
+      html += '<h2>Full Generated Curve (125 RPM increments)</h2>';
+      html += '<table><thead><tr><th>RPM</th><th>HP</th><th>TQ</th></tr></thead><tbody>';
+      curve.forEach(p => {
+        html += `<tr><td>${p.rpm}</td><td>${p.hp}</td><td>${p.torque_lbft}</td></tr>`;
+      });
+      html += '</tbody></table>';
+
+      resultsDiv.innerHTML = html;
+    } catch (error) {
+      resultsDiv.innerHTML = `<pre>${error.message}\n\n${error.stack}</pre>`;
+    }
+  </script>
+</body>
+</html>

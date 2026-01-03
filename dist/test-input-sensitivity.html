@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Input Sensitivity Analysis</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        table { border-collapse: collapse; margin: 20px 0; font-size: 11px; }
+        th, td { padding: 6px 10px; text-align: left; border: 1px solid #444; }
+        th { background: #2d2d30; }
+        pre { background: #2d2d30; padding: 10px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <h1>Input Sensitivity Analysis</h1>
+    <p>Testing which input changes could cause 7 HP / 50 RPM difference</p>
+    <div id="output"></div>
+    
+    <script type="module">
+        const { calcEngPerf } = await import('/src/domain/physics/engine/enginePerf.ts');
+        
+        // Baseline inputs (VB6 overrides applied)
+        const baseline = {
+            noCyl: 8, inline: 0, bore: 4.03, stroke: 3.48, rod: 5.85,
+            compressionRatio: 12.9, camType: 4, inCamDur: 264,
+            carb: true, carbCFM: 750, fuel: 1, manifold: 1, curved: true,
+            manFlow: 96, noInValves: 1, valveDia: 2.05, maxInFlow: 250,
+            deltaP: 28, refBore: 4.0, deck: 0.015, gasket: 0.039,
+            chamber: 62, dome: 12,
+        };
+        
+        const baseResult = calcEngPerf(baseline);
+        
+        let html = '<h2>Baseline Result</h2>';
+        html += '<pre>';
+        html += `Peak HP: ${Math.round(baseResult.peakHP)} @ ${baseResult.rpmPeakHP} RPM\n`;
+        html += `Peak TQ: ${Math.round(baseResult.peakTQ)} @ ${baseResult.rpmPeakTQ} RPM\n`;
+        html += `Target:  461 HP @ 6650 RPM, 415 TQ @ 5450 RPM\n`;
+        html += `Deficit: ${Math.round(baseResult.peakHP) - 461} HP, ${Math.round(baseResult.peakTQ) - 415} TQ\n`;
+        html += '</pre>';
+        
+        html += '<h2>Sensitivity Tests</h2>';
+        html += '<table>';
+        html += '<tr><th>Parameter</th><th>Change</th><th>HP</th><th>HP RPM</th><th>TQ</th><th>TQ RPM</th><th>ΔHP</th><th>ΔRPM</th></tr>';
+        
+        const tests = [
+            { param: 'bore', value: 4.03 * 1.01, desc: '+1%' },
+            { param: 'stroke', value: 3.48 * 1.01, desc: '+1%' },
+            { param: 'rod', value: 5.85 * 1.01, desc: '+1%' },
+            { param: 'compressionRatio', value: 13.0, desc: '12.9→13.0' },
+            { param: 'compressionRatio', value: 13.2, desc: '12.9→13.2' },
+            { param: 'inCamDur', value: 268, desc: '264→268' },
+            { param: 'inCamDur', value: 270, desc: '264→270' },
+            { param: 'carbCFM', value: 780, desc: '750→780' },
+            { param: 'carbCFM', value: 800, desc: '750→800' },
+            { param: 'manFlow', value: 100, desc: '96→100' },
+            { param: 'maxInFlow', value: 260, desc: '250→260' },
+            { param: 'maxInFlow', value: 265, desc: '250→265' },
+            { param: 'valveDia', value: 2.08, desc: '2.05→2.08' },
+            { param: 'valveDia', value: 2.10, desc: '2.05→2.10' },
+            { param: 'curved', value: false, desc: 'true→false' },
+            { param: 'manifold', value: 2, desc: '1→2 (indiv)' },
+            { param: 'manifold', value: 3, desc: '1→3 (dual)' },
+        ];
+        
+        tests.forEach(test => {
+            const testInputs = { ...baseline, [test.param]: test.value };
+            const result = calcEngPerf(testInputs);
+            
+            const deltaHP = Math.round(result.peakHP) - Math.round(baseResult.peakHP);
+            const deltaRPM = result.rpmPeakHP - baseResult.rpmPeakHP;
+            
+            html += '<tr>';
+            html += `<td>${test.param}</td>`;
+            html += `<td>${test.desc}</td>`;
+            html += `<td>${Math.round(result.peakHP)}</td>`;
+            html += `<td>${result.rpmPeakHP}</td>`;
+            html += `<td>${Math.round(result.peakTQ)}</td>`;
+            html += `<td>${result.rpmPeakTQ}</td>`;
+            html += `<td>${deltaHP > 0 ? '+' : ''}${deltaHP}</td>`;
+            html += `<td>${deltaRPM > 0 ? '+' : ''}${deltaRPM}</td>`;
+            html += '</tr>';
+        });
+        
+        html += '</table>';
+        
+        html += '<h2>Finding the Right Combination</h2>';
+        html += '<pre>';
+        html += 'Testing combinations that might yield 461 HP @ 6650 RPM...\n\n';
+        
+        // Try to find a combination that gets close to 461 HP
+        const combos = [
+            { desc: 'maxInFlow=265, manFlow=100', changes: { maxInFlow: 265, manFlow: 100 } },
+            { desc: 'CR=13.2, maxInFlow=260', changes: { compressionRatio: 13.2, maxInFlow: 260 } },
+            { desc: 'inCamDur=270, maxInFlow=260', changes: { inCamDur: 270, maxInFlow: 260 } },
+            { desc: 'valveDia=2.10, maxInFlow=255', changes: { valveDia: 2.10, maxInFlow: 255 } },
+        ];
+        
+        combos.forEach(combo => {
+            const testInputs = { ...baseline, ...combo.changes };
+            const result = calcEngPerf(testInputs);
+            html += `${combo.desc}:\n`;
+            html += `  HP: ${Math.round(result.peakHP)} @ ${result.rpmPeakHP} RPM (${Math.round(result.peakHP) - 461 > 0 ? '+' : ''}${Math.round(result.peakHP) - 461})\n`;
+        });
+        
+        html += '</pre>';
+        
+        html += '<h2>Conclusion</h2>';
+        html += '<pre>';
+        html += 'If no single parameter change or combination produces 461 HP,\n';
+        html += 'then either:\n';
+        html += '1. The VB6 screenshot is from a different configuration\n';
+        html += '2. There is a calculation error in the TypeScript port\n';
+        html += '3. The VB6 program applies additional corrections not in CalcEngPerf()\n';
+        html += '</pre>';
+        
+        document.getElementById('output').innerHTML = html;
+    </script>
+</body>
+</html>

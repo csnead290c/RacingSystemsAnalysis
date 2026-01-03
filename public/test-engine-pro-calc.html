@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Engine Pro Calculation Test</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .result {
+      margin: 20px 0;
+      padding: 15px;
+      background: #2d2d2d;
+      border: 1px solid #3e3e3e;
+      border-radius: 4px;
+    }
+    .pass { color: #4ec9b0; }
+    .fail { color: #f48771; }
+  </style>
+</head>
+<body>
+  <h1>Engine Pro VB6 Calculation Test</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    import { calcEngPerf } from '../src/domain/physics/engine/enginePerf.ts';
+
+    const resultsDiv = document.getElementById('results');
+
+    // Default Engine Pro config converted to VB6 inputs
+    // 8 cyl, Vee, 4.00" bore, 3.48" stroke, 5.70" rod, 10.5:1 CR
+    // Roller cam, 230° duration
+    // Racing gas, Carb 750 CFM
+    // Plenum manifold, Curved runners, 95% flow
+    // 1 intake valve, 2.02" dia, 270 CFM @ 28" H2O, 4.00" test bore
+    const vb6Inputs = {
+      noCyl: 8,
+      inline: 1,              // Vee
+      bore: 4.00,
+      stroke: 3.48,
+      rod: 5.70,
+      compressionRatio: 10.5,
+      camType: 1,             // Roller
+      inCamDur: 230,
+      carb: true,
+      carbCFM: 750,
+      fuel: 2,                // Racing gasoline
+      manifold: 1,            // Plenum
+      curved: true,
+      manFlow: 95,
+      noInValves: 1,
+      valveDia: 2.02,
+      maxInFlow: 270,
+      deltaP: 28,
+      refBore: 4.00,
+    };
+
+    try {
+      console.log('VB6 Inputs:', vb6Inputs);
+      const result = calcEngPerf(vb6Inputs);
+      console.log('VB6 Result:', result);
+
+      resultsDiv.innerHTML = `
+        <div class="result">
+          <h2 class="pass">✓ VB6 Calculation Success</h2>
+          <p><strong>Displacement:</strong> ${result.cid.toFixed(1)} ci</p>
+          <p><strong>Peak HP:</strong> ${Math.round(result.peakHP)} @ ${result.rpmPeakHP} RPM</p>
+          <p><strong>Peak TQ:</strong> ${Math.round(result.peakTQ)} @ ${result.rpmPeakTQ} RPM</p>
+          <p><strong>HP/CID:</strong> ${result.hpPerCID.toFixed(2)}</p>
+          <p><strong>TQ/CID:</strong> ${result.tqPerCID.toFixed(2)}</p>
+          <p><strong>Shift:</strong> ${result.shift} RPM</p>
+          <p><strong>Redline:</strong> ${result.redline} RPM</p>
+          
+          <h3>Expected for this config:</h3>
+          <p>Should be around 461 HP @ 6650 RPM, 415 TQ @ 5450 RPM</p>
+        </div>
+      `;
+    } catch (error) {
+      resultsDiv.innerHTML = `
+        <div class="result">
+          <h2 class="fail">✗ VB6 Calculation Failed</h2>
+          <pre>${error.message}\n\n${error.stack}</pre>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

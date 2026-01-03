@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Engine Calculation Verification</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .pass { color: #4ec9b0; }
+        .fail { color: #f48771; }
+        table { border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 8px 12px; text-align: left; border: 1px solid #444; }
+        th { background: #2d2d30; }
+        .diff { color: #ce9178; }
+    </style>
+</head>
+<body>
+    <h1>Engine Performance Calculation Verification</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        import { calcEngPerf } from './src/domain/physics/engine/enginePerf.ts';
+        
+        const TEST_INPUTS = {
+            noCyl: 8,
+            inline: 0,
+            bore: 4.03,
+            stroke: 3.48,
+            rod: 5.85,
+            compressionRatio: 12.9,
+            camType: 4,
+            inCamDur: 264,
+            carb: true,
+            carbCFM: 750,
+            fuel: 1,
+            manifold: 1,
+            curved: true,
+            manFlow: 96,
+            noInValves: 1,
+            valveDia: 2.05,
+            maxInFlow: 250,
+            deltaP: 28,
+            refBore: 4.0,
+            deck: 0.015,
+            gasket: 0.039,
+            chamber: 62,
+            dome: 12,
+        };
+        
+        const VB6_EXPECTED = {
+            cid: 355.1,
+            peakHP: 461,
+            peakTQ: 415,
+            rpmPeakHP: 6650,
+            rpmPeakTQ: 5450,
+            hpPerCID: 1.30,
+            tqPerCID: 1.17,
+            shift: 7200,
+            redline: 8350,
+        };
+        
+        const result = calcEngPerf(TEST_INPUTS);
+        
+        let html = '<h2>Test Case: Engine Pro BASECASE with Curved Runners</h2>';
+        html += '<table>';
+        html += '<tr><th>Metric</th><th>TypeScript</th><th>VB6 Expected</th><th>Difference</th><th>Status</th></tr>';
+        
+        const checks = [
+            { name: 'CID', ts: result.cid, vb6: VB6_EXPECTED.cid, tol: 0.1, fmt: 1 },
+            { name: 'Peak HP', ts: result.peakHP, vb6: VB6_EXPECTED.peakHP, tol: 1, fmt: 0 },
+            { name: 'Peak TQ', ts: result.peakTQ, vb6: VB6_EXPECTED.peakTQ, tol: 1, fmt: 0 },
+            { name: 'RPM @ Peak HP', ts: result.rpmPeakHP, vb6: VB6_EXPECTED.rpmPeakHP, tol: 50, fmt: 0 },
+            { name: 'RPM @ Peak TQ', ts: result.rpmPeakTQ, vb6: VB6_EXPECTED.rpmPeakTQ, tol: 50, fmt: 0 },
+            { name: 'HP/CID', ts: result.hpPerCID, vb6: VB6_EXPECTED.hpPerCID, tol: 0.01, fmt: 2 },
+            { name: 'TQ/CID', ts: result.tqPerCID, vb6: VB6_EXPECTED.tqPerCID, tol: 0.01, fmt: 2 },
+            { name: 'Shift RPM', ts: result.shift, vb6: VB6_EXPECTED.shift, tol: 50, fmt: 0 },
+            { name: 'Redline RPM', ts: result.redline, vb6: VB6_EXPECTED.redline, tol: 50, fmt: 0 },
+        ];
+        
+        let allPass = true;
+        checks.forEach(check => {
+            const diff = check.ts - check.vb6;
+            const pass = Math.abs(diff) <= check.tol;
+            if (!pass) allPass = false;
+            
+            const status = pass ? '<span class="pass">✓ PASS</span>' : '<span class="fail">✗ FAIL</span>';
+            const diffStr = pass ? diff.toFixed(check.fmt) : `<span class="diff">${diff.toFixed(check.fmt)}</span>`;
+            
+            html += `<tr>`;
+            html += `<td>${check.name}</td>`;
+            html += `<td>${check.ts.toFixed(check.fmt)}</td>`;
+            html += `<td>${check.vb6.toFixed(check.fmt)}</td>`;
+            html += `<td>${diffStr}</td>`;
+            html += `<td>${status}</td>`;
+            html += `</tr>`;
+        });
+        
+        html += '</table>';
+        
+        if (allPass) {
+            html += '<h2 class="pass">✓ ALL TESTS PASSED - 100% VB6 PARITY ACHIEVED!</h2>';
+        } else {
+            html += '<h2 class="fail">✗ TESTS FAILED - Discrepancies found</h2>';
+            html += '<p>Need to debug the physics calculations to identify the source of error.</p>';
+        }
+        
+        document.getElementById('output').innerHTML = html;
+    </script>
+</body>
+</html>

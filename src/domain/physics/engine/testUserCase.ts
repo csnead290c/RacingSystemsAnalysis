@@ -22,7 +22,7 @@ import type { EngineInputs } from './engineTypes';
 
 export const USER_TEST_CASE: EngineInputs = {
   noCyl: 8,
-  inline: 0,              // Vee
+  inline: 1,              // Vee (VB6 uses 0=Inline, 1=Vee, 2=Flat)
   bore: 4.03,
   stroke: 3.48,
   rod: 5.85,

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iteration Divergence Analysis</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; font-size: 10px; }
+        pre { background: #2d2d30; padding: 10px; white-space: pre; }
+        table { border-collapse: collapse; margin: 10px 0; font-size: 9px; }
+        th, td { padding: 4px 6px; text-align: right; border: 1px solid #444; }
+        th { background: #2d2d30; position: sticky; top: 0; }
+        .highlight { background: #3a3a00; }
+    </style>
+</head>
+<body>
+    <h2>Iteration-by-Iteration Value Trace</h2>
+    <pre id="summary"></pre>
+    <div id="output"></div>
+    
+    <script type="module">
+        // Create a modified version of calcEngPerf that logs all iteration values
+        const { CONSTANTS, CAM_FACTORS, calcGulp } = await import('/src/domain/physics/engine/engineConstants.ts');
+        
+        const PI = CONSTANTS.PI;
+        const VSW = 0.915;
+        const VSTM = 0.022;
+        
+        function fpsToRPM(fps, flrqs, stroke) {
+            return (fps * 60) / (PI * flrqs * stroke / 12);
+        }
+        
+        function calcEffCR(VE, RamVE) {
+            const EffCR = VE * RamVE;
+            return Math.max(0.5, Math.min(1, EffCR));
+        }
+        
+        function calcEFF(EffCR, CR, GAM, crx) {
+            const EFF = ((EffCR * (CR - 1) + 1) ** (GAM - 1) - 1) / ((crx - 1) ** (GAM - 1) - 1);
+            return Math.max(0.5, Math.min(1.05, EFF));
+        }
+        
+        function friction(rpm, CID, bore, stroke, CR, inline, camType, noInValves) {
+            const fcid = 0.011 + 0.000006 * rpm;
+            let ptq = fcid * CID * (1 + stroke / bore);
+            if (CR > 10) ptq *= 1 + 0.002 * (CR - 10);
+            if (inline === 1) ptq *= 0.98;
+            if (camType === 0) ptq *= 0.97;
+            if (noInValves > 1) ptq *= 0.99;
+            return ptq;
+        }
+        
+        function headLoss(fps) {
+            return 1 - 2 * (CONSTANTS.RHOair * fps ** 2 / (2 * CONSTANTS.GC * 144)) / CONSTANTS.PSIA;
+        }
+        
+        function flowBenchCorr(deltaP) {
+            const yFactor = 1.044429 * (1 - 0.618 * deltaP / CONSTANTS.PSTD);
+            return Math.sqrt(28 / deltaP) * yFactor;
+        }
+        
+        // Test case inputs
+        const inputs = {
+            noCyl: 8, inline: 0, bore: 4.03, stroke: 3.48, rod: 5.85,
+            compressionRatio: 12.9, camType: 4, inCamDur: 264,
+            carb: true, carbCFM: 750, fuel: 1, manifold: 1, curved: true,
+            manFlow: 96, noInValves: 1, valveDia: 2.05, maxInFlow: 250,
+            deltaP: 28, refBore: 4.0,
+        };
+        
+        // Initial calculations
+        const bore = inputs.bore;
+        const stroke = inputs.stroke;
+        const rod = inputs.rod;
+        const CR = inputs.compressionRatio;
+        const BQS = bore / stroke;
+        const B2QS = bore * BQS;
+        const S3QB = stroke ** 2 / BQS;
+        const LRQS = rod / stroke;
+        const flrqs = 1 + (0.348 / LRQS) ** 1.99;
+        const crvf = 1 + 1 / (CR - 1);
+        const BArea = PI * bore ** 2 / 4;
+        const CID = BArea * stroke * inputs.noCyl;
+        
+        // Fuel properties
+        const GAM = 1.28;
+        const aqf = 14.7;
+        const fhv = 20700;
+        const crx = 11.5;
+        const hpcfmx = 0.07634 * fhv / (550 * aqf) * 778.16 / 60;
+        const tqcidx = hpcfmx * 5252.113 / (2 * 1728);
+        
+        // Manifold effects
+        const efik = 1;
+        const epek = 0.9;
+        const crektq = 0.994;
+        const crekhp = 0.904;
+        
+        // Flow calculations
+        const cvexhp = 0.8827;
+        const cvextq = 0.8827;
+        const ICFM = inputs.maxInFlow * flowBenchCorr(inputs.deltaP) * (bore / inputs.refBore) ** 0.5;
+        const athroat = inputs.noInValves * (PI / 4) * inputs.valveDia ** 2 * (VSW ** 2 - VSTM);
+        let cdi = (ICFM / athroat) / 133;
+        if (cdi > 1) cdi = 1;
+        
+        const ICFMnorm = ICFM * (inputs.manFlow / 100) / BArea;
+        let EqvPS = ICFMnorm * 144 / 60;
+        EqvPS = EqvPS / (319.2 / 4.2);
+        
+        // Iteration variables
+        let ilc = 109, PHI = 1, icdtq = 0.995, icdrpm = 1;
+        let metq = 0.818, mehp = 0.778;
+        let lcetq = 0, PortVETQ = 0, CarbVETQ = 0;
+        let lcehp = 0, PortVEHP = 0, CarbVEHP = 0;
+        
+        const NTQ = [0, 0, 0];
+        const NHP = [0, 0, 0];
+        
+        const camk = CAM_FACTORS[inputs.camType];
+        const gulp = calcGulp(inputs.manifold, inputs.noCyl);
+        
+        let html = '<table>';
+        html += '<tr><th>Iter</th><th>Section</th><th>tqfps</th><th>rpmTQ</th><th>hpfps</th><th>rpmHP</th>';
+        html += '<th>VETQ</th><th>VEHP</th><th>RamVETQ</th><th>RamVEHP</th>';
+        html += '<th>EffCRTQ</th><th>EffCRHP</th><th>EFFTQ</th><th>EFFHP</th>';
+        html += '<th>NTQ[1]</th><th>NHP[1]</th><th>metq</th><th>mehp</th></tr>';
+        
+        let tqfps = 0, hpfps = 0;
+        let rpmPeakTQ = 0, rpmPeakHP = 0;
+        
+        for (let itr = 1; itr <= 5; itr++) {
+            // TQ calculations
+            const xqs = 0.5 * (1 + Math.cos(PI * (inputs.inCamDur + ilc - 180) / 180));
+            
+            let acrit;
+            if (itr === 1) {
+                acrit = 1.414 * gulp * inputs.carbCFM / (inputs.noCyl * BArea * EqvPS);
+            } else {
+                acrit = 1.414 * gulp * inputs.carbCFM / (inputs.noCyl * BArea * tqfps);
+            }
+            if (inputs.noInValves > 1) acrit = acrit / (137 / 133);
+            if (inputs.fuel === 3) acrit = acrit / 1.06;
+            
+            const astar = acrit / (BArea / athroat);
+            let psitq;
+            if (astar < 1) {
+                psitq = cdi ** 1.56 * astar ** 0.44;
+            } else {
+                psitq = cdi ** 1.56;
+            }
+            
+            const RamVETQ = crektq * camk[1] * psitq ** camk[2];
+            const VETQ = camk[3] * EqvPS ** 0.18 * epek;
+            const EffCRTQ = calcEffCR(VETQ, RamVETQ);
+            const EFFTQ = calcEFF(EffCRTQ, CR, GAM, crx);
+            
+            tqfps = (tqcidx * EFFTQ * efik * cvextq * xqs / crvf) ** (1 / 1.52);
+            rpmPeakTQ = fpsToRPM(tqfps, flrqs, stroke);
+            
+            const gtqcid = tqcidx * EFFTQ * efik * cvextq * xqs / crvf * tqfps ** 0.52;
+            const ftqTQ = friction(rpmPeakTQ, CID, bore, stroke, CR, inputs.inline, inputs.camType, inputs.noInValves);
+            NTQ[1] = (gtqcid - ftqTQ / CID) * CID;
+            
+            metq = 0.5 * metq + 0.5 * (1 - ftqTQ / (gtqcid * CID));
+            
+            const ntqcid = gtqcid * metq;
+            NTQ[2] = ntqcid * CID;
+            
+            const tqcfm = inputs.noCyl * BArea * tqfps * 60 / 1728;
+            CarbVETQ = 0.5 * CarbVETQ + 0.5 * (tqcfm / inputs.carbCFM);
+            PortVETQ = 0.5 * PortVETQ + 0.5 * (headLoss(tqfps) * CarbVETQ * icdtq);
+            lcetq = 0.5 * lcetq + 0.5 * (PortVETQ / RamVETQ);
+            
+            html += `<tr><td>${itr}</td><td>TQ</td>`;
+            html += `<td>${tqfps.toFixed(4)}</td><td>${rpmPeakTQ.toFixed(1)}</td><td>-</td><td>-</td>`;
+            html += `<td>${VETQ.toFixed(6)}</td><td>-</td>`;
+            html += `<td>${RamVETQ.toFixed(6)}</td><td>-</td>`;
+            html += `<td>${EffCRTQ.toFixed(6)}</td><td>-</td>`;
+            html += `<td>${EFFTQ.toFixed(6)}</td><td>-</td>`;
+            html += `<td>${NTQ[1].toFixed(2)}</td><td>-</td>`;
+            html += `<td>${metq.toFixed(6)}</td><td>-</td></tr>`;
+            
+            // HP calculations
+            if (itr === 1) {
+                acrit = 1.414 * gulp * inputs.carbCFM / (inputs.noCyl * BArea * EqvPS);
+            } else {
+                acrit = 1.414 * gulp * inputs.carbCFM / (inputs.noCyl * BArea * hpfps);
+            }
+            if (inputs.noInValves > 1) acrit = acrit / (137 / 133);
+            if (inputs.fuel === 3) acrit = acrit / 1.06;
+            
+            const astarHP = acrit / (BArea / athroat);
+            let psihp;
+            if (astarHP < 1) {
+                psihp = cdi ** 1.52 * astarHP ** 0.48;
+            } else {
+                psihp = cdi ** 1.52;
+            }
+            
+            const RamVEHP = crekhp * camk[4] * psihp ** camk[5];
+            const VEHP = camk[6] * EqvPS ** 0.177 * epek;
+            const EffCRHP = calcEffCR(VEHP, RamVEHP);
+            const EFFHP = calcEFF(EffCRHP, CR, GAM, crx);
+            
+            hpfps = (hpcfmx * EFFHP * efik * cvexhp * xqs / crvf) ** (1 / 1.52);
+            rpmPeakHP = fpsToRPM(hpfps, flrqs, stroke);
+            
+            const gtqhp = hpcfmx * EFFHP * efik * cvexhp * xqs / crvf * hpfps ** 0.52 * CONSTANTS.Z6;
+            const ftqHP = friction(rpmPeakHP, CID, bore, stroke, CR, inputs.inline, inputs.camType, inputs.noInValves);
+            NHP[1] = (gtqhp - ftqHP / CID) * CID * rpmPeakHP / CONSTANTS.Z6;
+            
+            mehp = 0.5 * mehp + 0.5 * (1 - ftqHP / (gtqhp * CID));
+            
+            const ntqhp = gtqhp * mehp;
+            NHP[2] = ntqhp * CID * rpmPeakHP / CONSTANTS.Z6;
+            
+            const hpcfm = inputs.noCyl * BArea * hpfps * 60 / 1728;
+            CarbVEHP = 0.5 * CarbVEHP + 0.5 * (hpcfm / inputs.carbCFM);
+            PortVEHP = 0.5 * PortVEHP + 0.5 * (headLoss(hpfps) * CarbVEHP * icdrpm);
+            lcehp = 0.5 * lcehp + 0.5 * (PortVEHP / RamVEHP);
+            
+            html += `<tr><td>${itr}</td><td>HP</td>`;
+            html += `<td>-</td><td>-</td><td>${hpfps.toFixed(4)}</td><td>${rpmPeakHP.toFixed(1)}</td>`;
+            html += `<td>-</td><td>${VEHP.toFixed(6)}</td>`;
+            html += `<td>-</td><td>${RamVEHP.toFixed(6)}</td>`;
+            html += `<td>-</td><td>${EffCRHP.toFixed(6)}</td>`;
+            html += `<td>-</td><td>${EFFHP.toFixed(6)}</td>`;
+            html += `<td>-</td><td>${NHP[1].toFixed(2)}</td>`;
+            html += `<td>-</td><td>${mehp.toFixed(6)}</td></tr>`;
+            
+            // Off-design camshaft modeling
+            const optcam = 108 + 8.5 * Math.log(rpmPeakHP / rpmPeakTQ);
+            PHI = (inputs.inCamDur - 224) / (optcam - 108);
+            icdrpm = 1 - 0.0078 * (PHI - 1) ** 2;
+            icdtq = 1 - 0.006 * (PHI - 1) ** 2;
+            
+            const lsa = 84 + 0.5 * inputs.inCamDur + 17 / (EffCRHP ** 2.7);
+            ilc = lsa - 0.5 * inputs.inCamDur;
+            if (ilc < 95) ilc = 95;
+            if (ilc > 118) ilc = 118;
+        }
+        
+        html += '</table>';
+        
+        let peakTQ = (NTQ[1] + NTQ[2]) / 2;
+        let peakHP = (NHP[1] + NHP[2]) / 2;
+        
+        const ntqhp = peakHP * CONSTANTS.Z6 / rpmPeakHP;
+        const xrpm = rpmPeakTQ / rpmPeakHP;
+        const tqmin = ntqhp * (1 + 0.31 * ((1 / xrpm) - 1));
+        if (peakTQ < tqmin) peakTQ = tqmin;
+        
+        rpmPeakTQ = Math.round(rpmPeakTQ / 50) * 50;
+        rpmPeakHP = Math.round(rpmPeakHP / 50) * 50;
+        
+        let summary = 'FINAL RESULTS:\n';
+        summary += '='.repeat(60) + '\n';
+        summary += `Peak HP: ${Math.round(peakHP)} @ ${rpmPeakHP} RPM\n`;
+        summary += `Peak TQ: ${Math.round(peakTQ)} @ ${rpmPeakTQ} RPM\n\n`;
+        summary += 'VB6 EXPECTED:\n';
+        summary += `Peak HP: 461 @ 6650 RPM\n`;
+        summary += `Peak TQ: 415 @ 5450 RPM\n\n`;
+        summary += 'DISCREPANCY:\n';
+        summary += `HP: ${Math.round(peakHP) - 461} HP\n`;
+        summary += `TQ: ${Math.round(peakTQ) - 415} lb-ft\n`;
+        summary += `HP RPM: ${rpmPeakHP - 6650} RPM\n`;
+        summary += `TQ RPM: ${rpmPeakTQ - 5450} RPM\n`;
+        
+        document.getElementById('summary').textContent = summary;
+        document.getElementById('output').innerHTML = html;
+    </script>
+</body>
+</html>

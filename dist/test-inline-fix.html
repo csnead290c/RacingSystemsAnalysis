@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inline Parameter Fix Test</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        table { border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 8px 12px; text-align: left; border: 1px solid #444; }
+        th { background: #2d2d30; }
+        .pass { color: #4ec9b0; font-weight: bold; }
+        .fail { color: #f48771; font-weight: bold; }
+        pre { background: #2d2d30; padding: 10px; }
+        h1 { color: #4ec9b0; }
+        h2 { color: #dcdcaa; }
+    </style>
+</head>
+<body>
+    <h1>Inline Parameter Fix Test</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        const { calcEngPerf } = await import('/src/domain/physics/engine/enginePerf.ts');
+        
+        // VB6 Mapping: 0=Inline, 1=Vee, 2=Flat
+        // VB6 test case uses gc_Inline.Value = 1 (Vee)
+        const inputs = {
+            noCyl: 8, inline: 1, bore: 4.03, stroke: 3.48, rod: 5.85,
+            compressionRatio: 12.9, camType: 4, inCamDur: 264,
+            carb: true, carbCFM: 750, fuel: 1, manifold: 1, curved: true,
+            manFlow: 96, noInValves: 1, valveDia: 2.05, maxInFlow: 250,
+            deltaP: 28, refBore: 4.0, deck: 0.015, gasket: 0.039,
+            chamber: 62, dome: 12,
+        };
+        
+        console.log('Running calculation with CORRECTED inline parameter...');
+        const result = calcEngPerf(inputs);
+        
+        let html = '<h2>VB6 Inline Parameter Mapping</h2>';
+        html += '<pre>';
+        html += 'VB6 uses:\n';
+        html += '  0 = Inline\n';
+        html += '  1 = Vee\n';
+        html += '  2 = Flat/Opposed\n\n';
+        html += 'VB6 test case: gc_Inline.Value = 1 (Vee)\n';
+        html += 'TypeScript test: inline = 1 (Vee) ✓ CORRECTED\n';
+        html += '</pre>';
+        
+        html += '<h2>Results Comparison</h2>';
+        html += '<table>';
+        html += '<tr><th>Metric</th><th>TypeScript</th><th>VB6 Expected</th><th>Difference</th><th>Match?</th></tr>';
+        
+        const metrics = [
+            { name: 'Peak HP', value: Math.round(result.peakHP), expected: 461, tol: 1 },
+            { name: 'HP RPM', value: result.rpmPeakHP, expected: 6650, tol: 50 },
+            { name: 'Peak TQ', value: Math.round(result.peakTQ), expected: 415, tol: 1 },
+            { name: 'TQ RPM', value: result.rpmPeakTQ, expected: 5450, tol: 50 },
+            { name: 'Shift RPM', value: result.shift, expected: 7200, tol: 50 },
+            { name: 'Redline', value: result.redline, expected: 8350, tol: 50 },
+        ];
+        
+        let allMatch = true;
+        metrics.forEach(m => {
+            const diff = m.value - m.expected;
+            const match = Math.abs(diff) <= m.tol;
+            if (!match) allMatch = false;
+            
+            html += '<tr>';
+            html += `<td>${m.name}</td>`;
+            html += `<td>${m.value}</td>`;
+            html += `<td>${m.expected}</td>`;
+            html += `<td>${diff > 0 ? '+' : ''}${diff}</td>`;
+            html += `<td class="${match ? 'pass' : 'fail'}">${match ? '✓ PASS' : '✗ FAIL'}</td>`;
+            html += '</tr>';
+        });
+        
+        html += '</table>';
+        
+        html += '<pre>';
+        if (allMatch) {
+            html += '\n';
+            html += '═══════════════════════════════════════════════════════════\n';
+            html += '   ✓✓✓ 100% VB6 PARITY ACHIEVED! ✓✓✓\n';
+            html += '═══════════════════════════════════════════════════════════\n\n';
+            html += 'The inline parameter fix resolved the discrepancy!\n';
+            html += 'All metrics now match VB6 output exactly.\n';
+        } else {
+            html += '\n';
+            html += 'Inline parameter corrected, but still have discrepancies:\n';
+            metrics.forEach(m => {
+                const diff = m.value - m.expected;
+                if (Math.abs(diff) > m.tol) {
+                    html += `  ${m.name}: ${diff > 0 ? '+' : ''}${diff}\n`;
+                }
+            });
+        }
+        html += '</pre>';
+        
+        document.getElementById('output').innerHTML = html;
+        
+        console.log('Result:', result);
+        console.log('All Match:', allMatch);
+    </script>
+</body>
+</html>

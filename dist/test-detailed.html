@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Detailed Engine Test</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; }
+        pre { background: #2d2d30; padding: 10px; overflow-x: auto; }
+        .pass { color: #4ec9b0; }
+        .fail { color: #f48771; }
+    </style>
+</head>
+<body>
+    <h2>Detailed Engine Calculation Trace</h2>
+    <div id="output"></div>
+    
+    <script type="module">
+        // Inline the calculation with detailed logging
+        import { CONSTANTS, FUEL_PROPERTIES, CAM_FACTORS, calcGulp, VSW, VSTM } from '/src/domain/physics/engine/engineConstants.ts';
+        
+        const inputs = {
+            noCyl: 8,
+            inline: 0,
+            bore: 4.03,
+            stroke: 3.48,
+            rod: 5.85,
+            compressionRatio: 12.9,
+            camType: 4,
+            inCamDur: 264,
+            carb: true,
+            carbCFM: 750,
+            fuel: 1,
+            manifold: 1,
+            curved: false,  // Testing with straight runners
+            manFlow: 96,
+            noInValves: 1,
+            valveDia: 2.05,
+            maxInFlow: 250,
+            deltaP: 28,
+            refBore: 4.0,
+            deck: 0.015,
+            gasket: 0.039,
+            chamber: 62,
+            dome: 12,
+        };
+        
+        const { noCyl, inline, bore, stroke, rod, compressionRatio, camType, inCamDur,
+                carb, carbCFM, fuel, manifold, curved, manFlow, noInValves, valveDia,
+                maxInFlow, deltaP, refBore } = inputs;
+        
+        let log = '';
+        function logLine(text) {
+            log += text + '\n';
+            console.log(text);
+        }
+        
+        // Initial calculations
+        const crvf = 1 + 1 / (compressionRatio - 1);
+        const BQS = bore / stroke;
+        const B2QS = bore * BQS;
+        const S3QB = Math.pow(stroke, 2) / BQS;
+        const LRQS = rod / stroke;
+        const flrqs = 1 + Math.pow(0.348 / LRQS, 1.99);
+        const CID = CONSTANTS.PI * Math.pow(bore / 2, 2) * stroke * noCyl;
+        const Gulp = calcGulp(manifold, noCyl);
+        const clk = (1.5 / 29.92) / Math.pow(carbCFM, 2);
+        
+        const fuelProps = FUEL_PROPERTIES[fuel];
+        const { GAM, aqf, fhv, crx } = fuelProps;
+        const hpcfmx = CONSTANTS.RHOair * fhv / (550 * aqf) * 778.16 / 60;
+        const tqcidx = hpcfmx * CONSTANTS.Z6 / (2 * 1728);
+        
+        logLine('=== INITIAL VALUES ===');
+        logLine(`CID: ${CID.toFixed(4)}`);
+        logLine(`crvf: ${crvf.toFixed(6)}`);
+        logLine(`flrqs: ${flrqs.toFixed(6)}`);
+        logLine(`tqcidx: ${tqcidx.toFixed(6)}`);
+        logLine(`hpcfmx: ${hpcfmx.toFixed(6)}`);
+        
+        let efik = 1;
+        let crektq = 1, crekhp = 1;
+        if (curved) {
+            crektq = 0.994;
+            crekhp = 0.904;
+        }
+        let epek = 1;
+        if (manifold === 1 && inline === 0) epek = 0.9;
+        
+        logLine(`\nefik: ${efik}`);
+        logLine(`crektq: ${crektq}`);
+        logLine(`crekhp: ${crekhp}`);
+        logLine(`epek: ${epek}`);
+        
+        // Flow calculations
+        const yFactor = 1.044429 * (1 - 0.618 * deltaP / CONSTANTS.PSTD);
+        const flowBenchCorr = Math.sqrt(28 / deltaP) * yFactor;
+        const BArea = CONSTANTS.PI * Math.pow(bore, 2) / 4;
+        const ICFM_raw = maxInFlow * flowBenchCorr * Math.pow(bore / refBore, 0.5);
+        const athroat = noInValves * (CONSTANTS.PI / 4) * Math.pow(valveDia, 2) * (Math.pow(VSW, 2) - VSTM);
+        
+        let cdi = (ICFM_raw / athroat) / 133;
+        if (cdi > 1) cdi = 1;
+        
+        const ICFMnorm = ICFM_raw * (manFlow / 100) / BArea;
+        let EqvPS = ICFMnorm * 144 / 60;
+        EqvPS = EqvPS / (319.2 / 4.2);
+        
+        logLine(`\nBArea: ${BArea.toFixed(6)}`);
+        logLine(`athroat: ${athroat.toFixed(6)}`);
+        logLine(`cdi: ${cdi.toFixed(6)}`);
+        logLine(`EqvPS: ${EqvPS.toFixed(6)}`);
+        
+        // Initial iteration values
+        let ilc = 109;
+        let icdtq = 0.995;
+        let icdrpm = 1;
+        let metq = 0.818;
+        let mehp = 0.778;
+        
+        let PortVETQ = 0.987;
+        let CarbVETQ = 1 - Math.pow(0.135 * CID * crvf / carbCFM, 1.25);
+        if (CarbVETQ < 0.65) CarbVETQ = 0.65;
+        
+        let PortVEHP = 0.98;
+        let CarbVEHP = 1 - Math.pow(0.17 * CID * crvf / carbCFM, 1.25);
+        if (CarbVEHP < 0.65) CarbVEHP = 0.65;
+        
+        logLine(`\nCarbVETQ: ${CarbVETQ.toFixed(6)}`);
+        logLine(`CarbVEHP: ${CarbVEHP.toFixed(6)}`);
+        
+        const camk = CAM_FACTORS[camType];
+        const NTQ = [0, 0, 0];
+        const NHP = [0, 0, 0];
+        
+        let rpmPeakTQ = 0;
+        let rpmPeakHP = 0;
+        let tqfps = 0;
+        let hpfps = 0;
+        
+        // Run 5 iterations
+        for (let itr = 1; itr <= 5; itr++) {
+            logLine(`\n${'='.repeat(60)}`);
+            logLine(`ITERATION ${itr}`);
+            logLine('='.repeat(60));
+            
+            // Calculate xqs
+            let xqs = 1;
+            const ivc = ilc + 1.08 * inCamDur / 2;
+            if (ivc > 180) {
+                const ivcr = ivc * CONSTANTS.PI / 180;
+                xqs = (1 + 2 * LRQS - Math.cos(ivcr) - Math.sqrt(Math.pow(2 * LRQS, 2) - Math.pow(Math.sin(ivcr), 2))) / 2;
+            }
+            
+            // Peak TQ calculations
+            let acrit = (itr === 1) ? 4.4 : 4.2 * Math.pow(524 / (4.2 * tqfps), 0.181);
+            if (noInValves > 1) acrit = acrit / (137 / 133);
+            if (fuel === 3) acrit = acrit / 1.06;
+            const astarTQ = acrit / (BArea / athroat);
+            
+            let psitq = (astarTQ < 1) ? 
+                Math.pow(cdi, 1.56) * Math.pow(astarTQ, 0.44) :
+                Math.pow(cdi, 1.56) * Math.pow(astarTQ, -3 * 0.44);
+            psitq = psitq - 4.3 * Math.pow(cdi - astarTQ, 2);
+            if (psitq < 0) psitq = 0;
+            
+            const RamVETQ = (1 + 0.177 * epek * crektq * Math.pow(psitq, 1.52) * Math.pow(noInValves, 0.13))
+                            * icdtq * Math.pow(camk[2], 0.5) * 1;  // lcetq starts at 1
+            
+            const VETQ = CarbVETQ * PortVETQ;
+            
+            let EffCRTQ = VETQ * RamVETQ * (xqs * (compressionRatio - 1) + 1);
+            if (EffCRTQ < 2) EffCRTQ = 2;
+            if (EffCRTQ > crx) EffCRTQ = crx;
+            
+            let EFFTQ = 1 - Math.pow(EffCRTQ, -(GAM - 1));
+            if (EFFTQ <= 0) EFFTQ = 0.01;
+            
+            // RPM @ Peak TQ
+            tqfps = (5683.2 / 60) * Math.pow(S3QB, 0.172) * Math.pow(flrqs, 0.42);
+            let PumpVE = Math.pow(VETQ, 0.32) * Math.pow(crvf, -2.7) * Math.pow(EqvPS, 0.608);
+            PumpVE = PumpVE * Math.pow(camk[1], 0.5);
+            tqfps = tqfps * PumpVE;
+            
+            let RamVE = Math.pow(RamVETQ, 0.015) * Math.pow(noInValves, 0.047);
+            RamVE = RamVE * icdrpm * Math.pow(camk[1], 0.5);
+            tqfps = tqfps * RamVE;
+            
+            tqfps = tqfps * Math.pow(EFFTQ, -0.22) * Math.pow(metq, 0.59);
+            rpmPeakTQ = (tqfps * 60) / (CONSTANTS.PI * flrqs * stroke / 12);
+            
+            logLine(`\nPeak TQ: rpmPeakTQ = ${rpmPeakTQ.toFixed(2)}`);
+            logLine(`  VETQ = ${VETQ.toFixed(6)}, RamVETQ = ${RamVETQ.toFixed(6)}`);
+            logLine(`  EffCRTQ = ${EffCRTQ.toFixed(6)}, EFFTQ = ${EFFTQ.toFixed(6)}`);
+            logLine(`  tqfps = ${tqfps.toFixed(6)}, metq = ${metq.toFixed(6)}`);
+            
+            // Gross TQ @ Peak TQ
+            let gtqcid = 0.8827 * Math.pow(B2QS, 0.018) * Math.pow(stroke, -0.008) * Math.pow(flrqs, 0.18);
+            PumpVE = Math.pow(VETQ, 0.7) * Math.pow(crvf, 1.4) * Math.pow(EqvPS, 0.187);
+            PumpVE = PumpVE * Math.pow(camk[2], 0.5);
+            gtqcid = gtqcid * PumpVE * RamVETQ * Math.pow(EFFTQ, 1.18) * tqcidx * efik;
+            
+            // Friction
+            let fcid = 0.268 * Math.pow(noCyl, 0.96) * Math.pow(bore, 1.6) * stroke;
+            fcid = fcid * Math.pow(EffCRTQ / crx, 0.5);
+            if (inline === 0 && noCyl > 1) {
+                const nrb = noCyl;
+                const nmb = 1 + noCyl / 2;
+                const icid = 0.08 * ((4 + 5) / (4 + 3)) * ((nrb + nmb)) / (nrb + nrb + 1);
+                fcid = fcid * (1 + icid);
+            }
+            fcid = fcid * Math.pow(noInValves, 0.1);
+            const ptq = CID * (1.01 - VETQ) * CONSTANTS.PSIA / 12;
+            const rtq = 1.07 * fcid * Math.pow(rpmPeakTQ * Math.pow(stroke, 0.8) / CONSTANTS.KRPM, 1.6);
+            const ftq = fcid + ptq + rtq;
+            
+            NTQ[1] = gtqcid * CID - ftq;
+            if (NTQ[1] < 0) NTQ[1] = 0;
+            
+            metq = 0.4 * metq + 0.6 * NTQ[1] / (gtqcid * CID);
+            
+            logLine(`  gtqcid = ${gtqcid.toFixed(6)}, ftq = ${ftq.toFixed(2)}`);
+            logLine(`  NTQ[1] = ${NTQ[1].toFixed(2)}`);
+            
+            if (itr === 5) {
+                logLine(`\n${'='.repeat(60)}`);
+                logLine('FINAL VALUES AFTER ITERATION 5:');
+                logLine(`rpmPeakTQ = ${rpmPeakTQ.toFixed(2)} (will round to ${Math.round(rpmPeakTQ / 50) * 50})`);
+                logLine(`NTQ[1] = ${NTQ[1].toFixed(2)}`);
+                logLine(`metq = ${metq.toFixed(6)}`);
+            }
+        }
+        
+        document.getElementById('output').innerHTML = `<pre>${log}</pre>`;
+        
+        logLine(`\n\nVB6 Expected: 461 HP @ 6650 RPM, 415 TQ @ 5450 RPM`);
+        logLine(`Need to identify where the ~7 HP and 50 RPM discrepancy comes from`);
+    </script>
+</body>
+</html>

@@ -1116,6 +1116,26 @@ const styles = {
   cardTall: {
     gridRow: 'span 2',
   } as React.CSSProperties,
+  mainLayout: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '20px',
+  } as React.CSSProperties,
+  leftColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  } as React.CSSProperties,
+  middleColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  } as React.CSSProperties,
+  rightColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  } as React.CSSProperties,
   section: {
     backgroundColor: 'var(--color-surface)',
     borderRadius: '8px',
@@ -1173,10 +1193,11 @@ const styles = {
     color: '#1e293b',
   } as React.CSSProperties,
   resultValueLarge: {
-    fontSize: '20px',
-    fontWeight: 'bold',
-    color: '#3b82f6',
-  } as React.CSSProperties,
+    fontSize: '24px',
+    fontWeight: '700' as const,
+    color: 'var(--color-primary)',
+    margin: '4px 0',
+  },
   resultValueMedium: {
     fontSize: '16px',
     fontWeight: '600',
@@ -1193,12 +1214,6 @@ const styles = {
     borderRadius: '6px',
     textAlign: 'center' as const,
     border: '1px solid var(--color-border)',
-  },
-  resultValueLarge: {
-    fontSize: '24px',
-    fontWeight: '700' as const,
-    color: 'var(--color-primary)',
-    margin: '4px 0',
   },
   resultSubtext: {
     fontSize: '11px',

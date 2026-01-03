@@ -9,7 +9,7 @@ import type { EngineInputs } from './engineTypes';
 // Test case from user's full VB6 output
 const TEST_INPUTS: EngineInputs = {
   noCyl: 8,
-  inline: 0,              // Vee
+  inline: 1,              // Vee (VB6: 0=Inline, 1=Vee, 2=Flat)
   bore: 4.03,
   stroke: 3.48,
   rod: 5.85,

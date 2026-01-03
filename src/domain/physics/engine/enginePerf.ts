@@ -242,6 +242,11 @@ export function calcEngPerf(inputs: EngineInputs): EngineOutputs {
   let tqfps = 0;
   let hpfps = 0;
   
+  // Variables needed for recommendations (declared at function level)
+  let RamVEHP = 0;
+  let EffCRHP = 0;
+  let acrit = 4.4;
+  
   // Get cam factors
   const camk = CAM_FACTORS[camType];
   
@@ -255,7 +260,6 @@ export function calcEngPerf(inputs: EngineInputs): EngineOutputs {
     }
     
     // *************************** Peak TQ and RPM ****************************
-    let acrit: number;
     if (itr === 1) {
       acrit = 4.4;
     } else {
@@ -370,11 +374,11 @@ export function calcEngPerf(inputs: EngineInputs): EngineOutputs {
     psihp = psihp - 1.5 * Math.pow(cdi - astarHP, 2);
     if (psihp < 0) psihp = 0;
     
-    const RamVEHP = (1 + 0.202 * epek * crekhp * Math.pow(psihp, 1.9) * Math.pow(noInValves, 0.145))
-                    * icdtq * Math.pow(camk[5], 0.5) * lcehp;
+    RamVEHP = (1 + 0.202 * epek * crekhp * Math.pow(psihp, 1.9) * Math.pow(noInValves, 0.145))
+              * icdtq * Math.pow(camk[5], 0.5) * lcehp;
     
     const VEHP = CarbVEHP * PortVEHP;
-    const EffCRHP = calcEffCR(VEHP * RamVEHP, compressionRatio, xqs, crx);
+    EffCRHP = calcEffCR(VEHP * RamVEHP, compressionRatio, xqs, crx);
     const EFFHP = calcEFF(EffCRHP, GAM);
     
     // RPM @ Peak HP from Peak Piston Speed
@@ -525,6 +529,16 @@ export function calcEngPerf(inputs: EngineInputs): EngineOutputs {
     shift,
     redline,
     cid: CID,
+    calculatedValues: {
+      hpcfm,
+      tqcfm,
+      hpfps,
+      tqfps,
+      RamVEHP,
+      EffCR: EffCRHP,
+      acrit,
+      flrqs
+    }
   };
 }
 

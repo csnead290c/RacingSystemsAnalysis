@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>VB6 Dyno Curve Accuracy Test</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    table { border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: right; }
+    th { background: #f0f0f0; }
+    .diff { background: #ffcccc; }
+  </style>
+</head>
+<body>
+  <h1>VB6 Dyno Curve Accuracy Test</h1>
+  <div id="output"></div>
+
+  <script type="module">
+    import { generateVB6DynoCurve } from '../src/domain/physics/engine/vb6CurveGen.ts';
+    import { calcEngPerf } from '../src/domain/physics/engine/enginePerf.ts';
+
+    // Test with default Engine Pro config (355 CID V8)
+    const testInputs = {
+      noCyl: 8,
+      inline: 1, // Vee
+      bore: 4.03,
+      stroke: 3.48,
+      rod: 5.85,
+      compressionRatio: 10.5,
+      camType: 4, // Normal flat tappet
+      inCamDur: 220,
+      carb: true,
+      carbCFM: 600,
+      fuel: 1, // Gasoline
+      manifold: 1, // Plenum
+      curved: false,
+      manFlow: 96,
+      noInValves: 1,
+      valveDia: 2.02,
+      maxInFlow: 220,
+      deltaP: 28,
+      refBore: 4.03,
+    };
+
+    const result = calcEngPerf(testInputs);
+    const displacement = Math.PI * Math.pow(testInputs.bore / 2, 2) * testInputs.stroke * testInputs.noCyl;
+
+    console.log('Physics Results:', result);
+    console.log('Displacement:', displacement.toFixed(1), 'CID');
+
+    const curve = generateVB6DynoCurve(
+      result.peakHP,
+      result.rpmPeakHP,
+      result.peakTQ,
+      result.rpmPeakTQ,
+      result.redline,
+      displacement
+    );
+
+    // Display results
+    let html = `
+      <h2>Engine Configuration</h2>
+      <p>Displacement: ${displacement.toFixed(1)} CID</p>
+      <p>Peak HP: ${result.peakHP.toFixed(1)} @ ${result.rpmPeakHP} RPM</p>
+      <p>Peak TQ: ${result.peakTQ.toFixed(1)} @ ${result.rpmPeakTQ} RPM</p>
+      <p>Shift: ${result.shift} RPM</p>
+      <p>Redline: ${result.redline} RPM</p>
+
+      <h2>Generated Dyno Curve (${curve.length} points)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>RPM</th>
+            <th>HP</th>
+            <th>Torque (lb-ft)</th>
+            <th>HP/CID</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    curve.forEach(p => {
+      const hpPerCID = (p.hp / displacement).toFixed(3);
+      html += `
+        <tr>
+          <td>${p.rpm}</td>
+          <td>${p.hp}</td>
+          <td>${p.torque_lbft}</td>
+          <td>${hpPerCID}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+        </tbody>
+      </table>
+
+      <h2>Peak Values Check</h2>
+      <p>Max HP in curve: ${Math.max(...curve.map(p => p.hp))}</p>
+      <p>Max TQ in curve: ${Math.max(...curve.map(p => p.torque_lbft))}</p>
+      <p>Expected Peak HP: ${result.peakHP.toFixed(1)}</p>
+      <p>Expected Peak TQ: ${result.peakTQ.toFixed(1)}</p>
+    `;
+
+    document.getElementById('output').innerHTML = html;
+  </script>
+</body>
+</html>

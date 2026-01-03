@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Carburetor CFM Fix Test</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        table { border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 8px 12px; text-align: left; border: 1px solid #444; }
+        th { background: #2d2d30; }
+        .pass { color: #4ec9b0; font-weight: bold; }
+        .fail { color: #f48771; }
+        pre { background: #2d2d30; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Carburetor CFM Fix Test</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        const { calcEngPerf } = await import('/src/domain/physics/engine/enginePerf.ts');
+        
+        const baseInputs = {
+            noCyl: 8, inline: 0, bore: 4.03, stroke: 3.48, rod: 5.85,
+            compressionRatio: 12.9, camType: 4, inCamDur: 264,
+            carb: true, carbCFM: 750, fuel: 1, manifold: 1, curved: true,
+            manFlow: 96, noInValves: 1, valveDia: 2.05, maxInFlow: 250,
+            deltaP: 28, refBore: 4.0, deck: 0.015, gasket: 0.039,
+            chamber: 62, dome: 12,
+        };
+        
+        // Test with calculated CFM from VB6 worksheet
+        const fixedInputs = { ...baseInputs, carbCFM: 730 };
+        
+        const baseResult = calcEngPerf(baseInputs);
+        const fixedResult = calcEngPerf(fixedInputs);
+        
+        let html = '<h2>CRITICAL FINDING!</h2>';
+        html += '<pre>';
+        html += 'VB6 Test Case shows:\n';
+        html += '  Input: Throttle CFM @ 1.5 inch Hg = 750\n';
+        html += '  Worksheet Calculated: 730 CFM\n';
+        html += '  (from 4 throttles, 1.688" dia, 1.375" venturi)\n\n';
+        html += 'VB6 likely uses the CALCULATED value (730), not the input (750)!\n';
+        html += '</pre>';
+        
+        html += '<h2>Test Results</h2>';
+        html += '<table>';
+        html += '<tr><th>Configuration</th><th>Peak HP</th><th>HP RPM</th><th>Peak TQ</th><th>TQ RPM</th></tr>';
+        html += '<tr>';
+        html += '<td>TypeScript with 750 CFM (input)</td>';
+        html += `<td>${Math.round(baseResult.peakHP)}</td>`;
+        html += `<td>${baseResult.rpmPeakHP}</td>`;
+        html += `<td>${Math.round(baseResult.peakTQ)}</td>`;
+        html += `<td>${baseResult.rpmPeakTQ}</td>`;
+        html += '</tr>';
+        html += '<tr>';
+        html += '<td>TypeScript with 730 CFM (calculated)</td>';
+        html += `<td>${Math.round(fixedResult.peakHP)}</td>`;
+        html += `<td>${fixedResult.rpmPeakHP}</td>`;
+        html += `<td>${Math.round(fixedResult.peakTQ)}</td>`;
+        html += `<td>${fixedResult.rpmPeakTQ}</td>`;
+        html += '</tr>';
+        html += '<tr style="background: #2d2d30;">';
+        html += '<td><strong>VB6 Expected</strong></td>';
+        html += '<td><strong>461</strong></td>';
+        html += '<td><strong>6650</strong></td>';
+        html += '<td><strong>415</strong></td>';
+        html += '<td><strong>5450</strong></td>';
+        html += '</tr>';
+        html += '</table>';
+        
+        html += '<h2>Comparison with VB6</h2>';
+        html += '<table>';
+        html += '<tr><th>Metric</th><th>750 CFM</th><th>730 CFM</th><th>VB6</th><th>730 Match?</th></tr>';
+        
+        const metrics = [
+            { name: 'Peak HP', base: Math.round(baseResult.peakHP), fixed: Math.round(fixedResult.peakHP), vb6: 461, tol: 1 },
+            { name: 'HP RPM', base: baseResult.rpmPeakHP, fixed: fixedResult.rpmPeakHP, vb6: 6650, tol: 50 },
+            { name: 'Peak TQ', base: Math.round(baseResult.peakTQ), fixed: Math.round(fixedResult.peakTQ), vb6: 415, tol: 1 },
+            { name: 'TQ RPM', base: baseResult.rpmPeakTQ, fixed: fixedResult.rpmPeakTQ, vb6: 5450, tol: 50 },
+        ];
+        
+        metrics.forEach(m => {
+            const match = Math.abs(m.fixed - m.vb6) <= m.tol;
+            html += '<tr>';
+            html += `<td>${m.name}</td>`;
+            html += `<td>${m.base}</td>`;
+            html += `<td>${m.fixed}</td>`;
+            html += `<td>${m.vb6}</td>`;
+            html += `<td class="${match ? 'pass' : 'fail'}">${match ? '✓ YES' : '✗ NO'}</td>`;
+            html += '</tr>';
+        });
+        
+        html += '</table>';
+        
+        html += '<h2>Analysis</h2>';
+        html += '<pre>';
+        html += 'Change from 750 to 730 CFM:\n';
+        html += `  HP: ${Math.round(baseResult.peakHP)} → ${Math.round(fixedResult.peakHP)} (${Math.round(fixedResult.peakHP) - Math.round(baseResult.peakHP) > 0 ? '+' : ''}${Math.round(fixedResult.peakHP) - Math.round(baseResult.peakHP)})\n`;
+        html += `  HP RPM: ${baseResult.rpmPeakHP} → ${fixedResult.rpmPeakHP} (${fixedResult.rpmPeakHP - baseResult.rpmPeakHP > 0 ? '+' : ''}${fixedResult.rpmPeakHP - baseResult.rpmPeakHP})\n`;
+        html += `  TQ: ${Math.round(baseResult.peakTQ)} → ${Math.round(fixedResult.peakTQ)} (${Math.round(fixedResult.peakTQ) - Math.round(baseResult.peakTQ) > 0 ? '+' : ''}${Math.round(fixedResult.peakTQ) - Math.round(baseResult.peakTQ)})\n`;
+        html += `  TQ RPM: ${baseResult.rpmPeakTQ} → ${fixedResult.rpmPeakTQ} (${fixedResult.rpmPeakTQ - baseResult.rpmPeakTQ > 0 ? '+' : ''}${fixedResult.rpmPeakTQ - baseResult.rpmPeakTQ})\n\n`;
+        
+        const allMatch = metrics.every(m => Math.abs(m.fixed - m.vb6) <= m.tol);
+        
+        if (allMatch) {
+            html += '✓✓✓ 100% VB6 PARITY ACHIEVED! ✓✓✓\n\n';
+            html += 'The issue was that VB6 uses the CALCULATED carburetor CFM\n';
+            html += 'from the throttle bore/venturi worksheet (730 CFM),\n';
+            html += 'not the input parameter value (750 CFM).\n';
+        } else {
+            html += 'Still not matching. The carburetor CFM is part of the issue,\n';
+            html += 'but there may be additional discrepancies.\n';
+        }
+        html += '</pre>';
+        
+        document.getElementById('output').innerHTML = html;
+    </script>
+</body>
+</html>

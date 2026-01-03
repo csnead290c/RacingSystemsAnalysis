@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Precision Test</title>
+    <style>
+        body { font-family: 'Courier New', monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        pre { background: #2d2d30; padding: 10px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <h2>Floating Point Precision Test</h2>
+    <pre id="output"></pre>
+    
+    <script type="module">
+        // Test VB6 Single precision vs JavaScript Number (double precision)
+        
+        let output = 'VB6 uses Single precision (32-bit float)\n';
+        output += 'JavaScript uses Number (64-bit double)\n\n';
+        
+        output += 'Testing key constants:\n';
+        output += '='.repeat(60) + '\n\n';
+        
+        // PI
+        const PI_VB6 = 3.141593;  // VB6 constant
+        const PI_JS = Math.PI;     // JavaScript
+        output += `PI (VB6):        ${PI_VB6.toFixed(15)}\n`;
+        output += `PI (JavaScript): ${PI_JS.toFixed(15)}\n`;
+        output += `Difference:      ${(PI_JS - PI_VB6).toExponential(6)}\n\n`;
+        
+        // Z6 = (60 / (2 * PI)) * 550
+        const Z6_VB6 = (60 / (2 * PI_VB6)) * 550;
+        const Z6_JS = (60 / (2 * PI_JS)) * 550;
+        output += `Z6 (VB6):        ${Z6_VB6.toFixed(15)}\n`;
+        output += `Z6 (JavaScript): ${Z6_JS.toFixed(15)}\n`;
+        output += `Difference:      ${(Z6_JS - Z6_VB6).toExponential(6)}\n\n`;
+        
+        // KRPM = (144 / PI) * 60 * 12
+        const KRPM_VB6 = (144 / PI_VB6) * 60 * 12;
+        const KRPM_JS = (144 / PI_JS) * 60 * 12;
+        output += `KRPM (VB6):      ${KRPM_VB6.toFixed(15)}\n`;
+        output += `KRPM (JavaScript): ${KRPM_JS.toFixed(15)}\n`;
+        output += `Difference:      ${(KRPM_JS - KRPM_VB6).toExponential(6)}\n\n`;
+        
+        output += '='.repeat(60) + '\n';
+        output += 'ANALYSIS:\n';
+        output += '='.repeat(60) + '\n\n';
+        
+        output += 'The PI constant difference is:\n';
+        output += `  ${((PI_JS - PI_VB6) / PI_VB6 * 100).toFixed(8)}%\n\n`;
+        
+        output += 'This small difference compounds through calculations.\n';
+        output += 'However, this would cause < 0.001% error, not 2% error.\n\n';
+        
+        output += 'The 7 HP / 50 RPM discrepancy (2% error) is too large\n';
+        output += 'to be explained by floating-point precision alone.\n\n';
+        
+        output += 'CONCLUSION: The issue is NOT floating-point precision.\n';
+        
+        document.getElementById('output').textContent = output;
+    </script>
+</body>
+</html>
