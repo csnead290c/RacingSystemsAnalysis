@@ -7,7 +7,7 @@
 export interface EngineInputs {
   // Engine Geometry
   noCyl: number;              // Number of cylinders (1-12)
-  inline: number;             // 0=V, 1=inline, 2=opposed
+  inline: number;             // 0=Inline, 1=Vee, 2=Flat/Opposed
   bore: number;               // Bore diameter (inches)
   stroke: number;             // Stroke length (inches)
   rod: number;                // Rod length (inches)
@@ -60,6 +60,18 @@ export interface EngineOutputs {
   
   // Detailed calculations
   cid: number;                // Cubic inch displacement
+  
+  // Intermediate values from engine simulation (needed for recommendations)
+  calculatedValues?: {
+    hpcfm: number;      // CFM at peak HP
+    tqcfm: number;      // CFM at peak TQ
+    hpfps: number;      // Piston speed at peak HP (ft/sec)
+    tqfps: number;      // Piston speed at peak TQ (ft/sec)
+    RamVEHP: number;    // Ram volumetric efficiency at HP
+    EffCR: number;      // Effective compression ratio
+    acrit: number;      // Critical area ratio
+    flrqs: number;      // Rod ratio factor
+  };
   
   // Engine Pro recommendations
   recommendations?: EngineRecommendations;

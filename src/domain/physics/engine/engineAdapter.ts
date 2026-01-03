@@ -16,10 +16,17 @@ export interface EngineSimConfig {
   stroke_in: number;
   rodLength_in: number;
   compressionRatio: number;
+  deckHeight_in?: number;  // 0.0-0.050" typical
+  headGasketThickness_in?: number;  // 0.018-0.060" typical
   
   // Camshaft
   camshaftType: 'overhead_cam' | 'roller' | 'mushroom_tappet' | 'high_rate_flat_tappet' | 'normal_flat_tappet' | 'hydraulic_roller' | 'hydraulic_flat_tappet';
-  intakeDuration050_deg: number;
+  intakeDuration050_deg: number;  // 180-320°, even numbers only
+  
+  // Advanced cam properties (Engine Pro mode)
+  // These have calculated defaults but can be manually edited
+  lobeSeparationAngle_deg?: number;  // 102-116°, calculated if not provided
+  intakeLobeCenterline_deg?: number;  // 100-118°, calculated if not provided
   
   // Throttle/Carburetor
   throttleCFM_at_1_5inHg: number;
@@ -39,11 +46,15 @@ export interface EngineSimConfig {
   maxIntakeFlow_cfm: number;
   flowTestPressure_inH2O: number;
   flowTestBoreDia_in: number;
+  maxIntakeValveLift_in?: number;  // 0.450-0.750" typical, Engine Pro only
+  
+  // Performance targets (calculated but can be estimated)
+  shift_rpm?: number;  // Estimated from peak HP if not provided
+  redline_rpm?: number;  // Estimated from shift if not provided
   
   // Optional compression ratio worksheet
   combustionChamberVolume_cc?: number;
   pistonToDeckHeight_in?: number;
-  headGasketThickness_in?: number;
   pistonDomeVolume_cc?: number;
 }
 
@@ -74,9 +85,10 @@ const MANIFOLD_TYPE_MAP: Record<string, number> = {
 };
 
 // Map UI layout to VB6 inline number
+// VB6: 0=Inline, 1=Vee, 2=Flat/Opposed
 const LAYOUT_MAP: Record<string, number> = {
-  'inline': 1,
-  'vee': 0,
+  'inline': 0,
+  'vee': 1,
   'flat': 2,
 };
 
@@ -148,6 +160,7 @@ export function createDefaultEngineJrConfig(): EngineSimConfig {
 
 /**
  * Create default Engine Pro configuration (advanced mode)
+ * Based on VB6 BASECASE.ENG - produces Peak HP: 461 @ 6650 RPM, Peak TQ: 415 @ 5450 RPM
  */
 export function createDefaultEngineProConfig(): EngineSimConfig {
   return {
@@ -156,24 +169,24 @@ export function createDefaultEngineProConfig(): EngineSimConfig {
     bore_in: 4.03,
     stroke_in: 3.48,
     rodLength_in: 5.85,
-    compressionRatio: 12.0,
-    camshaftType: 'roller',
-    intakeDuration050_deg: 240,
+    compressionRatio: 12.9,
+    camshaftType: 'normal_flat_tappet',  // Normal Flat Tappet & Solid Lifter
+    intakeDuration050_deg: 264,
     throttleCFM_at_1_5inHg: 750,
     isEFI: false,
     fuelType: 'gasoline',
     intakeManifoldType: 'plenum',
-    runnerStyle: 'straight',
+    runnerStyle: 'curved',
     intakeManifoldFlowFactor_pct: 96,
     numIntakeValvesPerCyl: 1,
-    intakeValveDia_in: 2.08,
-    maxIntakeFlow_cfm: 260,
+    intakeValveDia_in: 2.05,
+    maxIntakeFlow_cfm: 250,
     flowTestPressure_inH2O: 28,
-    flowTestBoreDia_in: 4.03,
-    combustionChamberVolume_cc: 64,
+    flowTestBoreDia_in: 4.0,
+    combustionChamberVolume_cc: 62,
     pistonToDeckHeight_in: 0.015,
     headGasketThickness_in: 0.039,
-    pistonDomeVolume_cc: 0,
+    pistonDomeVolume_cc: 12,
   };
 }
 
