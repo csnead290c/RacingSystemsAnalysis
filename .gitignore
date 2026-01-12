@@ -9,3 +9,6 @@ api/config.php
 
 # PHP vendor directory (installed by composer on server)
 api/vendor/
+
+# Build output
+/dist/
