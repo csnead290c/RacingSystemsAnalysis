@@ -12,3 +12,15 @@ api/vendor/
 
 # Build output
 /dist/
+
+# macOS
+.DS_Store
+
+# local scripts
+ARCHIVE_DEAD_FILES.sh
+
+# local archive workspace
+src/domain/physics/_legacy/archive/
+
+# node artifacts (never commit)
+package-lock.json
