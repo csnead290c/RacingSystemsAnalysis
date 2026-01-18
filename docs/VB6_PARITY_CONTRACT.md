@@ -1,6 +1,117 @@
-# VB6 Parity Contract - Engine Pro
+# VB6 Parity Contract
 
 This document tracks exact VB6 source line mappings for all ported calculations to ensure 100% parity.
+
+## ET/MPH Rounding - CRITICAL PARITY REQUIREMENT
+
+**Status:** ✅ IMPLEMENTED (2026-01-12)
+
+### Why ET/MPH Uses Banker's Rounding
+
+VB6 Quarter Pro uses **banker's rounding (round-half-to-even)** for ET/MPH display formatting, NOT the custom `Round()` function found in some VB6 modules.
+
+### VB6 Evidence
+
+**TIMESLIP.FRM - ET/MPH Display Formatting:**
+- Line 1496: `Mid(prtline, 3, 6) = RightAlign(5, 2, time(L))` - ET with 2 decimals
+- Line 1508: `Mid(prtline, 22, 5) = RightAlign(4, 1, Work)` - MPH with 1 decimal
+- Line 1450-1456: `tsv(x).caption = Format(TIMESLIP(x), "##.00")` - UI display uses `Format()`
+
+**CVALUE.CLS - RightAlign Implementation:**
+- Line 557: `RSet Work = Format(Value, fmt)` - Uses VB6 built-in `Format()` function
+- VB6 `Format()` applies **banker's rounding** (IEEE 754 round-half-to-even)
+
+**NOT Used for ET/MPH:**
+- Custom `Round()` function in RSALIB.bas/Module1.bas uses round-half-up
+- This is only for intermediate calculations (gear ratios, PMI, etc.)
+- ET/MPH display goes through `RightAlign()` → `Format()` → banker's rounding
+
+### Canonical Implementation
+
+**Location:** `src/domain/physics/vb6/exactMath.ts`
+
+```typescript
+export function vb6Round(x: number, places = 0): number {
+  const p = Math.pow(10, places);
+  const v = Math.fround(x * p);  // Float32 precision
+  const f = Math.floor(v);
+  const frac = v - f;
+  
+  if (frac > 0.5) return (f + 1) / p;
+  if (frac < 0.5) return f / p;
+  
+  // Exactly 0.5: round to even (banker's rounding)
+  return (f % 2 === 0 ? f : f + 1) / p;
+}
+```
+
+**Wrapper Functions:** `src/domain/physics/vb6/constants.ts`
+
+```typescript
+// Import banker's rounding from exactMath.ts
+import { vb6Round } from './exactMath';
+
+export function roundET(et_s: number, decimals: number = 2): number {
+  return vb6Round(et_s, decimals);
+}
+
+export function roundMPH(mph: number, decimals: number = 1): number {
+  return vb6Round(mph, decimals);
+}
+```
+
+### Usage in VB6Exact Model
+
+**Location:** `src/domain/physics/models/vb6Exact.ts`
+
+```typescript
+import { roundET, roundMPH } from '../vb6/constants';
+
+// Final ET/MPH output rounding
+const et_s = applyRounding ? roundET(et_s_raw, etDecimals) : et_s_raw;
+const mph = applyRounding ? roundMPH(mph_raw, mphDecimals) : mph_raw;
+
+// Timeslip rounding
+const roundedTimeslip = applyRounding 
+  ? timeslip.map(t => ({
+      d_ft: t.d_ft,
+      t_s: roundET(t.t_s, etDecimals),
+      v_mph: roundMPH(t.v_mph, mphDecimals),
+    }))
+  : timeslip;
+```
+
+### Test Coverage
+
+**Micro Truth Table:** `src/integration-tests/vb6.rounding.spec.ts`
+- 35 tests validating banker's rounding behavior
+- Proves round-half-to-even for all boundary cases
+
+**Parity Contract:** `src/integration-tests/vb6.rounding.parity.spec.ts`
+- Real-world VB6 printout values (Pro Stock, Super Comp, etc.)
+- Boundary cases (x.xx5 values that expose rounding method)
+- Regression protection (fails if changed to round-half-up)
+- 50+ tests with VB6 evidence citations
+
+### Examples
+
+**Banker's Rounding (Correct):**
+- `6.805s` → `6.80s` (round to even)
+- `6.815s` → `6.82s` (round to even)
+- `202.25 mph` → `202.2 mph` (round to even)
+- `202.35 mph` → `202.4 mph` (round to even)
+
+**Round-Half-Up (Incorrect for ET/MPH):**
+- `6.805s` → `6.81s` ❌ WRONG
+- `202.25 mph` → `202.3 mph` ❌ WRONG
+
+### Regression Protection
+
+The parity contract tests will **FAIL** if anyone changes to round-half-up or any other rounding method. This ensures VB6 parity is maintained.
+
+---
+
+## Engine Pro Parity
 
 ## P0 Parity Issues - Current Status
 
