@@ -24,3 +24,7 @@ src/domain/physics/_legacy/archive/
 
 # node artifacts (never commit)
 package-lock.json
+
+# reference artifacts (local only)
+Reference Files/**/*.log
+Reference Files/**/.DS_Store
