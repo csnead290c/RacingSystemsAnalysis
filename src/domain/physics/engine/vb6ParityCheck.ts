@@ -296,7 +296,7 @@ export function printParityCheckResults() {
     console.log('   ✅ PASS - All 4 rating points match VB6 exactly');
   } else {
     console.log('   ❌ FAIL - Errors:');
-    results.pistonSpeedSummary.errors.forEach(err => console.log(`      - ${err}`));
+    results.pistonSpeedSummary.errors.forEach((err: string) => console.log(`      - ${err}`));
   }
   
   console.log('\n2. Mechanical Details @ 6650 RPM:');
@@ -304,7 +304,7 @@ export function printParityCheckResults() {
     console.log('   ✅ PASS - All 15 rows match VB6 exactly');
   } else {
     console.log('   ❌ FAIL - Errors:');
-    results.mechDetails6650.errors.forEach(err => console.log(`      - ${err}`));
+    results.mechDetails6650.errors.forEach((err: string) => console.log(`      - ${err}`));
   }
   
   console.log('\n3. Flow Details @ 6650 RPM:');
@@ -312,7 +312,7 @@ export function printParityCheckResults() {
     console.log('   ✅ PASS - All 12 rows match VB6 exactly');
   } else {
     console.log('   ❌ FAIL - Errors:');
-    results.flowDetails6650.errors.forEach(err => console.log(`      - ${err}`));
+    results.flowDetails6650.errors.forEach((err: string) => console.log(`      - ${err}`));
   }
   
   console.log('\n========================================');

@@ -178,7 +178,6 @@ describe('VB6 UI Display Parity - Golden Master Tests', () => {
       // At low/moderate lifts, curtain area (a2) controls
       // At high lifts, throat area (a3) controls and plateaus
       const area_0_4 = calcEffectiveFlowArea(0.4, valveSeatData, 1);
-      const area_0_5 = calcEffectiveFlowArea(0.5, valveSeatData, 1);
       const area_0_6 = calcEffectiveFlowArea(0.6, valveSeatData, 1);
       const area_0_7 = calcEffectiveFlowArea(0.7, valveSeatData, 1);
       const area_0_8 = calcEffectiveFlowArea(0.8, valveSeatData, 1);
