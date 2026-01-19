@@ -23,9 +23,7 @@
   },
   "include": ["src"],
   "exclude": [
-    "src/domain/physics/_legacy/archive/**/*",
-    "src/domain/physics/engine/enginePerfVB6.ts",
-    "src/domain/physics/engine/enginePerfVB6Precision.ts"
+    "src/domain/physics/_legacy/archive/**/*"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
