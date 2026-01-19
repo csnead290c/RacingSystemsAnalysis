@@ -23,27 +23,9 @@
   },
   "include": ["src"],
   "exclude": [
-    "src/domain/physics/vb6/compare*.ts",
-    "src/domain/physics/vb6/debug*.ts",
-    "src/domain/physics/vb6/diagnose*.ts",
-    "src/domain/physics/vb6/verify*.ts",
-    "src/domain/physics/vb6/test*.ts",
-    "src/domain/physics/vb6/trace*.ts",
-    "src/domain/physics/vb6/quick*.ts",
-    "src/domain/physics/vb6/decode*.ts",
-    "src/domain/physics/engine/testEnginePerf.ts",
-    "src/domain/physics/engine/vb6Verification.ts",
-    "src/domain/physics/engine/runVerification.ts",
-    "src/domain/physics/engine/traceEnginePerf.ts",
-    "src/domain/physics/engine/testUserCase.ts",
-    "src/domain/physics/engine/debugEnginePerf.ts",
-    "src/domain/physics/engine/compare*.ts",
-    "src/domain/physics/engine/debug*.ts",
-    "src/domain/physics/engine/diagnose*.ts",
-    "src/domain/physics/engine/verify*.ts",
-    "src/domain/physics/engine/test*.ts",
-    "src/domain/physics/engine/trace*.ts",
-    "src/domain/physics/engine/enginePerfVB6*.ts"
+    "src/domain/physics/_legacy/archive/**/*",
+    "src/domain/physics/engine/enginePerfVB6.ts",
+    "src/domain/physics/engine/enginePerfVB6Precision.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
