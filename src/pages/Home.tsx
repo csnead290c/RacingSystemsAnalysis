@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { useAuth, useClerkRSA } from '../domain/auth';
+import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehicles } from '../domain/config/guards';
 import Landing from './Landing';
 
 function Home() {
@@ -62,8 +63,8 @@ function Home() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
             gap: '1rem' 
           }}>
-            {/* ET Sim - requires basic_sim feature */}
-            {hasFeature('basic_sim') && (
+            {/* ET Sim access (basic+ plans) */}
+            {canAccessEtSim({ hasFeature }) && (
               <Link 
                 to="/et-sim" 
                 className="card"
@@ -86,7 +87,7 @@ function Home() {
             )}
 
             {/* Vehicles */}
-            {hasFeature('save_vehicles') && (
+            {canAccessVehicles({ hasFeature }) && (
               <Link 
                 to="/vehicles" 
                 className="card"
@@ -108,8 +109,8 @@ function Home() {
               </Link>
             )}
 
-            {/* Run History */}
-            {hasFeature('save_runs') && (
+            {/* Run History (basic+ plans) */}
+            {canAccessRunLogging({ hasFeature }) && (
               <Link 
                 to="/history" 
                 className="card"
@@ -131,8 +132,8 @@ function Home() {
               </Link>
             )}
 
-            {/* Race Day Dashboard */}
-            {hasFeature('basic_sim') && (
+            {/* Race Day Dashboard (basic+ plans) */}
+            {canAccessRaceTools({ hasFeature }) && (
               <Link 
                 to="/race-day" 
                 className="card"
