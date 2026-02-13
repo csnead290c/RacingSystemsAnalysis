@@ -6,16 +6,17 @@
 
 require_once 'config.php';
 require_once 'functions.php';
+require_once __DIR__ . '/lib/capabilities.php';
 rsa_setCorsHeaders();
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $auth = rsa_requireAuth();
 
-// Only owner and admin can access this API
-if (!in_array($auth['role'], ['owner', 'admin'])) {
-    rsa_jsonResponse(['error' => 'Permission denied'], 403);
-}
+// Server-side capability enforcement: all user management requires admin.access
+$_adminUserId = rsa_resolveUserId($pdo, $auth);
+$_adminRole = rsa_getUserRole($pdo, $_adminUserId);
+rsa_requireCapability($pdo, $_adminUserId, $_adminRole, 'admin.access');
 
 switch ($method) {
     case 'GET':

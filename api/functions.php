@@ -22,6 +22,10 @@ function rsa_setCorsHeaders() {
 }
 
 function rsa_jsonResponse($data, $code = 200) {
+    // Discard any stray output (PHP warnings/notices) that would corrupt JSON
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     http_response_code($code);
     header('Content-Type: application/json');
     header('Cache-Control: no-cache, no-store, must-revalidate');

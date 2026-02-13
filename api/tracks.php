@@ -7,6 +7,7 @@
 
 require_once 'config.php';
 require_once 'functions.php';
+require_once __DIR__ . '/lib/capabilities.php';
 rsa_setCorsHeaders();
 
 $pdo = getDB();
@@ -56,10 +57,14 @@ function handleGet($pdo) {
 }
 
 function handlePost($pdo, $auth) {
-    // Only admins and owners can add tracks
-    if (!$auth || !in_array($auth['role'], ['admin', 'owner'])) {
-        rsa_jsonResponse(['error' => 'Unauthorized - admin access required'], 403);
+    if (!$auth) {
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: adding tracks requires admin.access
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'admin.access');
     
     $input = rsa_getJsonInput();
     
@@ -109,10 +114,14 @@ function handlePost($pdo, $auth) {
 }
 
 function handlePut($pdo, $auth) {
-    // Only admins and owners can update tracks
-    if (!$auth || !in_array($auth['role'], ['admin', 'owner'])) {
-        rsa_jsonResponse(['error' => 'Unauthorized - admin access required'], 403);
+    if (!$auth) {
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: updating tracks requires admin.access
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'admin.access');
     
     $trackId = $_GET['id'] ?? null;
     if (!$trackId) {
@@ -171,10 +180,14 @@ function handlePut($pdo, $auth) {
 }
 
 function handleDelete($pdo, $auth) {
-    // Only owners can delete tracks
-    if (!$auth || $auth['role'] !== 'owner') {
-        rsa_jsonResponse(['error' => 'Unauthorized - owner access required'], 403);
+    if (!$auth) {
+        rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: deleting tracks requires admin.userManagement
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'admin.userManagement');
     
     $trackId = $_GET['id'] ?? null;
     if (!$trackId) {

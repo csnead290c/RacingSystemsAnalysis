@@ -6,6 +6,7 @@
 
 require_once 'config.php';
 require_once 'functions.php';
+require_once __DIR__ . '/lib/capabilities.php';
 rsa_setCorsHeaders();
 
 $pdo = getDB();
@@ -31,6 +32,11 @@ function handleGet($pdo, $auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
+    // Server-side capability enforcement: viewing run history requires data.runLog
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'data.runLog');
+    
     $limit = min((int)($_GET['limit'] ?? 50), 100);
     
     $stmt = $pdo->prepare("
@@ -51,6 +57,11 @@ function handlePost($pdo, $auth) {
     if (!$auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: saving runs requires data.runLog
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'data.runLog');
     
     $input = rsa_getJsonInput();
     
@@ -108,6 +119,11 @@ function handleDelete($pdo, $auth) {
     if (!$auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: deleting runs requires data.runLog
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'data.runLog');
     
     $uuid = $_GET['id'] ?? null;
     
