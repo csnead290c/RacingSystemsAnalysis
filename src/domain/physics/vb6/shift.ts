@@ -15,7 +15,8 @@
  * - Converter: DTShift = 0.25 seconds (250 ms)
  */
 
-import { F, f32 } from './exactMath';
+// F, f32 removed: VB6 computes in Double, truncates only at assignment boundaries.
+// engRPM and shiftRPM arrive already truncated to Single from vb6SimulationStep.
 
 /**
  * Check if vehicle should shift to next gear
@@ -157,7 +158,7 @@ export function shouldShift_f32(
   // No shift point defined
   if (!shiftRPM || shiftRPM <= 0) return false;
   
-  // VB6-STRICT: Use >= operator (not tolerance-based)
-  // F.sub returns Float32, compare to 0
-  return F.sub(f32(engRPM), f32(shiftRPM)) >= 0;
+  // VB6: If EngRPM >= ShiftRPM Then ... (both are already Single)
+  // No per-op truncation needed — values arrive pre-truncated from vb6AssignSingle.
+  return engRPM >= shiftRPM;
 }

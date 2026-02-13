@@ -27,40 +27,94 @@
  */
 
 import { 
-  gc, PI, JMin, JMax, AMin, K6, K61, Z5,
+  VB6_TRACE_ENABLED, recordTracePoint,
+} from './vb6TraceHook';
+import {
+  isInitTraceEnabled, recordInitStep, clearInitTrace,
+} from './vb6InitTrace';
+import { 
+  gc, PI, Z6, JMin, JMax, AMin, K6, K61, Z5,
   // Quarter Pro constants
   CMU, CMUK, KP21, KP22, FRCT, AX, KV,
   // Bonneville Pro constants
   CMU_BV, CMUK_BV, KP21_BV, KP22_BV, FRCT_BV, AX_BV, KV_BV
 } from './constants';
-import { f32, F } from './exactMath';
+import { vb6AssignSingle } from './exactMath';
+import { taby as tabyLagrange } from './dtaby';
 
 // ============================================================================
-// Float32 Math Wrapper
-// When vb6Strict is true, all math uses Float32 precision like VB6 Single type
+// VB6 Type Semantics (from actual VB6 source inspection)
+// ============================================================================
+//
+// VB6 DECLARES.BAS/TIMESLIP.FRM constants are DOUBLE (no type suffix).
+// VB6 Dim'd variables (HP, TQ, force, Ags0, etc.) are Single.
+// VB6 computes expressions in DOUBLE, truncates to Single on ASSIGNMENT.
+//
+// CORRECT pattern:
+//   const TQ = asSingle(Z6 * HP / rpm);  // Double expr, Single assignment
+//
+// WRONG pattern (what we had before):
+//   const TQ = M.div(M.mul(f(Z6), f(HP)), f(rpm));  // Truncates each op!
+//
 // ============================================================================
 
-/** Global flag for Float32 mode - set before simulation */
-let useFloat32 = false;
+/** 
+ * DEPRECATED: Float32 mode flag - NO LONGER AFFECTS NUMERICAL BEHAVIOR
+ * 
+ * This flag was previously used to toggle per-operation Float32 truncation via
+ * the M.* and f() helpers. Those helpers have been removed because they violated
+ * VB6 semantics (VB6 computes in Double, truncates only at assignment to Single).
+ * 
+ * The correct VB6 semantics are now implemented via vb6AssignSingle() at all
+ * assignment boundaries, which is ALWAYS active regardless of this flag.
+ * 
+ * This export is kept for API compatibility with vb6Exact.ts but is a NO-OP.
+ * DO NOT rely on this flag to change numerical behavior.
+ * 
+ * @deprecated No longer affects numerical behavior. Kept for API compatibility only.
+ * 
+ * TODO: Remove this flag and setFloat32Mode() once the vb6Strict input flag is
+ * retired from SimInputs. Track removal in vb6Exact.ts where it's called.
+ */
+let _useFloat32_deprecated = false;
 
-/** Enable/disable Float32 precision mode */
+/** 
+ * DEPRECATED: Enable/disable Float32 precision mode
+ * 
+ * WARNING: This function is a NO-OP. It does not change numerical behavior.
+ * VB6 semantics (Double computation, Single assignment truncation) are now
+ * always active via vb6AssignSingle() at assignment boundaries.
+ * 
+ * Kept for API compatibility with vb6Exact.ts. Do not rely on this function.
+ * 
+ * @deprecated No longer affects numerical behavior. Kept for API compatibility only.
+ * 
+ * TODO: Remove this function once the vb6Strict input flag is retired from SimInputs.
+ * See vb6Exact.ts for the call site that needs to be removed.
+ */
 export function setFloat32Mode(enabled: boolean): void {
-  useFloat32 = enabled;
+  _useFloat32_deprecated = enabled;
+  if (enabled) {
+    console.warn(
+      '[vb6SimulationStep] setFloat32Mode() is DEPRECATED and has no effect. ' +
+      'VB6 semantics (vb6AssignSingle at assignment boundaries) are always active.'
+    );
+  }
 }
 
-/** Wrap value in Float32 if strict mode enabled */
-const f = (x: number): number => useFloat32 ? f32(x) : x;
+// Suppress unused variable warning
+void _useFloat32_deprecated;
 
-/** Float32-aware math operations */
-const M = {
-  add: (a: number, b: number): number => useFloat32 ? F.add(a, b) : a + b,
-  sub: (a: number, b: number): number => useFloat32 ? F.sub(a, b) : a - b,
-  mul: (a: number, b: number): number => useFloat32 ? F.mul(a, b) : a * b,
-  div: (a: number, b: number): number => useFloat32 ? F.div(a, b) : a / b,
-  sqrt: (x: number): number => useFloat32 ? F.sqrt(x) : Math.sqrt(x),
-  pow: (x: number, y: number): number => useFloat32 ? F.pow(x, y) : Math.pow(x, y),
-  abs: (x: number): number => useFloat32 ? F.abs(x) : Math.abs(x),
-};
+// ============================================================================
+// LEGACY PER-OP TRUNCATION REMOVED
+// ============================================================================
+// The M.* and f() helpers that performed per-operation truncation have been
+// removed. VB6 computes expressions in Double precision and truncates only
+// at assignment to Single variables. Use vb6AssignSingle() at assignment
+// boundaries instead.
+//
+// DO NOT reintroduce M.* or f() patterns in physics code!
+// ============================================================================
 
 // ============================================================================
 // Types
@@ -167,7 +221,7 @@ export interface VB6EnvParams {
   nextDistPrint?: number;   // Next distance print point (ft) for VB6 distance targeting
   prevDistPrint?: number;   // Previous distance print point (ft) for VB6 timestep limiting
   TimePrintInc?: number;    // VB6 TIMESLIP.FRM:902-918 - Time print increment
-  TimePrint?: number;       // VB6 TIMESLIP.FRM:918 - Next time print point
+  absTimePrint_s?: number;  // ABSOLUTE time for next time print (not ET). Use Infinity pre-rollout.
   iDist?: number;           // VB6 iDist - current distance print index (1-based like VB6)
   shiftRPMs?: number[];     // VB6 ShiftRPM array for VelShiftMatch calculation
   Shift2PrintTime?: number; // VB6 TIMESLIP.FRM:1071 - Target time for shift completion
@@ -212,38 +266,35 @@ export interface VB6StepComputed {
 // Helper Functions
 // ============================================================================
 
-/**
- * VB6 TABY function - linear interpolation in HP curve
- * TIMESLIP.FRM uses 1st order (linear) interpolation
- */
-export function TABY(xrpm: number[], yhp: number[], NHP: number, _order: number, rpm: number): number {
-  // Find bracketing points
-  let i = 0;
-  for (i = 0; i < NHP - 1; i++) {
-    if (rpm <= xrpm[i + 1]) break;
-  }
-  
-  // Clamp to range
-  if (i >= NHP - 1) i = NHP - 2;
-  if (i < 0) i = 0;
-  
-  // Linear interpolation with Float32 precision when enabled
-  const x0 = f(xrpm[i]);
-  const x1 = f(xrpm[i + 1]);
-  const y0 = f(yhp[i]);
-  const y1 = f(yhp[i + 1]);
-  
-  if (x1 === x0) return y0;
-  
-  const t = M.div(M.sub(f(rpm), x0), M.sub(x1, x0));
-  return M.add(y0, M.mul(t, M.sub(y1, y0)));
-}
+// TABY wrapper removed - use taby() from dtaby.ts directly
+// See docs/audit/parity_taby_bisc_engine.md for consolidation rationale
 
 /**
  * VB6 Tire subroutine - calculates tire growth and circumference
- * TIMESLIP.FRM line 1585-1606
  * 
- * Note: Bonneville Pro uses a completely different formula than Quarter Pro!
+ * ============================================================================
+ * VB6↔TS CROSSWALK (authoritative)
+ * ============================================================================
+ * Source: TIMESLIP.FRM lines 1585-1606
+ * 
+ * VB6 Declaration:
+ *   Private Sub Tire(TireGrowth As Single, TireCirFt As Single)
+ *   Dim TGK As Single, TGLinear As Single, TireSQ As Single
+ * 
+ * VB6 Variable Types:
+ *   TireGrowth, TireCirFt - Single (ByRef parameters)
+ *   TGK, TGLinear, TireSQ - Single (local)
+ *   gc_TireWidth.Value    - Variant→Double (CValue)
+ *   TireDia               - Single (module-level, line 534)
+ *   Vel(L)                - Single (module-level array)
+ *   Ags0                  - Single (module-level, line 527)
+ *   PI                    - Double (DECLARES.BAS, no suffix)
+ * 
+ * VB6 Coercion Rules:
+ *   1. Expressions with Double operand (PI, gc_*.Value) compute in Double
+ *   2. Truncation to Single occurs ONLY at assignment to Single variable
+ *   3. NO per-operation truncation in intermediate calculations
+ * ============================================================================
  */
 export function vb6Tire(
   TireDia_in: number,
@@ -255,38 +306,40 @@ export function vb6Tire(
   let TireGrowth: number;
   let TireCirFt: number;
   
-  const tireDia = f(TireDia_in);
-  const tireWidth = f(TireWidth_in);
-  const vel = f(Vel_ftps);
-  const ags0 = f(Ags0_g);
-  const pi = f(PI);
-  
   if (isLandSpeed) {
     // VB6: TIMESLIP.FRM:1603-1605 - Bonneville Pro
     // TireGrowth = 1 + 0.00004 * Vel(L)
     // TireCirFt = TireGrowth * TireDia * PI / 12
     // Note: No tire squat for BVPro!
-    TireGrowth = M.add(f(1), M.mul(f(0.00004), vel));
-    TireCirFt = M.div(M.mul(M.mul(TireGrowth, tireDia), pi), f(12));
+    // All literals are Double, Vel is Single → computed in Double, assigned to Single
+    TireGrowth = vb6AssignSingle(1 + 0.00004 * Vel_ftps);
+    TireCirFt = vb6AssignSingle(TireGrowth * TireDia_in * PI / 12);
   } else {
     // VB6: TIMESLIP.FRM:1589-1596 - Quarter Pro
-    // TGK = (TireWidth^1.4 + TireDia - 16) / (0.171 * TireDia^1.7)
-    // TireGrowth = 1 + TGK * 0.0000135 * Vel^1.6
-    // TGLinear = 1 + TGK * 0.00035 * Vel
-    // If TGLinear < TireGrowth Then TireGrowth = TGLinear
-    // TireSQ = TireGrowth - 0.035 * Abs(Ags0)
-    // TireCirFt = TireSQ * TireDia * PI / 12
-    const TGK = M.div(
-      M.sub(M.add(M.pow(tireWidth, f(1.4)), tireDia), f(16)),
-      M.mul(f(0.171), M.pow(tireDia, f(1.7)))
+    // TGK = (gc_TireWidth.Value^1.4 + TireDia - 16) / (0.171 * TireDia^1.7)
+    // gc_TireWidth is CValue (Double), TireDia is Single, literals are Double
+    // Expression computed in Double, assigned to TGK (Single)
+    const TGK = vb6AssignSingle(
+      (Math.pow(TireWidth_in, 1.4) + TireDia_in - 16) / (0.171 * Math.pow(TireDia_in, 1.7))
     );
-    TireGrowth = M.add(f(1), M.mul(M.mul(TGK, f(0.0000135)), M.pow(vel, f(1.6))));
-    const TGLinear = M.add(f(1), M.mul(M.mul(TGK, f(0.00035)), vel));
+    
+    // TireGrowth = 1 + TGK * 0.0000135 * Vel^1.6
+    // TGK is Single, literals are Double, Vel is Single → computed in Double
+    TireGrowth = vb6AssignSingle(1 + TGK * 0.0000135 * Math.pow(Vel_ftps, 1.6));
+    
+    // TGLinear = 1 + TGK * 0.00035 * Vel
+    const TGLinear = vb6AssignSingle(1 + TGK * 0.00035 * Vel_ftps);
+    
+    // If TGLinear < TireGrowth Then TireGrowth = TGLinear
     if (TGLinear < TireGrowth) TireGrowth = TGLinear;
     
-    // Tire squat under load
-    const TireSQ = M.sub(TireGrowth, M.mul(f(0.035), M.abs(ags0)));
-    TireCirFt = M.div(M.mul(M.mul(TireSQ, tireDia), pi), f(12));
+    // TireSQ = TireGrowth - 0.035 * Abs(Ags0)
+    // TireGrowth is Single, literal is Double, Ags0 is Single → computed in Double
+    const TireSQ = vb6AssignSingle(TireGrowth - 0.035 * Math.abs(Ags0_g));
+    
+    // TireCirFt = TireSQ * TireDia * PI / 12
+    // TireSQ/TireDia are Single, PI is Double → computed in Double
+    TireCirFt = vb6AssignSingle(TireSQ * TireDia_in * PI / 12);
   }
   
   return { TireGrowth, TireCirFt };
@@ -294,13 +347,28 @@ export function vb6Tire(
 
 /**
  * Calculate CAXI (traction coefficient base)
- * VB6: TIMESLIP.FRM:1050
- * CAXI = (1 - (TractionIndex - 1) * 0.01) / (TrackTempEffect ^ 0.25)
+ * 
+ * ============================================================================
+ * VB6↔TS CROSSWALK (authoritative)
+ * ============================================================================
+ * Source: TIMESLIP.FRM line 1050
+ * 
+ * VB6 Statement:
+ *   CAXI = (1 - (gc_TractionIndex.Value - 1) * 0.01) / (TrackTempEffect ^ 0.25)
+ * 
+ * VB6 Variable Types:
+ *   CAXI             - Single (line 508)
+ *   TractionIndex    - Variant→Double (CValue)
+ *   TrackTempEffect  - Single (line 672)
+ *   Literals (1, 0.01, 0.25) - Double (no suffix)
+ * 
+ * VB6 Coercion:
+ *   Expression computed in Double (CValue promotes), truncated to Single on assignment
+ * ============================================================================
  */
 export function calcCAXI(TractionIndex: number, TrackTempEffect: number): number {
-  const ti = f(TractionIndex);
-  const tte = f(TrackTempEffect);
-  return M.div(M.sub(f(1), M.mul(M.sub(ti, f(1)), f(0.01))), M.pow(tte, f(0.25)));
+  // Compute in Double, truncate to Single on assignment
+  return vb6AssignSingle((1 - (TractionIndex - 1) * 0.01) / Math.pow(TrackTempEffect, 0.25));
 }
 
 /**
@@ -342,7 +410,7 @@ export interface VB6DoOptContext {
   Ags0: number;
   RPM0: number;
   DistToPrint: number;
-  TimePrint: number;
+  absTimePrint_s: number;  // ABSOLUTE time for next time print (not ET)
   MPHtoPrint: number;
   iDist: number;
   iMPH: number;
@@ -428,7 +496,7 @@ function vb6Sub310(ctx: VB6DoOptContext, factor1: number, TIMESLIP: number[], Sa
  */
 function vb6Sub315(ctx: VB6DoOptContext, factor2: number): { time: number; dist: number; vel: number } {
   const factor = factor2;
-  const time = ctx.TimePrint;
+  const time = ctx.absTimePrint_s;
   const dist = ctx.Dist0 + factor * (ctx.ASV.dist - ctx.Dist0);
   const vel = ctx.Vel0 + factor * (ctx.ASV.vel - ctx.Vel0);
   return { time, dist, vel };
@@ -491,9 +559,10 @@ export function vb6DoOpt(ctx: VB6DoOptContext, prevSlip: number, TIMESLIP: numbe
   
   // Check time overshoot (opt2)
   // VB6: If time(L) >= TimePrint + TimeTol Then
-  if (ctx.ASV.time >= ctx.TimePrint + ctx.TimeTol) {
+  // CRITICAL: Only check if absTimePrint_s is finite (not Infinity pre-rollout)
+  if (Number.isFinite(ctx.absTimePrint_s) && ctx.ASV.time >= ctx.absTimePrint_s + ctx.TimeTol) {
     opt2 = 1;
-    factor2 = (ctx.TimePrint - ctx.Time0) / (ctx.ASV.time - ctx.Time0);
+    factor2 = (ctx.absTimePrint_s - ctx.Time0) / (ctx.ASV.time - ctx.Time0);
     if (factor2 <= 0 || factor2 >= 1) { factor2 = 0; opt2 = 0; }
   }
   
@@ -708,9 +777,26 @@ export function vb6SimulationStep(
   const iGear = state.Gear;
   
   // ========================================================================
-  // TIMESLIP.FRM:1070-1076 - Check for gear change
-  // At top of gear change loop, TimeStep = DTShift
-  // ========================================================================
+  // TIMESLIP.FRM:1070-1082 - Timestep Selection
+  // ============================================================================
+  // VB6↔TS CROSSWALK (authoritative)
+  // ============================================================================
+  // Source: TIMESLIP.FRM lines 1070-1082
+  //
+  // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+  //   TimeStep - Single (line 526)
+  //   TSMax    - Single (line 513)
+  //   AgsMax   - Single (line 507)
+  //   Ags0     - Single (line 527)
+  //   DTShift  - Single (line 513)
+  //   Literal 4 in exponent - Double (no suffix)
+  //
+  // VB6 Coercion Rules:
+  //   1. All operands are Single, but literal 4 is Double
+  //   2. Expression (AgsMax / Ags0) ^ 4 computed in Double (due to literal 4)
+  //   3. TSMax * (...) computed in Double
+  //   4. Truncation to Single occurs ONLY at assignment to TimeStep
+  // ============================================================================
   let TimeStep: number;
   const gearChanged = state.Gear !== state.PrevGear;
   
@@ -719,78 +805,135 @@ export function vb6SimulationStep(
   // - Line 1090: Ags0 = AGS(L)  (updates Ags0 for use in velocity calc and next iteration)
   // 
   // At line 1082, Ags0 has the value set at line 1090 of the PREVIOUS iteration.
-  // At that previous line 1090, Ags0 = AGS(L), where AGS(L) was set at line 1221 of the iteration BEFORE that.
   // So at line 1082, Ags0 = AGS from TWO iterations ago.
-  //
-  // In RSA, state.Ags0_g is set at line 767 (equivalent to VB6's 1090) from state.AGS_g.
-  // state.AGS_g at that point is from the PREVIOUS step's final calculation.
-  // So state.Ags0_g at the start of step N = AGS from step N-2 (set during step N-1).
   // This matches VB6! state.Ags0_g IS the correct value for timestep.
-  const Ags0_for_timestep = f(state.Ags0_g);  // Use AGS from TWO steps ago (matches VB6)
+  const Ags0_for_timestep = state.Ags0_g;  // Use AGS from TWO steps ago (matches VB6)
   
   if (gearChanged) {
     // VB6: TIMESLIP.FRM:1072 - TimeStep = DTShift at gear change
-    TimeStep = f(vehicle.DTShift);
+    // DTShift is Single, assigned to TimeStep (Single)
+    TimeStep = vb6AssignSingle(vehicle.DTShift);
     state.PrevGear = state.Gear;
   } else {
-    // ========================================================================
-    // TIMESLIP.FRM:1082 - Calculate adaptive timestep
-    // VB6: TimeStep = TSMax * (AgsMax / Ags0) ^ 4
-    // 
-    // CRITICAL: VB6 normal iterations enter at label 240 (via GoTo 240 at line 1437).
-    // Line 1082 is ALWAYS executed for normal iterations - there's no L check.
-    // The L > 1 check at line 1076 only affects shift iterations (entering at 230).
-    // ========================================================================
-    TimeStep = f(TSMax);
+    // VB6 line 1082: TimeStep = TSMax * (AgsMax / Ags0) ^ 4
+    // TSMax/AgsMax/Ags0 are Single, literal 4 is Double → computed in Double
+    // TimeStep is Single → truncated on assignment
     if (Ags0_for_timestep > 0) {
-      TimeStep = M.mul(f(TSMax), M.pow(M.div(f(state.AgsMax_g), f(Ags0_for_timestep)), f(4)));
+      TimeStep = vb6AssignSingle(TSMax * Math.pow(state.AgsMax_g / Ags0_for_timestep, 4));
+    } else {
+      TimeStep = vb6AssignSingle(TSMax);
+    }
+    // For land speed runs, enforce minimum timestep to prevent excessive iterations
+    // VB6 Bonneville Pro uses larger timesteps at high speed
+    if (env.isLandSpeed && TimeStep < 0.001) {
+      TimeStep = vb6AssignSingle(0.001);  // 1ms minimum for land speed
     }
   }
   
   // ========================================================================
-  // TIMESLIP.FRM:1084-1088 - Calculate jerk from previous step
-  // VB6: Jerk = (AGS(L) - Ags0) / Work
-  // At line 1086, Ags0 is the SAME value used in line 1082 (timestep calculation).
-  // Both use Ags0 BEFORE it's updated at line 1090.
-  // So we use Ags0_for_timestep (previous step's AGS) here too.
-  // ========================================================================
-  let Jerk = f(0);
-  const Work_time = M.sub(f(state.time_s), f(state.Time0_s));
+  // TIMESLIP.FRM:1084-1088 - Jerk Calculation
+  // ============================================================================
+  // VB6↔TS CROSSWALK (authoritative)
+  // ============================================================================
+  // Source: TIMESLIP.FRM lines 1084-1088
+  //
+  // VB6 Code:
+  //   250 Jerk = 0    'jerk has units of g's per second
+  //       Work = time(L) - Time0
+  //       If Work > 0 Then Jerk = (AGS(L) - Ags0) / Work
+  //       If Jerk < JMin Then Jerk = JMin
+  //       If Jerk > JMax Then Jerk = JMax
+  //
+  // VB6 Variable Types:
+  //   Jerk     - Single (line 513)
+  //   Work     - Single (line 539)
+  //   time(L)  - Single (line 536, array element)
+  //   Time0    - Single (line 519)
+  //   AGS(L)   - Single (line 536, array element)
+  //   Ags0     - Single (line 527)
+  //   JMin     - Const = -4 (Double, no suffix, line 543)
+  //   JMax     - Const = 2 (Double, no suffix, line 544)
+  //
+  // VB6 Coercion Rules:
+  //   1. Work = time(L) - Time0: Single - Single → Single (no Double operand)
+  //   2. Jerk = (AGS(L) - Ags0) / Work: Single / Single → Single
+  //   3. Jerk < JMin: Single compared to Double constant (promotes to Double for comparison)
+  //   4. Jerk = JMin: Double constant assigned to Single → truncated
+  // ============================================================================
+  
+  // VB6 line 1084: Jerk = 0
+  let Jerk = vb6AssignSingle(0);
+  
+  // VB6 line 1085: Work = time(L) - Time0
+  // time(L) and Time0 are both Single → expression is Single, assigned to Work (Single)
+  const Work_time = vb6AssignSingle(state.time_s - state.Time0_s);
+  
   if (Work_time > 0) {
-    // VB6: Jerk = (AGS(L) - Ags0) / Work
-    // AGS(L) at this point = state.AGS_g (previous step's result)
-    // Ags0 at this point = Ags0_for_timestep (also previous step's AGS, same value)
-    // So jerk = (AGS_g - Ags0_for_timestep) / time = (AGS_{N-1} - AGS_{N-1}) / time = 0 for same step?
-    // Wait, need to re-check. In VB6, AGS(L) is the array element, Ags0 is a scalar.
-    // At line 1086, AGS(L) = value from PREVIOUS iteration's line 1221
+    // VB6 line 1086: Jerk = (AGS(L) - Ags0) / Work
+    // AGS(L), Ags0, Work are all Single → expression is Single, assigned to Jerk (Single)
+    // Note: In VB6, AGS(L) = value from PREVIOUS iteration's line 1221
     // Ags0 = value from PREVIOUS iteration's line 1090 = AGS(L) from TWO iterations ago
     // So VB6 jerk = (AGS_{N-1} - AGS_{N-2}) / Work
-    // This matches using state.AGS_g and state.Ags0_g!
-    Jerk = M.div(M.sub(f(state.AGS_g), f(state.Ags0_g)), f(Work_time));
+    Jerk = vb6AssignSingle((state.AGS_g - state.Ags0_g) / Work_time);
   }
-  if (Jerk < JMin) Jerk = f(JMin);
-  if (Jerk > JMax) Jerk = f(JMax);
+  
+  // VB6 lines 1087-1088: Clamp Jerk to [JMin, JMax]
+  // JMin/JMax are Double constants, Jerk is Single
+  // Comparison promotes Jerk to Double, then result assigned back to Single
+  if (Jerk < JMin) Jerk = vb6AssignSingle(JMin);
+  if (Jerk > JMax) Jerk = vb6AssignSingle(JMax);
   
   // ========================================================================
-  // TIMESLIP.FRM:1090-1096 - Save previous values (truncate to Float32)
-  // ========================================================================
-  state.Vel0_ftps = f(state.Vel_ftps);
-  state.Ags0_g = f(state.AGS_g);
-  state.Time0_s = f(state.time_s);
-  state.Dist0_ft = f(state.Dist_ft);
-  state.RPM0 = f(state.EngRPM);
-  state.DSRPM0 = f(state.DSRPM);
+  // TIMESLIP.FRM:1090-1096 - Save previous values
+  // ============================================================================
+  // VB6↔TS CROSSWALK (authoritative)
+  // ============================================================================
+  // Source: TIMESLIP.FRM lines 1090-1096
+  //
+  // VB6 Code:
+  //   Vel0 = Vel(L):      Ags0 = AGS(L)
+  //   Tire TireGrowth, TireCirFt
+  //   RPM0 = EngRPM(L):   Time0 = time(L)
+  //   If RPM0 = gc_LaunchRPM.Value And Time0 = 0 Then
+  //       RPM0 = Stall:   If gc_LaunchRPM.Value < Stall Then Time0 = gc_EnginePMI.Value * (Stall - gc_LaunchRPM.Value) / 250000
+  //   End If
+  //   Dist0 = Dist(L)
+  //
+  // VB6 Variable Types:
+  //   Vel0, Ags0, RPM0, Time0, Dist0, DSRPM0 - Single (lines 522, 527, 515, 519, 526, 537)
+  //   Vel(L), AGS(L), EngRPM(L), time(L), Dist(L), DSRPM - Single (line 536, 537)
+  //   gc_LaunchRPM.Value, gc_EnginePMI.Value - Variant→Double (CValue)
+  //   Stall - Single (line 517)
+  //   Literal 250000 - Double (no suffix)
+  // ============================================================================
+  
+  // VB6 line 1090: Vel0 = Vel(L): Ags0 = AGS(L)
+  // Single = Single assignments
+  state.Vel0_ftps = vb6AssignSingle(state.Vel_ftps);
+  state.Ags0_g = vb6AssignSingle(state.AGS_g);
+  
+  // VB6 line 1092: Time0 = time(L)
+  state.Time0_s = vb6AssignSingle(state.time_s);
+  state.Dist0_ft = vb6AssignSingle(state.Dist_ft);
+  
+  // VB6 line 1092: RPM0 = EngRPM(L)
+  state.RPM0 = vb6AssignSingle(state.EngRPM);
+  state.DSRPM0 = vb6AssignSingle(state.DSRPM);
   
   // TIMESLIP.FRM:1093-1094 - Special handling for first step at launch
-  // VB6: If RPM0 = LaunchRPM And Time0 = 0 Then
+  // VB6: If RPM0 = gc_LaunchRPM.Value And Time0 = 0 Then
   //     RPM0 = Stall: Time0 = EnginePMI * (Stall - LaunchRPM) / 250000
-  // This happens BEFORE the iteration loop, so Time0 = spinUpTime is used in time calculation
+  // RPM0 is Single, gc_LaunchRPM.Value is CValue (Double) → comparison in Double
   // Use tolerance for floating point comparison
-  const isFirstStep = M.abs(M.sub(f(state.RPM0), f(vehicle.LaunchRPM))) < 1 && state.Time0_s === 0;
+  const isFirstStep = Math.abs(state.RPM0 - vehicle.LaunchRPM) < 1 && state.Time0_s === 0;
   if (isFirstStep) {
-    state.RPM0 = f(vehicle.Stall);
+    // VB6: RPM0 = Stall (Single = Single)
+    state.RPM0 = vb6AssignSingle(vehicle.Stall);
     if (vehicle.LaunchRPM < vehicle.Stall) {
-      state.Time0_s = M.div(M.mul(f(vehicle.EnginePMI), M.sub(f(vehicle.Stall), f(vehicle.LaunchRPM))), f(250000));
+      // VB6: Time0 = gc_EnginePMI.Value * (Stall - gc_LaunchRPM.Value) / 250000
+      // EnginePMI is CValue (Double), Stall is Single, LaunchRPM is CValue (Double), 250000 is Double
+      // Expression computed in Double, assigned to Time0 (Single)
+      state.Time0_s = vb6AssignSingle(vehicle.EnginePMI * (vehicle.Stall - vehicle.LaunchRPM) / 250000);
     }
   }
   
@@ -803,37 +946,115 @@ export function vb6SimulationStep(
   
   // ========================================================================
   // TIMESLIP.FRM:1098-1102 - Calculate tire slip
-  // VB6: Different formulas for Quarter Pro vs Bonneville Pro
-  // ========================================================================
+  // ============================================================================
+  // VB6↔TS CROSSWALK (authoritative)
+  // ============================================================================
+  // Source: TIMESLIP.FRM lines 1098-1102 (Quarter Pro), line 875 (Bonneville Pro)
+  //
+  // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+  //   TireSlip        - Single (line 519)
+  //   Work            - Single (line 539)
+  //   Dist0           - Single (line 526)
+  //   TractionIndex   - Variant→Double (gc_TractionIndex.Value is CValue)
+  //   TrackTempEffect - Single (line 672)
+  //   Literals (1.02, 0.005, 3, 1320, etc.) - Double (no suffix)
+  //
+  // VB6 Coercion Rules:
+  //   1. gc_TractionIndex.Value (CValue) returns Variant, promotes to Double
+  //   2. Expression with Double operand computes in Double
+  //   3. Truncation to Single occurs ONLY at assignment to Single variable
+  //   4. Work is assigned (Single), then used in TireSlip expression
+  // ============================================================================
   let TireSlip: number;
   if (env.isLandSpeed) {
     // Bonneville Pro: TIMESLIP.FRM:875
-    // TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
-    // Note: No distance-based reduction for BVPro
-    TireSlip = M.add(f(1.01), M.mul(M.sub(f(env.TractionIndex), f(1)), f(0.01)));
+    // VB6: TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
+    // TractionIndex is CValue (Double), literals are Double → computed in Double
+    // TireSlip is Single → truncated on assignment
+    TireSlip = vb6AssignSingle(1.01 + (env.TractionIndex - 1) * 0.01);
   } else {
-    // Quarter Pro: TIMESLIP.FRM:1098-1101
-    // Work = 0.005 * (TractionIndex - 1) + 3 * (TrackTempEffect - 1)
-    // TireSlip = 1.02 + Work * (1 - (Dist0 / 1320) ^ 2)
-    const Work_slip = M.add(
-      M.mul(f(0.005), M.sub(f(env.TractionIndex), f(1))),
-      M.mul(f(3), M.sub(f(env.TrackTempEffect), f(1)))
+    // Quarter Pro: TIMESLIP.FRM:1100-1101
+    // VB6 line 1100: Work = 0.005 * (gc_TractionIndex.Value - 1) + 3 * (TrackTempEffect - 1)
+    // TractionIndex is CValue (Double), TrackTempEffect is Single, literals are Double
+    // Expression computed in Double, assigned to Work (Single)
+    const Work_slip = vb6AssignSingle(
+      0.005 * (env.TractionIndex - 1) + 3 * (env.TrackTempEffect - 1)
     );
-    TireSlip = M.add(f(1.02), M.mul(Work_slip, M.sub(f(1), M.pow(M.div(f(state.Dist0_ft), f(1320)), f(2)))));
+    
+    // VB6 line 1101: TireSlip = 1.02 + Work * (1 - (Dist0 / 1320) ^ 2)
+    // Work is Single, Dist0 is Single, literals are Double → computed in Double
+    // TireSlip is Single → truncated on assignment
+    TireSlip = vb6AssignSingle(
+      1.02 + Work_slip * (1 - Math.pow(state.Dist0_ft / 1320, 2))
+    );
   }
   
   // ========================================================================
   // TIMESLIP.FRM:1074-1075 - Calculate chassis PMI for this gear
-  // ChassisPMI = TiresPMI + TransPMI * GearRatio^2 * TGR(iGear)^2
-  // ========================================================================
-  const TGR_gear = f(vehicle.TGR[iGear - 1] ?? 1); // Convert to 0-indexed
-  const ChassisPMI = M.add(f(vehicle.TiresPMI), M.mul(M.mul(f(vehicle.TransPMI), M.pow(f(vehicle.GearRatio), f(2))), M.pow(TGR_gear, f(2))));
+  // ============================================================================
+  // VB6↔TS CROSSWALK (authoritative)
+  // ============================================================================
+  // Source: TIMESLIP.FRM lines 1074-1075
+  //
+  // VB6 Code:
+  //   Rem**  CALCULATE THE TOTAL CHASSIS INERTIA FOR THIS GEAR
+  //   ChassisPMI = gc_TiresPMI.Value + gc_TransPMI.Value * gc_GearRatio.Value ^ 2 * TGR(iGear) ^ 2
+  //
+  // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+  //   ChassisPMI           - Single (line 507)
+  //   gc_TiresPMI.Value    - Variant→Double (CValue control)
+  //   gc_TransPMI.Value    - Variant→Double (CValue control)
+  //   gc_GearRatio.Value   - Variant→Double (CValue control)
+  //   TGR(iGear)           - Single (line 533, array element)
+  //   iGear                - Integer (line 529)
+  //   Literal 2 in exponent - Double (no suffix)
+  //
+  // VB6 Coercion Rules:
+  //   1. gc_*.Value are CValue (Variant→Double)
+  //   2. TGR(iGear) is Single, but ^ 2 promotes to Double
+  //   3. Entire expression computed in Double
+  //   4. Truncation to Single occurs ONLY at assignment to ChassisPMI
+  // ============================================================================
+  const TGR_gear = vehicle.TGR[iGear - 1] ?? 1; // Convert to 0-indexed
+  // VB6: ChassisPMI = gc_TiresPMI.Value + gc_TransPMI.Value * gc_GearRatio.Value ^ 2 * TGR(iGear) ^ 2
+  // All CValue (Double), TGR is Single but ^ 2 promotes to Double → computed in Double
+  // ChassisPMI is Single → truncated on assignment
+  const ChassisPMI = vb6AssignSingle(
+    vehicle.TiresPMI + vehicle.TransPMI * Math.pow(vehicle.GearRatio, 2) * Math.pow(TGR_gear, 2)
+  );
   
   // ========================================================================
   // TIMESLIP.FRM:1107 - Estimate next velocity (first pass)
-  // Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep^2 / 2
-  // ========================================================================
-  let Vel_L = M.add(M.add(f(state.Vel0_ftps), M.mul(M.mul(f(state.Ags0_g), f(gc)), f(TimeStep))), M.div(M.mul(M.mul(f(Jerk), f(gc)), M.mul(f(TimeStep), f(TimeStep))), f(2)));
+  // ============================================================================
+  // VB6↔TS CROSSWALK (authoritative)
+  // ============================================================================
+  // Source: TIMESLIP.FRM line 1107
+  //
+  // VB6 Code:
+  //   Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep ^ 2 / 2
+  //
+  // VB6 Variable Types:
+  //   Vel(L)    - Single (line 536, array element)
+  //   Vel0      - Single (line 522)
+  //   Ags0      - Single (line 527)
+  //   gc        - Public Const = 32.174 (Double, DECLARES.BAS line 11)
+  //   TimeStep  - Single (line 526)
+  //   Jerk      - Single (line 513)
+  //   Literal 2 - Double (no suffix)
+  //
+  // VB6 Coercion Rules:
+  //   1. gc is a Double constant (32.174)
+  //   2. Ags0 * gc promotes to Double (Single * Double = Double)
+  //   3. TimeStep ^ 2 promotes to Double (Single ^ Double = Double)
+  //   4. Entire expression computed in Double
+  //   5. Truncation to Single occurs ONLY at assignment to Vel(L)
+  // ============================================================================
+  // VB6: Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep ^ 2 / 2
+  // Vel0/Ags0/TimeStep/Jerk are Single, gc is Double constant → computed in Double
+  // Vel(L) is Single → truncated on assignment
+  let Vel_L = vb6AssignSingle(
+    state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * Math.pow(TimeStep, 2) / 2
+  );
   
   // ========================================================================
   // TIMESLIP.FRM:1109 - Skip timestep limiting during shift
@@ -857,11 +1078,14 @@ export function vb6SimulationStep(
       if (TimeStep > maxTimeStepByInc) TimeStep = maxTimeStepByInc;
     }
     
-    // TIMESLIP.FRM:1113-1114 - Don't let TimeStep exceed TimePrint
+    // TIMESLIP.FRM:1113-1114 - Don't let TimeStep exceed time to next print
     // VB6: If TimeStep > (TimePrint - Time0) Then TimeStep = TimePrint - Time0
-    if (env.TimePrint !== undefined) {
-      const timeToNextPrint = env.TimePrint - state.Time0_s;
-      if (timeToNextPrint > 0 && TimeStep > timeToNextPrint) {
+    // CRITICAL: absTimePrint_s is in ABSOLUTE time (not ET). Use Infinity pre-rollout.
+    const absTimePrint = env.absTimePrint_s ?? Infinity;
+    if (Number.isFinite(absTimePrint)) {
+      const timeToNextPrint = absTimePrint - state.Time0_s;
+      // Only limit if timeToNextPrint is positive and finite
+      if (Number.isFinite(timeToNextPrint) && timeToNextPrint > 0 && TimeStep > timeToNextPrint) {
         TimeStep = timeToNextPrint;
       }
     }
@@ -885,9 +1109,45 @@ export function vb6SimulationStep(
     // VB6: If TimeStep > 0.05 Then TimeStep = 0.05
     if (TimeStep > 0.05) TimeStep = 0.05;
     
-    // TIMESLIP.FRM:1122 - Recalculate velocity with limited timestep
-    // VB6: Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
-    Vel_L = M.add(M.add(f(state.Vel0_ftps), M.mul(M.mul(f(state.Ags0_g), f(gc)), f(TimeStep))), M.div(M.mul(M.mul(f(Jerk), f(gc)), M.mul(f(TimeStep), f(TimeStep))), f(2)));
+    // For land speed runs, enforce minimum timestep AFTER all limiting
+    // This prevents excessive iterations at high speed when acceleration is low
+    if (env.isLandSpeed && TimeStep < 0.0005) {
+      TimeStep = vb6AssignSingle(0.0005);  // 0.5ms minimum for land speed
+    }
+    
+    // HARD ASSERTION: TimeStep must be finite and positive
+    if (!Number.isFinite(TimeStep) || TimeStep <= 0) {
+      throw new Error(`[vb6SimulationStep] FATAL: Invalid TimeStep=${TimeStep} at L=${state.L}. ` +
+        `Diagnostics: Time0=${state.Time0_s}, absTimePrint_s=${env.absTimePrint_s}, ` +
+        `Dist0=${state.Dist0_ft}, Vel0=${state.Vel0_ftps}, Ags0=${state.Ags0_g}, ` +
+        `nextDistPrint=${env.nextDistPrint}, prevDistPrint=${env.prevDistPrint}`);
+    }
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1122 - Recalculate Velocity with Limited Timestep
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM line 1122
+    //
+    // VB6 Code:
+    //   Vel(L) = Vel0 + Ags0 * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
+    //
+    // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+    //   Vel(L)    - Single (line 536, array element)
+    //   Vel0      - Single (line 522)
+    //   Ags0      - Single (line 527)
+    //   TimeStep  - Single (line 526)
+    //   Jerk      - Single (line 513)
+    //   gc        - Public Const = 32.174 (Double, DECLARES.BAS)
+    //   Literal 2 - Double (no suffix)
+    //
+    // VB6 Coercion: Vel0/Ags0/TimeStep/Jerk are Single, gc and literal 2 are Double
+    // → computed in Double, Vel(L) is Single → truncated on assignment
+    // ============================================================================
+    Vel_L = vb6AssignSingle(
+      state.Vel0_ftps + state.Ags0_g * gc * TimeStep + Jerk * gc * TimeStep * TimeStep / 2
+    );
     
     // TIMESLIP.FRM:1125-1129 - Limit velocity to shift point
     // VB6: If Vel0 > 0 And RPM0 > Stall And iGear < NGR Then
@@ -922,16 +1182,204 @@ export function vb6SimulationStep(
       console.log(`[vb6Step] L=${state.L} 330ft CHECK: Dist0=${state.Dist0_ft.toFixed(2)}, DistStep_est=${DistStep_est.toFixed(2)}, target=${env.nextDistPrint.toFixed(1)}, threshold=${(env.nextDistPrint - DistTol).toFixed(2)}, triggered=${DistStep_est >= (env.nextDistPrint - DistTol)}, TimeStep=${TimeStep.toFixed(5)}`);
     }
     
-    if (env.nextDistPrint !== undefined && DistStep_est >= (env.nextDistPrint - DistTol)) {
-      const targetDist = env.nextDistPrint;
-      const distToTarget = targetDist - state.Dist0_ft;
-      if (distToTarget > 0) {
-        // VB6 unconditionally sets velocity - no sanity check
-        const Vel_L_old = Vel_L;
-        Vel_L = Math.sqrt(state.Vel0_ftps * state.Vel0_ftps + 2 * state.Ags0_g * gc * distToTarget);
-        // Debug: Log when distance targeting triggers
-        if (env.nextDistPrint > 300 && env.nextDistPrint < 350) {
-          console.log(`[vb6Step] L=${state.L} 330ft TARGET ADJUSTED: distToTarget=${distToTarget.toFixed(2)}, Vel_L ${Vel_L_old.toFixed(2)} -> ${Vel_L.toFixed(2)}`);
+    // ========================================================================
+    // TIMESLIP.FRM:1133-1136 - Distance Print Targeting
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1133-1136
+    //
+    // VB6 Code:
+    //   DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
+    //   If DistStep >= (DistToPrint(iDist) - DistTol) Then
+    //       Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
+    //   End If
+    //
+    // VB6 Variable Types:
+    //   DistStep      - Single (line 526)
+    //   Dist0         - Single (line 526)
+    //   Vel0          - Single (line 522)
+    //   TimeStep      - Single (line 526)
+    //   Ags0          - Single (line 527)
+    //   DistToPrint() - Single (line 508, array element)
+    //   DistTol       - Single (line 530)
+    //   Vel(L)        - Single (line 536, array element)
+    //   gc            - Public Const = 32.174 (Double, DECLARES.BAS)
+    //   Literal 2     - Double (no suffix)
+    //
+    // VB6 Coercion: All variables are Single, gc and literals are Double
+    // → expressions computed in Double, assignments truncated to Single
+    //
+    // CRITICAL: The branch condition (DistStep >= threshold) uses Single values.
+    // We must evaluate using Single precision to match VB6 branch behavior.
+    // ============================================================================
+    if (env.nextDistPrint !== undefined) {
+      // VB6 line 1133: DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
+      // (Already computed above as DistStep_est in Double, but branch uses Single comparison)
+      const DistStep_f32 = vb6AssignSingle(DistStep_est);
+      
+      // VB6 line 1134: If DistStep >= (DistToPrint(iDist) - DistTol) Then
+      // threshold = DistToPrint - DistTol (Single - Single → Single)
+      const threshold_f32 = vb6AssignSingle(env.nextDistPrint - DistTol);
+      const branchTriggered = DistStep_f32 >= threshold_f32;
+      
+      // ========================================================================
+      // VB6 SINGLE-QUANTIZATION HARNESS FOR ROLLOUT TARGETING
+      // Compare Float64 path vs VB6 Single emulation at EVERY assignment
+      // VB6 types from TIMESLIP.FRM Dim statements (lines 507-540):
+      //   Dist0 As Single, Vel0 As Single, Ags0 As Single, TimeStep As Single
+      //   DistStep As Single, DistTol As Single, DistToPrint() As Single
+      //   Vel() As Single, Work As Single
+      //   Const Z5 = 3600 / 5280 (computed as Single)
+      // ========================================================================
+      if (env.nextDistPrint < 1) {
+        // VB6 print formatting functions (imported at top of file)
+        // Using inline implementations to avoid circular dependencies
+        const vb6_sng = (x: number) => Math.fround(x);
+        const vb6_Z5 = vb6_sng(3600 / 5280);
+        const vb6_Int = (x: number) => Math.floor(x);
+        const vb6_Round_01 = (value: number) => {
+          const val = vb6_sng((vb6_sng(value) + vb6_sng(0.05)) / vb6_sng(0.1));
+          return vb6_sng(vb6_Int(val) / 10);
+        };
+        const vb6FormatMph = (velFps: number) => {
+          const Work = vb6_sng(vb6_sng(velFps) * vb6_Z5);
+          return vb6_Round_01(Work).toFixed(1);
+        };
+        const vb6RoundedMph = (velFps: number) => {
+          const Work = vb6_sng(vb6_sng(velFps) * vb6_Z5);
+          return vb6_Round_01(Work);
+        };
+        
+        // PATH 1: Float64 (normal TS math)
+        const f64_Dist0 = state.Dist0_ft;
+        const f64_Vel0 = state.Vel0_ftps;
+        const f64_Ags0 = state.Ags0_g;
+        const f64_TimeStep = TimeStep;
+        const f64_DistTol = DistTol;
+        const f64_DistToPrint = env.nextDistPrint;
+        const f64_DistStep_est = f64_Dist0 + f64_Vel0 * f64_TimeStep + f64_Ags0 * gc * f64_TimeStep * f64_TimeStep / 2;
+        const f64_threshold = f64_DistToPrint - f64_DistTol;
+        const f64_branchTriggered = f64_DistStep_est >= f64_threshold;
+        
+        // PATH 2: VB6 Single emulation - apply vb6_sng() at EVERY assignment
+        // NOTE: This debug harness intentionally uses per-op truncation to compare
+        // against Float64. This is NOT how production physics code should work!
+        const sng_Dist0 = vb6_sng(state.Dist0_ft);
+        const sng_Vel0 = vb6_sng(state.Vel0_ftps);
+        const sng_Ags0 = vb6_sng(state.Ags0_g);
+        const sng_TimeStep = vb6_sng(TimeStep);
+        const sng_DistTol = vb6_sng(DistTol);
+        const sng_DistToPrint = vb6_sng(env.nextDistPrint);
+        const sng_gc = vb6_sng(gc);
+        // VB6 line 1133: DistStep = Dist0 + Vel0 * TimeStep + Ags0 * gc * TimeStep ^ 2 / 2
+        const sng_term1 = vb6_sng(sng_Vel0 * sng_TimeStep);
+        const sng_term2_a = vb6_sng(sng_Ags0 * sng_gc);
+        const sng_term2_b = vb6_sng(sng_TimeStep * sng_TimeStep);
+        const sng_term2_c = vb6_sng(sng_term2_a * sng_term2_b);
+        const sng_term2 = vb6_sng(sng_term2_c / vb6_sng(2));
+        const sng_DistStep_est = vb6_sng(vb6_sng(sng_Dist0 + sng_term1) + sng_term2);
+        // VB6 line 1134: If DistStep >= (DistToPrint(iDist) - DistTol) Then
+        const sng_threshold = vb6_sng(sng_DistToPrint - sng_DistTol);
+        const sng_branchTriggered = sng_DistStep_est >= sng_threshold;
+        
+        // Calculate targeted velocity for both paths
+        let f64_Vel_targeted = f64_Vel0;
+        let sng_Vel_targeted = sng_Vel0;
+        
+        if (f64_branchTriggered) {
+          // VB6 line 1135: Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
+          const f64_distToTarget = f64_DistToPrint - f64_Dist0;
+          f64_Vel_targeted = Math.sqrt(f64_Vel0 * f64_Vel0 + 2 * f64_Ags0 * gc * f64_distToTarget);
+        }
+        
+        if (sng_branchTriggered) {
+          const sng_distToTarget = vb6_sng(sng_DistToPrint - sng_Dist0);
+          const sng_Vel0_sq = vb6_sng(sng_Vel0 * sng_Vel0);
+          const sng_accel_term = vb6_sng(vb6_sng(vb6_sng(2) * vb6_sng(sng_Ags0 * sng_gc)) * sng_distToTarget);
+          const sng_sum = vb6_sng(sng_Vel0_sq + sng_accel_term);
+          sng_Vel_targeted = vb6_sng(Math.sqrt(sng_sum));
+        }
+        
+        // Calculate mph for both paths
+        const Z5_f64 = 3600 / 5280;
+        const Z5_sng = vb6_sng(3600 / 5280);
+        const f64_Work_mph = f64_Vel_targeted * Z5_f64;
+        const sng_Work_mph = vb6_sng(sng_Vel_targeted * Z5_sng);
+        
+        // Use VB6 RightAlign/Round for printed output
+        const f64_printed_mph = vb6FormatMph(f64_Vel_targeted);
+        const sng_printed_mph = vb6FormatMph(sng_Vel_targeted);
+        const f64_rounded_mph = vb6RoundedMph(f64_Vel_targeted);
+        const sng_rounded_mph = vb6RoundedMph(sng_Vel_targeted);
+        
+        console.log(`[vb6Step] L=${state.L} ROLLOUT VB6-SINGLE HARNESS:
+  === PATH 1: Float64 (normal TS) ===
+  Dist0=${f64_Dist0.toFixed(8)}, Vel0=${f64_Vel0.toFixed(8)}, Ags0=${f64_Ags0.toFixed(8)}, TimeStep=${f64_TimeStep.toFixed(8)}
+  DistTol=${f64_DistTol.toFixed(8)}, DistToPrint=${f64_DistToPrint.toFixed(8)}
+  DistStep_est=${f64_DistStep_est.toFixed(8)}, threshold=${f64_threshold.toFixed(8)}
+  Condition: ${f64_DistStep_est.toFixed(8)} >= ${f64_threshold.toFixed(8)} => ${f64_branchTriggered}
+  Vel_targeted=${f64_Vel_targeted.toFixed(8)} fps
+  Work_mph=${f64_Work_mph.toFixed(8)}, rounded_mph=${f64_rounded_mph}, printed="${f64_printed_mph.trim()}"
+  
+  === PATH 2: VB6 Single Emulation ===
+  Dist0=${sng_Dist0.toFixed(8)}, Vel0=${sng_Vel0.toFixed(8)}, Ags0=${sng_Ags0.toFixed(8)}, TimeStep=${sng_TimeStep.toFixed(8)}
+  DistTol=${sng_DistTol.toFixed(8)}, DistToPrint=${sng_DistToPrint.toFixed(8)}
+  DistStep_est=${sng_DistStep_est.toFixed(8)}, threshold=${sng_threshold.toFixed(8)}
+  Condition: ${sng_DistStep_est.toFixed(8)} >= ${sng_threshold.toFixed(8)} => ${sng_branchTriggered}
+  Vel_targeted=${sng_Vel_targeted.toFixed(8)} fps
+  Work_mph=${sng_Work_mph.toFixed(8)}, rounded_mph=${sng_rounded_mph}, printed="${sng_printed_mph.trim()}"
+  
+  === COMPARISON ===
+  Branch differs: ${f64_branchTriggered !== sng_branchTriggered}
+  Vel_targeted differs: ${Math.abs(f64_Vel_targeted - sng_Vel_targeted) > 1e-6}
+  Printed mph differs: ${f64_printed_mph.trim() !== sng_printed_mph.trim()}
+`);
+      }
+      
+      // ========================================================================
+      // TIMESLIP.FRM:1135 - Velocity Targeting (Sqr Formula)
+      // ============================================================================
+      // VB6↔TS CROSSWALK (authoritative)
+      // ============================================================================
+      // Source: TIMESLIP.FRM line 1135
+      //
+      // VB6 Code:
+      //   Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
+      //
+      // VB6 Variable Types:
+      //   Vel(L)        - Single (line 536, array element)
+      //   Vel0          - Single (line 522)
+      //   Ags0          - Single (line 527)
+      //   DistToPrint() - Single (line 508, array element)
+      //   Dist0         - Single (line 526)
+      //   gc            - Public Const = 32.174 (Double, DECLARES.BAS)
+      //   Literal 2     - Double (no suffix)
+      //
+      // VB6 Coercion: Vel0/Ags0/DistToPrint/Dist0 are Single, gc and literal 2 are Double
+      // → Sqr argument computed in Double, Sqr returns Double, Vel(L) is Single → truncated
+      // ============================================================================
+      if (branchTriggered) {
+        const targetDist = env.nextDistPrint;
+        const distToTarget = targetDist - state.Dist0_ft;
+        if (distToTarget > 0) {
+          const Vel_L_old = Vel_L;
+          
+          // VB6 line 1135: Vel(L) = Sqr(Vel0 ^ 2 + 2 * Ags0 * gc * (DistToPrint(iDist) - Dist0))
+          // Compute entire expression in Double, truncate only at assignment
+          Vel_L = vb6AssignSingle(
+            Math.sqrt(
+              state.Vel0_ftps * state.Vel0_ftps + 
+              2 * state.Ags0_g * gc * distToTarget
+            )
+          );
+          
+          // Debug: Log when velocity targeting triggers for rollout
+          if (env.nextDistPrint < 1) {
+            const mph_old = Vel_L_old * (3600/5280);
+            const mph_new = Vel_L * (3600/5280);
+            console.log(`[vb6Step] L=${state.L} ROLLOUT VEL TARGET (VB6 line 1135): distToTarget=${distToTarget.toFixed(6)}, Vel_L ${Vel_L_old.toFixed(4)} (${mph_old.toFixed(4)}mph) -> ${Vel_L.toFixed(4)} (${mph_new.toFixed(4)}mph)`);
+          }
         }
       }
     }
@@ -984,73 +1432,253 @@ export function vb6SimulationStep(
   for (let velRevision = 0; velRevision < MAX_VEL_REVISIONS; velRevision++) {
     
     // ========================================================================
-    // TIMESLIP.FRM:1139 - Calculate VelSqrd
-    // VelSqrd = Vel(L)^2 - Vel0^2
-    // ========================================================================
-    VelSqrd = M.sub(M.mul(f(Vel_L), f(Vel_L)), M.mul(f(state.Vel0_ftps), f(state.Vel0_ftps)));
+    // TIMESLIP.FRM:1139-1140 - VelSqrd and DSRPM Calculation
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1139-1140
+    //
+    // VB6 Code:
+    //   270 Rem**  ENTRY POINT FOR VELOCITY REVISION TO MATCH DISTANCE, TIME, OR SHIFT POINT PRINTS
+    //       VelSqrd = Vel(L) ^ 2 - Vel0 ^ 2
+    //       DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
+    //
+    // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+    //   VelSqrd   - Single (line 522)
+    //   Vel(L)    - Single (line 536, array element)
+    //   Vel0      - Single (line 522)
+    //   DSRPM     - Single (line 537)
+    //   TireSlip  - Single (line 519)
+    //   TireCirFt - Single (line 518)
+    //   Literal 2 - Double (no suffix)
+    //   Literal 60 - Double (no suffix)
+    //
+    // VB6 Coercion Rules:
+    //   1. Vel(L) ^ 2: Single ^ Double → computed in Double
+    //   2. Vel0 ^ 2: Single ^ Double → computed in Double
+    //   3. VelSqrd = ...: Double expression assigned to Single → truncated
+    //   4. TireSlip * Vel(L) * 60 / TireCirFt: Single * Single * Double / Single
+    //      → promotes to Double due to literal 60
+    //   5. DSRPM = ...: Double expression assigned to Single → truncated
+    // ============================================================================
+    
+    // VB6 line 1139: VelSqrd = Vel(L) ^ 2 - Vel0 ^ 2
+    // Vel(L) and Vel0 are Single, literal 2 is Double → computed in Double
+    // VelSqrd is Single → truncated on assignment
+    VelSqrd = vb6AssignSingle(Math.pow(Vel_L, 2) - Math.pow(state.Vel0_ftps, 2));
   
-    // ========================================================================
-    // TIMESLIP.FRM:1140 - Calculate DSRPM
-    // DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
-    // ========================================================================
-    DSRPM = M.div(M.mul(M.mul(f(TireSlip), f(Vel_L)), f(60)), f(state.TireCirFt));
+    // VB6 line 1140: DSRPM = TireSlip * Vel(L) * 60 / TireCirFt
+    // TireSlip/Vel(L)/TireCirFt are Single, literal 60 is Double → computed in Double
+    // DSRPM is Single → truncated on assignment
+    DSRPM = vb6AssignSingle(TireSlip * Vel_L * 60 / state.TireCirFt);
     
     // ========================================================================
-    // TIMESLIP.FRM:1144-1174 - Clutch/Converter calculations
-    // ========================================================================
-    LockRPM = M.mul(M.mul(f(DSRPM), f(vehicle.GearRatio)), TGR_gear);
-    EngRPM_L = M.mul(f(vehicle.Slippage), f(LockRPM));
+    // TIMESLIP.FRM:1144-1174 - Clutch/Converter Calculations
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1144-1174
+    //
+    // VB6 Code:
+    //   Rem**  PERFORM CLUTCH AND CONVERTER CALCULATIONS
+    //   LockRPM = DSRPM * gc_GearRatio.Value * TGR(iGear)
+    //   EngRPM(L) = gc_Slippage.Value * LockRPM
+    //   
+    //   If Not gc_TransType.Value Then                      'clutch
+    //       If EngRPM(L) < Stall Then
+    //           If iGear = 1 Or gc_LockUp.Value = 0 Then EngRPM(L) = Stall
+    //       End If
+    //       ClutchSlip = LockRPM / EngRPM(L)
+    //   Else
+    //       If iGear = 1 Or gc_LockUp.Value = 0 Then        'non lock-up converter
+    //           zStall = Stall
+    //           SlipRatio = gc_Slippage.Value * LockRPM / zStall
+    //           
+    //           If L > 2 Then
+    //               If SlipRatio > 0.6 Then zStall = zStall * (1 + (gc_Slippage.Value - 1) * (SlipRatio - 0.6) / ((1 / gc_Slippage.Value) - 0.6))
+    //               SlipRatio = gc_Slippage.Value * LockRPM / zStall
+    //           End If
+    //           ClutchSlip = 1 / gc_Slippage.Value
+    //             
+    //           If EngRPM(L) < zStall Then
+    //               EngRPM(L) = zStall
+    //               Work = gc_TorqueMult.Value - (gc_TorqueMult.Value - 1) * SlipRatio
+    //               ClutchSlip = Work * LockRPM / zStall
+    //           End If
+    //       Else                                            'lock-up converter
+    //           EngRPM(L) = 1.005 * LockRPM                 'assume 0.5% slippage
+    //           ClutchSlip = LockRPM / EngRPM(L)
+    //       End If
+    //   End If
+    //   If ClutchSlip > 1 Then ClutchSlip = 1
+    //
+    // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+    //   LockRPM    - Single (line 510)
+    //   EngRPM(L)  - Single (line 536, array element)
+    //   ClutchSlip - Single (line 511)
+    //   SlipRatio  - Single (line 516)
+    //   Stall      - Single (line 517)
+    //   zStall     - Single (line 517)
+    //   Work       - Single (line 539)
+    //   DSRPM      - Single (line 537)
+    //   TGR(iGear) - Single (line 533, array element)
+    //   iGear      - Integer (line 529)
+    //   L          - Integer (line 531)
+    //   gc_GearRatio.Value   - Variant→Double (CValue)
+    //   gc_Slippage.Value    - Variant→Double (CValue)
+    //   gc_TransType.Value   - Variant→Boolean (CValue)
+    //   gc_LockUp.Value      - Variant→Integer (CValue, 0 or 1)
+    //   gc_TorqueMult.Value  - Variant→Double (CValue)
+    //   Literal 1, 0.6, 1.005 - Double (no suffix)
+    //
+    // VB6 Coercion Rules:
+    //   1. gc_*.Value are CValue (Variant→Double for numeric)
+    //   2. DSRPM * gc_GearRatio.Value: Single * Double → Double
+    //   3. All expressions with Double operands compute in Double
+    //   4. Truncation to Single occurs ONLY at assignment to Single variable
+    // ============================================================================
+    
+    // VB6 line 1145: LockRPM = DSRPM * gc_GearRatio.Value * TGR(iGear)
+    // DSRPM/TGR are Single, gc_GearRatio.Value is CValue (Double) → computed in Double
+    // LockRPM is Single → truncated on assignment
+    LockRPM = vb6AssignSingle(DSRPM * vehicle.GearRatio * TGR_gear);
+    
+    // VB6 line 1146: EngRPM(L) = gc_Slippage.Value * LockRPM
+    // gc_Slippage.Value is CValue (Double), LockRPM is Single → computed in Double
+    // EngRPM(L) is Single → truncated on assignment
+    EngRPM_L = vb6AssignSingle(vehicle.Slippage * LockRPM);
+    
     zStall = vehicle.Stall;
     SlipRatio = 0;
   
     if (vehicle.isClutch) {
-      // TIMESLIP.FRM:1148-1152 - Clutch
+      // VB6 lines 1148-1152 - Clutch type transmission
+      // VB6: If Not gc_TransType.Value Then 'clutch
       if (EngRPM_L < vehicle.Stall) {
+        // VB6 line 1150: If iGear = 1 Or gc_LockUp.Value = 0 Then EngRPM(L) = Stall
         if (iGear === 1 || !vehicle.LockUp) {
-          EngRPM_L = f(vehicle.Stall);
+          // Stall is Single, assigned to EngRPM(L) (Single)
+          EngRPM_L = vb6AssignSingle(vehicle.Stall);
         }
       }
-      ClutchSlip = M.div(f(LockRPM), f(EngRPM_L));
+      // VB6 line 1152: ClutchSlip = LockRPM / EngRPM(L)
+      // LockRPM/EngRPM(L) are Single → Single / Single = Single (no Double operand)
+      // ClutchSlip is Single → truncated on assignment
+      ClutchSlip = vb6AssignSingle(LockRPM / EngRPM_L);
     } else {
-      // TIMESLIP.FRM:1154-1172 - Converter
+      // VB6 lines 1154-1172 - Converter type transmission
       if (iGear === 1 || !vehicle.LockUp) {
-        // Non lock-up converter
-        zStall = f(vehicle.Stall);
-        SlipRatio = M.div(M.mul(f(vehicle.Slippage), f(LockRPM)), f(zStall));
+        // VB6 lines 1154-1168 - Non lock-up converter
+        // VB6 line 1155: zStall = Stall
+        // Stall is Single, assigned to zStall (Single)
+        zStall = vb6AssignSingle(vehicle.Stall);
+        
+        // VB6 line 1156: SlipRatio = gc_Slippage.Value * LockRPM / zStall
+        // gc_Slippage.Value is CValue (Double), LockRPM/zStall are Single → computed in Double
+        // SlipRatio is Single → truncated on assignment
+        SlipRatio = vb6AssignSingle(vehicle.Slippage * LockRPM / zStall);
         
         if (state.L > 2) {
+          // VB6 line 1159: If SlipRatio > 0.6 Then zStall = zStall * (1 + (gc_Slippage.Value - 1) * (SlipRatio - 0.6) / ((1 / gc_Slippage.Value) - 0.6))
           if (SlipRatio > 0.6) {
-            zStall = M.mul(f(zStall), M.add(f(1), M.div(M.mul(M.sub(f(vehicle.Slippage), f(1)), M.sub(f(SlipRatio), f(0.6))), M.sub(M.div(f(1), f(vehicle.Slippage)), f(0.6)))));
+            // gc_Slippage.Value is CValue (Double), literals are Double → computed in Double
+            // zStall is Single → truncated on assignment
+            zStall = vb6AssignSingle(
+              zStall * (1 + (vehicle.Slippage - 1) * (SlipRatio - 0.6) / ((1 / vehicle.Slippage) - 0.6))
+            );
           }
-          SlipRatio = M.div(M.mul(f(vehicle.Slippage), f(LockRPM)), f(zStall));
+          // VB6 line 1160: SlipRatio = gc_Slippage.Value * LockRPM / zStall
+          SlipRatio = vb6AssignSingle(vehicle.Slippage * LockRPM / zStall);
         }
-        ClutchSlip = M.div(f(1), f(vehicle.Slippage));
+        
+        // VB6 line 1162: ClutchSlip = 1 / gc_Slippage.Value
+        // Literal 1 is Double, gc_Slippage.Value is CValue (Double) → computed in Double
+        // ClutchSlip is Single → truncated on assignment
+        ClutchSlip = vb6AssignSingle(1 / vehicle.Slippage);
         
         if (EngRPM_L < zStall) {
-          EngRPM_L = f(zStall);
-          const Work_conv = M.sub(f(vehicle.TorqueMult), M.mul(M.sub(f(vehicle.TorqueMult), f(1)), f(SlipRatio)));
-          ClutchSlip = M.div(M.mul(f(Work_conv), f(LockRPM)), f(zStall));
+          // VB6 line 1165: EngRPM(L) = zStall
+          // zStall is Single, assigned to EngRPM(L) (Single)
+          EngRPM_L = vb6AssignSingle(zStall);
+          
+          // VB6 line 1166: Work = gc_TorqueMult.Value - (gc_TorqueMult.Value - 1) * SlipRatio
+          // gc_TorqueMult.Value is CValue (Double), SlipRatio is Single, literals are Double
+          // → computed in Double, Work is Single → truncated on assignment
+          const Work_conv = vb6AssignSingle(
+            vehicle.TorqueMult - (vehicle.TorqueMult - 1) * SlipRatio
+          );
+          
+          // VB6 line 1167: ClutchSlip = Work * LockRPM / zStall
+          // Work/LockRPM/zStall are all Single → Single expression
+          // ClutchSlip is Single → truncated on assignment
+          ClutchSlip = vb6AssignSingle(Work_conv * LockRPM / zStall);
         }
       } else {
-        // Lock-up converter
-        EngRPM_L = M.mul(f(1.005), f(LockRPM)); // 0.5% slippage
-        ClutchSlip = M.div(f(LockRPM), f(EngRPM_L));
+        // VB6 lines 1169-1171 - Lock-up converter
+        // VB6 line 1170: EngRPM(L) = 1.005 * LockRPM  'assume 0.5% slippage
+        // Literal 1.005 is Double, LockRPM is Single → computed in Double
+        // EngRPM(L) is Single → truncated on assignment
+        EngRPM_L = vb6AssignSingle(1.005 * LockRPM);
+        
+        // VB6 line 1171: ClutchSlip = LockRPM / EngRPM(L)
+        // LockRPM/EngRPM(L) are Single → Single expression
+        // ClutchSlip is Single → truncated on assignment
+        ClutchSlip = vb6AssignSingle(LockRPM / EngRPM_L);
       }
     }
-    if (ClutchSlip > 1) ClutchSlip = f(1);
+    
+    // VB6 line 1174: If ClutchSlip > 1 Then ClutchSlip = 1
+    // Literal 1 is Double, ClutchSlip is Single → comparison promotes to Double
+    // Assignment of Double 1 to Single ClutchSlip → truncated
+    if (ClutchSlip > 1) ClutchSlip = vb6AssignSingle(1);
   
     // ========================================================================
-    // TIMESLIP.FRM:1176-1178 - Get HP from curve
-    // VB6: Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
-    //      HP = gc_HPTQMult.Value * HP / hpc
-    //      HPSave = HP:    HP = HP * ClutchSlip
-    // ========================================================================
-    HP = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L);
-    HP = M.div(M.mul(f(vehicle.HPTQMult), f(HP)), f(env.hpc));
+    // TIMESLIP.FRM:1176-1178 - HP Lookup from Engine Curve
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1176-1178
+    //
+    // VB6 Code:
+    //   Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP) 'Patrick - 2nd order in QProRx
+    //   HP = gc_HPTQMult.Value * HP / hpc
+    //   HPSave = HP:    HP = HP * ClutchSlip
+    //
+    // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+    //   HP              - Single (line 510)
+    //   HPSave          - Single (line 511)
+    //   hpc             - Single (line 511)
+    //   ClutchSlip      - Single (line 511)
+    //   EngRPM(L)       - Single (line 536, array element)
+    //   xrpm(0 To 16)   - Single (line 538, array)
+    //   yhp(0 To 16)    - Single (line 538, array)
+    //   NHP             - Integer (line 514)
+    //   gc_HPTQMult.Value - Variant→Double (CValue)
+    //
+    // VB6 Coercion Rules:
+    //   1. TABY returns result in HP (Single) - output parameter
+    //   2. gc_HPTQMult.Value is CValue (Variant→Double)
+    //   3. gc_HPTQMult.Value * HP: Double * Single → computed in Double
+    //   4. HP = ...: Double expression assigned to Single → truncated
+    //   5. HPSave = HP: Single assigned to Single → no truncation
+    //   6. HP * ClutchSlip: Single * Single → Single expression
+    //   7. HP = ...: Single expression assigned to Single → truncated
+    // ============================================================================
+    
+    // VB6 line 1176: Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+    // TABY performs Lagrange interpolation, returns HP as Single
+    // tabyLagrange returns Double, we truncate to Single at assignment
+    HP = vb6AssignSingle(tabyLagrange(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, EngRPM_L));
+    
+    // VB6 line 1177: HP = gc_HPTQMult.Value * HP / hpc
+    // gc_HPTQMult.Value is CValue (Double), HP/hpc are Single → computed in Double
+    // HP is Single → truncated on assignment
+    HP = vb6AssignSingle(vehicle.HPTQMult * HP / env.hpc);
     
     // RSA Extension: Apply throttle stop HP reduction
     // throttlePct is the throttle opening percentage (0-100)
     // 0% = idle (no power), 100% = full throttle (no reduction)
+    // NOTE: This is an RSA extension, not in original VB6
     if (throttleStop?.enabled) {
       const currentTime = state.time_s;
       const stopStart = throttleStop.activateTime_s;
@@ -1058,114 +1686,385 @@ export function vb6SimulationStep(
       
       if (currentTime >= stopStart && currentTime < stopEnd) {
         // Apply throttle reduction: HP * (throttlePct / 100)
-        HP = M.mul(f(HP), f(throttleStop.throttlePct / 100));
+        // Treat as Single assignment for consistency
+        HP = vb6AssignSingle(HP * (throttleStop.throttlePct / 100));
       }
     }
     
-    HPSave = HP;  // VB6: HPSave = HP (BEFORE ClutchSlip, AFTER throttle stop)
-    HP = M.mul(f(HP), f(ClutchSlip));
+    // VB6 line 1178: HPSave = HP:    HP = HP * ClutchSlip
+    // HPSave = HP: Single assigned to Single → truncated (already Single)
+    // HP = HP * ClutchSlip: Single * Single → Single expression
+    // HP is Single → truncated on assignment
+    HPSave = vb6AssignSingle(HP);
+    HP = vb6AssignSingle(HP * ClutchSlip);
     
     // ========================================================================
-    // TIMESLIP.FRM:1180-1194 - Calculate drag forces
-    // ========================================================================
-    // Wind effective velocity
-    const windSpeedFPS = M.div(f(env.WindSpeed_mph), f(Z5));
-    const windAngleRad = M.mul(f(PI), M.div(f(env.WindAngle_deg), f(180)));
-    WindFPS = M.sqrt(M.add(M.add(
-      M.mul(f(Vel_L), f(Vel_L)),
-      M.mul(M.mul(M.mul(f(2), f(Vel_L)), windSpeedFPS), f(Math.cos(windAngleRad)))),
-      M.mul(windSpeedFPS, windSpeedFPS)
-    ));
+    // TIMESLIP.FRM:1180-1194 - Calculate Drag Forces
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1180-1194
+    //
+    // VB6 Code:
+    //   Rem**  CALCULATE DRAG FORCES (FRICTION, VISCOUS AND AERODYNAMIC)
+    //   WindFPS = Sqr(Vel(L) ^ 2 + 2 * Vel(L) * (gc_WindSpeed.Value / Z5) * Cos(PI * gc_WindAngle.Value / 180) + (gc_WindSpeed.Value / Z5) ^ 2)
+    //   q = Sgn(WindFPS) * rho * Abs(WindFPS) ^ 2 / (2 * gc)
+    //   
+    //   Rem **  increase frontal area based on tire growth
+    //   If gc_BodyStyle.Value = 8 Then
+    //       RefArea2 = gc_RefArea.Value + ((TireGrowth - 1) * TireDia / 2) * gc_TireWidth.Value / 144
+    //   Else
+    //       RefArea2 = gc_RefArea.Value + ((TireGrowth - 1) * TireDia / 2) * (2 * gc_TireWidth.Value) / 144
+    //   End If
+    //   
+    //   DownForce = gc_Weight.Value + gc_LiftCoef.Value * RefArea2 * q
+    //   cmu1 = CMU - (Dist0 / 1320) * CMUK
+    //   DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel(L)) + gc_DragCoef.Value * RefArea2 * q
+    //   DragHP = DragForce * Vel(L) / 550
+    //
+    // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+    //   WindFPS    - Single (line 672)
+    //   q          - Single (line 515)
+    //   rho        - Single (line 515)
+    //   RefArea2   - Single (line 672)
+    //   DownForce  - Single (line 508)
+    //   cmu1       - Single (line 507)
+    //   DragForce  - Single (line 509)
+    //   DragHP     - Single (line 509)
+    //   Vel(L)     - Single (line 536, array element)
+    //   TireGrowth - Single (line 518)
+    //   TireDia    - Single (line 518)
+    //   Dist0      - Single (line 526)
+    //   gc_WindSpeed.Value  - Variant→Double (CValue)
+    //   gc_WindAngle.Value  - Variant→Double (CValue)
+    //   gc_BodyStyle.Value  - Variant→Integer (CValue)
+    //   gc_RefArea.Value    - Variant→Double (CValue)
+    //   gc_TireWidth.Value  - Variant→Double (CValue)
+    //   gc_Weight.Value     - Variant→Double (CValue)
+    //   gc_LiftCoef.Value   - Variant→Double (CValue)
+    //   gc_DragCoef.Value   - Variant→Double (CValue)
+    //   Z5         - Const = 3600/5280 (Double, line 542)
+    //   PI         - Public Const = 3.141593 (Double, DECLARES.BAS)
+    //   gc         - Public Const = 32.174 (Double, DECLARES.BAS)
+    //   CMU        - Const = 0.025 (Double, line 552) or 0.03 for BVPro
+    //   CMUK       - Const = 0.01 (Double, line 553) or 0 for BVPro
+    //   Literal 2, 180, 144, 1320, 0.0001, 550 - Double (no suffix)
+    //
+    // VB6 Coercion Rules:
+    //   1. gc_*.Value are CValue (Variant→Double)
+    //   2. Sqr(), Cos(), Sgn(), Abs() return Double
+    //   3. ^ operator with Double exponent computes in Double
+    //   4. All expressions with Double operands compute in Double
+    //   5. Truncation to Single occurs ONLY at assignment to Single variable
+    // ============================================================================
     
-    // Dynamic pressure (VB6 uses lbm/ft³ for rho, divides by gc)
-    q = M.div(M.mul(M.mul(f(Math.sign(WindFPS)), f(env.rho)), M.mul(M.abs(WindFPS), M.abs(WindFPS))), M.mul(f(2), f(gc)));
+    // VB6 line 1181: WindFPS = Sqr(Vel(L) ^ 2 + 2 * Vel(L) * (gc_WindSpeed.Value / Z5) * Cos(PI * gc_WindAngle.Value / 180) + (gc_WindSpeed.Value / Z5) ^ 2)
+    // gc_WindSpeed.Value/gc_WindAngle.Value are CValue (Double), Z5/PI are Double constants
+    // Vel(L) is Single but ^ 2 promotes to Double → entire expression in Double
+    // WindFPS is Single → truncated on assignment
+    const windSpeedFPS = env.WindSpeed_mph / Z5;  // gc_WindSpeed.Value / Z5 (Double)
+    const windAngleRad = PI * env.WindAngle_deg / 180;  // PI * gc_WindAngle.Value / 180 (Double)
+    WindFPS = vb6AssignSingle(
+      Math.sqrt(
+        Math.pow(Vel_L, 2) + 
+        2 * Vel_L * windSpeedFPS * Math.cos(windAngleRad) + 
+        Math.pow(windSpeedFPS, 2)
+      )
+    );
     
-    // Frontal area with tire growth
+    // VB6 line 1182: q = Sgn(WindFPS) * rho * Abs(WindFPS) ^ 2 / (2 * gc)
+    // Sgn() and Abs() return Double, rho is Single, gc is Double constant
+    // → computed in Double, q is Single → truncated on assignment
+    q = vb6AssignSingle(
+      Math.sign(WindFPS) * env.rho * Math.pow(Math.abs(WindFPS), 2) / (2 * gc)
+    );
+    
+    // VB6 lines 1185-1189: RefArea2 calculation based on BodyStyle
+    // gc_RefArea.Value/gc_TireWidth.Value are CValue (Double), TireGrowth/TireDia are Single
+    // Literals 1, 2, 144 are Double → computed in Double
+    // RefArea2 is Single → truncated on assignment
     if (vehicle.BodyStyle === 8) {
-      // Motorcycle
-      RefArea2 = M.add(f(vehicle.RefArea_ft2), M.div(M.mul(M.div(M.mul(M.sub(f(state.TireGrowth), f(1)), f(vehicle.TireDia_in)), f(2)), f(vehicle.TireWidth_in)), f(144)));
+      // VB6 line 1186: RefArea2 = gc_RefArea.Value + ((TireGrowth - 1) * TireDia / 2) * gc_TireWidth.Value / 144
+      RefArea2 = vb6AssignSingle(
+        vehicle.RefArea_ft2 + ((state.TireGrowth - 1) * vehicle.TireDia_in / 2) * vehicle.TireWidth_in / 144
+      );
     } else {
-      RefArea2 = M.add(f(vehicle.RefArea_ft2), M.div(M.mul(M.div(M.mul(M.sub(f(state.TireGrowth), f(1)), f(vehicle.TireDia_in)), f(2)), M.mul(f(2), f(vehicle.TireWidth_in))), f(144)));
+      // VB6 line 1188: RefArea2 = gc_RefArea.Value + ((TireGrowth - 1) * TireDia / 2) * (2 * gc_TireWidth.Value) / 144
+      RefArea2 = vb6AssignSingle(
+        vehicle.RefArea_ft2 + ((state.TireGrowth - 1) * vehicle.TireDia_in / 2) * (2 * vehicle.TireWidth_in) / 144
+      );
     }
     
-    // Down force (weight + aero lift)
-    DownForce = M.add(f(vehicle.Weight_lbf), M.mul(M.mul(f(vehicle.LiftCoef), f(RefArea2)), f(q)));
+    // VB6 line 1191: DownForce = gc_Weight.Value + gc_LiftCoef.Value * RefArea2 * q
+    // gc_Weight.Value/gc_LiftCoef.Value are CValue (Double), RefArea2/q are Single
+    // → computed in Double, DownForce is Single → truncated on assignment
+    DownForce = vb6AssignSingle(
+      vehicle.Weight_lbf + vehicle.LiftCoef * RefArea2 * q
+    );
     
     // Select constants based on land speed mode
     // VB6: TIMESLIP.FRM:550-570 - different constants for ISBVPRO
-    const cmu_const = f(env.isLandSpeed ? CMU_BV : CMU);
-    const cmuk_const = f(env.isLandSpeed ? CMUK_BV : CMUK);
-    const frct_const = f(env.isLandSpeed ? FRCT_BV : FRCT);
+    const cmu_const = env.isLandSpeed ? CMU_BV : CMU;
+    const cmuk_const = env.isLandSpeed ? CMUK_BV : CMUK;
+    const frct_const = env.isLandSpeed ? FRCT_BV : FRCT;
     
-    // Rolling resistance coefficient (decreases with distance for QPro, constant for BVPro)
-    const cmu1 = M.sub(cmu_const, M.mul(M.div(f(state.Dist0_ft), f(1320)), cmuk_const));
+    // VB6 line 1192: cmu1 = CMU - (Dist0 / 1320) * CMUK
+    // CMU/CMUK are Double constants, Dist0 is Single, literal 1320 is Double
+    // → computed in Double, cmu1 is Single → truncated on assignment
+    const cmu1 = vb6AssignSingle(cmu_const - (state.Dist0_ft / 1320) * cmuk_const);
     
-    // Total drag force
-    DragForce = M.add(M.add(M.mul(cmu1, f(DownForce)), M.mul(M.mul(f(0.0001), f(DownForce)), M.mul(f(Z5), f(Vel_L)))), M.mul(M.mul(f(vehicle.DragCoef), f(RefArea2)), f(q)));
-    DragHP = M.div(M.mul(f(DragForce), f(Vel_L)), f(550));
+    // VB6 line 1193: DragForce = cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel(L)) + gc_DragCoef.Value * RefArea2 * q
+    // cmu1/DownForce/RefArea2/q/Vel(L) are Single, Z5/gc_DragCoef.Value/0.0001 are Double
+    // → computed in Double, DragForce is Single → truncated on assignment
+    DragForce = vb6AssignSingle(
+      cmu1 * DownForce + 0.0001 * DownForce * (Z5 * Vel_L) + vehicle.DragCoef * RefArea2 * q
+    );
+    
+    // VB6 line 1194: DragHP = DragForce * Vel(L) / 550
+    // DragForce/Vel(L) are Single, literal 550 is Double → computed in Double
+    // DragHP is Single → truncated on assignment
+    DragHP = vb6AssignSingle(DragForce * Vel_L / 550);
   
     // ========================================================================
-    // TIMESLIP.FRM:1196-1211 - Calculate dynamic weight transfer
-    // ========================================================================
-    const TireRadIn = M.div(M.mul(f(12), f(state.TireCirFt)), M.mul(f(2), f(PI)));
-    const deltaFWT = M.div(M.add(M.mul(M.mul(f(state.Ags0_g), f(vehicle.Weight_lbf)), M.add(M.sub(f(vehicle.YCG_in), f(TireRadIn)), M.mul(M.div(frct_const, f(vehicle.Efficiency)), f(TireRadIn)))), M.mul(f(DragForce), f(vehicle.YCG_in))), f(vehicle.Wheelbase_in));
-    DynamicFWT = M.sub(f(vehicle.StaticFWt_lbf), f(deltaFWT));
+    // TIMESLIP.FRM:1196-1211 - Calculate Dynamic Weight Transfer
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1196-1211
+    //
+    // VB6 Code:
+    //   'calculate dynamic weight on front tires
+    //   TireRadIn = 12 * TireCirFt / (2 * PI)
+    //   'FRCT should really be variable at this point, getting closer to 1 downtrack
+    //   deltaFWT = (Ags0 * gc_Weight.Value * ((gc_YCG.Value - TireRadIn) + (FRCT / gc_Efficiency.Value) * TireRadIn) + DragForce * gc_YCG.Value) / gc_Wheelbase.Value
+    //   DynamicFWT = gc_StaticFWt.Value - deltaFWT
+    //   
+    //   'calculate wheelie bar weight
+    //   WheelBarWT = 0
+    //   If DynamicFWT < 0 Then
+    //       'assume 64" wheelie bar as required to keep dynamic front weight = 0
+    //       WheelBarWT = -DynamicFWT * gc_Wheelbase.Value / 64
+    //       DynamicFWT = 0
+    //   End If
+    //   
+    //   'calculate dynamic force on rear tires
+    //   DynamicRWT = DownForce - DynamicFWT - WheelBarWT:   If DynamicRWT < 0 Then DynamicRWT = gc_Weight.Value
+    //
+    // VB6 Variable Types (from TIMESLIP.FRM Dim statements):
+    //   TireRadIn   - Single (line 518)
+    //   TireCirFt   - Single (line 518)
+    //   deltaFWT    - Single (line 524)
+    //   DynamicFWT  - Single (line 524)
+    //   WheelBarWT  - Single (line 524)
+    //   DynamicRWT  - Single (line 524)
+    //   DownForce   - Single (line 508)
+    //   DragForce   - Single (line 509)
+    //   Ags0        - Single (line 527)
+    //   gc_Weight.Value     - Variant→Double (CValue)
+    //   gc_YCG.Value        - Variant→Double (CValue)
+    //   gc_Efficiency.Value - Variant→Double (CValue)
+    //   gc_Wheelbase.Value  - Variant→Double (CValue)
+    //   gc_StaticFWt.Value  - Variant→Double (CValue)
+    //   PI          - Public Const = 3.141593 (Double, DECLARES.BAS)
+    //   FRCT        - Const = 1.03 (Double, line 559) or 1.01 for BVPro
+    //   Literals 12, 2, 0, 64 - Double (no suffix)
+    //
+    // VB6 Coercion Rules:
+    //   1. gc_*.Value are CValue (Variant→Double)
+    //   2. All expressions with Double operands compute in Double
+    //   3. Truncation to Single occurs ONLY at assignment to Single variable
+    // ============================================================================
     
-    // Wheelie bar
-    WheelBarWT = f(0);
+    // VB6 line 1197: TireRadIn = 12 * TireCirFt / (2 * PI)
+    // TireCirFt is Single, literals 12/2 and PI are Double → computed in Double
+    // TireRadIn is Single → truncated on assignment
+    const TireRadIn = vb6AssignSingle(12 * state.TireCirFt / (2 * PI));
+    
+    // VB6 line 1199: deltaFWT = (Ags0 * gc_Weight.Value * ((gc_YCG.Value - TireRadIn) + (FRCT / gc_Efficiency.Value) * TireRadIn) + DragForce * gc_YCG.Value) / gc_Wheelbase.Value
+    // Ags0/TireRadIn/DragForce are Single, gc_*.Value are CValue (Double), FRCT is Double constant
+    // → computed in Double, deltaFWT is Single → truncated on assignment
+    const deltaFWT = vb6AssignSingle(
+      (state.Ags0_g * vehicle.Weight_lbf * ((vehicle.YCG_in - TireRadIn) + (frct_const / vehicle.Efficiency) * TireRadIn) + DragForce * vehicle.YCG_in) / vehicle.Wheelbase_in
+    );
+    
+    // VB6 line 1200: DynamicFWT = gc_StaticFWt.Value - deltaFWT
+    // gc_StaticFWt.Value is CValue (Double), deltaFWT is Single → computed in Double
+    // DynamicFWT is Single → truncated on assignment
+    DynamicFWT = vb6AssignSingle(vehicle.StaticFWt_lbf - deltaFWT);
+    
+    // VB6 lines 1203-1208: Wheelie bar calculation
+    // VB6 line 1203: WheelBarWT = 0
+    WheelBarWT = vb6AssignSingle(0);
     if (DynamicFWT < 0) {
-      WheelBarWT = M.div(M.mul(M.sub(f(0), f(DynamicFWT)), f(vehicle.Wheelbase_in)), f(64));
-      DynamicFWT = f(0);
+      // VB6 line 1206: WheelBarWT = -DynamicFWT * gc_Wheelbase.Value / 64
+      // DynamicFWT is Single, gc_Wheelbase.Value is CValue (Double), literal 64 is Double
+      // → computed in Double, WheelBarWT is Single → truncated on assignment
+      WheelBarWT = vb6AssignSingle(-DynamicFWT * vehicle.Wheelbase_in / 64);
+      // VB6 line 1207: DynamicFWT = 0
+      DynamicFWT = vb6AssignSingle(0);
     }
     
-    // Dynamic rear weight
-    DynamicRWT = M.sub(M.sub(f(DownForce), f(DynamicFWT)), f(WheelBarWT));
-    if (DynamicRWT < 0) DynamicRWT = f(vehicle.Weight_lbf);
+    // VB6 line 1211: DynamicRWT = DownForce - DynamicFWT - WheelBarWT
+    // All are Single → Single expression, DynamicRWT is Single → truncated on assignment
+    DynamicRWT = vb6AssignSingle(DownForce - DynamicFWT - WheelBarWT);
+    // VB6 line 1211: If DynamicRWT < 0 Then DynamicRWT = gc_Weight.Value
+    // gc_Weight.Value is CValue (Double) → truncated to Single on assignment
+    if (DynamicRWT < 0) DynamicRWT = vb6AssignSingle(vehicle.Weight_lbf);
     
     // ========================================================================
-    // TIMESLIP.FRM:1213-1216 - Calculate AMax (traction limit)
-    // ========================================================================
+    // TIMESLIP.FRM:1213-1216 - Calculate Traction Limit (CRTF and AMax)
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1213-1216
+    //
+    // VB6 Code:
+    //   CRTF = CAXI * AX * TireDia * (gc_TireWidth.Value + 1) * (0.92 + 0.08 * (DynamicRWT / 1900) ^ 2.15)
+    //   If gc_BodyStyle.Value = 8 Then CRTF = 0.5 * CRTF
+    //   AMAX = ((CRTF / TireGrowth) - DragForce) / gc_Weight.Value
+    //
+    // VB6 Variable Types:
+    //   CRTF        - Single (line 508)
+    //   CAXI        - Single (line 508)
+    //   AMAX        - Single (line 513)
+    //   TireDia     - Single (line 518)
+    //   TireGrowth  - Single (line 518)
+    //   DynamicRWT  - Single (line 524)
+    //   DragForce   - Single (line 509)
+    //   gc_TireWidth.Value  - Variant→Double (CValue)
+    //   gc_BodyStyle.Value  - Variant→Integer (CValue)
+    //   gc_Weight.Value     - Variant→Double (CValue)
+    //   AX          - Const = 10.8 (Double, line 551) or 9.7 for BVPro
+    //   Literals 0.92, 0.08, 1900, 2.15, 0.5 - Double (no suffix)
+    // ============================================================================
+    
+    // VB6 line 1213: CRTF = CAXI * AX * TireDia * (gc_TireWidth.Value + 1) * (0.92 + 0.08 * (DynamicRWT / 1900) ^ 2.15)
+    // CAXI/TireDia/DynamicRWT are Single, AX/gc_TireWidth.Value/literals are Double
+    // ^ operator with Double exponent computes in Double → entire expression in Double
+    // CRTF is Single → truncated on assignment
     const CAXI = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-    const AX_val = f(calcAX(env.isLandSpeed));
-    CRTF = M.mul(M.mul(M.mul(M.mul(f(CAXI), AX_val), f(vehicle.TireDia_in)), M.add(f(vehicle.TireWidth_in), f(1))), M.add(f(0.92), M.mul(f(0.08), M.pow(M.div(f(DynamicRWT), f(1900)), f(2.15)))));
-    if (vehicle.BodyStyle === 8) CRTF = M.mul(f(0.5), f(CRTF));
+    const AX_val = calcAX(env.isLandSpeed);
+    CRTF = vb6AssignSingle(
+      CAXI * AX_val * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(DynamicRWT / 1900, 2.15))
+    );
     
-    AMax_g = M.div(M.sub(M.div(f(CRTF), f(state.TireGrowth)), f(DragForce)), f(vehicle.Weight_lbf));
+    // VB6 line 1214: If gc_BodyStyle.Value = 8 Then CRTF = 0.5 * CRTF
+    // Literal 0.5 is Double, CRTF is Single → computed in Double
+    // CRTF is Single → truncated on assignment
+    if (vehicle.BodyStyle === 8) CRTF = vb6AssignSingle(0.5 * CRTF);
+    
+    // VB6 line 1216: AMAX = ((CRTF / TireGrowth) - DragForce) / gc_Weight.Value
+    // CRTF/TireGrowth/DragForce are Single, gc_Weight.Value is CValue (Double)
+    // → computed in Double, AMAX is Single → truncated on assignment
+    AMax_g = vb6AssignSingle(((CRTF / state.TireGrowth) - DragForce) / vehicle.Weight_lbf);
   
     // ========================================================================
-    // TIMESLIP.FRM:1218-1229 - Initial HP chain and time estimate
-    // VB6: HP = HP * TGEff(iGear) * Efficiency / TireSlip - DragHP
-    // 
-    // NOTE: TorqueMult is handled through ClutchSlip when converter is stalling.
-    // The VB6 HP chain does NOT directly apply TorqueMult - it's incorporated via ClutchSlip.
-    // ========================================================================
-    const TGEff_gear = f(vehicle.TGEff[iGear - 1] ?? 0.99);
-    HP = M.div(M.mul(M.mul(f(HP), TGEff_gear), f(vehicle.Efficiency)), f(TireSlip));
+    // TIMESLIP.FRM:1218-1228 - Calculate PQWT and Apply Traction Limits
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1218-1228
+    //
+    // VB6 Code:
+    //   'CALCULATE RESIDUAL HORSEPOWER AVAILABLE (limit to AMax)
+    //   HP = HP * TGEff(iGear) * gc_Efficiency.Value / TireSlip
+    //   HP = HP - DragHP
+    //   PQWT = 550 * gc * HP / gc_Weight.Value:     AGS(L) = PQWT / (Vel(L) * gc)
+    //   
+    //   SLIP(L) = 0
+    //   If AGS(L) > AMAX Then
+    //       SLIP(L) = 1
+    //       PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L):    AGS(L) = AMAX - (AGS(L) - AMAX)
+    //   End If
+    //   If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L):          AGS(L) = AMin
+    //
+    // VB6 Variable Types:
+    //   HP          - Single (line 510)
+    //   DragHP      - Single (line 509)
+    //   PQWT        - Single (line 515)
+    //   AGS(L)      - Single (line 536, array element)
+    //   AMAX        - Single (line 513)
+    //   TireSlip    - Single (line 519)
+    //   TGEff(iGear)- Single (line 533, array element)
+    //   Vel(L)      - Single (line 536, array element)
+    //   SLIP(L)     - Integer (line 532, array element)
+    //   gc_Efficiency.Value - Variant→Double (CValue)
+    //   gc_Weight.Value     - Variant→Double (CValue)
+    //   gc          - Public Const = 32.174 (Double, DECLARES.BAS)
+    //   AMin        - Const = 0.004 (Double, line 547)
+    //   Literal 550 - Double (no suffix)
+    // ============================================================================
+    
+    // VB6 line 1219: HP = HP * TGEff(iGear) * gc_Efficiency.Value / TireSlip
+    // HP/TGEff/TireSlip are Single, gc_Efficiency.Value is CValue (Double)
+    // → computed in Double, HP is Single → truncated on assignment
+    const TGEff_gear = vehicle.TGEff[iGear - 1] ?? 0.99;
+    HP = vb6AssignSingle(HP * TGEff_gear * vehicle.Efficiency / TireSlip);
     HPAtWheels = HP;  // HP at wheels BEFORE subtracting drag (for plotting)
-    HP = M.sub(f(HP), f(DragHP));
     
-    PQWT = M.div(M.mul(M.mul(f(550), f(gc)), f(HP)), f(vehicle.Weight_lbf));
-    AGS_g = M.div(f(PQWT), M.mul(f(Vel_L), f(gc)));
+    // VB6 line 1220: HP = HP - DragHP
+    // HP/DragHP are Single → Single expression, HP is Single → truncated on assignment
+    HP = vb6AssignSingle(HP - DragHP);
     
-    // TIMESLIP.FRM:1223-1228 - Initial AMin/AMax clamps
+    // VB6 line 1221: PQWT = 550 * gc * HP / gc_Weight.Value
+    // HP is Single, gc/gc_Weight.Value/550 are Double → computed in Double
+    // PQWT is Single → truncated on assignment
+    PQWT = vb6AssignSingle(550 * gc * HP / vehicle.Weight_lbf);
+    
+    // VB6 line 1221: AGS(L) = PQWT / (Vel(L) * gc)
+    // PQWT/Vel(L) are Single, gc is Double → computed in Double
+    // AGS(L) is Single → truncated on assignment
+    AGS_g = vb6AssignSingle(PQWT / (Vel_L * gc));
+    
+    // VB6 lines 1223-1227: Traction limit clamp (AMax)
     // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
-    // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
     SLIP = false;
     if (AGS_g > AMax_g) {
+      // VB6 line 1225: SLIP(L) = 1
       SLIP = true;
-      PQWT = M.div(M.mul(f(PQWT), M.sub(f(AMax_g), M.sub(f(AGS_g), f(AMax_g)))), f(AGS_g));
-      AGS_g = M.sub(f(AMax_g), M.sub(f(AGS_g), f(AMax_g)));
-    }
-    if (AGS_g < AMin) {
-      // VB6: TIMESLIP.FRM:1228 - Scale PQWT proportionally, then clamp AGS
-      // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
-      PQWT = M.div(M.mul(f(PQWT), f(AMin)), f(AGS_g));
-      AGS_g = f(AMin);
+      // VB6 line 1226: PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L)
+      // All are Single → Single expression, PQWT is Single → truncated on assignment
+      PQWT = vb6AssignSingle(PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g);
+      // VB6 line 1226: AGS(L) = AMAX - (AGS(L) - AMAX)
+      AGS_g = vb6AssignSingle(AMax_g - (AGS_g - AMax_g));
     }
     
-    // Initial time estimate
-    // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-    time_L = M.add(M.div(f(VelSqrd), M.mul(f(2), f(PQWT))), f(state.Time0_s));
+    // VB6 line 1228: If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
+    if (AGS_g < AMin) {
+      // Guard against division by zero
+      if (Math.abs(AGS_g) > 1e-10) {
+        PQWT = vb6AssignSingle(PQWT * AMin / AGS_g);
+      }
+      AGS_g = vb6AssignSingle(AMin);
+    }
+    
+    // ========================================================================
+    // TIMESLIP.FRM:1229 - Initial Time Estimate
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM line 1229
+    //
+    // VB6 Code:
+    //   time(L) = VelSqrd / (2 * PQWT) + Time0
+    //
+    // VB6 Variable Types:
+    //   time(L)  - Single (line 536, array element)
+    //   VelSqrd  - Single (line 522)
+    //   PQWT     - Single (line 515)
+    //   Time0    - Single (line 519)
+    //   Literal 2 - Double (no suffix)
+    //
+    // VB6 Coercion: VelSqrd/PQWT/Time0 are Single, literal 2 is Double
+    // → computed in Double, time(L) is Single → truncated on assignment
+    // ============================================================================
+    
+    // Guard against division by zero - if PQWT is too small, use a large time estimate
+    if (Math.abs(PQWT) < 1e-10) {
+      time_L = vb6AssignSingle(state.Time0_s + 1000);  // Large time estimate to trigger iteration
+    } else {
+      time_L = vb6AssignSingle(VelSqrd / (2 * PQWT) + state.Time0_s);
+    }
   
     // Debug: Log first step physics values with full HP chain
     if (state.L <= 2) {
@@ -1174,117 +2073,317 @@ export function vb6SimulationStep(
     }
     
     // ========================================================================
-    // TIMESLIP.FRM:1231-1240 - Calculate acceleration HP terms
-    // ========================================================================
+    // TIMESLIP.FRM:1231-1240 - Calculate Acceleration HP Terms
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1231-1240
+    //
+    // VB6 Code:
+    //   EngAccHP = gc_EnginePMI.Value * EngRPM(L) * (EngRPM(L) - RPM0)
+    //   If EngAccHP < 0 Then
+    //       If Not gc_TransType.Value Then
+    //           EngAccHP = KP21 * EngAccHP
+    //       Else
+    //           EngAccHP = KP22 * EngAccHP
+    //       End If
+    //   End If
+    //   ChasAccHP = ChassisPMI * DSRPM * (DSRPM - DSRPM0): If ChasAccHP < 0 Then ChasAccHP = 0
+    //
+    // VB6 Variable Types:
+    //   EngAccHP    - Single (line 515)
+    //   ChasAccHP   - Single (line 515)
+    //   ChassisPMI  - Single (line 507)
+    //   EngRPM(L)   - Single (line 536, array element)
+    //   RPM0        - Single (line 515)
+    //   DSRPM       - Single (line 537)
+    //   DSRPM0      - Single (line 526)
+    //   gc_EnginePMI.Value - Variant→Double (CValue)
+    //   gc_TransType.Value - Variant→Boolean (CValue)
+    //   KP21        - Const = 0.15 (Double, line 557) or 0 for BVPro
+    //   KP22        - Const = 0.25 (Double, line 558) or 0 for BVPro
+    //   Literal 0   - Double (no suffix)
+    // ============================================================================
+    
     // Select KP21/KP22 based on land speed mode
     // VB6: TIMESLIP.FRM:557-558 (QPro) vs 567-568 (BVPro)
     const kp21_const = env.isLandSpeed ? KP21_BV : KP21;
     const kp22_const = env.isLandSpeed ? KP22_BV : KP22;
     
-    EngAccHP = M.mul(M.mul(f(vehicle.EnginePMI), f(EngRPM_L)), M.sub(f(EngRPM_L), f(state.RPM0)));
+    // VB6 line 1231: EngAccHP = gc_EnginePMI.Value * EngRPM(L) * (EngRPM(L) - RPM0)
+    // gc_EnginePMI.Value is CValue (Double), EngRPM(L)/RPM0 are Single
+    // → computed in Double, EngAccHP is Single → truncated on assignment
+    EngAccHP = vb6AssignSingle(vehicle.EnginePMI * EngRPM_L * (EngRPM_L - state.RPM0));
     
     // Debug: Show EngAccHP calculation on first step
     if (state.L <= 2) {
       console.log(`[vb6Step] L=${state.L} EngAccHP: EnginePMI=${vehicle.EnginePMI.toFixed(2)}, EngRPM_L=${EngRPM_L.toFixed(0)}, RPM0=${state.RPM0.toFixed(0)}, EngAccHP=${EngAccHP.toFixed(0)}`);
     }
     
+    // VB6 lines 1232-1238: If EngAccHP < 0 Then EngAccHP = KP21/KP22 * EngAccHP
+    // KP21/KP22 are Double constants, EngAccHP is Single → computed in Double
+    // EngAccHP is Single → truncated on assignment
     if (EngAccHP < 0) {
       if (vehicle.isClutch) {
-        EngAccHP = M.mul(f(kp21_const), f(EngAccHP));
+        EngAccHP = vb6AssignSingle(kp21_const * EngAccHP);
       } else {
-        EngAccHP = M.mul(f(kp22_const), f(EngAccHP));
+        EngAccHP = vb6AssignSingle(kp22_const * EngAccHP);
       }
     }
     
-    ChasAccHP = M.mul(M.mul(f(ChassisPMI), f(DSRPM)), M.sub(f(DSRPM), f(state.DSRPM0)));
-    if (ChasAccHP < 0) ChasAccHP = f(0);
+    // VB6 line 1240: ChasAccHP = ChassisPMI * DSRPM * (DSRPM - DSRPM0)
+    // All are Single → Single expression, ChasAccHP is Single → truncated on assignment
+    ChasAccHP = vb6AssignSingle(ChassisPMI * DSRPM * (DSRPM - state.DSRPM0));
+    // VB6 line 1240: If ChasAccHP < 0 Then ChasAccHP = 0
+    if (ChasAccHP < 0) ChasAccHP = vb6AssignSingle(0);
     
     // ========================================================================
     // TIMESLIP.FRM:1244-1276 - ITERATION LOOP
-    // ========================================================================
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM lines 1244-1276
+    //
+    // VB6 Code:
+    //   280 Rem**  ITERATION TO CONVERGE INERTIA TRANSIENT
+    //   k = k + 1
+    //   dtk1 = time(L) - Time0
+    //   Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+    //   HPEngPMI = EngAccHP * Work:    HPChasPMI = ChasAccHP * Work
+    //   
+    //   HP = (HPSave - HPEngPMI) * ClutchSlip
+    //   HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+    //   PQWT = 550 * gc * HP / gc_Weight.Value
+    //   AGS(L) = PQWT / (Vel(L) * gc)
+    //   
+    //   'steady iteration progress by using jerk limits
+    //   Jerk = 0:   If dtk1 <> 0 Then Jerk = (AGS(L) - Ags0) / dtk1
+    //   If Jerk < JMin Then Jerk = JMin: AGS(L) = Ags0 + Jerk * dtk1: PQWT = AGS(L) * gc * Vel(L)
+    //   If Jerk > JMax Then Jerk = JMax: AGS(L) = Ags0 + Jerk * dtk1: PQWT = AGS(L) * gc * Vel(L)
+    //   
+    //   'and observe min/max Ags limits
+    //   SLIP(L) = 0
+    //   If AGS(L) > AMAX Then
+    //       SLIP(L) = 1
+    //       PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L): AGS(L) = AMAX - (AGS(L) - AMAX)
+    //   End If
+    //   If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
+    //   
+    //   time(L) = VelSqrd / (2 * PQWT) + Time0
+    //   dtk2 = time(L) - Time0
+    //   If k = 12 Or Abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01 Then GoTo 300
+    //   
+    //   z = HP / HPSave
+    //   If z < K6 Then z = K6
+    //   If z > K61 Then z = K61
+    //   time(L) = Time0 + dtk1 + z * (dtk2 - dtk1)
+    //   GoTo 280
+    //
+    // VB6 Variable Types:
+    //   k           - Integer (line 512)
+    //   dtk1, dtk2  - Single (lines 526-527)
+    //   Work        - Single (line 539)
+    //   HPEngPMI    - Single (line 510)
+    //   HPChasPMI   - Single (line 510)
+    //   HP          - Single (line 510)
+    //   HPSave      - Single (line 511)
+    //   ClutchSlip  - Single (line 511)
+    //   TGEff(iGear)- Single (line 533, array element)
+    //   TireSlip    - Single (line 519)
+    //   DragHP      - Single (line 509)
+    //   PQWT        - Single (line 515)
+    //   AGS(L)      - Single (line 536, array element)
+    //   Vel(L)      - Single (line 536, array element)
+    //   Jerk        - Single (line 513)
+    //   Ags0        - Single (line 527)
+    //   AMAX        - Single (line 513)
+    //   SLIP(L)     - Integer (line 532, array element)
+    //   VelSqrd     - Single (line 522)
+    //   Time0       - Single (line 519)
+    //   time(L)     - Single (line 536, array element)
+    //   z           - Single (line 526)
+    //   gc_Efficiency.Value - Variant→Double (CValue)
+    //   gc_Weight.Value     - Variant→Double (CValue)
+    //   gc          - Public Const = 32.174 (Double)
+    //   PI          - Public Const = 3.141593 (Double)
+    //   JMin        - Const = -4 (Double, line 543)
+    //   JMax        - Const = 2 (Double, line 544)
+    //   AMin        - Const = 0.004 (Double, line 547)
+    //   K6          - Const = 0.92 (Double, line 545)
+    //   K61         - Const = 1.08 (Double, line 546)
+    //   Literals 2, 60, 12, 550, 0, 100, 0.01 - Double (no suffix)
+    // ============================================================================
     HPEngPMI = 0;
     HPChasPMI = 0;
     k = 0;
   
     for (k = 1; k <= 12; k++) {
-      const dtk1 = M.sub(f(time_L), f(state.Time0_s));
+      // VB6 line 1246: dtk1 = time(L) - Time0
+      // time(L)/Time0 are Single → Single expression, dtk1 is Single → truncated on assignment
+      const dtk1 = vb6AssignSingle(time_L - state.Time0_s);
       // VB6 doesn't have a dtk1 <= 0 check - it proceeds with the calculation
       
-      // TIMESLIP.FRM:1247-1248
-      const Work = M.div(M.pow(M.div(M.mul(f(2), f(PI)), f(60)), f(2)), M.mul(M.mul(f(12), f(550)), f(dtk1)));
-      HPEngPMI = M.mul(f(EngAccHP), f(Work));
-      HPChasPMI = M.mul(f(ChasAccHP), f(Work));
+      // VB6 line 1247: Work = (2 * PI / 60) ^ 2 / (12 * 550 * dtk1)
+      // PI is Double constant, literals are Double, dtk1 is Single → computed in Double
+      // Work is Single → truncated on assignment
+      const Work = vb6AssignSingle(Math.pow(2 * PI / 60, 2) / (12 * 550 * dtk1));
       
-      // TIMESLIP.FRM:1250-1253
-      // VB6: HP = (HPSave - HPEngPMI) * ClutchSlip
-      // VB6: HP = ((HP * TGEff(iGear) * Efficiency - HPChasPMI) / TireSlip) - DragHP
-      HP = M.mul(M.sub(f(HPSave), f(HPEngPMI)), f(ClutchSlip));
-      HP = M.sub(M.div(M.sub(M.mul(M.mul(f(HP), TGEff_gear), f(vehicle.Efficiency)), f(HPChasPMI)), f(TireSlip)), f(DragHP));
-      PQWT = M.div(M.mul(M.mul(f(550), f(gc)), f(HP)), f(vehicle.Weight_lbf));
-      AGS_g = M.div(f(PQWT), M.mul(f(Vel_L), f(gc)));
+      // VB6 line 1248: HPEngPMI = EngAccHP * Work: HPChasPMI = ChasAccHP * Work
+      // EngAccHP/ChasAccHP/Work are Single → Single expression
+      // HPEngPMI/HPChasPMI are Single → truncated on assignment
+      HPEngPMI = vb6AssignSingle(EngAccHP * Work);
+      HPChasPMI = vb6AssignSingle(ChasAccHP * Work);
       
-      // TIMESLIP.FRM:1255-1258 - Jerk limits
-      let Jerk_iter = f(0);
+      // VB6 line 1250: HP = (HPSave - HPEngPMI) * ClutchSlip
+      // All are Single → Single expression, HP is Single → truncated on assignment
+      HP = vb6AssignSingle((HPSave - HPEngPMI) * ClutchSlip);
+      
+      // VB6 line 1251: HP = ((HP * TGEff(iGear) * gc_Efficiency.Value - HPChasPMI) / TireSlip) - DragHP
+      // HP/TGEff/HPChasPMI/TireSlip/DragHP are Single, gc_Efficiency.Value is CValue (Double)
+      // → computed in Double, HP is Single → truncated on assignment
+      HP = vb6AssignSingle(((HP * TGEff_gear * vehicle.Efficiency - HPChasPMI) / TireSlip) - DragHP);
+      
+      // VB6 line 1252: PQWT = 550 * gc * HP / gc_Weight.Value
+      // HP is Single, gc/gc_Weight.Value/550 are Double → computed in Double
+      // PQWT is Single → truncated on assignment
+      PQWT = vb6AssignSingle(550 * gc * HP / vehicle.Weight_lbf);
+      
+      // VB6 line 1253: AGS(L) = PQWT / (Vel(L) * gc)
+      // PQWT/Vel(L) are Single, gc is Double → computed in Double
+      // AGS(L) is Single → truncated on assignment
+      AGS_g = vb6AssignSingle(PQWT / (Vel_L * gc));
+      
+      // VB6 lines 1256-1258: Jerk limits
+      // VB6 line 1256: Jerk = 0: If dtk1 <> 0 Then Jerk = (AGS(L) - Ags0) / dtk1
+      let Jerk_iter = vb6AssignSingle(0);
       if (dtk1 !== 0) {
-        Jerk_iter = M.div(M.sub(f(AGS_g), f(state.Ags0_g)), f(dtk1));
-      }
-      if (Jerk_iter < JMin) {
-        Jerk_iter = f(JMin);
-        AGS_g = M.add(f(state.Ags0_g), M.mul(f(Jerk_iter), f(dtk1)));
-        PQWT = M.mul(M.mul(f(AGS_g), f(gc)), f(Vel_L));
-      }
-      if (Jerk_iter > JMax) {
-        Jerk_iter = f(JMax);
-        AGS_g = M.add(f(state.Ags0_g), M.mul(f(Jerk_iter), f(dtk1)));
-        PQWT = M.mul(M.mul(f(AGS_g), f(gc)), f(Vel_L));
+        // AGS(L)/Ags0/dtk1 are Single → Single expression, Jerk is Single → truncated on assignment
+        Jerk_iter = vb6AssignSingle((AGS_g - state.Ags0_g) / dtk1);
       }
       
-      // TIMESLIP.FRM:1260-1266 - AMin/AMax clamps
+      // VB6 line 1257: If Jerk < JMin Then Jerk = JMin: AGS(L) = Ags0 + Jerk * dtk1: PQWT = AGS(L) * gc * Vel(L)
+      if (Jerk_iter < JMin) {
+        Jerk_iter = vb6AssignSingle(JMin);
+        AGS_g = vb6AssignSingle(state.Ags0_g + Jerk_iter * dtk1);
+        PQWT = vb6AssignSingle(AGS_g * gc * Vel_L);
+      }
+      
+      // VB6 line 1258: If Jerk > JMax Then Jerk = JMax: AGS(L) = Ags0 + Jerk * dtk1: PQWT = AGS(L) * gc * Vel(L)
+      if (Jerk_iter > JMax) {
+        Jerk_iter = vb6AssignSingle(JMax);
+        AGS_g = vb6AssignSingle(state.Ags0_g + Jerk_iter * dtk1);
+        PQWT = vb6AssignSingle(AGS_g * gc * Vel_L);
+      }
+      
+      // VB6 lines 1261-1266: AMin/AMax clamps
       // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
-      // This can produce negative values when AGS >> AMAX, which then get clamped to AMin
       SLIP = false;
       if (AGS_g > AMax_g) {
+        // VB6 line 1263: SLIP(L) = 1
         SLIP = true;
-        PQWT = M.div(M.mul(f(PQWT), M.sub(f(AMax_g), M.sub(f(AGS_g), f(AMax_g)))), f(AGS_g));
-        AGS_g = M.sub(f(AMax_g), M.sub(f(AGS_g), f(AMax_g)));
-      }
-      if (AGS_g < AMin) {
-        // VB6: TIMESLIP.FRM:1266 - Scale PQWT proportionally, then clamp AGS
-        // VB6: PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
-        PQWT = M.div(M.mul(f(PQWT), f(AMin)), f(AGS_g));
-        AGS_g = f(AMin);
+        // VB6 line 1264: PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L)
+        // All are Single → Single expression, PQWT is Single → truncated on assignment
+        PQWT = vb6AssignSingle(PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g);
+        // VB6 line 1264: AGS(L) = AMAX - (AGS(L) - AMAX)
+        AGS_g = vb6AssignSingle(AMax_g - (AGS_g - AMax_g));
       }
       
-      // TIMESLIP.FRM:1268-1270 - New time estimate and convergence check
-      // VB6: time(L) = VelSqrd / (2 * PQWT) + Time0
-      const dtk2_time = M.add(M.div(f(VelSqrd), M.mul(f(2), f(PQWT))), f(state.Time0_s));
-      const dtk2 = M.sub(f(dtk2_time), f(state.Time0_s));
+      // VB6 line 1266: If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
+      if (AGS_g < AMin) {
+        // Guard against division by zero
+        if (Math.abs(AGS_g) > 1e-10) {
+          PQWT = vb6AssignSingle(PQWT * AMin / AGS_g);
+        }
+        AGS_g = vb6AssignSingle(AMin);
+      }
+      
+      // VB6 lines 1268-1270: New time estimate and convergence check
+      // VB6 line 1268: time(L) = VelSqrd / (2 * PQWT) + Time0
+      // VelSqrd/PQWT/Time0 are Single, literal 2 is Double → computed in Double
+      // time(L) is Single → truncated on assignment
+      let dtk2_time: number;
+      let dtk2: number;
+      if (Math.abs(PQWT) < 1e-10) {
+        dtk2_time = vb6AssignSingle(state.Time0_s + 1000);  // Large time estimate
+        dtk2 = vb6AssignSingle(1000);
+      } else {
+        dtk2_time = vb6AssignSingle(VelSqrd / (2 * PQWT) + state.Time0_s);
+        // VB6 line 1269: dtk2 = time(L) - Time0
+        dtk2 = vb6AssignSingle(dtk2_time - state.Time0_s);
+      }
       
       // Debug: Log iteration values
       if (state.L <= 2 && k <= 3) {
         console.log(`[vb6Step] L=${state.L} iter k=${k}: HP=${HP.toFixed(1)}, PQWT=${PQWT.toFixed(2)}, AGS_g=${AGS_g.toFixed(3)}, dtk1=${dtk1.toFixed(5)}, dtk2=${dtk2.toFixed(5)}`);
       }
       
-      if (k === 12 || M.abs(M.div(M.mul(f(100), M.sub(f(dtk2), f(dtk1))), f(dtk2))) <= 0.01) {
+      // VB6 line 1270: If k = 12 Or Abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01 Then GoTo 300
+      // Convergence check: compute in Double (literals are Double)
+      if (k === 12 || Math.abs(100 * (dtk2 - dtk1) / dtk2) <= 0.01) {
         time_L = dtk2_time;
         break;
       }
       
-      // TIMESLIP.FRM:1272-1275 - Relaxation for next iteration
-      let z = M.div(f(HP), f(HPSave));
-      if (z < K6) z = f(K6);
-      if (z > K61) z = f(K61);
-      time_L = M.add(M.add(f(state.Time0_s), f(dtk1)), M.mul(f(z), M.sub(f(dtk2), f(dtk1))));
+      // VB6 lines 1272-1275: Relaxation for next iteration
+      // VB6 line 1272: z = HP / HPSave
+      // HP/HPSave are Single → Single expression, z is Single → truncated on assignment
+      let z = vb6AssignSingle(HP / HPSave);
+      // VB6 line 1273: If z < K6 Then z = K6
+      if (z < K6) z = vb6AssignSingle(K6);
+      // VB6 line 1274: If z > K61 Then z = K61
+      if (z > K61) z = vb6AssignSingle(K61);
+      
+      // VB6 line 1275: time(L) = Time0 + dtk1 + z * (dtk2 - dtk1)
+      // Time0/dtk1/z/dtk2 are Single → Single expression, time(L) is Single → truncated on assignment
+      // Guard against NaN propagation
+      if (!Number.isFinite(dtk1) || !Number.isFinite(dtk2)) {
+        time_L = vb6AssignSingle(state.Time0_s + TimeStep);  // Fallback to simple time advance
+      } else {
+        time_L = vb6AssignSingle(state.Time0_s + dtk1 + z * (dtk2 - dtk1));
+      }
     }
     
     // ========================================================================
-    // TIMESLIP.FRM:1280 - Calculate distance after convergence
-    // VB6: Dist(L) = ((2*PQWT*(time(L)-Time0) + Vel0^2)^1.5 - Vel0^3) / (3*PQWT) + Dist0
-    // ========================================================================
-    dt_final = M.sub(f(time_L), f(state.Time0_s));
-    let term = M.add(M.mul(M.mul(f(2), f(PQWT)), f(dt_final)), M.mul(f(state.Vel0_ftps), f(state.Vel0_ftps)));
-    const Vel0_cubed_f32 = M.mul(M.mul(f(state.Vel0_ftps), f(state.Vel0_ftps)), f(state.Vel0_ftps));
-    Dist_L = M.add(M.div(M.sub(M.pow(f(term), f(1.5)), f(Vel0_cubed_f32)), M.mul(f(3), f(PQWT))), f(state.Dist0_ft));
+    // TIMESLIP.FRM:1280 - Calculate Distance After Convergence
+    // ============================================================================
+    // VB6↔TS CROSSWALK (authoritative)
+    // ============================================================================
+    // Source: TIMESLIP.FRM line 1280
+    //
+    // VB6 Code:
+    //   Dist(L) = ((2 * PQWT * (time(L) - Time0) + Vel0 ^ 2) ^ 1.5 - Vel0 ^ 3) / (3 * PQWT) + Dist0
+    //
+    // VB6 Variable Types:
+    //   Dist(L)  - Single (line 536, array element)
+    //   PQWT     - Single (line 515)
+    //   time(L)  - Single (line 536, array element)
+    //   Time0    - Single (line 519)
+    //   Vel0     - Single (line 522)
+    //   Dist0    - Single (line 526)
+    //   Literals 2, 1.5, 3 - Double (no suffix)
+    //
+    // VB6 Coercion: All variables are Single, literals are Double
+    // → computed in Double, Dist(L) is Single → truncated on assignment
+    // ============================================================================
+    
+    // dt_final = time(L) - Time0
+    dt_final = vb6AssignSingle(time_L - state.Time0_s);
+    
+    // Calculate distance using VB6 formula
+    // Guard against PQWT being zero or very small (would cause NaN)
+    // term = 2 * PQWT * dt_final + Vel0^2
+    const term = 2 * PQWT * dt_final + state.Vel0_ftps * state.Vel0_ftps;
+    // Vel0_cubed = Vel0^3
+    const Vel0_cubed = state.Vel0_ftps * state.Vel0_ftps * state.Vel0_ftps;
+    
+    if (Math.abs(PQWT) < 1e-10) {
+      // PQWT too small - use linear distance estimate
+      Dist_L = vb6AssignSingle(state.Dist0_ft + Vel_L * dt_final);
+    } else {
+      // Dist(L) = (term^1.5 - Vel0^3) / (3 * PQWT) + Dist0
+      Dist_L = vb6AssignSingle((Math.pow(term, 1.5) - Vel0_cubed) / (3 * PQWT) + state.Dist0_ft);
+    }
+    
     
     // ========================================================================
     // TIMESLIP.FRM:1282-1287 - Shift2PrintTime velocity revision (during gear shift)
@@ -1349,6 +2448,16 @@ export function vb6SimulationStep(
       const targetDist = env.nextDistPrint;
       const DistStep_rev = Math.abs(targetDist - Dist_L);
       
+      // Debug: Log VelDistMatch calculation for rollout
+      if (env.nextDistPrint < 1) {
+        console.log(`[vb6Step] L=${state.L} ROLLOUT VelDistMatch CHECK (VB6 line 1296-1310):
+  Dist_L=${Dist_L.toFixed(6)}, targetDist=${targetDist.toFixed(6)}, DistStep_rev=${DistStep_rev.toFixed(6)}
+  DistTol_rev=${DistTol_rev.toFixed(6)}, TimeTol_rev=${TimeTol_rev.toFixed(6)}
+  Within tolerance: DistStep_rev < DistTol_rev = ${DistStep_rev < DistTol_rev}
+  Time check: (DistStep_rev / Vel_L) < TimeTol_rev = ${(DistStep_rev / Vel_L) < TimeTol_rev}
+  Dist_L > targetDist: ${Dist_L > targetDist}`);
+      }
+      
       if (!(DistStep_rev < DistTol_rev && (DistStep_rev / Vel_L) < TimeTol_rev)) {
         if (Dist_L > targetDist) {
           // VB6 line 1306: Work = 3 * PQWT * (DistToPrint(iDist) - Dist(L)) + Vel(L) ^ 3
@@ -1361,12 +2470,14 @@ export function vb6SimulationStep(
     }
     
     // VB6 lines 1312-1321: Check for TIME overshoot (VelTimeMatch)
+    // CRITICAL: absTimePrint_s is in ABSOLUTE time. Only apply if finite.
     let VelTimeMatch = 0;
-    if (env.TimePrint !== undefined) {
-      if (Math.abs(env.TimePrint - time_L) >= TimeTol_rev) {
-        if (time_L > env.TimePrint) {
+    const absTimePrint_rev = env.absTimePrint_s ?? Infinity;
+    if (Number.isFinite(absTimePrint_rev)) {
+      if (Math.abs(absTimePrint_rev - time_L) >= TimeTol_rev) {
+        if (time_L > absTimePrint_rev) {
           // VB6 line 1318: Work = 2 * PQWT * (TimePrint - time(L)) + Vel(L) ^ 2
-          const Work_time = 2 * PQWT * (env.TimePrint - time_L) + Vel_L * Vel_L;
+          const Work_time = 2 * PQWT * (absTimePrint_rev - time_L) + Vel_L * Vel_L;
           if (Work_time > 0) {
             VelTimeMatch = Math.sqrt(Work_time);
           }
@@ -1421,6 +2532,19 @@ export function vb6SimulationStep(
     if (VelMPHMatch > 0 && VelMPHMatch < NextVel) NextVel = VelMPHMatch;
     if (VelShiftMatch > 0 && VelShiftMatch < NextVel) NextVel = VelShiftMatch;
     
+    // Debug: Log velocity revision for rollout
+    if (env.nextDistPrint !== undefined && env.nextDistPrint < 1) {
+      const Z5 = 3600 / 5280;
+      console.log(`[vb6Step] L=${state.L} ROLLOUT VEL REVISION (VB6 line 1344-1352):
+  Vel0=${state.Vel0_ftps.toFixed(4)} (${(state.Vel0_ftps * Z5).toFixed(4)}mph)
+  Vel_L=${Vel_L.toFixed(4)} (${(Vel_L * Z5).toFixed(4)}mph)
+  VelDistMatch=${VelDistMatch.toFixed(4)} (${(VelDistMatch * Z5).toFixed(4)}mph)
+  VelTimeMatch=${VelTimeMatch.toFixed(4)}, VelMPHMatch=${VelMPHMatch.toFixed(4)}, VelShiftMatch=${VelShiftMatch.toFixed(4)}
+  NextVel=${NextVel.toFixed(4)} (${(NextVel * Z5).toFixed(4)}mph)
+  Revision check: NextVel > Vel0 = ${NextVel > state.Vel0_ftps}, NextVel < Vel_L = ${NextVel < Vel_L}
+  Will revise: ${NextVel > state.Vel0_ftps && NextVel < Vel_L}`);
+    }
+    
     // VB6 line 1352: If NextVel > Vel0 And NextVel < Vel(L) Then Vel(L) = NextVel: GoTo 270
     if (NextVel > state.Vel0_ftps && NextVel < Vel_L) {
       // Revise velocity and LOOP BACK to re-run full physics (GoTo 270)
@@ -1448,13 +2572,21 @@ export function vb6SimulationStep(
   if (!gearChanged) {
     state.L += 1;
   }
-  state.time_s = f(time_L);
-  state.Vel_ftps = f(Vel_L);
-  state.Dist_ft = f(Dist_L);
-  state.AGS_g = f(AGS_g);
-  state.EngRPM = f(EngRPM_L);
-  state.DSRPM = f(DSRPM);
+  // VB6 state variables are Single - truncate at assignment boundary
+  state.time_s = vb6AssignSingle(time_L);
+  state.Vel_ftps = vb6AssignSingle(Vel_L);
+  state.Dist_ft = vb6AssignSingle(Dist_L);
+  state.AGS_g = vb6AssignSingle(AGS_g);
+  state.EngRPM = vb6AssignSingle(EngRPM_L);
+  state.DSRPM = vb6AssignSingle(DSRPM);
   state.SLIP = SLIP;
+  
+  // HARD ASSERTION: State values must be finite after step
+  if (!Number.isFinite(state.time_s) || !Number.isFinite(state.Dist_ft) || !Number.isFinite(state.AGS_g)) {
+    throw new Error(`[vb6SimulationStep] FATAL: NaN in state after step at L=${state.L}. ` +
+      `time_s=${state.time_s}, Dist_ft=${state.Dist_ft}, AGS_g=${state.AGS_g}, Vel_ftps=${state.Vel_ftps}. ` +
+      `TimeStep=${TimeStep}, time_L=${time_L}, Dist_L=${Dist_L}, AGS_g_local=${AGS_g}`);
+  }
   
   // VB6: AgsMax is set ONCE at launch (line 1028) and never updated
   // It's the initial launch acceleration, NOT the maximum seen during the run
@@ -1492,89 +2624,233 @@ export function vb6SimulationStep(
 
 /**
  * Initialize VB6 simulation state
+ * 
+ * ============================================================================
+ * VB6 INIT SOURCE + TYPES (authoritative)
+ * ============================================================================
+ * Source: TIMESLIP.FRM lines 1003-1057, DECLARES.BAS lines 10-12
+ * 
+ * VB6 INIT CODE (lines 1003-1057):
+ * ```vb
+ * 1003  L = 1: Time0 = 0: time(L) = 0: Vel(L) = 0: Dist(L) = 0: DSRPM = 0
+ * 1006  EngRPM(L) = gc_LaunchRPM.Value
+ * 1007  Gear(L) = iGear
+ * 1008  DownForce = gc_Weight.Value
+ * 1010  Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+ * 1011  HP = gc_HPTQMult.Value * HP / hpc
+ * 1012  HPSave = HP
+ * 1013  TQ = Z6 * HP / EngRPM(L)
+ * 1014  TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
+ * 1016  WindFPS = Sqr(Vel(L)^2 + 2*Vel(L)*(gc_WindSpeed.Value/Z5)*Cos(PI*gc_WindAngle.Value/180) + (gc_WindSpeed.Value/Z5)^2)
+ * 1017  q = Sgn(WindFPS) * rho * Abs(WindFPS)^2 / (2*gc)
+ * 1019  DragForce = CMU * gc_Weight.Value + gc_DragCoef.Value * gc_RefArea.Value * q
+ * 1020  force = TQ * gc_GearRatio.Value * gc_Efficiency.Value / (TireSlip * TireDia / 24) - DragForce
+ * 1023  If gc_TransType.Value Then
+ * 1024      Ags0 = 0.96 * force / gc_Weight.Value
+ * 1025  Else
+ * 1026      Ags0 = 0.88 * force / gc_Weight.Value
+ * 1027  End If
+ * 1028  AgsMax = Ags0
+ * 1035  Tire TireGrowth, TireCirFt
+ * 1036  TireRadIn = 12 * TireCirFt / (2 * PI)
+ * 1037  deltaFWT = (Ags0*gc_Weight.Value*((gc_YCG.Value-TireRadIn)+(FRCT/gc_Efficiency.Value)*TireRadIn)+DragForce*gc_YCG.Value)/gc_Wheelbase.Value
+ * 1041  DynamicFWT = 0
+ * 1043  gc_StaticFWt.Value = deltaFWT + DynamicFWT
+ * 1047  StaticRWT = DownForce - gc_StaticFWt.Value: If StaticRWT < 0 Then StaticRWT = gc_Weight.Value
+ * 1050  CAXI = (1 - (gc_TractionIndex.Value - 1) * 0.01) / (TrackTempEffect ^ 0.25)
+ * 1051  CRTF = CAXI * AX * TireDia * (gc_TireWidth.Value + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ^ 2.15)
+ * 1052  If gc_BodyStyle.Value = 8 Then CRTF = 0.5 * CRTF
+ * 1054  AMAX = (CRTF - DragForce) / gc_Weight.Value
+ * 1055  SLIP(L) = 0: If Ags0 > AMAX Then Ags0 = AMAX: SLIP(L) = 1
+ * 1056  If Ags0 < AMin Then Ags0 = AMin
+ * 1057  AGS(L) = Ags0
+ * ```
+ * 
+ * VARIABLE TYPES (from Dim statements, TIMESLIP.FRM lines 507-538, 672):
+ * | Variable        | VB6 Type | Line |
+ * |-----------------|----------|------|
+ * | HP              | Single   | 510  |
+ * | TQ              | Single   | 519  |
+ * | force           | Single   | 510  |
+ * | Ags0            | Single   | 527  |
+ * | DragForce       | Single   | 509  |
+ * | q               | Single   | 515  |
+ * | rho             | Single   | 515  |
+ * | hpc             | Single   | 511  |
+ * | CRTF            | Single   | 508  |
+ * | CAXI            | Single   | 508  |
+ * | AMAX            | Single   | 513  |
+ * | StaticRWT       | Single   | 524  |
+ * | TireSlip        | Single   | 519  |
+ * | WindFPS         | Single   | 672  |
+ * | TrackTempEffect | Single   | 672  |
+ * | DownForce       | Single   | 508  |
+ * | TireRadIn       | Single   | 518  |
+ * | TireCirFt       | Single   | 518  |
+ * | deltaFWT        | Single   | 524  |
+ * | AgsMax          | Single   | 507  |
+ * | EngRPM()        | Single   | 536  |
+ * | Vel()           | Single   | 536  |
+ * | AGS()           | Single   | 536  |
+ * | TGR()           | Single   | 533  |
+ * | TGEff()         | Single   | 533  |
+ * | L               | Integer  | 531  |
+ * | SLIP()          | Integer  | 532  |
+ * 
+ * CONSTANT TYPES (no suffix = Double):
+ * | Constant | VB6 Type | Source              |
+ * |----------|----------|---------------------|
+ * | PI       | Double   | DECLARES.BAS:10     |
+ * | gc       | Double   | DECLARES.BAS:11     |
+ * | Z6       | Double   | DECLARES.BAS:12     |
+ * | Z5       | Double   | TIMESLIP.FRM:542    |
+ * | AX       | Double   | TIMESLIP.FRM:551    |
+ * | CMU      | Double   | TIMESLIP.FRM:552    |
+ * | AMin     | Double   | TIMESLIP.FRM:547    |
+ * | FRCT     | Double   | TIMESLIP.FRM:559    |
+ * 
+ * VB6 COERCION RULES:
+ * 1. If ANY operand is Double, expression evaluates in Double precision
+ * 2. Truncation to Single occurs ONLY at assignment to Single variable
+ * 3. gc_*.Value (CValue) returns Variant → promotes to Double in expressions
+ * 4. Numeric literals without suffix (0.96, 0.88, etc.) are Double
+ * ============================================================================
  */
 export function vb6InitState(
   vehicle: VB6VehicleParams,
   env: VB6EnvParams,
   launchRPM: number
 ): VB6SimState {
-  // VB6: TIMESLIP.FRM:1003-1057 - Initialize launch conditions
-  // L = 1: Time0 = 0: time(L) = 0: Vel(L) = 0: Dist(L) = 0: DSRPM = 0
+  // Clear INIT trace buffer at start
+  if (isInitTraceEnabled()) {
+    clearInitTrace();
+  }
   
   // Initial tire calculations (at zero velocity)
   const tireResult = vb6Tire(vehicle.TireDia_in, vehicle.TireWidth_in, 0, 0, env.isLandSpeed);
   
-  // VB6: TIMESLIP.FRM:1010-1014 - Get HP and calculate torque
-  // Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
-  // HP = gc_HPTQMult.Value * HP / hpc
-  // TQ = Z6 * HP / EngRPM(L)
-  // TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
-  // NOTE: Z6 = (60 / (2 * PI)) * 550 = 5252.113... (imported from constants.ts)
-  const HP_launch = TABY(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, launchRPM);
-  const HP_corrected = M.div(M.mul(f(vehicle.HPTQMult), f(HP_launch)), f(env.hpc));
-  const Z6_local = M.mul(M.div(f(60), M.mul(f(2), f(PI))), f(550));  // VB6 exact formula: DECLARES.BAS:12
-  let TQ = M.div(M.mul(f(Z6_local), f(HP_corrected)), f(launchRPM));
-  const TGR_1 = f(vehicle.TGR[0] ?? 1);
-  const TGEff_1 = f(vehicle.TGEff[0] ?? 0.99);
-  TQ = M.mul(M.mul(M.mul(f(TQ), f(vehicle.TorqueMult)), TGR_1), TGEff_1);
+  // INIT TRACE: Record launch RPM
+  if (isInitTraceEnabled()) recordInitStep('LAUNCH_RPM', launchRPM, '1003');
   
-  // VB6: TIMESLIP.FRM:1016-1019 - Calculate drag force at launch (Vel=0)
-  // WindFPS = Sqr(Vel(L)^2 + ...) = WindSpeed/Z5 at Vel=0
-  // q = Sgn(WindFPS) * rho * Abs(WindFPS)^2 / (2*gc)
-  // DragForce = CMU * Weight + DragCoef * RefArea * q
-  const cmu_launch = f(env.isLandSpeed ? CMU_BV : CMU);
-  const WindFPS_launch = M.div(f(env.WindSpeed_mph), f(Z5));
-  const q_launch = M.div(M.mul(M.mul(f(Math.sign(WindFPS_launch)), f(env.rho)), M.mul(M.abs(WindFPS_launch), M.abs(WindFPS_launch))), M.mul(f(2), f(gc)));
-  const DragForce_launch = M.add(M.mul(cmu_launch, f(vehicle.Weight_lbf)), M.mul(M.mul(f(vehicle.DragCoef), f(vehicle.RefArea_ft2)), f(q_launch)));
+  // VB6 1010: Call TABY(xrpm(), yhp(), NHP, 1, EngRPM(L), HP)
+  // TABY returns into HP (Single), so result is truncated on assignment
+  const HP_launch = vb6AssignSingle(tabyLagrange(vehicle.xrpm, vehicle.yhp, vehicle.NHP, 1, launchRPM));
+  if (isInitTraceEnabled()) recordInitStep('HP_LAUNCH_RAW', HP_launch, '1010');
   
-  // VB6: TIMESLIP.FRM:872-875 - Initial tire slip
-  // Different formulas for Quarter Pro vs Bonneville Pro
+  // VB6 1011: HP = gc_HPTQMult.Value * HP / hpc
+  // HPTQMult is CValue (Double), HP is Single, hpc is Single
+  // Expression computed in Double, result assigned to HP (Single)
+  const HP_corrected = vb6AssignSingle(vehicle.HPTQMult * HP_launch / env.hpc);
+  if (isInitTraceEnabled()) recordInitStep('HP_CORRECTED', HP_corrected, '1011');
+  
+  // Z6 is Double constant from DECLARES.BAS (no type suffix = Double)
+  if (isInitTraceEnabled()) recordInitStep('Z6_COMPUTED', Z6, 'DECLARES:12');
+  
+  // VB6 1013: TQ = Z6 * HP / EngRPM(L)
+  // Z6 is Double, HP is Single, EngRPM is Single → computed in Double, assigned to TQ (Single)
+  let TQ = vb6AssignSingle(Z6 * HP_corrected / launchRPM);
+  if (isInitTraceEnabled()) recordInitStep('TQ_PRE_MULT', TQ, '1013');
+  
+  // VB6 1014: TQ = TQ * gc_TorqueMult.Value * TGR(iGear) * TGEff(iGear)
+  // TorqueMult is CValue (Double), TGR/TGEff are Single arrays
+  const TGR_1 = vehicle.TGR[0] ?? 1;
+  const TGEff_1 = vehicle.TGEff[0] ?? 0.99;
+  TQ = vb6AssignSingle(TQ * vehicle.TorqueMult * TGR_1 * TGEff_1);
+  if (isInitTraceEnabled()) recordInitStep('TQ_POST_MULT', TQ, '1014');
+  
+  // VB6 1016: WindFPS = Sqr(Vel(L)^2 + 2*Vel(L)*(WindSpeed/Z5)*Cos(...) + (WindSpeed/Z5)^2)
+  // At Vel=0, simplifies to WindSpeed/Z5. Z5 is Double constant, WindSpeed is CValue (Double)
+  // WindFPS is Single (line 672)
+  const cmu_launch = env.isLandSpeed ? CMU_BV : CMU;  // Double constants
+  const WindFPS_launch = vb6AssignSingle(env.WindSpeed_mph / Z5);
+  if (isInitTraceEnabled()) recordInitStep('WIND_FPS', WindFPS_launch, '1016');
+  
+  // VB6 1017: q = Sgn(WindFPS) * rho * Abs(WindFPS)^2 / (2*gc)
+  // gc is Double constant, rho is Single, WindFPS is Single. q is Single (line 515)
+  const q_launch = vb6AssignSingle(Math.sign(WindFPS_launch) * env.rho * Math.abs(WindFPS_launch) ** 2 / (2 * gc));
+  if (isInitTraceEnabled()) recordInitStep('Q_LAUNCH', q_launch, '1017');
+  
+  // VB6 1019: DragForce = CMU * gc_Weight.Value + gc_DragCoef.Value * gc_RefArea.Value * q
+  // CMU is Double constant, Weight/DragCoef/RefArea are CValue (Double), q is Single
+  // DragForce is Single (line 509)
+  const DragForce_launch = vb6AssignSingle(cmu_launch * vehicle.Weight_lbf + vehicle.DragCoef * vehicle.RefArea_ft2 * q_launch);
+  if (isInitTraceEnabled()) recordInitStep('DRAG_FORCE', DragForce_launch, '1019');
+  
+  // VB6 872: TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
+  // All numeric literals (1.02, 0.005, 3, etc.) are Double in VB6
+  // TireSlip is Single (line 519), TrackTempEffect is Single (line 672)
   let TireSlip_init: number;
   if (env.isLandSpeed) {
-    // Bonneville Pro: TIMESLIP.FRM:875
-    // TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
-    TireSlip_init = M.add(f(1.01), M.mul(M.sub(f(env.TractionIndex), f(1)), f(0.01)));
+    // VB6 875: TireSlip = 1.01 + (gc_TractionIndex.Value - 1) * 0.01
+    TireSlip_init = vb6AssignSingle(1.01 + (env.TractionIndex - 1) * 0.01);
   } else {
-    // Quarter Pro: TIMESLIP.FRM:872
-    // TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
-    TireSlip_init = M.add(M.add(f(1.02), M.mul(M.sub(f(env.TractionIndex), f(1)), f(0.005))), M.mul(M.sub(f(env.TrackTempEffect), f(1)), f(3)));
+    // VB6 872: TireSlip = 1.02 + (gc_TractionIndex.Value - 1) * 0.005 + (TrackTempEffect - 1) * 3
+    TireSlip_init = vb6AssignSingle(1.02 + (env.TractionIndex - 1) * 0.005 + (env.TrackTempEffect - 1) * 3);
   }
+  if (isInitTraceEnabled()) recordInitStep('TIRE_SLIP_INIT', TireSlip_init, '872');
   
-  // VB6: TIMESLIP.FRM:1020 - Calculate wheel force
-  // force = TQ * GearRatio * Efficiency / (TireSlip * TireDia / 24) - DragForce
-  const force = M.sub(M.div(M.mul(M.mul(f(TQ), f(vehicle.GearRatio)), f(vehicle.Efficiency)), M.div(M.mul(f(TireSlip_init), f(vehicle.TireDia_in)), f(24))), f(DragForce_launch));
+  // VB6 1020: force = TQ * gc_GearRatio.Value * gc_Efficiency.Value / (TireSlip * TireDia / 24) - DragForce
+  // GearRatio/Efficiency are CValue (Double), TQ/TireSlip/TireDia/DragForce are Single
+  // force is Single (line 510)
+  const force = vb6AssignSingle(TQ * vehicle.GearRatio * vehicle.Efficiency / (TireSlip_init * vehicle.TireDia_in / 24) - DragForce_launch);
+  if (isInitTraceEnabled()) recordInitStep('FORCE', force, '1020');
   
-  // VB6: TIMESLIP.FRM:1022-1027 - Estimate initial acceleration
-  // If gc_TransType.Value Then (converter)
-  //     Ags0 = 0.96 * force / Weight  '4% misc losses
-  // Else (clutch)
-  //     Ags0 = 0.88 * force / Weight  '12% misc losses
-  const lossFactor = f(vehicle.isClutch ? 0.88 : 0.96);
-  let Ags0_g = M.div(M.mul(lossFactor, f(force)), f(vehicle.Weight_lbf));
+  // VB6 1023-1027: If gc_TransType.Value Then Ags0 = 0.96 * force / gc_Weight.Value
+  //                Else Ags0 = 0.88 * force / gc_Weight.Value
+  // 0.96/0.88 are Double literals, force is Single, Weight is CValue (Double)
+  // Ags0 is Single (line 527)
+  const lossFactor = vehicle.isClutch ? 0.88 : 0.96;  // Double literal
+  if (isInitTraceEnabled()) recordInitStep('LOSS_FACTOR', vb6AssignSingle(lossFactor), '1023');
   
-  // VB6: TIMESLIP.FRM:1046-1054 - Calculate AMAX and clamp Ags0
-  // StaticRWT = DownForce - StaticFWt: If StaticRWT < 0 Then StaticRWT = Weight
-  const DownForce_init = f(vehicle.Weight_lbf);
-  let StaticRWT = M.sub(f(DownForce_init), f(vehicle.StaticFWt_lbf));
-  if (StaticRWT < 0) StaticRWT = f(vehicle.Weight_lbf);
+  let Ags0_g = vb6AssignSingle(lossFactor * force / vehicle.Weight_lbf);
+  if (isInitTraceEnabled()) recordInitStep('AGS0_UNCLAMPED', Ags0_g, '1024');
   
-  // CAXI = (1 - (TractionIndex - 1) * 0.01) / (TrackTempEffect ^ 0.25)
-  const CAXI_init = calcCAXI(env.TractionIndex, env.TrackTempEffect);
-  const AX_init = f(calcAX(env.isLandSpeed));
+  // VB6 1047: StaticRWT = DownForce - gc_StaticFWt.Value: If StaticRWT < 0 Then StaticRWT = gc_Weight.Value
+  // DownForce is Single (line 508), StaticFWt is CValue (Double)
+  // StaticRWT is Single (line 524)
+  const DownForce_init = vehicle.Weight_lbf;
+  let StaticRWT = vb6AssignSingle(DownForce_init - vehicle.StaticFWt_lbf);
+  if (StaticRWT < 0) StaticRWT = vb6AssignSingle(vehicle.Weight_lbf);
+  if (isInitTraceEnabled()) recordInitStep('STATIC_RWT', StaticRWT, '1047');
   
-  // CRTF = CAXI * AX * TireDia * (TireWidth + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ^ 2.15)
-  let CRTF_init = M.mul(M.mul(M.mul(M.mul(f(CAXI_init), AX_init), f(vehicle.TireDia_in)), M.add(f(vehicle.TireWidth_in), f(1))), M.add(f(0.92), M.mul(f(0.08), M.pow(M.div(f(StaticRWT), f(1900)), f(2.15)))));
-  if (vehicle.BodyStyle === 8) CRTF_init = M.mul(f(0.5), f(CRTF_init));
+  // VB6 1050: CAXI = (1 - (gc_TractionIndex.Value - 1) * 0.01) / (TrackTempEffect ^ 0.25)
+  // All literals are Double, TractionIndex is CValue (Double), TrackTempEffect is Single
+  // CAXI is Single (line 508)
+  const CAXI_init = vb6AssignSingle((1 - (env.TractionIndex - 1) * 0.01) / Math.pow(env.TrackTempEffect, 0.25));
+  if (isInitTraceEnabled()) recordInitStep('CAXI', CAXI_init, '1050');
   
-  // AMAX = (CRTF - DragForce) / Weight
-  const AMax_init = M.div(M.sub(f(CRTF_init), f(DragForce_launch)), f(vehicle.Weight_lbf));
+  // AX is Double constant from TIMESLIP.FRM line 551
+  const AX_init = AX;  // Double, no truncation needed for constant
+  if (isInitTraceEnabled()) recordInitStep('AX', vb6AssignSingle(AX_init), '551');
+  
+  // VB6 1051: CRTF = CAXI * AX * TireDia * (gc_TireWidth.Value + 1) * (0.92 + 0.08 * (StaticRWT / 1900) ^ 2.15)
+  // CAXI/StaticRWT are Single, AX is Double, TireDia/TireWidth are CValue (Double), literals are Double
+  // CRTF is Single (line 508)
+  let CRTF_init = vb6AssignSingle(CAXI_init * AX_init * vehicle.TireDia_in * (vehicle.TireWidth_in + 1) * (0.92 + 0.08 * Math.pow(StaticRWT / 1900, 2.15)));
+  // VB6 1052: If gc_BodyStyle.Value = 8 Then CRTF = 0.5 * CRTF
+  if (vehicle.BodyStyle === 8) CRTF_init = vb6AssignSingle(0.5 * CRTF_init);
+  if (isInitTraceEnabled()) recordInitStep('CRTF', CRTF_init, '1051');
+  
+  // VB6 1054: AMAX = (CRTF - DragForce) / gc_Weight.Value
+  // CRTF/DragForce are Single, Weight is CValue (Double)
+  // AMAX is Single (line 513)
+  const AMax_init = vb6AssignSingle((CRTF_init - DragForce_launch) / vehicle.Weight_lbf);
+  if (isInitTraceEnabled()) recordInitStep('AMAX', AMax_init, '1054');
   
   // VB6: TIMESLIP.FRM:1055-1056 - Clamp Ags0 to AMax/AMin
   // If Ags0 > AMAX Then Ags0 = AMAX: SLIP(L) = 1
   // If Ags0 < AMin Then Ags0 = AMin
   const Ags0_unclamped = Ags0_g;
-  if (Ags0_g > AMax_init) Ags0_g = AMax_init;
+  let SLIP_init = false;
+  if (Ags0_g > AMax_init) {
+    SLIP_init = true;  // Traction limited - set slip flag
+    Ags0_g = AMax_init;
+  }
   if (Ags0_g < AMin) Ags0_g = AMin;
+  if (isInitTraceEnabled()) {
+    recordInitStep('AGS0_FINAL', Ags0_g, '1055-1056');
+    recordInitStep('SLIP_FLAG', SLIP_init ? 1 : 0, '1055');
+  }
   
   // Debug: Log traction limit calculation
   console.log('[vb6InitState] Traction limit:', JSON.stringify({
@@ -1591,32 +2867,63 @@ export function vb6InitState(
     DragForce_launch,
   }));
   
-  // Return initial state with all values truncated to Float32 if in strict mode
+  // TRACE HOOK: Record INIT_DONE with all intermediate variables
+  if (VB6_TRACE_ENABLED) {
+    recordTracePoint(
+      0,  // stepIndex = 0 for init
+      'INIT_DONE',
+      {
+        time_s: 0,
+        dist_ft: 0,
+        vel_ftps: 0,
+        rpm: launchRPM,
+        AGS_g: Ags0_g,
+        gear: 1,
+      },
+      {
+        HP_launch,
+        HP_corrected,
+        TQ,
+        force,
+        Ags0_unclamped,
+        CAXI: CAXI_init,
+        AX: AX_init,
+        CRTF: CRTF_init,
+        AMax: AMax_init,
+        StaticRWT,
+        DragForce: DragForce_launch,
+        TireSlip: TireSlip_init,
+        lossFactor,
+      }
+    );
+  }
+  
+  // Return initial state with all values truncated to Single (VB6 semantics)
   return {
     L: 1,
-    time_s: f(0),
-    Vel_ftps: f(0), // VB6: TIMESLIP.FRM:1003 - Vel(L) = 0
-    Dist_ft: f(0),
-    AGS_g: f(Ags0_g),
-    EngRPM: f(launchRPM),
-    DSRPM: f(0),
+    time_s: vb6AssignSingle(0),
+    Vel_ftps: vb6AssignSingle(0), // VB6: TIMESLIP.FRM:1003 - Vel(L) = 0
+    Dist_ft: vb6AssignSingle(0),
+    AGS_g: vb6AssignSingle(Ags0_g),
+    EngRPM: vb6AssignSingle(launchRPM),
+    DSRPM: vb6AssignSingle(0),
     Gear: 1,
-    SLIP: false,
+    SLIP: SLIP_init,  // True if traction limited (Ags0 > AMAX)
     
-    Vel0_ftps: f(0),
-    Ags0_g: f(Ags0_g),
-    Dist0_ft: f(0),
-    DSRPM0: f(0),
+    Vel0_ftps: vb6AssignSingle(0),
+    Ags0_g: vb6AssignSingle(Ags0_g),
+    Dist0_ft: vb6AssignSingle(0),
+    DSRPM0: vb6AssignSingle(0),
     
     // VB6: TIMESLIP.FRM:1003 - Initial values before first step
     // RPM0 and Time0 are set DURING the step (lines 1092-1095), not at init
     // Initialize to values that will trigger the first-step special handling
-    RPM0: f(launchRPM),
-    Time0_s: f(0),
+    RPM0: vb6AssignSingle(launchRPM),
+    Time0_s: vb6AssignSingle(0),
     
-    AgsMax_g: f(Ags0_g),
-    TireGrowth: f(tireResult.TireGrowth),
-    TireCirFt: f(tireResult.TireCirFt),
+    AgsMax_g: vb6AssignSingle(Ags0_g),
+    TireGrowth: vb6AssignSingle(tireResult.TireGrowth),
+    TireCirFt: vb6AssignSingle(tireResult.TireCirFt),
     
     // Shift tracking
     ShiftFlag: 0,

@@ -5,7 +5,7 @@
 
 import { predictBaseline } from './pipeline';
 import type { PredictRequest } from '../domain/quarter/types';
-import { getModel, type PhysicsModelId, type SimInputs, type SimResult } from '../domain/physics';
+import { getModel, resolveModelId, type PhysicsModelId, type SimInputs, type SimResult } from '../domain/physics';
 
 /**
  * Power point for engine curve.
@@ -220,13 +220,16 @@ function hpDebugHash(hp?: any[]): string {
 self.onmessage = async (ev: MessageEvent) => {
   try {
     const msg = ev.data;
-    if (!msg?.model || !msg?.payload) throw new Error('Bad worker message');
+    if (!msg?.payload) throw new Error('Bad worker message');
+
+    // Resolve model ID safely (maps legacy/unknown IDs to VB6Exact)
+    const modelId = resolveModelId(msg.model);
 
     // 1) Deep-clone to avoid structured clone surprises
     const input = JSON.parse(JSON.stringify(msg.payload));
 
-    // VB6Exact model: Pass SimInputs directly without RSACLASSIC normalization
-    if (msg.model === 'VB6Exact') {
+    // VB6Exact model: Pass SimInputs directly without legacy normalization
+    if (modelId === 'VB6Exact') {
       console.log('[WORKER:VB6Exact] Running with SimInputs format', {
         hasVehicle: !!input.vehicle,
         vehicleName: input.vehicle?.name,
@@ -235,13 +238,13 @@ self.onmessage = async (ev: MessageEvent) => {
         raceLength: input.raceLength,
       });
       
-      const model = getModel(msg.model);
+      const model = getModel(modelId);
       const result = model.simulate(input);
       (self as any).postMessage({ ok: true, result });
       return;
     }
 
-    // 2) Normalize field names (aliases) and ensure powerHP exists (for RSACLASSIC/Blend)
+    // 2) Normalize field names (aliases) and ensure powerHP exists (for Blend/SimpleV1)
     normalizeInput(input);
 
     // 3) Validate
@@ -282,7 +285,7 @@ self.onmessage = async (ev: MessageEvent) => {
       input.flags.vb6Strict = msg.payload?.flags?.vb6Strict ?? true;
     }
 
-    const model = getModel(msg.model);
+    const model = getModel(modelId);
     const result = model.simulate(input);
     (self as any).postMessage({ ok: true, result });
   } catch (e: any) {

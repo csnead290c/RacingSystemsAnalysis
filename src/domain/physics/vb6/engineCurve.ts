@@ -5,12 +5,61 @@
  * peak HP and peak RPM are known. It uses lookup tables based on
  * HP/CID ratio to create a realistic curve shape.
  * 
- * From TIMESLIP.FRM lines 1758-1828
+ * ============================================================================
+ * VB6↔TS CROSSWALK (authoritative)
+ * ============================================================================
+ * Source: TIMESLIP.FRM lines 1758-1828
+ * 
+ * VB6 ENGINE subroutine:
+ * ```vb
+ * Private Sub ENGINE()
+ * Dim N As Integer
+ * Dim SX(16) As Single, sY(80) As Single, sz(5) As Single, sYS(16) As Single
+ * Dim TQPHP As Single, TQ As Single, TQR As Single, HPCID As Single
+ *     ' ... lookup table initialization ...
+ *     TQPHP = Z6 * gc_PeakHP.Value / gc_RPMPeakHP.Value
+ *     HPCID = (gc_PeakHP.Value / gc_Displacement.Value) / CalcWork
+ *     ' ... clamp HPCID ...
+ *     NHP = 16
+ *     For N = 1 To NHP
+ *         xrpm(N) = SX(N) * gc_RPMPeakHP.Value
+ *         If gc_FuelSystem.Value = 8 Then
+ *             TQ = sYS(N) * TQPHP
+ *         Else
+ *             Call DTABY(SX(), sz(), sY(), NHP, 5, 1, 1, SX(N), HPCID, TQR)
+ *             TQ = TQR * TQPHP
+ *         End If
+ *         yhp(N) = xrpm(N) * TQ / Z6
+ *         ztq(N) = TQ
+ *     Next
+ * End Sub
+ * ```
+ * 
+ * VB6 Variable Types:
+ *   SX(), sY(), sz(), sYS() - Single arrays (local)
+ *   TQPHP, TQ, TQR, HPCID   - Single (local)
+ *   xrpm(), yhp(), ztq()    - Single arrays (module-level, TIMESLIP.FRM:536-538)
+ *   Z6                      - Double constant (DECLARES.BAS:12, no suffix)
+ *   gc_*.Value              - Variant→Double (CValue returns Variant)
+ * 
+ * VB6 Coercion Rules:
+ *   1. TQPHP = Z6 * ... → computed in Double (Z6 is Double), truncated to Single
+ *   2. HPCID = ... → computed in Double, truncated to Single
+ *   3. xrpm(N) = SX(N) * peakRPM → Single * Double → Double, truncated to Single
+ *   4. TQ = TQR * TQPHP → Single * Single → Single (no promotion)
+ *   5. yhp(N) = xrpm(N) * TQ / Z6 → Single * Single / Double → Double, truncated to Single
+ * 
+ * TS Implementation:
+ *   - Uses vb6AssignSingle() at assignment boundaries to match VB6 truncation
+ *   - Computes in Double precision (JS default)
+ *   - Returns 1-indexed arrays to match VB6 module-level arrays
+ * ============================================================================
  */
 
 import { Z6 } from './constants';
 import { dtaby } from './dtaby';
 import { calcWork, type FuelSystemValue } from './calcWork';
+import { vb6AssignSingle } from './exactMath';
 
 // Normalized RPM points (fraction of peak RPM) - 0-indexed for DTABY
 const SX_0 = [
@@ -88,28 +137,30 @@ export interface EngineCurveResult {
  * Build synthetic HP curve from peak HP/RPM (QuarterJr method)
  * 
  * This replicates the VB6 ENGINE subroutine from TIMESLIP.FRM
+ * with correct Single truncation at assignment boundaries.
  */
 export function buildEngineCurve(inputs: EngineCurveInputs): EngineCurveResult {
   const { peakHP, peakRPM, displacement_cid, fuelSystem } = inputs;
   
-  // Calculate torque at peak HP
-  // TQPHP = Z6 * gc_PeakHP.Value / gc_RPMPeakHP.Value
-  const TQPHP = Z6 * peakHP / peakRPM;
+  // VB6 1804: TQPHP = Z6 * gc_PeakHP.Value / gc_RPMPeakHP.Value
+  // Z6 is Double, gc_*.Value is Variant→Double, TQPHP is Single
+  // Computed in Double, truncated to Single on assignment
+  const TQPHP = vb6AssignSingle(Z6 * peakHP / peakRPM);
   
-  // Calculate HP/CID ratio (normalized by CalcWork based on fuel system)
-  // HPCID = (gc_PeakHP.Value / gc_Displacement.Value) / CalcWork
+  // VB6 1806: HPCID = (gc_PeakHP.Value / gc_Displacement.Value) / CalcWork
+  // Computed in Double, truncated to Single on assignment
   const workMultiplier = calcWork(fuelSystem as FuelSystemValue);
-  let HPCID = (peakHP / displacement_cid) / workMultiplier;
+  let HPCID = vb6AssignSingle((peakHP / displacement_cid) / workMultiplier);
   
-  // Clamp HP/CID ratio to valid range
+  // VB6 1807-1812: Clamp HP/CID ratio to valid range
   if (fuelSystem <= 5) {
     // Naturally aspirated
-    if (HPCID < SZ[1]) HPCID = SZ[1]; // 0.7
+    if (HPCID < SZ[1]) HPCID = vb6AssignSingle(SZ[1]); // 0.7
   } else {
     // Supercharged
-    if (HPCID < SZ[2]) HPCID = SZ[2]; // 1.2
+    if (HPCID < SZ[2]) HPCID = vb6AssignSingle(SZ[2]); // 1.2
   }
-  if (HPCID > SZ[5]) HPCID = SZ[5]; // 3.4
+  if (HPCID > SZ[5]) HPCID = vb6AssignSingle(SZ[5]); // 3.4
   
   const xrpm: number[] = [0]; // 1-indexed
   const yhp: number[] = [0];
@@ -117,22 +168,28 @@ export function buildEngineCurve(inputs: EngineCurveInputs): EngineCurveResult {
   
   const NHP = 16;
   
+  // VB6 1815-1827: Build curve points
   for (let n = 1; n <= NHP; n++) {
-    // RPM at this point
-    xrpm[n] = SX[n] * peakRPM;
+    // VB6 1816: xrpm(N) = SX(N) * gc_RPMPeakHP.Value
+    // SX is Single, peakRPM is Double → computed in Double, truncated to Single
+    xrpm[n] = vb6AssignSingle(SX[n] * peakRPM);
     
     let TQ: number;
     if (fuelSystem === 8) {
-      // Supercharged nitro - use special curve
-      TQ = SYS[n] * TQPHP;
+      // VB6 1819: TQ = sYS(N) * TQPHP (supercharged nitro)
+      // Both Single → stays Single
+      TQ = vb6AssignSingle(SYS[n] * TQPHP);
     } else {
-      // Everything else - interpolate from lookup table
-      const TQR = interpolateTorqueRatio(SX[n], HPCID);
-      TQ = TQR * TQPHP;
+      // VB6 1821-1822: Call DTABY(..., TQR): TQ = TQR * TQPHP
+      // TQR is Single (ByRef output), TQPHP is Single → stays Single
+      const TQR = vb6AssignSingle(interpolateTorqueRatio(SX[n], HPCID));
+      TQ = vb6AssignSingle(TQR * TQPHP);
     }
     
-    // HP = RPM * TQ / Z6
-    yhp[n] = xrpm[n] * TQ / Z6;
+    // VB6 1825: yhp(N) = xrpm(N) * TQ / Z6
+    // xrpm and TQ are Single, Z6 is Double → computed in Double, truncated to Single
+    yhp[n] = vb6AssignSingle(xrpm[n] * TQ / Z6);
+    // VB6 1826: ztq(N) = TQ (Single to Single, no change)
     ztq[n] = TQ;
   }
   

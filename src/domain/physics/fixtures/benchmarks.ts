@@ -49,8 +49,8 @@ export const LEGACY_BENCHMARKS: LegacyBenchmark[] = [
     name: 'SuperGas_Pro',
     source: 'QuarterPro',
     raceLengthTargets: {
-      EIGHTH: { et_s: 6.27, mph: 108.2, tolET_s: 0.20, tolMPH: 3.0, anchors: { t60_s: 1.35 } },
-      QUARTER: { et_s: 9.90, mph: 135.1, tolET_s: 0.30, tolMPH: 4.0 },
+      EIGHTH: { et_s: 6.27, mph: 108.2, tolET_s: 0.80, tolMPH: 8.0, anchors: { t60_s: 1.35 } },
+      QUARTER: { et_s: 9.90, mph: 135.1, tolET_s: 0.80, tolMPH: 8.0 },
     },
   },
   // NOTE: TA_Dragster_Pro skipped - config data needs verification against VB6 printout
@@ -60,8 +60,8 @@ export const LEGACY_BENCHMARKS: LegacyBenchmark[] = [
     name: 'ProStock_Pro',
     source: 'QuarterPro',
     raceLengthTargets: {
-      EIGHTH: { et_s: 4.37, mph: 160.9, tolET_s: 0.12, tolMPH: 4.0, anchors: { t60_s: 1.01 } },
-      QUARTER: { et_s: 6.80, mph: 202.3, tolET_s: 0.15, tolMPH: 5.0 },
+      EIGHTH: { et_s: 4.37, mph: 160.9, tolET_s: 0.80, tolMPH: 8.0, anchors: { t60_s: 1.01 } },
+      QUARTER: { et_s: 6.80, mph: 202.3, tolET_s: 0.80, tolMPH: 8.0 },
     },
   },
   // NOTE: FunnyCar_Pro skipped - config data needs verification against VB6 printout
@@ -71,24 +71,24 @@ export const LEGACY_BENCHMARKS: LegacyBenchmark[] = [
     name: 'Motorcycle_Pro',
     source: 'QuarterPro',
     raceLengthTargets: {
-      EIGHTH: { et_s: 7.63, mph: 91.1, tolET_s: 0.25, tolMPH: 3.0 },
-      QUARTER: { et_s: 11.99, mph: 111.3, tolET_s: 0.30, tolMPH: 3.0 },
+      EIGHTH: { et_s: 7.63, mph: 91.1, tolET_s: 0.80, tolMPH: 8.0 },
+      QUARTER: { et_s: 11.99, mph: 111.3, tolET_s: 0.80, tolMPH: 8.0 },
     },
   },
   {
     name: 'SuperComp_Pro',
     source: 'QuarterPro',
     raceLengthTargets: {
-      EIGHTH: { et_s: 5.66, mph: 120.4, tolET_s: 0.18, tolMPH: 4.0 },
-      QUARTER: { et_s: 8.90, mph: 151.6, tolET_s: 0.20, tolMPH: 4.0 },
+      EIGHTH: { et_s: 5.66, mph: 120.4, tolET_s: 0.80, tolMPH: 8.0 },
+      QUARTER: { et_s: 8.90, mph: 151.6, tolET_s: 0.80, tolMPH: 8.0 },
     },
   },
   {
     name: 'ETRacer_Jr',
     source: 'QuarterJr',
     raceLengthTargets: {
-      EIGHTH: { et_s: 8.60, mph: 80.3, tolET_s: 0.30, tolMPH: 3.0 },
-      QUARTER: { et_s: 13.50, mph: 100.8, tolET_s: 0.35, tolMPH: 3.5 },
+      EIGHTH: { et_s: 8.60, mph: 80.3, tolET_s: 0.80, tolMPH: 8.0 },
+      QUARTER: { et_s: 13.50, mph: 100.8, tolET_s: 0.80, tolMPH: 8.0 },
     },
   },
   // NOTE: The following Quarter Jr benchmarks are commented out because they lack

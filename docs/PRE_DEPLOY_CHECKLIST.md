@@ -145,3 +145,33 @@ If something goes wrong, revert in this order:
 - If v4 is not run, capability computation falls back to code-level `PLAN_CAPABILITIES` automatically
 
 **Nothing blocks today's deploy if v4 migration is deferred.**
+
+---
+
+## 10. RC2 — Physics/ET/Engine Parity (2026-02-13)
+
+**Scope:** VB6 per-operation Float32 truncation parity refactor (frontend-only).
+
+### Pre-Deploy Checks
+- [ ] `npm run build` succeeds (tsc clean + vite build)
+- [ ] Release-gate tests pass: `npx vitest run src/domain/config src/dev/__tests__` (428/428)
+- [ ] Integration tests: no new regressions vs main (12 pre-existing OK)
+- [ ] Branch: `release/2026-02-13-rc2-physics`
+
+### Deploy Steps (Frontend Only)
+- [ ] `npm run build` → produces `dist/`
+- [ ] rsync `dist/` to `public_html/` excluding `api/`, `.htaccess`, `.well-known/`
+- [ ] **NO** API file changes needed
+- [ ] **NO** database migrations needed
+- [ ] **DO NOT** touch `config.php`
+
+### Post-Deploy Smoke Tests
+- [ ] `/predict` — run a simulation, verify ET/MPH output appears
+- [ ] `/engine-sim` — dashboard loads, tabs work, Pro mode gating intact
+- [ ] `/admin` — Plans tab still shows `dbBacked: true`
+- [ ] Browser console — no JS errors on Predict or Engine Sim pages
+- [ ] `/api/capabilities-endpoint.php` — still returns 401 unauthenticated
+
+### Rollback
+- Revert `dist/` to RC1 build (API and DB are unchanged)
+- `git checkout main && npm run build` → rsync that dist/

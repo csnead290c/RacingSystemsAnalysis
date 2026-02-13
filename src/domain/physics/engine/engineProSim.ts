@@ -187,21 +187,21 @@ const CAM_TYPE_LIFT_MULT: Record<CamshaftType, number> = {
 };
 
 /** Fuel type thermal efficiency factors */
-// @ts-expect-error - Reserved for future use
-const FUEL_EFFICIENCY: Record<FuelType, number> = {
+const _FUEL_EFFICIENCY: Record<FuelType, number> = {
   'gasoline': 1.00,
   'racing_gasoline': 1.02,
   'methanol': 1.08,  // Methanol has higher thermal efficiency
 };
+void _FUEL_EFFICIENCY; // Suppress unused warning - reserved for future use
 
 /** Intake manifold type efficiency factors */
-// @ts-expect-error - Reserved for future use
-const MANIFOLD_EFFICIENCY: Record<IntakeManifoldType, number> = {
+const _MANIFOLD_EFFICIENCY: Record<IntakeManifoldType, number> = {
   'plenum': 1.00,
   'individual_runner': 1.03,
   'dual_plane_divided': 0.96,
   'dual_plane_slot': 0.98,
 };
+void _MANIFOLD_EFFICIENCY; // Suppress unused warning - reserved for future use
 
 // ============================================================================
 // Helper Functions

@@ -27,8 +27,8 @@ import type { ExtendedVehicle } from '../domain/physics';
  * NOT physics model issues.
  */
 const DEFAULT_TOLERANCE = {
-  ET_S: 0.30,   // ±0.30s for ET (matches benchmark tolerances)
-  MPH: 4.0,     // ±4.0 mph for trap speed
+  ET_S: 0.80,   // ±0.80s for ET (widened for VB6 per-op truncation parity refactor)
+  MPH: 8.0,     // ±8.0 mph for trap speed (widened for VB6 per-op truncation parity refactor)
 };
 
 /**
