@@ -196,11 +196,20 @@ export function verifyMechDetails6650(): { pass: boolean; errors: string[] } {
 }
 
 /**
+ * Base case flowbench data as 1-indexed arrays for TABY interpolation.
+ * Built from VB6_EXPECTED_FLOWBENCH_TABLE + max lift point (0.550/250.0).
+ * These were previously hardcoded in vb6FlowDetails.ts.
+ */
+const VB6_FLOWBENCH_LIFT_1IDX = [0, 0.100, 0.200, 0.300, 0.400, 0.500, 0.550, 0.600, 0.700, 0.800];
+const VB6_FLOWBENCH_FLOW_1IDX = [0, 56.6, 116.0, 169.4, 212.6, 241.3, 250.0, 258.7, 262.9, 264.2];
+const VB6_FLOWBENCH_LAST_ROW = 9;
+
+/**
  * Verify Flow Details @ 6650 RPM against VB6
  */
 export function verifyFlowDetails6650(): { pass: boolean; errors: string[] } {
   const errors: string[] = [];
-  const { stroke_in, rodLength_in, bore_in, intakeValveDia_in, numIntakeValvesPerCyl, intakeDuration050_deg, intakeLobeCenterline_deg, maxIntakeValveLift_in } = VB6_BASE_CASE;
+  const { stroke_in, rodLength_in, bore_in, intakeValveDia_in, numIntakeValvesPerCyl, intakeDuration050_deg, intakeLobeCenterline_deg, maxIntakeValveLift_in, testPressure_inH2O } = VB6_BASE_CASE;
   const rpm = 6650;
   
   const valveSeatData = calcDefaultValveSeatData(intakeValveDia_in);
@@ -213,7 +222,12 @@ export function verifyFlowDetails6650(): { pass: boolean; errors: string[] } {
     intakeDuration050_deg,
     intakeLobeCenterline_deg,
     maxIntakeValveLift_in,
-    valveSeatData
+    valveSeatData,
+    undefined, // camType default
+    VB6_FLOWBENCH_LIFT_1IDX,
+    VB6_FLOWBENCH_FLOW_1IDX,
+    VB6_FLOWBENCH_LAST_ROW,
+    testPressure_inH2O,
   );
   
   if (result.length !== VB6_EXPECTED_FLOW_DETAILS_6650.length) {

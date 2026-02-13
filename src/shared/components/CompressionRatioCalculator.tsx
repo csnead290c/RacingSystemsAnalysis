@@ -4,7 +4,7 @@
  * Matches VB6 Compression Ratio Worksheet - uses inline styles for consistency
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Calculator } from 'lucide-react';
 
 interface CompressionRatioCalculatorProps {
@@ -66,6 +66,23 @@ export function CompressionRatioCalculator({
     onApply(compressionRatio);
     onClose();
   };
+
+  // Focus trap: keeps Tab cycling inside the modal
+  const trapFocus = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const all = e.currentTarget.querySelectorAll<HTMLElement>(
+      'input:not(:disabled), button:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"]):not(:disabled)'
+    );
+    const focusable = Array.from(all).filter(el => el.offsetParent !== null);
+    if (focusable.length === 0) { e.preventDefault(); return; }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }, []);
 
   const modalStyles = {
     overlay: {
@@ -196,7 +213,7 @@ export function CompressionRatioCalculator({
 
   return (
     <div style={modalStyles.overlay} onClick={onClose}>
-      <div style={modalStyles.modal} onClick={e => e.stopPropagation()}>
+      <div style={modalStyles.modal} onClick={e => e.stopPropagation()} onKeyDown={trapFocus}>
         {/* Header */}
         <div style={modalStyles.header}>
           <div style={modalStyles.headerTitle}>

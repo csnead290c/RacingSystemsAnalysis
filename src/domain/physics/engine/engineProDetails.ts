@@ -5,7 +5,7 @@
 
 import type { EngineProConfig } from './engineProSim';
 import type { EngineSimConfig } from './engineAdapter';
-import { DTABY } from './vb6Interpolation';
+import { DTABY, TABY } from './vb6Interpolation';
 import { getCalculatedCamDefaults } from './camDefaults';
 
 const PI = Math.PI;
@@ -71,7 +71,8 @@ export function calcMechDetails(
     }
   } else {
     // VB6 table display points only (lines 110-114)
-    const AngMPS = Math.asin(1 / Math.sqrt(1 + LRQS ** 2)) * 180 / PI;
+    // VB6 ENGPERF.BAS line 65: AngMPS = 62 + (750 * (LRQS - 0.958)) ^ 0.4027
+    const AngMPS = 62 + Math.pow(750 * (LRQS - 0.958), 0.4027);
     angles = [5, 15, 30, 45, 60, AngMPS, 80, 85, 90, 105, 120, 135, 150, 165, 180];
   }
   
@@ -269,9 +270,33 @@ function calcCurtainArea(
   return work;
 }
 
+/** Flowbench data + seat geometry for Flow Details calculation */
+export interface FlowDetailsConfig {
+  /** 1-indexed lift array (element 0 is dummy) — VB6 xlift() */
+  flowbenchLifts_1idx: number[];
+  /** 1-indexed flow array (element 0 is dummy) — VB6 yflow() */
+  flowbenchFlows_1idx: number[];
+  /** Number of valid data points — VB6 LastRow */
+  lastRow: number;
+  /** Flowbench test pressure (inH2O) — VB6 gc_DeltaP */
+  testPressure_inH2O: number;
+  /** Valve seat throat diameter (in) — VB6 gc_SeatDia */
+  seatDia_in: number;
+  /** Valve seat angle (deg) — VB6 gc_VSAngle */
+  seatAngle_deg: number;
+  /** Valve seat width (in) — VB6 gc_VSWidth */
+  seatWidth_in: number;
+  /** Valve stem diameter (in) — VB6 gc_StemDia */
+  stemDia_in: number;
+}
+
 /**
  * Calculate Flow Details at a specific RPM
  * Ports VB6 CalcFlowDetails from CDETAILS.CLS lines 274-657
+ *
+ * Now accepts optional flowbench data + seat geometry via flowConfig.
+ * When provided, uses TABY interpolation and quadratic pressure drop solver
+ * matching VB6 exactly. When omitted, falls back to simplified flow demand.
  */
 export function calcFlowDetails(
   rpm: number,
@@ -283,8 +308,11 @@ export function calcFlowDetails(
   duration_deg: number,
   lobeCenterline_deg: number,
   maxLift_in: number,
-  camType: number
+  camType: number,
+  flowConfig?: FlowDetailsConfig
 ): FlowDetailPoint[] {
+  const PSTD = 406.8; // VB6 standard pressure (inH2O)
+
   // VB6 LRQS = rod / stroke (not rod / (stroke/2))
   const LRQS = rodLength_in / stroke_in;
   // VB6 AngMPS formula from ENGPERF.BAS line 65
@@ -348,6 +376,13 @@ export function calcFlowDetails(
   const RSTD = 53.345; // VB6 gas constant from DECLARES.BAS
   const spd = Math.sqrt(1.4 * GC * RSTD * degr);
   
+  // Flowbench data for TABY interpolation
+  const hasFlowbench = flowConfig && flowConfig.lastRow > 0;
+  const xlifts = flowConfig?.flowbenchLifts_1idx ?? [0];
+  const yflows = flowConfig?.flowbenchFlows_1idx ?? [0];
+  const nRows = flowConfig?.lastRow ?? 0;
+  const testP = flowConfig?.testPressure_inH2O ?? 28.0;
+
   const points: FlowDetailPoint[] = [];
   
   for (const angleData of angles) {
@@ -361,7 +396,13 @@ export function calcFlowDetails(
     const vl = calcValveLift(angleDeg, duration_deg, lobeCenterline_deg, maxLift_in, camType);
     
     // Calculate flow area (VB6 line 402)
-    const flowArea = calcCurtainArea(vl, valveDia_in, numValves);
+    const flowArea = calcCurtainArea(
+      vl, valveDia_in, numValves,
+      flowConfig?.seatDia_in,
+      flowConfig?.stemDia_in,
+      flowConfig?.seatAngle_deg,
+      flowConfig?.seatWidth_in
+    );
     
     // Calculate piston position (VB6 line 406)
     const pxs = (stroke_in / 2) * (1 + lrqs2 - zcos - Math.sqrt(lrqsq - zsin * zsin));
@@ -374,10 +415,38 @@ export function calcFlowDetails(
     const zang = ang - dt * (rpm / 60) * 2 * PI;
     const zsinhp = Math.sin(zang);
     const zxs = zsinhp + (Math.sin(2 * zang) / lrqs4) / Math.sqrt(1 - zsinhp * zsinhp / lrqsq);
-    const cfmxs = zhp * zxs * BArea / 144;
+    let cfmxs = zhp * zxs * BArea / 144;
     
-    // Calculate flow velocity (VB6 line 441)
-    const vel = flowArea > 0 ? 2.4 * cfmxs / flowArea : 0;
+    // VB6 lines 419-442: Quadratic pressure drop solver (when flowbench data available)
+    let vpd = 0;
+    let vel = 0;
+    if (hasFlowbench && vl > 0.05 && flowArea > 0) {
+      // VB6 line 427: TABY interpolation for flow at this lift
+      const flowAtLift = TABY(xlifts, yflows, nRows, 1, vl);
+
+      // VB6 lines 419-423: dump loss factor
+      const qdump = numValves === 1 ? 1.593 : 1.204;
+
+      // VB6 lines 428-431: quadratic coefficients
+      const A = Math.pow(cfmxs * qdump / PSTD, 2);
+      const B = -cfmxs * cfmxs * 2 * qdump / PSTD - flowAtLift * flowAtLift / testP;
+      const c = cfmxs * cfmxs;
+      const disc = B * B - 4 * A * c;
+      if (disc >= 0) {
+        vpd = (-B - Math.sqrt(disc)) / (2 * A);
+        // VB6 line 437: adjust flow demand
+        cfmxs = cfmxs * (1 - qdump * vpd / PSTD) / (1.044429 * (1 - 0.618 * vpd / PSTD));
+        // VB6 line 441: velocity
+        vel = 2.4 * cfmxs / flowArea;
+        if (vel < 0) vpd = -vpd;
+      }
+    } else {
+      // Simplified path (no flowbench data)
+      vel = flowArea > 0 ? 2.4 * cfmxs / flowArea : 0;
+    }
+
+    // VB6 clamps negative CFM to 0 at valve opening/closing
+    if (cfmxs < 0 && vl <= 0.05) cfmxs = 0;
     
     points.push({
       angle_deg: angleDeg,
@@ -387,10 +456,167 @@ export function calcFlowDetails(
       pistonSpeed_fpm: vxs,
       flowDemand_cfm: cfmxs,
       flowVelocity_fps: vel,
-      testPressure_inH2O: 0 // Simplified - VB6 calculates from quadratic equation
+      testPressure_inH2O: Math.round(vpd)
     });
   }
   
+  return points;
+}
+
+/**
+ * Smooth graph point for Flow Details chart (100-point curve).
+ * Matches VB6 CDETAILS.CLS lines 581-653 graph data loop.
+ */
+export interface FlowDetailGraphPoint {
+  angle_deg: number;
+  flowDemand_cfm: number;
+  flowVelocity_fps: number;
+  flowArea_sqin: number;
+}
+
+/**
+ * VB6-specific axis scaling seed values extracted from the 12-point table data.
+ * VB6 uses specific indices for axis max seeds:
+ *   - leftYSeed = FlowDemand(6) (the 90° / 6th table point)
+ *   - rightYSeed = FlowArea(7) (the ILC / 7th table point — max lift)
+ *   - firstAngle = Angles(1), lastAngle = Angles(12)
+ *   - leftYMax = max(leftYSeed, all table velocities)
+ */
+export interface FlowDetailsAxisInputs {
+  firstAngle: number;
+  lastAngle: number;
+  leftYMax: number;   // max(FlowDemand(6), all table velocities)
+  rightYMax: number;  // FlowArea(7) — area at max lift
+}
+
+/**
+ * Extract VB6-consistent axis scaling inputs from the 12-point table data.
+ * VB6 CDETAILS.CLS lines 493-542.
+ */
+export function calcFlowDetailsAxisInputs(tablePoints: FlowDetailPoint[]): FlowDetailsAxisInputs {
+  const n = tablePoints.length;
+  const firstAngle = n > 0 ? tablePoints[0].angle_deg : 0;
+  const lastAngle = n > 0 ? tablePoints[n - 1].angle_deg : 180;
+
+  // VB6 line 495: .YAxisMax = FlowDemand(6) — the 6th table point (1-indexed)
+  // In 0-indexed that's index 5
+  let leftYMax = n > 5 ? tablePoints[5].flowDemand_cfm : 0;
+
+  // VB6 lines 496-502: check all 12 velocities
+  for (const p of tablePoints) {
+    if (p.flowDemand_cfm > 0 && p.flowArea_sqin > 0) {
+      const vel = 2.4 * p.flowDemand_cfm / p.flowArea_sqin;
+      if (vel > leftYMax) leftYMax = vel;
+    }
+  }
+
+  // VB6 line 542: .YAxisMax = FlowArea(7) — the 7th table point (1-indexed)
+  // In 0-indexed that's index 6
+  const rightYMax = n > 6 ? tablePoints[6].flowArea_sqin : 0;
+
+  return { firstAngle, lastAngle, leftYMax, rightYMax };
+}
+
+/**
+ * Generate 100-point smooth curve for Flow Details chart.
+ * Ports VB6 CDETAILS.CLS lines 581-653 graph data loop exactly.
+ *
+ * VB6 sweeps from ang1 = ILC - duration/2 to ang1 + duration
+ * with 100 evenly spaced points, computing demand, velocity, and area
+ * at each point using the same physics as the table calculation.
+ */
+export function calcFlowDetailsGraph(
+  rpm: number,
+  stroke_in: number,
+  rodLength_in: number,
+  bore_in: number,
+  valveDia_in: number,
+  numValves: number,
+  duration_deg: number,
+  lobeCenterline_deg: number,
+  maxLift_in: number,
+  camType: number,
+  flowConfig?: FlowDetailsConfig
+): FlowDetailGraphPoint[] {
+  const PSTD = 406.8;
+  const LRQS = rodLength_in / stroke_in;
+  const lrqs2 = 2 * LRQS;
+  const lrqsq = lrqs2 * lrqs2;
+  const lrqs4 = 4 * LRQS;
+  const BArea = PI * bore_in * bore_in / 4;
+  const zhp = rpm * PI * stroke_in / 12;
+  const degr = 60 + 459.67;
+  const RSTD = 53.345;
+  const spd = Math.sqrt(1.4 * GC * RSTD * degr);
+
+  const hasFlowbench = flowConfig && flowConfig.lastRow > 0;
+  const xlifts = flowConfig?.flowbenchLifts_1idx ?? [0];
+  const yflows = flowConfig?.flowbenchFlows_1idx ?? [0];
+  const nRows = flowConfig?.lastRow ?? 0;
+  const testP = flowConfig?.testPressure_inH2O ?? 28.0;
+
+  // VB6 line 582: ang1 = gc_WSInLobeCL.Value - gc_WSInCamDur.Value / 2
+  const ang1 = lobeCenterline_deg - duration_deg / 2;
+  const numPoints = 100;
+  const points: FlowDetailGraphPoint[] = [];
+
+  for (let i = 1; i <= numPoints; i++) {
+    // VB6 line 586: angx = ang1 + (i-1) * duration / (numPoints-1)
+    const angx = ang1 + (i - 1) * duration_deg / (numPoints - 1);
+    const ang = angx * PI / 180;
+    const zsin = Math.sin(ang);
+    const zcos = Math.cos(ang);
+    const zsin2 = Math.sin(2 * ang);
+
+    // Valve lift
+    const vl = calcValveLift(angx, duration_deg, lobeCenterline_deg, maxLift_in, camType);
+
+    // Flow area
+    const garea = calcCurtainArea(
+      vl, valveDia_in, numValves,
+      flowConfig?.seatDia_in, flowConfig?.stemDia_in,
+      flowConfig?.seatAngle_deg, flowConfig?.seatWidth_in
+    );
+
+    // Piston position (VB6 line 610)
+    const pxs = (stroke_in / 2) * (1 + lrqs2 - zcos - Math.sqrt(lrqsq - zsin * zsin));
+
+    // Piston speed (VB6 line 613)
+    const vxs = zhp * (zsin + (zsin2 / lrqs4) / Math.sqrt(1 - zsin * zsin / lrqsq));
+
+    // Flow demand (VB6 lines 616-620)
+    const dt = ((pxs + 0.1 * valveDia_in) / 12) / (spd - vxs / 60);
+    const zang2 = ang - dt * (rpm / 60) * 2 * PI;
+    const zsinhp = Math.sin(zang2);
+    const zxs = zsinhp + (Math.sin(2 * zang2) / lrqs4) / Math.sqrt(1 - zsinhp * zsinhp / lrqsq);
+    let cfmxs = zhp * zxs * BArea / 144;
+
+    // Quadratic solver (VB6 lines 623-641)
+    let vel = 0;
+    if (hasFlowbench && vl > 0.05 && garea > 0) {
+      const flowAtLift = TABY(xlifts, yflows, nRows, 1, vl);
+      const qdump = numValves === 1 ? 1.593 : 1.204;
+      const A = Math.pow(cfmxs * qdump / PSTD, 2);
+      const B = -cfmxs * cfmxs * 2 * qdump / PSTD - flowAtLift * flowAtLift / testP;
+      const c = cfmxs * cfmxs;
+      const disc = B * B - 4 * A * c;
+      if (disc >= 0) {
+        const vpd = (-B - Math.sqrt(disc)) / (2 * A);
+        cfmxs = cfmxs * (1 - qdump * vpd / PSTD) / (1.044429 * (1 - 0.618 * vpd / PSTD));
+        vel = 2.4 * cfmxs / garea;
+      }
+    } else {
+      vel = garea > 0 ? 2.4 * cfmxs / garea : 0;
+    }
+
+    points.push({
+      angle_deg: angx,
+      flowDemand_cfm: cfmxs,
+      flowVelocity_fps: vel,
+      flowArea_sqin: garea,
+    });
+  }
+
   return points;
 }
 

@@ -22,6 +22,63 @@ import type { EngineOutputs } from '../domain/physics/engine/engineTypes';
 import { generateVB6DynoCurve } from '../domain/physics/engine/vb6CurveGen';
 import { calcMechDetails, calcFlowDetails, calcRecommendations } from '../domain/physics/engine/engineProDetails';
 import { CompressionRatioCalculator } from '../shared/components/CompressionRatioCalculator';
+import {
+  calcCarbCfm,
+  clampNumBoresPrimary,
+  clampNumBoresSecondary,
+  clampThrottleDia,
+  clampVenturiDia,
+  venturiDiaLimits,
+  parseNumericInput,
+  formatCfm,
+  formatDia,
+  CARB_WS_DEFAULTS,
+  type CarbWorksheetInputs,
+  type ThrottleType,
+} from '../domain/physics/engine/worksheets/carbCfmWorksheet';
+import {
+  calcCircularArea,
+  calcEllipticalArea,
+  calcRectangularArea,
+  calcAnnularArea,
+  parseCSAInput,
+  formatDimension,
+  formatArea,
+  CSA_DEFAULTS,
+  type CSAWorksheetState,
+} from '../domain/physics/engine/worksheets/csaWorksheet';
+import {
+  calcWSCSArea,
+  calcFlowStuff,
+  calcSeatPer,
+  calcSeatDia,
+  estSeatDia,
+  calcVelStd,
+  calcFromFlowVel,
+  calcFromFlowFlux,
+  calcFromFVIndex,
+  clampSeatPer,
+  clampVSAngle,
+  clampFVIndex,
+  parseWSInput,
+  formatDim3,
+  formatDec1,
+  CS_AREA_DEFAULTS as INTAKE_CS_DEFAULTS,
+  FLOW_DEFAULTS as INTAKE_FLOW_DEFAULTS,
+  type CSAreaInputs,
+  type FlowInputs,
+} from '../domain/physics/engine/worksheets/intakeFlowWorksheet';
+import {
+  initAllFieldConstraints,
+  setValue,
+  vb6Val,
+  formatValue,
+  updateField,
+  recomputeOnCommit,
+  recomputeOnCamTypeChange,
+  type FieldKey,
+  type FieldConstraint,
+} from '../domain/physics/engine/engineConstraints';
 
 // Cam type mapping for flow details
 const CAM_TYPE_MAP: Record<string, number> = {
@@ -34,12 +91,356 @@ const CAM_TYPE_MAP: Record<string, number> = {
   'hydraulic_flat_tappet': 6,
 };
 
+// VB6 manifold type: 1=plenum, 2=IR, 3=dual_plane_divided, 4=dual_plane_slot
+const MANIFOLD_TYPE_MAP: Record<string, number> = {
+  'plenum': 1,
+  'individual_runner': 2,
+  'dual_plane_divided': 3,
+  'dual_plane_slot': 4,
+};
+
 export default function EngineSim() {
   const { features } = useSubscription();
   const [config, setConfig] = useState<EngineSimConfig>(createDefaultEngineProConfig());
-  const [activeTab, setActiveTab] = useState<'performance' | 'mech' | 'flow' | 'recommendations'>('performance');
+  const [activeTab, setActiveTab] = useState<'performance' | 'mech' | 'flow' | 'recommendations' | 'ws_cr' | 'ws_carb' | 'ws_intake' | 'ws_csa'>('performance');
   const [selectedRPM, setSelectedRPM] = useState<'peakTQ' | 'peakHP' | 'shift' | 'redline'>('peakHP');
   const [showCRCalculator, setShowCRCalculator] = useState(false);
+
+  // --- VB6 cValue constraint layer ---
+  const [constraints, setConstraints] = useState(() => initAllFieldConstraints());
+
+  // Local text buffers: hold raw typing until blur/Enter commits.
+  const [boreTxt, setBoreTxt] = useState(() => String(config.bore_in));
+  const [strokeTxt, setStrokeTxt] = useState(() => String(config.stroke_in));
+  const [rodTxt, setRodTxt] = useState(() => String(config.rodLength_in));
+  const [refBoreTxt, setRefBoreTxt] = useState(() => String(config.flowTestBoreDia_in));
+  const [nivTxt, setNivTxt] = useState(() => String(config.numIntakeValvesPerCyl));
+  const [valveDiaTxt, setValveDiaTxt] = useState(() => String(config.intakeValveDia_in));
+  const [maxInFlowTxt, setMaxInFlowTxt] = useState(() => String(config.maxIntakeFlow_cfm));
+  const [deltaPTxt, setDeltaPTxt] = useState(() => String(config.flowTestPressure_inH2O));
+  const [carbCFMTxt, setCarbCFMTxt] = useState(() => String(config.throttleCFM_at_1_5inHg));
+
+  // --- Carb CFM Worksheet state (VB6: CARBCFM.FRM) ---
+  const [carbWS, setCarbWS] = useState<CarbWorksheetInputs>(() => ({ ...CARB_WS_DEFAULTS }));
+  const [carbWSTxt, setCarbWSTxt] = useState({
+    numBoresPrimary: String(CARB_WS_DEFAULTS.numBoresPrimary),
+    throttleDiaPrimary: formatDia(CARB_WS_DEFAULTS.throttleDiaPrimary),
+    venturiDiaPrimary: formatDia(CARB_WS_DEFAULTS.venturiDiaPrimary),
+    numBoresSecondary: String(CARB_WS_DEFAULTS.numBoresSecondary),
+    throttleDiaSecondary: formatDia(CARB_WS_DEFAULTS.throttleDiaSecondary),
+    venturiDiaSecondary: formatDia(CARB_WS_DEFAULTS.venturiDiaSecondary),
+  });
+  const carbWSResult = useMemo(() => calcCarbCfm(carbWS), [carbWS]);
+
+  // Commit a carb worksheet field (VB6 _LostFocus semantics)
+  function commitCarbWSField(field: keyof CarbWorksheetInputs, raw: string) {
+    const parsed = parseNumericInput(raw);
+    setCarbWS(prev => {
+      const next = { ...prev };
+      switch (field) {
+        case 'numBoresPrimary':
+          next.numBoresPrimary = clampNumBoresPrimary(parsed);
+          break;
+        case 'throttleDiaPrimary': {
+          next.throttleDiaPrimary = clampThrottleDia(parsed);
+          // VB6 SetTVDia: update venturi limits when throttle dia changes
+          next.venturiDiaPrimary = clampVenturiDia(next.venturiDiaPrimary, next.throttleDiaPrimary);
+          break;
+        }
+        case 'venturiDiaPrimary':
+          next.venturiDiaPrimary = clampVenturiDia(parsed, next.throttleDiaPrimary);
+          break;
+        case 'numBoresSecondary': {
+          next.numBoresSecondary = clampNumBoresSecondary(parsed);
+          // VB6: if secondary bores set to 0, zero out secondary diameters
+          if (next.numBoresSecondary === 0) {
+            next.throttleDiaSecondary = 0;
+            next.venturiDiaSecondary = 0;
+          }
+          break;
+        }
+        case 'throttleDiaSecondary': {
+          next.throttleDiaSecondary = clampThrottleDia(parsed);
+          next.venturiDiaSecondary = clampVenturiDia(next.venturiDiaSecondary, next.throttleDiaSecondary);
+          break;
+        }
+        case 'venturiDiaSecondary':
+          next.venturiDiaSecondary = clampVenturiDia(parsed, next.throttleDiaSecondary);
+          break;
+        default:
+          break;
+      }
+      // Sync text buffers to clamped values
+      setCarbWSTxt({
+        numBoresPrimary: String(next.numBoresPrimary),
+        throttleDiaPrimary: formatDia(next.throttleDiaPrimary),
+        venturiDiaPrimary: formatDia(next.venturiDiaPrimary),
+        numBoresSecondary: String(next.numBoresSecondary),
+        throttleDiaSecondary: formatDia(next.throttleDiaSecondary),
+        venturiDiaSecondary: formatDia(next.venturiDiaSecondary),
+      });
+      return next;
+    });
+  }
+
+  // --- CSA Calculator Worksheet state (VB6: CSCalc.frm) ---
+  const [csaWS, setCsaWS] = useState<CSAWorksheetState>(() => ({ ...CSA_DEFAULTS,
+    circular: { ...CSA_DEFAULTS.circular },
+    elliptical: { ...CSA_DEFAULTS.elliptical },
+    rectangular: { ...CSA_DEFAULTS.rectangular },
+    annular: { ...CSA_DEFAULTS.annular },
+  }));
+  const [csaTxt, setCsaTxt] = useState({
+    cDia: formatDimension(0), cStem: formatDimension(0),
+    eMajor: formatDimension(0), eMinor: formatDimension(0), eStem: formatDimension(0),
+    rHeight: formatDimension(0), rWidth: formatDimension(0), rCorner: formatDimension(0), rStem: formatDimension(0),
+    aOuter: formatDimension(0), aInner: formatDimension(0), aStem: formatDimension(0),
+  });
+  const csaResults = useMemo(() => ({
+    circularArea: calcCircularArea(csaWS.circular),
+    ellipticalArea: calcEllipticalArea(csaWS.elliptical),
+    rectangularArea: calcRectangularArea(csaWS.rectangular),
+    annularArea: calcAnnularArea(csaWS.annular),
+  }), [csaWS]);
+
+  // VB6 _LostFocus: parse → update state → sync text buffers
+  function commitCSAField(section: keyof CSAWorksheetState, field: string, raw: string) {
+    const val = parseCSAInput(raw);
+    setCsaWS(prev => {
+      const next = {
+        ...prev,
+        circular: { ...prev.circular },
+        elliptical: { ...prev.elliptical },
+        rectangular: { ...prev.rectangular },
+        annular: { ...prev.annular },
+      };
+      (next[section] as Record<string, number>)[field] = val;
+      return next;
+    });
+    // Sync all text buffers to formatted values after commit
+    setCsaTxt(prev => {
+      const p = { ...prev };
+      const key = `${section[0]}${field.charAt(0).toUpperCase()}${field.slice(1)}` as keyof typeof prev;
+      // Map section+field to text key
+      const map: Record<string, keyof typeof prev> = {
+        'circular.diameter': 'cDia', 'circular.stemDiameter': 'cStem',
+        'elliptical.majorDiameter': 'eMajor', 'elliptical.minorDiameter': 'eMinor', 'elliptical.stemDiameter': 'eStem',
+        'rectangular.height': 'rHeight', 'rectangular.width': 'rWidth', 'rectangular.cornerDiameter': 'rCorner', 'rectangular.stemDiameter': 'rStem',
+        'annular.outerDiameter': 'aOuter', 'annular.innerDiameter': 'aInner', 'annular.stemDiameter': 'aStem',
+      };
+      const txtKey = map[`${section}.${field}`] ?? key;
+      p[txtKey] = formatDimension(val);
+      return p;
+    });
+  }
+
+  // --- Intake Flow Worksheet state (VB6: CSAREA.FRM + MAXFLOW.FRM) ---
+  const [intakeCS, setIntakeCS] = useState<CSAreaInputs>(() => ({ ...INTAKE_CS_DEFAULTS }));
+  const [intakeFlow, setIntakeFlow] = useState<FlowInputs>(() => ({ ...INTAKE_FLOW_DEFAULTS }));
+  const [intakeCSTxt, setIntakeCSTxt] = useState({
+    seatDia: formatDim3(INTAKE_CS_DEFAULTS.seatDia),
+    seatPer: formatDec1(INTAKE_CS_DEFAULTS.seatPer),
+    vsAngle: formatDec1(INTAKE_CS_DEFAULTS.vsAngle),
+    vsWidth: formatDim3(INTAKE_CS_DEFAULTS.vsWidth),
+    stemDia: formatDim3(INTAKE_CS_DEFAULTS.stemDia),
+    valveLift: formatDim3(INTAKE_CS_DEFAULTS.valveLift),
+  });
+  const [intakeFlowTxt, setIntakeFlowTxt] = useState({
+    csArea: formatDim3(INTAKE_FLOW_DEFAULTS.csArea),
+    flowVel: formatDec1(0),
+    flowFlux: formatDec1(0),
+    fvIndex: formatDec1(0),
+  });
+
+  // Derived: VSTD from engine context
+  const intakeVSTD = useMemo(
+    () => calcVelStd(constraints.deltaP.value, constraints.noInValves.value),
+    [constraints.deltaP.value, constraints.noInValves.value]
+  );
+
+  // Derived: CS Area worksheet result
+  const intakeWSCSArea = useMemo(
+    () => calcWSCSArea(intakeCS, {
+      valveDia: constraints.valveDia.value,
+      noInValves: constraints.noInValves.value,
+    }),
+    [intakeCS, constraints.valveDia.value, constraints.noInValves.value]
+  );
+
+  // Derived: Flow results from main form maxInFlow + csArea
+  const intakeFlowResult = useMemo(
+    () => calcFlowStuff(constraints.maxInFlow.value, intakeFlow.csArea, intakeVSTD),
+    [constraints.maxInFlow.value, intakeFlow.csArea, intakeVSTD]
+  );
+
+  // Commit CS Area sub-worksheet field (VB6 CSAREA.FRM _LostFocus)
+  function commitIntakeCSField(field: keyof CSAreaInputs, raw: string) {
+    const parsed = parseWSInput(raw);
+    setIntakeCS(prev => {
+      const next = { ...prev };
+      switch (field) {
+        case 'seatDia': {
+          next.seatDia = parsed;
+          // VB6 txtSeatDia_LostFocus: CalcSeatPer, SetVSWidth
+          next.seatPer = calcSeatPer(next.seatDia, constraints.valveDia.value);
+          break;
+        }
+        case 'seatPer': {
+          next.seatPer = clampSeatPer(parsed);
+          // VB6 txtSeatPer_LostFocus: CalcSeatDia, SetVSWidth
+          next.seatDia = calcSeatDia(next.seatPer, constraints.valveDia.value);
+          break;
+        }
+        case 'vsAngle':
+          next.vsAngle = clampVSAngle(parsed);
+          break;
+        case 'vsWidth':
+          next.vsWidth = parsed;
+          break;
+        case 'stemDia':
+          next.stemDia = parsed;
+          break;
+        case 'valveLift':
+          next.valveLift = parsed;
+          break;
+      }
+      // Sync text buffers
+      setIntakeCSTxt({
+        seatDia: formatDim3(next.seatDia),
+        seatPer: formatDec1(next.seatPer),
+        vsAngle: formatDec1(next.vsAngle),
+        vsWidth: formatDim3(next.vsWidth),
+        stemDia: formatDim3(next.stemDia),
+        valveLift: formatDim3(next.valveLift),
+      });
+      return next;
+    });
+  }
+
+  // VB6 lblWSCSArea_DblClick: transfer calculated wsCSArea to flow worksheet csArea
+  function applyWSCSAreaToFlow() {
+    setIntakeFlow(prev => {
+      const next = { ...prev, csArea: intakeWSCSArea };
+      setIntakeFlowTxt(t => ({
+        ...t,
+        csArea: formatDim3(next.csArea),
+      }));
+      return next;
+    });
+  }
+
+  // Commit Flow sub-worksheet field (VB6 MAXFLOW.FRM _LostFocus)
+  function commitIntakeFlowField(field: keyof FlowInputs, raw: string) {
+    const parsed = parseWSInput(raw);
+    setIntakeFlow(prev => {
+      let next = { ...prev };
+      switch (field) {
+        case 'csArea': {
+          next.csArea = parsed;
+          // VB6 txtCSArea_LostFocus: CalcFlowStuff, then check FVIndex limits
+          const result = calcFlowStuff(constraints.maxInFlow.value, next.csArea, intakeVSTD);
+          next.flowFlux = result.flowFlux;
+          next.flowVel = result.flowVel;
+          next.fvIndex = result.fvIndex;
+          // VB6: EstSeatDia, CalcSeatPer, SetVSWidth after csArea change
+          const newSeatDia = estSeatDia(next.csArea, constraints.noInValves.value, intakeCS.stemDia);
+          const newSeatPer = calcSeatPer(newSeatDia, constraints.valveDia.value);
+          setIntakeCS(p => {
+            const u = { ...p, seatDia: newSeatDia, seatPer: newSeatPer };
+            setIntakeCSTxt({
+              seatDia: formatDim3(u.seatDia),
+              seatPer: formatDec1(u.seatPer),
+              vsAngle: formatDec1(u.vsAngle),
+              vsWidth: formatDim3(u.vsWidth),
+              stemDia: formatDim3(u.stemDia),
+              valveLift: formatDim3(u.valveLift),
+            });
+            return u;
+          });
+          break;
+        }
+        case 'flowVel': {
+          const result = calcFromFlowVel(parsed, next.csArea, intakeVSTD);
+          next = { ...next, ...result };
+          break;
+        }
+        case 'flowFlux': {
+          const result = calcFromFlowFlux(parsed, next.csArea, intakeVSTD);
+          next = { ...next, ...result };
+          break;
+        }
+        case 'fvIndex': {
+          const clamped = clampFVIndex(parsed);
+          const result = calcFromFVIndex(clamped, next.csArea, intakeVSTD);
+          next = { ...next, ...result };
+          break;
+        }
+      }
+      setIntakeFlowTxt({
+        csArea: formatDim3(next.csArea),
+        flowVel: formatDec1(next.flowVel),
+        flowFlux: formatDec1(next.flowFlux),
+        fvIndex: formatDec1(next.fvIndex),
+      });
+      return next;
+    });
+  }
+
+  // VB6 lblWSCarb_DblClick: transfer calculated CFM to main form
+  function applyCarbWSToMain() {
+    const cfmStr = formatCfm(carbWSResult.cfmTotal);
+    setCarbCFMTxt(cfmStr);
+    commitField('carbCFM', cfmStr);
+  }
+
+  // VB6-style commit: parse → clamp → recompute all dynamic limits → sync
+  function commitField(key: FieldKey, raw: string) {
+    const parsed = vb6Val(raw);
+    const nextField = setValue(constraints[key], parsed);
+    let updatedMap = updateField(constraints, key, nextField);
+
+    // Recompute per-field VB6 handler chain
+    const camType = CAM_TYPE_MAP[config.camshaftType] ?? 4;
+    const noCyl = config.numCylinders ?? 8;
+    const manifoldType = MANIFOLD_TYPE_MAP[config.intakeManifoldType] ?? 1;
+    const { nextMap } = recomputeOnCommit(updatedMap, { camType, committedKey: key, noCyl, manifoldType });
+    updatedMap = nextMap;
+    syncConstraintsToUI(updatedMap);
+  }
+
+  // Sync constraint map → config state + all text buffers
+  function syncConstraintsToUI(m: Record<FieldKey, FieldConstraint>) {
+    setConstraints(m);
+    setConfig(prev => ({
+      ...prev,
+      bore_in: m.bore.value,
+      stroke_in: m.stroke.value,
+      rodLength_in: m.rod.value,
+      flowTestBoreDia_in: m.refBore.value,
+      numIntakeValvesPerCyl: m.noInValves.value,
+      intakeValveDia_in: m.valveDia.value,
+      maxIntakeFlow_cfm: m.maxInFlow.value,
+      flowTestPressure_inH2O: m.deltaP.value,
+      throttleCFM_at_1_5inHg: m.carbCFM.value,
+    }));
+    setBoreTxt(formatValue(m.bore));
+    setStrokeTxt(formatValue(m.stroke));
+    setRodTxt(formatValue(m.rod));
+    setRefBoreTxt(formatValue(m.refBore));
+    setNivTxt(formatValue(m.noInValves));
+    setValveDiaTxt(formatValue(m.valveDia));
+    setMaxInFlowTxt(formatValue(m.maxInFlow));
+    setDeltaPTxt(formatValue(m.deltaP));
+    setCarbCFMTxt(formatValue(m.carbCFM));
+  }
+
+  // VB6 cmbCamType_Click: recompute NIV + downstream chain on camType change
+  function onCamTypeChange(newCamshaftType: string) {
+    updateConfig({ camshaftType: newCamshaftType as any });
+    const camType = CAM_TYPE_MAP[newCamshaftType] ?? 4;
+    const { nextMap } = recomputeOnCamTypeChange(constraints, { camType });
+    syncConstraintsToUI(nextMap);
+  }
 
   // Pro features are locked behind subscription
   const hasProAccess = features.quarterProFields;
@@ -135,7 +536,7 @@ export default function EngineSim() {
   };
 
   return (
-    <Page title="ENGINE Pro">
+    <Page title="ENGINE Pro" wide>
       {/* Compression Ratio Calculator Modal */}
       <CompressionRatioCalculator
         isOpen={showCRCalculator}
@@ -192,6 +593,37 @@ export default function EngineSim() {
           >
             Recommendations {!hasProAccess && '🔒'}
           </button>
+          <span style={{ borderLeft: '1px solid var(--color-border)', margin: '0 4px' }} />
+          <button
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === 'ws_carb' ? styles.tabButtonActive : {}),
+              fontSize: '11px',
+            }}
+            onClick={() => setActiveTab('ws_carb')}
+          >
+            Carb CFM WS
+          </button>
+          <button
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === 'ws_intake' ? styles.tabButtonActive : {}),
+              fontSize: '11px',
+            }}
+            onClick={() => setActiveTab('ws_intake')}
+          >
+            Intake Flow WS
+          </button>
+          <button
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === 'ws_csa' ? styles.tabButtonActive : {}),
+              fontSize: '11px',
+            }}
+            onClick={() => setActiveTab('ws_csa')}
+          >
+            CSA Calculator
+          </button>
         </div>
 
         {/* Main Layout */}
@@ -230,33 +662,39 @@ export default function EngineSim() {
               <div style={styles.inputRow}>
                 <label style={styles.label}>Bore (inches)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.bore_in}
-                  onChange={e => updateConfig({ bore_in: parseFloat(e.target.value) || 4.0 })}
-                  step={0.001}
+                  value={boreTxt}
+                  onChange={e => setBoreTxt(e.target.value)}
+                  onBlur={() => commitField('bore', boreTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('bore', boreTxt); } }}
                 />
               </div>
 
               <div style={styles.inputRow}>
                 <label style={styles.label}>Stroke (inches)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.stroke_in}
-                  onChange={e => updateConfig({ stroke_in: parseFloat(e.target.value) || 3.5 })}
-                  step={0.001}
+                  value={strokeTxt}
+                  onChange={e => setStrokeTxt(e.target.value)}
+                  onBlur={() => commitField('stroke', strokeTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('stroke', strokeTxt); } }}
                 />
               </div>
 
               <div style={styles.inputRow}>
                 <label style={styles.label}>Rod Length (inches)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.rodLength_in}
-                  onChange={e => updateConfig({ rodLength_in: parseFloat(e.target.value) || 6.0 })}
-                  step={0.001}
+                  value={rodTxt}
+                  onChange={e => setRodTxt(e.target.value)}
+                  onBlur={() => commitField('rod', rodTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('rod', rodTxt); } }}
                 />
               </div>
 
@@ -274,8 +712,8 @@ export default function EngineSim() {
                     onClick={() => setShowCRCalculator(true)}
                     style={{
                       padding: '8px 12px',
-                      backgroundColor: '#3b82f6',
-                      color: 'white',
+                      backgroundColor: 'var(--color-primary)',
+                      color: '#ffffff',
                       border: 'none',
                       borderRadius: '4px',
                       cursor: 'pointer',
@@ -300,7 +738,7 @@ export default function EngineSim() {
                 <select
                   style={styles.select}
                   value={config.camshaftType}
-                  onChange={e => updateConfig({ camshaftType: e.target.value as any })}
+                  onChange={e => onCamTypeChange(e.target.value)}
                 >
                   <option value="overhead_cam">Overhead Cam</option>
                   <option value="roller">Roller Cam & Lifter</option>
@@ -357,10 +795,13 @@ export default function EngineSim() {
                   {config.isEFI ? 'Throttle Body' : 'Carburetor'} CFM @ 1.5" Hg
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.throttleCFM_at_1_5inHg}
-                  onChange={e => updateConfig({ throttleCFM_at_1_5inHg: parseFloat(e.target.value) || 600 })}
+                  value={carbCFMTxt}
+                  onChange={e => setCarbCFMTxt(e.target.value)}
+                  onBlur={() => commitField('carbCFM', carbCFMTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('carbCFM', carbCFMTxt); } }}
                 />
               </div>
             </div>
@@ -415,54 +856,65 @@ export default function EngineSim() {
               <div style={styles.inputRow}>
                 <label style={styles.label}>Intake Valves per Cylinder</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   style={styles.input}
-                  value={config.numIntakeValvesPerCyl}
-                  onChange={e => updateConfig({ numIntakeValvesPerCyl: parseInt(e.target.value) || 1 })}
-                  min={1}
-                  max={4}
+                  value={nivTxt}
+                  onChange={e => setNivTxt(e.target.value)}
+                  onBlur={() => commitField('noInValves', nivTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('noInValves', nivTxt); } }}
                 />
               </div>
 
               <div style={styles.inputRow}>
                 <label style={styles.label}>Intake Valve Diameter (inches)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.intakeValveDia_in}
-                  onChange={e => updateConfig({ intakeValveDia_in: parseFloat(e.target.value) || 2.0 })}
-                  step={0.01}
+                  value={valveDiaTxt}
+                  onChange={e => setValveDiaTxt(e.target.value)}
+                  onBlur={() => commitField('valveDia', valveDiaTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('valveDia', valveDiaTxt); } }}
                 />
               </div>
 
               <div style={styles.inputRow}>
                 <label style={styles.label}>Max Intake Flow (CFM)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.maxIntakeFlow_cfm}
-                  onChange={e => updateConfig({ maxIntakeFlow_cfm: parseFloat(e.target.value) || 220 })}
+                  value={maxInFlowTxt}
+                  onChange={e => setMaxInFlowTxt(e.target.value)}
+                  onBlur={() => commitField('maxInFlow', maxInFlowTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('maxInFlow', maxInFlowTxt); } }}
                 />
               </div>
 
               <div style={styles.inputRow}>
                 <label style={styles.label}>Flow Test Pressure (in H2O)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.flowTestPressure_inH2O}
-                  onChange={e => updateConfig({ flowTestPressure_inH2O: parseFloat(e.target.value) || 28 })}
+                  value={deltaPTxt}
+                  onChange={e => setDeltaPTxt(e.target.value)}
+                  onBlur={() => commitField('deltaP', deltaPTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('deltaP', deltaPTxt); } }}
                 />
               </div>
 
               <div style={styles.inputRow}>
                 <label style={styles.label}>Flow Test Bore Diameter (inches)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   style={styles.input}
-                  value={config.flowTestBoreDia_in}
-                  onChange={e => updateConfig({ flowTestBoreDia_in: parseFloat(e.target.value) || 4.0 })}
-                  step={0.001}
+                  value={refBoreTxt}
+                  onChange={e => setRefBoreTxt(e.target.value)}
+                  onBlur={() => commitField('refBore', refBoreTxt)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitField('refBore', refBoreTxt); } }}
                 />
               </div>
             </div>
@@ -510,7 +962,7 @@ export default function EngineSim() {
               </div>
 
               {result.lobeSepAng && result.inLobeCL && (
-                <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                <div style={{ marginTop: '12px', padding: '8px', backgroundColor: 'var(--color-warning-bg)', borderRadius: '4px' }}>
                   <div style={styles.resultLabel}>Camshaft Recommendations:</div>
                   <div style={{ fontSize: '11px', marginTop: '4px' }}>
                     Lobe Separation Angle: {result.lobeSepAng}°
@@ -633,7 +1085,7 @@ export default function EngineSim() {
                                 key={key}
                                 style={{
                                   ...styles.tableRow,
-                                  ...(selectedRPM === key ? { backgroundColor: 'var(--color-primary)', color: '#fff', cursor: 'pointer' } : { cursor: 'pointer' }),
+                                  ...(selectedRPM === key ? { backgroundColor: 'var(--color-primary)', color: '#ffffff', cursor: 'pointer' } : { cursor: 'pointer' }),
                                 }}
                                 onClick={() => setSelectedRPM(key)}
                               >
@@ -745,7 +1197,7 @@ export default function EngineSim() {
                       </thead>
                       <tbody>
                         <tr 
-                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'peakTQ' ? 'rgba(59, 130, 246, 0.2)' : undefined }}
+                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'peakTQ' ? 'var(--color-surface-alt)' : undefined }}
                           onClick={() => setSelectedRPM('peakTQ')}
                         >
                           <td style={{ ...styles.tableCell, color: '#22c55e' }}>Peak TQ</td>
@@ -754,7 +1206,7 @@ export default function EngineSim() {
                           <td style={styles.tableCell}>{Math.round(result.rpmPeakTQ * config.stroke_in * Math.PI / 12)}</td>
                         </tr>
                         <tr 
-                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'peakHP' ? 'rgba(59, 130, 246, 0.2)' : undefined }}
+                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'peakHP' ? 'var(--color-surface-alt)' : undefined }}
                           onClick={() => setSelectedRPM('peakHP')}
                         >
                           <td style={{ ...styles.tableCell, color: '#22c55e', fontWeight: selectedRPM === 'peakHP' ? 'bold' : undefined }}>Peak HP</td>
@@ -763,7 +1215,7 @@ export default function EngineSim() {
                           <td style={{ ...styles.tableCell, fontWeight: selectedRPM === 'peakHP' ? 'bold' : undefined }}>{Math.round(result.rpmPeakHP * config.stroke_in * Math.PI / 12)}</td>
                         </tr>
                         <tr 
-                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'shift' ? 'rgba(59, 130, 246, 0.2)' : undefined }}
+                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'shift' ? 'var(--color-surface-alt)' : undefined }}
                           onClick={() => setSelectedRPM('shift')}
                         >
                           <td style={{ ...styles.tableCell, color: '#22c55e' }}>Shift</td>
@@ -772,7 +1224,7 @@ export default function EngineSim() {
                           <td style={styles.tableCell}>{Math.round(result.shift * config.stroke_in * Math.PI / 12)}</td>
                         </tr>
                         <tr 
-                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'redline' ? 'rgba(59, 130, 246, 0.2)' : undefined }}
+                          style={{ ...styles.tableRow, cursor: 'pointer', backgroundColor: selectedRPM === 'redline' ? 'var(--color-surface-alt)' : undefined }}
                           onClick={() => setSelectedRPM('redline')}
                         >
                           <td style={{ ...styles.tableCell, color: '#22c55e' }}>Redline</td>
@@ -793,7 +1245,7 @@ export default function EngineSim() {
                         <select
                           style={{ ...styles.input, width: '180px', fontSize: '11px' }}
                           value={config.camshaftType || 'normal_flat_tappet'}
-                          onChange={e => updateConfig({ camshaftType: e.target.value as EngineSimConfig['camshaftType'] })}
+                          onChange={e => onCamTypeChange(e.target.value)}
                         >
                           <option value="overhead_cam">Overhead Cam</option>
                           <option value="roller">Roller Cam & Lifter</option>
@@ -808,7 +1260,7 @@ export default function EngineSim() {
                         <label style={styles.label}>Intake Duration @ .050" - deg</label>
                         <input
                           type="number"
-                          style={{ ...styles.input, width: '60px', color: '#3b82f6', fontWeight: 'bold' }}
+                          style={{ ...styles.input, width: '60px', color: 'var(--color-primary)', fontWeight: 'bold' }}
                           value={config.intakeDuration050_deg || 264}
                           onChange={e => updateConfig({ intakeDuration050_deg: parseFloat(e.target.value) || 264 })}
                         />
@@ -867,7 +1319,7 @@ export default function EngineSim() {
                               backgroundColor: p.eventLabel.includes('Max Lift') ? 'rgba(59, 130, 246, 0.1)' : 
                                              p.eventLabel.includes('Max Piston') ? 'rgba(239, 68, 68, 0.1)' : undefined
                             }}>
-                              <td style={{ ...styles.tableCell, fontSize: '10px', color: '#94a3b8' }}>{p.eventLabel}</td>
+                              <td style={{ ...styles.tableCell, fontSize: '10px', color: 'var(--color-muted)' }}>{p.eventLabel}</td>
                               <td style={styles.tableCell}>{p.angle_deg.toFixed(1)}</td>
                               <td style={styles.tableCell}>{p.valveLift_in.toFixed(3)}</td>
                               <td style={styles.tableCell}>{p.flowArea_sqin.toFixed(3)}</td>
@@ -1068,6 +1520,460 @@ export default function EngineSim() {
               </>
             )}
 
+            {/* ============================================================ */}
+            {/* Worksheet Tabs                                               */}
+            {/* ============================================================ */}
+
+            {/* Carb CFM Worksheet (VB6: CARBCFM.FRM — frmCarb) */}
+            {activeTab === 'ws_carb' && (() => {
+              const tvLimitsP = venturiDiaLimits(carbWS.throttleDiaPrimary);
+              const tvLimitsS = venturiDiaLimits(carbWS.throttleDiaSecondary);
+              return (
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Throttle CFM @ 1.5" Hg Worksheet</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  {/* Primary */}
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>Primary</div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Number of Throttle Bores</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={carbWSTxt.numBoresPrimary}
+                        onChange={e => setCarbWSTxt(p => ({ ...p, numBoresPrimary: e.target.value }))}
+                        onBlur={e => commitCarbWSField('numBoresPrimary', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitCarbWSField('numBoresPrimary', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Throttle Diameter - inches</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={carbWSTxt.throttleDiaPrimary}
+                        onChange={e => setCarbWSTxt(p => ({ ...p, throttleDiaPrimary: e.target.value }))}
+                        onBlur={e => commitCarbWSField('throttleDiaPrimary', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitCarbWSField('throttleDiaPrimary', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Venturi Diameter - inches</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={carbWSTxt.venturiDiaPrimary}
+                        onChange={e => setCarbWSTxt(p => ({ ...p, venturiDiaPrimary: e.target.value }))}
+                        onBlur={e => commitCarbWSField('venturiDiaPrimary', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitCarbWSField('venturiDiaPrimary', (e.target as HTMLInputElement).value); } }}
+                      />
+                      <span style={{ fontSize: '10px', color: 'var(--color-muted)' }}>
+                        range: {formatDia(tvLimitsP.min)} – {formatDia(tvLimitsP.max)}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Secondary */}
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>Secondary</div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Number of Throttle Bores</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={carbWSTxt.numBoresSecondary}
+                        onChange={e => setCarbWSTxt(p => ({ ...p, numBoresSecondary: e.target.value }))}
+                        onBlur={e => commitCarbWSField('numBoresSecondary', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitCarbWSField('numBoresSecondary', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Throttle Diameter - inches</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={carbWSTxt.throttleDiaSecondary}
+                        onChange={e => setCarbWSTxt(p => ({ ...p, throttleDiaSecondary: e.target.value }))}
+                        onBlur={e => commitCarbWSField('throttleDiaSecondary', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitCarbWSField('throttleDiaSecondary', (e.target as HTMLInputElement).value); } }}
+                        disabled={carbWS.numBoresSecondary === 0}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Venturi Diameter - inches</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={carbWSTxt.venturiDiaSecondary}
+                        onChange={e => setCarbWSTxt(p => ({ ...p, venturiDiaSecondary: e.target.value }))}
+                        onBlur={e => commitCarbWSField('venturiDiaSecondary', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitCarbWSField('venturiDiaSecondary', (e.target as HTMLInputElement).value); } }}
+                        disabled={carbWS.numBoresSecondary === 0}
+                      />
+                      {carbWS.numBoresSecondary > 0 && (
+                        <span style={{ fontSize: '10px', color: 'var(--color-muted)' }}>
+                          range: {formatDia(tvLimitsS.min)} – {formatDia(tvLimitsS.max)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div style={styles.inputRow}>
+                  <label style={styles.label}>Throttle Style</label>
+                  <select
+                    style={styles.select}
+                    value={carbWS.throttleType}
+                    onChange={e => setCarbWS(prev => ({ ...prev, throttleType: e.target.value as ThrottleType }))}
+                  >
+                    <option value="butterfly">Butterfly</option>
+                    <option value="slide">Slide Valve</option>
+                  </select>
+                </div>
+                <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '12px', paddingTop: '8px' }}>
+                  <div style={styles.resultRow}>
+                    <span style={styles.resultLabel}>Throttle CFM @ 1.5" Hg</span>
+                    <span style={{ ...styles.resultValue, fontSize: '16px', fontWeight: 'bold' }}>
+                      {formatCfm(carbWSResult.cfmTotal)}
+                    </span>
+                  </div>
+                  {carbWS.numBoresSecondary > 0 && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-muted)', marginTop: '4px' }}>
+                      Primary: {formatCfm(carbWSResult.cfmPrimary)} CFM &nbsp;|&nbsp; Secondary: {formatCfm(carbWSResult.cfmSecondary)} CFM
+                    </div>
+                  )}
+                  <div style={{ fontSize: '11px', color: 'var(--color-muted)', marginTop: '4px' }}>
+                    Throttle CFM @ 3.0" Hg = {formatCfm(carbWSResult.cfmAt3inHg)}
+                  </div>
+                </div>
+                <div style={{ marginTop: '12px' }}>
+                  <button
+                    style={{ ...styles.tabButton, padding: '6px 16px', fontSize: '12px' }}
+                    onClick={applyCarbWSToMain}
+                    title="VB6: double-click lblWSCarb transfers value to main form Throttle CFM input"
+                  >
+                    Use this value ({formatCfm(carbWSResult.cfmTotal)} CFM)
+                  </button>
+                </div>
+              </div>
+              );
+            })()}
+
+            {/* Intake Flow Worksheet (VB6: CSAREA.FRM + MAXFLOW.FRM) */}
+            {activeTab === 'ws_intake' && (
+              <div style={styles.section}>
+                {/* ---- Intake Port Flow sub-worksheet (VB6: MAXFLOW.FRM) ---- */}
+                <div style={styles.sectionTitle}>
+                  Intake Port Flow @ {formatValue(constraints.deltaP)} inch H2O Worksheet
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Minimum Cross-section Area - sq inch</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={intakeFlowTxt.csArea}
+                        onChange={e => setIntakeFlowTxt(p => ({ ...p, csArea: e.target.value }))}
+                        onBlur={e => commitIntakeFlowField('csArea', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitIntakeFlowField('csArea', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Intake Flow Velocity - ft/sec</label>
+                      <input
+                        type="text"
+                        style={{ ...styles.input, backgroundColor: '#2a2a2a' }}
+                        value={intakeFlowTxt.flowVel}
+                        onChange={e => setIntakeFlowTxt(p => ({ ...p, flowVel: e.target.value }))}
+                        onBlur={e => commitIntakeFlowField('flowVel', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitIntakeFlowField('flowVel', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Intake Flow Flux - CFM/sq inch</label>
+                      <input
+                        type="text"
+                        style={{ ...styles.input, backgroundColor: '#2a2a2a' }}
+                        value={intakeFlowTxt.flowFlux}
+                        onChange={e => setIntakeFlowTxt(p => ({ ...p, flowFlux: e.target.value }))}
+                        onBlur={e => commitIntakeFlowField('flowFlux', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitIntakeFlowField('flowFlux', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Flow Velocity Index - %</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={intakeFlowTxt.fvIndex}
+                        onChange={e => setIntakeFlowTxt(p => ({ ...p, fvIndex: e.target.value }))}
+                        onBlur={e => commitIntakeFlowField('fvIndex', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { commitIntakeFlowField('fvIndex', (e.target as HTMLInputElement).value); } }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Flow Velocity (ft/sec)</span>
+                      <span style={styles.resultValue}>{formatDec1(intakeFlowResult.flowVel)}</span>
+                    </div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Flow Flux (CFM/sq in)</span>
+                      <span style={styles.resultValue}>{formatDec1(intakeFlowResult.flowFlux)}</span>
+                    </div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Flow Velocity Index (%)</span>
+                      <span style={styles.resultValue}>{formatDec1(intakeFlowResult.fvIndex)}</span>
+                    </div>
+                    <div style={{ ...styles.resultRow, borderTop: '1px solid var(--color-border)', marginTop: '8px', paddingTop: '8px' }}>
+                      <span style={{ ...styles.resultLabel, fontWeight: 'bold' }}>Maximum Intake Port Flow (CFM)</span>
+                      <span style={{ ...styles.resultValue, fontWeight: 'bold' }}>{formatValue(constraints.maxInFlow)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ---- Minimum Cross-section Area sub-worksheet (VB6: CSAREA.FRM) ---- */}
+                <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '16px', paddingTop: '12px' }}>
+                  <div style={{ ...styles.sectionTitle, fontSize: '13px' }}>
+                    Minimum Cross-section Area Worksheet
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <div style={styles.inputRow}>
+                        <label style={styles.label}>Valve Seat Throat Diameter - inch</label>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          value={intakeCSTxt.seatDia}
+                          onChange={e => setIntakeCSTxt(p => ({ ...p, seatDia: e.target.value }))}
+                          onBlur={e => commitIntakeCSField('seatDia', e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { commitIntakeCSField('seatDia', (e.target as HTMLInputElement).value); } }}
+                        />
+                      </div>
+                      <div style={styles.inputRow}>
+                        <label style={styles.label}>Valve Seat Throat Percentage - %</label>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          value={intakeCSTxt.seatPer}
+                          onChange={e => setIntakeCSTxt(p => ({ ...p, seatPer: e.target.value }))}
+                          onBlur={e => commitIntakeCSField('seatPer', e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { commitIntakeCSField('seatPer', (e.target as HTMLInputElement).value); } }}
+                        />
+                      </div>
+                      <div style={styles.inputRow}>
+                        <label style={styles.label}>Valve Seat Angle - degree</label>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          value={intakeCSTxt.vsAngle}
+                          onChange={e => setIntakeCSTxt(p => ({ ...p, vsAngle: e.target.value }))}
+                          onBlur={e => commitIntakeCSField('vsAngle', e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { commitIntakeCSField('vsAngle', (e.target as HTMLInputElement).value); } }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={styles.inputRow}>
+                        <label style={styles.label}>Valve Seat Width - inch</label>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          value={intakeCSTxt.vsWidth}
+                          onChange={e => setIntakeCSTxt(p => ({ ...p, vsWidth: e.target.value }))}
+                          onBlur={e => commitIntakeCSField('vsWidth', e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { commitIntakeCSField('vsWidth', (e.target as HTMLInputElement).value); } }}
+                        />
+                      </div>
+                      <div style={styles.inputRow}>
+                        <label style={styles.label}>Valve Stem Diameter - inch</label>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          value={intakeCSTxt.stemDia}
+                          onChange={e => setIntakeCSTxt(p => ({ ...p, stemDia: e.target.value }))}
+                          onBlur={e => commitIntakeCSField('stemDia', e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { commitIntakeCSField('stemDia', (e.target as HTMLInputElement).value); } }}
+                        />
+                      </div>
+                      <div style={styles.inputRow}>
+                        <label style={styles.label}>Maximum Intake Valve Lift - inch</label>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          value={intakeCSTxt.valveLift}
+                          onChange={e => setIntakeCSTxt(p => ({ ...p, valveLift: e.target.value }))}
+                          onBlur={e => commitIntakeCSField('valveLift', e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { commitIntakeCSField('valveLift', (e.target as HTMLInputElement).value); } }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Valve Seat Throat Area - sq inch</span>
+                      <span style={styles.resultValue}>{formatDim3(intakeWSCSArea)}</span>
+                    </div>
+                    <button
+                      style={{ ...styles.tabButton, padding: '6px 16px', fontSize: '12px' }}
+                      onClick={applyWSCSAreaToFlow}
+                      title="VB6: double-click lblWSCSArea transfers value to Intake Port Flow csArea"
+                    >
+                      Use this area ({formatDim3(intakeWSCSArea)} sq in)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CSA Calculator (VB6: CSCalc.frm — frmCSCalc) */}
+            {activeTab === 'ws_csa' && (
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Cross-section Area Calculator</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  {/* Circular Port (VB6: Frame1, gc_C(0..2), CalcCir) */}
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: '6px', padding: '12px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>Circular Area Worksheet</div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.cDia}
+                        onChange={e => setCsaTxt(p => ({ ...p, cDia: e.target.value }))}
+                        onBlur={e => commitCSAField('circular', 'diameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('circular', 'diameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Stem Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.cStem}
+                        onChange={e => setCsaTxt(p => ({ ...p, cStem: e.target.value }))}
+                        onBlur={e => commitCSAField('circular', 'stemDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('circular', 'stemDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Cross-section Area</span>
+                      <span style={styles.resultValue}>{formatArea(csaResults.circularArea)}</span>
+                    </div>
+                  </div>
+                  {/* Elliptical Port (VB6: Frame2, gc_E(0..3), CalcEll) */}
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: '6px', padding: '12px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>Elliptical Area Worksheet</div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Major Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.eMajor}
+                        onChange={e => setCsaTxt(p => ({ ...p, eMajor: e.target.value }))}
+                        onBlur={e => commitCSAField('elliptical', 'majorDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('elliptical', 'majorDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Minor Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.eMinor}
+                        onChange={e => setCsaTxt(p => ({ ...p, eMinor: e.target.value }))}
+                        onBlur={e => commitCSAField('elliptical', 'minorDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('elliptical', 'minorDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Stem Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.eStem}
+                        onChange={e => setCsaTxt(p => ({ ...p, eStem: e.target.value }))}
+                        onBlur={e => commitCSAField('elliptical', 'stemDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('elliptical', 'stemDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Cross-section Area</span>
+                      <span style={styles.resultValue}>{formatArea(csaResults.ellipticalArea)}</span>
+                    </div>
+                  </div>
+                  {/* Rectangular Port (VB6: Frame3, gc_R(0..4), CalcRec) */}
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: '6px', padding: '12px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>Rectangular Area Worksheet</div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Height</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.rHeight}
+                        onChange={e => setCsaTxt(p => ({ ...p, rHeight: e.target.value }))}
+                        onBlur={e => commitCSAField('rectangular', 'height', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('rectangular', 'height', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Width</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.rWidth}
+                        onChange={e => setCsaTxt(p => ({ ...p, rWidth: e.target.value }))}
+                        onBlur={e => commitCSAField('rectangular', 'width', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('rectangular', 'width', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Corner Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.rCorner}
+                        onChange={e => setCsaTxt(p => ({ ...p, rCorner: e.target.value }))}
+                        onBlur={e => commitCSAField('rectangular', 'cornerDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('rectangular', 'cornerDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Stem Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.rStem}
+                        onChange={e => setCsaTxt(p => ({ ...p, rStem: e.target.value }))}
+                        onBlur={e => commitCSAField('rectangular', 'stemDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('rectangular', 'stemDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Cross-section Area</span>
+                      <span style={styles.resultValue}>{formatArea(csaResults.rectangularArea)}</span>
+                    </div>
+                  </div>
+                  {/* Annular Area (VB6: Frame4, gc_A(0..3), CalcAnn) */}
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: '6px', padding: '12px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>Annular Area Worksheet</div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Outer Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.aOuter}
+                        onChange={e => setCsaTxt(p => ({ ...p, aOuter: e.target.value }))}
+                        onBlur={e => commitCSAField('annular', 'outerDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('annular', 'outerDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Inner Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.aInner}
+                        onChange={e => setCsaTxt(p => ({ ...p, aInner: e.target.value }))}
+                        onBlur={e => commitCSAField('annular', 'innerDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('annular', 'innerDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.inputRow}>
+                      <label style={styles.label}>Stem Diameter</label>
+                      <input
+                        type="text" style={styles.input} value={csaTxt.aStem}
+                        onChange={e => setCsaTxt(p => ({ ...p, aStem: e.target.value }))}
+                        onBlur={e => commitCSAField('annular', 'stemDiameter', e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitCSAField('annular', 'stemDiameter', (e.target as HTMLInputElement).value); }}
+                      />
+                    </div>
+                    <div style={styles.resultRow}>
+                      <span style={styles.resultLabel}>Cross-section Area</span>
+                      <span style={styles.resultValue}>{formatArea(csaResults.annularArea)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -1102,10 +2008,10 @@ const styles = {
     height: 'calc(100% - 100px)',
   } as React.CSSProperties,
   card: {
-    backgroundColor: 'white',
+    backgroundColor: 'var(--color-bg)',
     borderRadius: '8px',
     padding: '12px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    boxShadow: 'var(--shadow-sm)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'auto',
@@ -1158,39 +2064,43 @@ const styles = {
   } as React.CSSProperties,
   label: {
     fontSize: '11px',
-    color: '#64748b',
+    color: 'var(--color-text-muted)',
     minWidth: '100px',
     flex: '0 0 100px',
   } as React.CSSProperties,
   input: {
     padding: '4px 6px',
-    border: '1px solid #cbd5e1',
+    border: '1px solid var(--color-border)',
     borderRadius: '4px',
     fontSize: '11px',
     width: '70px',
+    backgroundColor: 'var(--color-input-bg)',
+    color: 'var(--color-text)',
   } as React.CSSProperties,
   select: {
     padding: '4px 6px',
-    border: '1px solid #cbd5e1',
+    border: '1px solid var(--color-border)',
     borderRadius: '4px',
     fontSize: '11px',
     flex: 1,
+    backgroundColor: 'var(--color-input-bg)',
+    color: 'var(--color-text)',
   } as React.CSSProperties,
   resultRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '4px 0',
-    borderBottom: '1px solid #f1f5f9',
+    borderBottom: '1px solid var(--color-border)',
   } as React.CSSProperties,
   resultLabel: {
     fontSize: '11px',
-    color: '#64748b',
+    color: 'var(--color-text-muted)',
   } as React.CSSProperties,
   resultValue: {
     fontSize: '12px',
     fontWeight: '600',
-    color: '#1e293b',
+    color: 'var(--color-text)',
   } as React.CSSProperties,
   resultValueLarge: {
     fontSize: '24px',
@@ -1201,7 +2111,7 @@ const styles = {
   resultValueMedium: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#1e293b',
+    color: 'var(--color-text)',
   } as React.CSSProperties,
   resultsGrid: {
     display: 'grid',
