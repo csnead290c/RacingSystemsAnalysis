@@ -15,12 +15,9 @@ const GC = 32.174;   // VB6 gravity constant
 const RSTD = 53.35;  // VB6 gas constant for air
 const PSTD = 406.8;  // VB6 standard pressure (inH2O) - VB6 uses inH2O units for vpd calculations (14.696 psi * 27.68)
 
-// VB6 Flowbench Data Arrays (from base case)
 // VB6 CDETAILS.CLS lines 363-367: xlift() and yflow() arrays
 // These are populated from gc_IntLift and gc_IntFlow controls
-// Values from VB6_EXPECTED_FLOWBENCH_TABLE and max lift point
-const VB6_FLOWBENCH_LIFT = [0, 0.100, 0.200, 0.300, 0.400, 0.500, 0.550, 0.600, 0.700, 0.800]; // 1-based in VB6
-const VB6_FLOWBENCH_FLOW = [0, 56.6, 116.0, 169.4, 212.6, 241.3, 250.0, 258.7, 262.9, 264.2]; // 1-based in VB6
+// Now passed as parameters from the caller (EngineSimConfig.flowBenchLifts_in / flowBenchFlows_cfm)
 
 export interface FlowDetailPoint {
   angle_deg: number;
@@ -167,6 +164,11 @@ function calcFlowDemandVB6(
 /**
  * Calculate full flow details for a given RPM
  * VB6 CDETAILS.CLS lines 274-465
+ *
+ * @param flowbenchLifts - 1-indexed lift array (element 0 is dummy) from gc_IntLift
+ * @param flowbenchFlows - 1-indexed flow array (element 0 is dummy) from gc_IntFlow
+ * @param lastRow - number of valid data points (VB6 FindLastRow result)
+ * @param testPressure_inH2O - flowbench test pressure from gc_DeltaP
  */
 export function calcFlowDetailsForRPM(
   rpm: number,
@@ -178,8 +180,18 @@ export function calcFlowDetailsForRPM(
   lobeCenterline_deg: number,
   maxLift_in: number,
   valveSeatData: FlowbenchValveSeatData,
-  camType: VB6CamType = VB6CamType.NormalFlatTappet
+  camType: VB6CamType = VB6CamType.NormalFlatTappet,
+  flowbenchLifts?: number[],
+  flowbenchFlows?: number[],
+  lastRow?: number,
+  testPressure_inH2O: number = 28.0
 ): FlowDetailPoint[] {
+  // Build 1-indexed arrays for TABY (VB6 convention: element 0 is dummy)
+  // If no flowbench data provided, return empty (caller should provide data)
+  const xlifts = flowbenchLifts ?? [0];
+  const yflows = flowbenchFlows ?? [0];
+  const nRows = lastRow ?? Math.max(xlifts.length - 1, 0);
+
   const angles = getVB6FlowDetailsAngles(duration_deg, lobeCenterline_deg);
   
   return angles.map(angle => {
@@ -200,8 +212,8 @@ export function calcFlowDetailsForRPM(
     
     // VB6 line 427: Call TABY(xlift(), yflow(), LastRow, 1, vl, FlowVal)
     // Get flow at this lift using TABY interpolation of flowbench data
-    const flowAtLift_cfm = valveLift > 0.05 
-      ? TABY(VB6_FLOWBENCH_LIFT, VB6_FLOWBENCH_FLOW, 9, 1, valveLift)
+    const flowAtLift_cfm = (valveLift > 0.05 && nRows > 0)
+      ? TABY(xlifts, yflows, nRows, 1, valveLift)
       : 0;
     
     // Calculate flow demand using exact VB6 logic
@@ -216,7 +228,7 @@ export function calcFlowDetailsForRPM(
       flowArea,
       numValves,
       flowAtLift_cfm,
-      28.0 // testPressure_inH2O
+      testPressure_inH2O
     );
     
     return {

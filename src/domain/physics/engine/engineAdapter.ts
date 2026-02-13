@@ -48,6 +48,20 @@ export interface EngineSimConfig {
   flowTestBoreDia_in: number;
   maxIntakeValveLift_in?: number;  // 0.450-0.750" typical, Engine Pro only
   
+  // Flowbench data (Engine Pro mode)
+  // Up to 10 lift/flow pairs from the Flow Bench worksheet
+  // VB6: gc_IntLift(0..9), gc_IntFlow(0..9)
+  flowBenchLifts_in?: number[];   // Valve lift at each point (inches)
+  flowBenchFlows_cfm?: number[];  // Flow at each point (CFM)
+
+  // Valve seat geometry for flowbench calculations (Engine Pro mode)
+  // VB6: gc_SeatDia, gc_SeatPer, gc_VSAngle, gc_VSWidth, gc_StemDia
+  seatDia_in?: number;       // Valve seat throat diameter (inches)
+  seatPer?: number;          // Valve seat percentage (%)
+  vsAngle_deg?: number;      // Valve seat angle (degrees)
+  vsWidth_in?: number;       // Valve seat width (inches)
+  stemDia_in?: number;       // Valve stem diameter (inches)
+
   // Performance targets (calculated but can be estimated)
   shift_rpm?: number;  // Estimated from peak HP if not provided
   redline_rpm?: number;  // Estimated from shift if not provided
@@ -183,6 +197,13 @@ export function createDefaultEngineProConfig(): EngineSimConfig {
     maxIntakeFlow_cfm: 250,
     flowTestPressure_inH2O: 28,
     flowTestBoreDia_in: 4.0,
+    maxIntakeValveLift_in: 0.55,
+    // Valve seat geometry (VB6 SetAllValues defaults)
+    seatDia_in: 1.794,
+    seatPer: 87.5,
+    vsAngle_deg: 45,
+    vsWidth_in: 0.08,
+    stemDia_in: 0.344,
     combustionChamberVolume_cc: 62,
     pistonToDeckHeight_in: 0.015,
     headGasketThickness_in: 0.039,

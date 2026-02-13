@@ -1,0 +1,79 @@
+{
+  "description": "Engine Sim truth harness fixtures. Case #1 from VB6 screenshot (curved=true, refBore=4.0).",
+  "cases": [
+    {
+      "name": "Screenshot Case #1 — VB6 SetAllValues defaults",
+      "screenshotExpected": {
+        "peakHP_display": 461,
+        "peakTQ_display": 415,
+        "rpmPeakHP": 6650,
+        "rpmPeakTQ": 5450,
+        "cid_display": "355.1",
+        "hpPerCID_display": "1.30",
+        "shift": 7200,
+        "redline": 8350
+      },
+      "input": {
+        "noCyl": 8,
+        "inline": 1,
+        "bore": 4.03,
+        "stroke": 3.48,
+        "rod": 5.85,
+        "compressionRatio": 12.9,
+        "camType": 4,
+        "inCamDur": 264,
+        "carb": true,
+        "carbCFM": 750,
+        "fuel": 1,
+        "manifold": 1,
+        "curved": true,
+        "manFlow": 96,
+        "noInValves": 1,
+        "valveDia": 2.05,
+        "maxInFlow": 250,
+        "deltaP": 28,
+        "refBore": 4.0
+      },
+      "expected": {
+        "summary": {
+          "peakHP": 461.3070281652408,
+          "peakTQ": 414.60762033428114,
+          "rpmPeakHP": 6650,
+          "rpmPeakTQ": 5450,
+          "hpPerCID": 1.2990348993295564,
+          "tqPerCID": 1.167529943093098,
+          "shift": 7200,
+          "redline": 8350,
+          "cid": 355.1151923657521
+        },
+        "dynoCurve": [
+          { "rpm": 4500, "hp": 327, "torque_lbft": 382 },
+          { "rpm": 4625, "hp": 342, "torque_lbft": 389 },
+          { "rpm": 4750, "hp": 358, "torque_lbft": 396 },
+          { "rpm": 4875, "hp": 373, "torque_lbft": 402 },
+          { "rpm": 5000, "hp": 387, "torque_lbft": 407 },
+          { "rpm": 5125, "hp": 400, "torque_lbft": 410 },
+          { "rpm": 5250, "hp": 412, "torque_lbft": 412 },
+          { "rpm": 5375, "hp": 424, "torque_lbft": 414 },
+          { "rpm": 5500, "hp": 434, "torque_lbft": 415 },
+          { "rpm": 5625, "hp": 442, "torque_lbft": 413 },
+          { "rpm": 5750, "hp": 448, "torque_lbft": 409 },
+          { "rpm": 5875, "hp": 452, "torque_lbft": 404 },
+          { "rpm": 6000, "hp": 456, "torque_lbft": 399 },
+          { "rpm": 6125, "hp": 458, "torque_lbft": 393 },
+          { "rpm": 6250, "hp": 460, "torque_lbft": 387 },
+          { "rpm": 6375, "hp": 461, "torque_lbft": 380 },
+          { "rpm": 6500, "hp": 461, "torque_lbft": 373 },
+          { "rpm": 6625, "hp": 461, "torque_lbft": 366 },
+          { "rpm": 6750, "hp": 459, "torque_lbft": 357 },
+          { "rpm": 6875, "hp": 453, "torque_lbft": 346 },
+          { "rpm": 7000, "hp": 445, "torque_lbft": 334 },
+          { "rpm": 7125, "hp": 435, "torque_lbft": 321 },
+          { "rpm": 7250, "hp": 423, "torque_lbft": 306 },
+          { "rpm": 7375, "hp": 409, "torque_lbft": 291 },
+          { "rpm": 7500, "hp": 393, "torque_lbft": 275 }
+        ]
+      }
+    }
+  ]
+}
