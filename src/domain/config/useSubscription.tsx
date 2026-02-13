@@ -5,7 +5,7 @@
  * This is the main interface for components to check what the user can access.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useAuth } from '../auth';
 import {
   SubscriptionTier,
@@ -19,6 +19,11 @@ import {
   getRunLimit,
   getTeamSeatLimit,
 } from './entitlements';
+import {
+  isViewAsAllowed,
+  getViewAsSubscriptionTier,
+} from './devViewAs';
+import { viewAsSubscribe, viewAsSnapshot } from './viewAsStore';
 
 export interface SubscriptionState {
   /** Current subscription tier */
@@ -53,7 +58,8 @@ export interface SubscriptionState {
 export function useSubscription(): SubscriptionState {
   const { user, isAuthenticated } = useAuth();
   
-  const tier = useMemo((): SubscriptionTier => {
+  // Compute real tier from auth/subscription
+  const realTier = useMemo((): SubscriptionTier => {
     if (!isAuthenticated || !user) return 'free';
     
     // Check role first (owner, admin, beta take precedence)
@@ -78,6 +84,18 @@ export function useSubscription(): SubscriptionState {
     // Fall back to role-based tier
     return getTierFromRole(roleId);
   }, [isAuthenticated, user]);
+
+  // Subscribe to View As override changes (shared reactive store)
+  const viewAsOverride = useSyncExternalStore(viewAsSubscribe, viewAsSnapshot, viewAsSnapshot);
+
+  // View As override: if active and allowed, use overridden tier
+  const tier = useMemo((): SubscriptionTier => {
+    if (!viewAsOverride?.enabled) return realTier;
+    // Safety: only allow if DEV or real user has devTools-level access
+    const realHasDevTools = realTier === 'owner' || realTier === 'beta';
+    if (!isViewAsAllowed(realHasDevTools)) return realTier;
+    return getViewAsSubscriptionTier(viewAsOverride);
+  }, [realTier, viewAsOverride]);
   
   const features = useMemo(() => TIER_FEATURES[tier], [tier]);
   const tierInfo = useMemo(() => TIER_INFO[tier], [tier]);

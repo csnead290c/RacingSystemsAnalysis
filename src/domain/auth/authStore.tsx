@@ -8,6 +8,12 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { User, Role, Product, AuthState, AuthConfig, FeatureFlag } from './types';
 import { INITIAL_AUTH_STATE, DEFAULT_ROLES, DEFAULT_PRODUCTS } from './types';
 import { authApi, setAuthToken } from '../../services/api';
+import {
+  loadViewAsOverride,
+  isViewAsAllowed,
+  getViewAsLegacyAccess,
+  type ViewAsLegacyAccess,
+} from '../config/devViewAs';
 
 // ============================================================================
 // Storage Keys
@@ -516,7 +522,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return products.filter(p => role.products.includes(p.id));
   }, [getUserRole, products]);
   
+  // ── View As override bridge ──────────────────────────────────────
+  // When a dev View As override is active and allowed, hasFeature/hasProduct
+  // must return results based on the overridden plan/role, not the real user.
+  const getActiveViewAs = useCallback((): ViewAsLegacyAccess | null => {
+    const override = loadViewAsOverride();
+    if (!override?.enabled) return null;
+    // Safety: only allow if DEV or real user has dev_tools
+    const role = getUserRole();
+    const realHasDevTools = import.meta.env.DEV || !!(role?.additionalFeatures.includes('dev_tools'));
+    if (!isViewAsAllowed(realHasDevTools)) return null;
+    return getViewAsLegacyAccess(override);
+  }, [getUserRole]);
+
   const hasFeature = useCallback((feature: FeatureFlag): boolean => {
+    // View As override takes precedence
+    const viewAs = getActiveViewAs();
+    if (viewAs) {
+      if (viewAs.additionalFeatures.includes(feature)) return true;
+      const viewAsProds = products.filter(p => viewAs.products.includes(p.id));
+      return viewAsProds.some(p => p.features.includes(feature));
+    }
+
     // First check API products (for API-authenticated users)
     const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
     
@@ -541,9 +568,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const hasIt = userProducts.some(p => p.features.includes(feature));
     console.log(`hasFeature(${feature}): role=${role.id}, roleProducts=${role.products}, has=${hasIt}`);
     return hasIt;
-  }, [getUserRole, products]);
+  }, [getUserRole, products, getActiveViewAs]);
   
   const hasProduct = useCallback((productId: string): boolean => {
+    // View As override takes precedence
+    const viewAs = getActiveViewAs();
+    if (viewAs) {
+      return viewAs.products.includes(productId);
+    }
+
     // First check API products (for API-authenticated users)
     const apiProducts = loadFromStorage<string[]>('rsa.auth.apiProducts', []);
     console.log(`hasProduct(${productId}): apiProducts=${JSON.stringify(apiProducts)}, includes=${apiProducts.includes(productId)}`);
@@ -553,7 +586,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const role = getUserRole();
     if (!role) return false;
     return role.products.includes(productId);
-  }, [getUserRole]);
+  }, [getUserRole, getActiveViewAs]);
   
   const canManageUsers = useCallback((): boolean => {
     const role = getUserRole();

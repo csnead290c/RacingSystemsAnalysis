@@ -115,6 +115,120 @@ export const RACE_LENGTH_INFO: Record<RaceLength, {
 };
 
 /**
+ * VB6 Bonneville Pro DistToPrint(2..9) — the mile-marker checkpoints used in
+ * the printed report and the timeslip panel.  DistToPrint(1) is rollout and is
+ * skipped for display purposes.
+ *
+ * Source: QCommon/TIMESLIP.FRM lines 820–856 (Select Case gc_Track.Value).
+ * Each track variant defines DistToPrint(1..9).  Index 1 is rollout; indices
+ * 2–9 are the report checkpoints.
+ */
+const LAND_SPEED_CHECKPOINTS: Record<string, { label: string; dist_ft: number }[]> = {
+  ONE_MILE: [
+    { label: '0.13', dist_ft: 660 },
+    { label: '0.25', dist_ft: 1320 },
+    { label: '0.38', dist_ft: 1980 },
+    { label: '0.50', dist_ft: 2640 },
+    { label: '0.63', dist_ft: 3300 },
+    { label: '0.75', dist_ft: 3960 },
+    { label: '0.88', dist_ft: 4620 },
+    { label: '1.00', dist_ft: 5280 },
+  ],
+  EL_MIRAGE: [
+    { label: '0.13', dist_ft: 660 },
+    { label: '0.25', dist_ft: 1320 },
+    { label: '0.50', dist_ft: 2640 },
+    { label: '0.75', dist_ft: 3960 },
+    { label: '1.00', dist_ft: 5280 },
+    { label: '1.10', dist_ft: 5808 },
+    { label: '1.20', dist_ft: 6336 },
+    { label: '1.30', dist_ft: 6864 },
+  ],
+  MUROC: [
+    { label: '0.13', dist_ft: 660 },
+    { label: '0.25', dist_ft: 1320 },
+    { label: '0.50', dist_ft: 2640 },
+    { label: '0.75', dist_ft: 3960 },
+    { label: '1.00', dist_ft: 5280 },
+    { label: '1.25', dist_ft: 6600 },
+    { label: '1.38', dist_ft: 7260 },
+    { label: '1.50', dist_ft: 7920 },
+  ],
+  TWO_MILE: [
+    { label: '0.13', dist_ft: 660 },
+    { label: '0.25', dist_ft: 1320 },
+    { label: '0.50', dist_ft: 2640 },
+    { label: '1.00', dist_ft: 5280 },
+    { label: '1.25', dist_ft: 6600 },
+    { label: '1.50', dist_ft: 7920 },
+    { label: '1.75', dist_ft: 9240 },
+    { label: '2.00', dist_ft: 10560 },
+  ],
+  BONNEVILLE_SHORT: [
+    { label: '0.50', dist_ft: 2640 },
+    { label: '1 mi',  dist_ft: 5280 },
+    { label: '1.50', dist_ft: 7920 },
+    { label: '2 mi',  dist_ft: 10560 },
+    { label: '2.25', dist_ft: 11880 },
+    { label: '2.50', dist_ft: 13200 },
+    { label: '2.75', dist_ft: 14520 },
+    { label: '3 mi',  dist_ft: 15840 },
+  ],
+  BONNEVILLE_LONG: [
+    { label: '1 mi',  dist_ft: 5280 },
+    { label: '2 mi',  dist_ft: 10560 },
+    { label: '2.5',   dist_ft: 13200 },
+    { label: '3 mi',  dist_ft: 15840 },
+    { label: '3.5',   dist_ft: 18480 },
+    { label: '4 mi',  dist_ft: 21120 },
+    { label: '4.5',   dist_ft: 23760 },
+    { label: '5 mi',  dist_ft: 26400 },
+  ],
+  TEN_MILE: [
+    { label: '1 mi',  dist_ft: 5280 },
+    { label: '2 mi',  dist_ft: 10560 },
+    { label: '4 mi',  dist_ft: 21120 },
+    { label: '6 mi',  dist_ft: 31680 },
+    { label: '7 mi',  dist_ft: 36960 },
+    { label: '8 mi',  dist_ft: 42240 },
+    { label: '9 mi',  dist_ft: 47520 },
+    { label: '10 mi', dist_ft: 52800 },
+  ],
+};
+
+/**
+ * Get the land speed checkpoint list for a given race length.
+ * Returns VB6 DistToPrint(2..9) entries with labels and distances.
+ * Returns undefined for drag race lengths.
+ */
+export function getLandSpeedCheckpoints(raceLength: RaceLength): { label: string; dist_ft: number }[] | undefined {
+  return LAND_SPEED_CHECKPOINTS[raceLength];
+}
+
+/**
+ * Get distance markers for graph vertical reference lines.
+ *
+ * - Drag: standard drag incrementals (60, 330, 660, 1000, 1320 ft).
+ * - Land speed: VB6 DistToPrint(2..9) mile-marker distances.
+ *
+ * These are the same distances shown in the printed report checkpoint table,
+ * matching VB6 behavior where graph markers align with report checkpoints.
+ */
+export function getDistanceMarkers(raceLength: RaceLength): number[] {
+  const info = RACE_LENGTH_INFO[raceLength];
+  if (!info) return [60, 330, 660, 1000, 1320];
+
+  if (info.category === 'landspeed') {
+    const checkpoints = LAND_SPEED_CHECKPOINTS[raceLength];
+    return checkpoints ? checkpoints.map(c => c.dist_ft) : [];
+  }
+
+  // Drag: use standard incrementals up to race length
+  const dragMarkers = [60, 330, 660, 1000, 1320];
+  return dragMarkers.filter(d => d <= info.lengthFt);
+}
+
+/**
  * Get traction index range for a track type
  * From VB6 BVPro Traction.frm
  */

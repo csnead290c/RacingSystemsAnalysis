@@ -5,6 +5,8 @@
  */
 
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../domain/auth';
+import { canAccessEtSim, canAccessRaceTools, canAccessRunLogging, canAccessVehicles } from '../../domain/config/guards';
 
 interface QuickAction {
   path: string;
@@ -12,6 +14,8 @@ interface QuickAction {
   description: string;
   icon: string;
   color: string;
+  /** Optional feature gate key — action is hidden when the gate returns false. */
+  gate?: 'et_sim' | 'race_tools' | 'run_logging' | 'save_vehicles';
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
@@ -21,6 +25,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     description: 'Predict your ET and MPH',
     icon: '🏎️',
     color: '#3b82f6',
+    gate: 'et_sim',
   },
   {
     path: '/dial-in',
@@ -28,6 +33,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     description: 'Get your bracket dial-in',
     icon: '🎯',
     color: '#22c55e',
+    gate: 'race_tools',
   },
   {
     path: '/log',
@@ -35,6 +41,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     description: 'Record your latest pass',
     icon: '📝',
     color: '#f59e0b',
+    gate: 'run_logging',
   },
   {
     path: '/race-day',
@@ -42,6 +49,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     description: 'Live weather & predictions',
     icon: '🏁',
     color: '#ef4444',
+    gate: 'race_tools',
   },
   {
     path: '/vehicles',
@@ -49,6 +57,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     description: 'Edit your vehicle specs',
     icon: '🚗',
     color: '#8b5cf6',
+    gate: 'save_vehicles',
   },
   {
     path: '/calculators',
@@ -65,13 +74,24 @@ interface QuickActionsProps {
 }
 
 export default function QuickActions({ columns = 3, compact = false }: QuickActionsProps) {
+  const { hasFeature } = useAuth();
+
+  // Filter actions by gate
+  const visibleActions = QUICK_ACTIONS.filter((a) => {
+    if (a.gate === 'et_sim') return canAccessEtSim({ hasFeature });
+    if (a.gate === 'race_tools') return canAccessRaceTools({ hasFeature });
+    if (a.gate === 'run_logging') return canAccessRunLogging({ hasFeature });
+    if (a.gate === 'save_vehicles') return canAccessVehicles({ hasFeature });
+    return true;
+  });
+
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: `repeat(${columns}, 1fr)`,
       gap: compact ? '8px' : '16px',
     }}>
-      {QUICK_ACTIONS.map((action) => (
+      {visibleActions.map((action) => (
         <Link
           key={action.path}
           to={action.path}
