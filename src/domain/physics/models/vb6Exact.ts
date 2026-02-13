@@ -90,8 +90,12 @@ interface TracePoint {
  * 8 = Nitro + Supercharged
  * 9 = Electric
  */
-function getFuelSystemType(fuel: string | undefined): FuelSystemType {
-  if (!fuel) return 1;
+function getFuelSystemType(fuel: string | number | undefined): FuelSystemType {
+  if (fuel === undefined || fuel === null) return 1;
+  // If already a valid numeric fuel system type, return it directly
+  if (typeof fuel === 'number') {
+    return (Number.isFinite(fuel) && fuel >= 1 && fuel <= 9) ? fuel as FuelSystemType : 1;
+  }
   const f = fuel.toUpperCase();
   
   // Handle unified fuel type values (new format)
@@ -134,6 +138,20 @@ function getFuelSystemType(fuel: string | undefined): FuelSystemType {
   if (f.includes('ELECTRIC')) return 9;
   
   return 1;
+}
+
+/**
+ * Robustly resolve a fuelSystem value that may be a string, number, or undefined
+ * to a numeric FuelSystemValue for use in buildEngineCurve / calcWork.
+ */
+function resolveFuelSystem(raw: unknown): FuelSystemValue {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 && raw <= 9) {
+    return raw as FuelSystemValue;
+  }
+  if (typeof raw === 'string') {
+    return getFuelSystemType(raw) as FuelSystemValue;
+  }
+  return 1 as FuelSystemValue;
 }
 
 /**
@@ -206,7 +224,7 @@ function extractHPCurve(input: SimInputs): {
     const peakIdx = yhp.indexOf(peakHP);
     const rpmAtPeakHP = xrpm[peakIdx] ?? 6500;
     const displacement_cid = Number((vehicle as any).displacement_cid ?? (vehicle as any).displacementCID ?? 350);
-    const fuelSystem = ((input as any).fuelSystem ?? (vehicle as any).fuelSystem ?? 1) as FuelSystemValue;
+    const fuelSystem = resolveFuelSystem((input as any).fuelSystem ?? (vehicle as any).fuelSystem);
     
     return { 
       xrpm, yhp, NHP: xrpm.length, 
@@ -224,7 +242,7 @@ function extractHPCurve(input: SimInputs): {
   const peakHP = Number(vehicle.powerHP ?? (vehicle as any).peakHP);
   const rpmAtPeakHP = Number((vehicle as any).rpmAtPeakHP ?? (vehicle as any).peakRPM ?? 6500);
   const displacement_cid = Number((vehicle as any).displacement_cid ?? (vehicle as any).displacementCID ?? 350);
-  const fuelSystem = ((input as any).fuelSystem ?? (vehicle as any).fuelSystem ?? 1) as FuelSystemValue;
+  const fuelSystem = resolveFuelSystem((input as any).fuelSystem ?? (vehicle as any).fuelSystem);
   
   if (Number.isFinite(peakHP) && peakHP > 0) {
     // Use VB6's ENGINE() function to generate synthetic curve
@@ -450,16 +468,20 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   //   - Timer starts when car has moved "rollout" distance
   //   - Distance is measured to where the NOSE would be (rear + wheelbase + overhang)
   //
-  const rolloutIn = (vehicle as any).rolloutIn ?? 9;  // Staging beam rollout (inches)
-  const overhangIn = (vehicle as any).overhangIn ?? 0; // Front overhang (inches)
+  // VB6 Bonneville Pro has no staging beam — rollout/overhang are drag-only concepts.
+  // VB6 BonnevillePro: timer starts at t=0, d=0 (no rollout offset).
+  // Confirmed by fixture normalizer: "BonnevillePro: rolloutIn does NOT exist (no staging)"
+  const rolloutIn = isLandSpeed ? 0 : ((vehicle as any).rolloutIn ?? 9);  // Staging beam rollout (inches)
+  const overhangIn = isLandSpeed ? 0 : ((vehicle as any).overhangIn ?? 0); // Front overhang (inches)
   
   // VB6 TIMESLIP.FRM lines 809-815: Calculate overhang adjustment
   // ftd = front tire diameter = 2 * rollout (minimum 24")
   // ovradj = (overhang + 0.25 * ftd) / 12 (minimum 0.5 * ftd / 12)
+  // Land speed: no overhang adjustment (no staging beam geometry)
   let ftd = 2 * rolloutIn;
-  if (ftd < 24) ftd = 24;
-  let ovradj = (overhangIn + 0.25 * ftd) / 12;
-  const minOvradj = 0.5 * ftd / 12;
+  if (ftd < 24) ftd = isLandSpeed ? 0 : 24;
+  let ovradj = isLandSpeed ? 0 : (overhangIn + 0.25 * ftd) / 12;
+  const minOvradj = isLandSpeed ? 0 : 0.5 * ftd / 12;
   if (ovradj < minOvradj) ovradj = minOvradj;
   
   // First distance checkpoint is at rollout/12 feet
@@ -966,11 +988,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // These are used for distance targeting to hit exact print points
   const rolloutTarget = rolloutFt > 0 ? rolloutFt : 1;  // VB6: If rollout = 0, use 1ft
   // VB6 TIMESLIP.FRM distance print points:
-  // Quarter mile: rollout, 30ft, 60ft, 330ft, 660ft, 1000ft, 1320ft
+  // Quarter mile: rollout, 30ft, 60ft, 330ft, 594ft, 660ft, 1000ft, 1254ft, 1320ft
+  //   594 and 1254 are internal trap-speed save-time distances (not printed)
   // Bonneville: rollout, then 1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 miles (converted to feet)
   const distPrintPoints = isLandSpeed 
     ? [rolloutTarget, 5280, 10560, 13200, 15840, 18480, 21120, 23760, 26400] // Bonneville (miles * 5280)
-    : [rolloutTarget, 30, 60, 330, 660, 1000, 1320];                         // Quarter mile
+    : [rolloutTarget, 30, 60, 330, 594, 660, 1000, 1254, 1320];              // Quarter mile
   let distPrintIdx = 0;
   
   // VB6 TIMESLIP.FRM:878-918 - Calculate TimePrintInc based on estimated ET
@@ -1041,7 +1064,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // nextEtPrint_s is the NEXT time print target in ET space (elapsed time from rollout)
   // absTimePrint_s is computed each loop as timerStartTime_s + nextEtPrint_s
   let nextEtPrint_s = TimePrintInc;  // VB6: TimePrint = TimePrintInc (line 918)
-  console.log(`[vb6Exact] TimePrintInc=${TimePrintInc}, estimatedET=${estimatedET.toFixed(2)}, kd=${kd}, NGR=${NGR}, isLandSpeed=${isLandSpeed}`);
   let Shift2PrintTime: number | undefined = undefined;  // VB6 line 1071 - set ONCE when ShiftFlag transitions 1→2
   
   // VB6 TIMESLIP.FRM:818 - MPHtoPrint array for VelMPHMatch velocity revision
@@ -1118,7 +1140,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Run simulation
   // ========================================================================
   // For land speed runs, allow more steps and time
-  const MAX_STEPS = isLandSpeed ? 200000 : 5000;  // 200k steps for 5-mile run
+  const MAX_STEPS = isLandSpeed ? 200000 : 10000;  // 200k steps for 5-mile run, 10k for quarter
   const MAX_TIME_S = isLandSpeed ? 300 : 30;  // 5 minutes for land speed
   
   const convergenceHistory: VB6ExactResult['vb6Diagnostics'] = {
@@ -1193,44 +1215,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     isLandSpeed
   ));
   
-  // Debug: Log initial state for timing analysis
-  console.log('[vb6Exact] Initial state:', JSON.stringify({
-    launchRPM,
-    stallRPM,
-    enginePMI,
-    spinUpTime: enginePMI * (stallRPM - launchRPM) / 250000,
-    rolloutFt,
-    ovradj,
-    TSMax,
-    slippage,
-    torqueMult,
-    isClutch,
-    weight: vehicle.weightLb,
-    tireDia: tireDiaIn,
-    tireWidth: tireWidthIn,
-    finalDrive,
-    gearRatios,
-    TGEff,
-    shiftRPMs: vb6Vehicle.ShiftRPM,
-    // Launch calculation debug
-    tireSlipAtLaunch,
-    trackTempEffect: trackTempEffect_early,
-    tractionIndex: tractionIndex_early,
-    Ags0,
-    HP_launch: HP_corrected,
-    TQ_launch: 5252 * HP_corrected / launchRPM * torqueMult * gearRatios[0] * TGEff[0],
-    force_launch: force,
-  }, null, 2));
-  
   for (let step = 0; step < MAX_STEPS; step++) {
     // Check termination conditions (track distance has passed finish line)
     const currentTrackDist = state.Dist_ft - rolloutFt + ovradj;
     if (currentTrackDist >= raceLengthFt + 50) {
-      console.log(`[vb6Exact] Terminating: currentTrackDist=${currentTrackDist.toFixed(1)} >= raceLengthFt+50=${raceLengthFt + 50}`);
       break; // Stop shortly after finish line
     }
     if (state.time_s >= MAX_TIME_S) {
-      console.log(`[vb6Exact] Terminating: time=${state.time_s.toFixed(2)} >= MAX_TIME_S=${MAX_TIME_S}`);
       break;
     }
     
@@ -1252,7 +1243,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Single advancement rule: nextEtPrint_s advances ONLY when a time print row is emitted
     // EPS = 1e-6 for floating-point tolerance
     // ========================================================================
-    const EPS = 1e-6;
+    const EPS = 5e-6;  // Single-precision safe: ~7 sig digits at t≈12s → ulp ≈ 1e-6
     
     // PRE-STEP: If at boundary, emit time row using current state (no interpolation needed)
     if (timerStartTime_s !== null) {
@@ -1308,8 +1299,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const savedGear = state.Gear;
     
     let stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
-    
-    
     
     // VB6 TIMESLIP.FRM:1355, 1433 - Shift recalculation (GoTo 230)
     // If shift triggers during step (EngRPM near ShiftRPM), VB6 recalculates with new gear
@@ -1444,7 +1433,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           doOptSaveTime = doOptResult.SaveTime;
           
           // doOpt may have recorded TIMESLIP values - we handle this in the distance print section
-          console.log(`[vb6Exact] doOpt interpolation at step ${step}: dist=${doOptResult.dist.toFixed(2)}, time=${doOptResult.time.toFixed(4)}, vel=${doOptResult.vel.toFixed(2)}`);
         }
       }
     }
@@ -1490,24 +1478,19 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     const toleranceMet = distPrintIdx < distPrintPoints.length && 
         (withinTolerance || overshoot || shiftFallback);
     
-    // Debug: Log when tolerance is met for distance prints
-    if (toleranceMet && distPrintIdx < 5) {
-      console.log(`[vb6Exact] DIST TOLERANCE MET: Step ${step}, distPrintIdx=${distPrintIdx}, target=${currentTarget?.toFixed(1)}, dist=${state.Dist_ft.toFixed(2)}, withinTol=${withinTolerance}, overshoot=${overshoot}`);
-    }
-    
     if (toleranceMet) {
       // VB6 records TIMESLIP values when hitting specific distance print points
       // For Quarter mile: distPrintPoints = [rollout, 30, 60, 330, 594, 660, 1000, 1254, 1320]
-      // TIMESLIP indices:                     1       2   3    4    5    6     7     8     9
-      // Note: distPrintIdx is 0-based, VB6 iDist is 1-based
+      // vb6iDist (1-based):                    1       2   3    4    5    6     7     8     9
+      // Note: distPrintIdx is 0-based, vb6iDist = distPrintIdx + 1
       const vb6iDist = distPrintIdx + 1;  // Convert to VB6's 1-based index
       
       // VB6 line 1299: If iDist = 1 And gc_Rollout.Value = 0 Then PrintFlag = -1
       // For Bonneville with zero rollout, skip the first checkpoint (1ft)
       const skipFirstCheckpoint = vb6iDist === 1 && rolloutIn === 0;
       if (skipFirstCheckpoint) {
-        distPrintIdx++;  // Skip to next checkpoint
-        // Don't record anything for this checkpoint - continue to next step
+        // VB6 line 1299: PrintFlag = -1 (suppress print, but iDist still advances once at line 1417)
+        // Don't record anything for this checkpoint — distPrintIdx++ at end of block handles advancement
       } else {
       
       // VB6 sub310 DISTANCE INTERPOLATION (TIMESLIP.FRM:1609-1640)
@@ -1553,7 +1536,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       
       // Record printed row for distance checkpoint (VB6 AddListLine)
       // Skip rollout (vb6iDist=1) as it's handled separately when timer starts
-      if (vb6iDist > 1 && timerStartTime_s !== null) {
+      // Skip 594ft (vb6iDist=5) and 1254ft (vb6iDist=8) - internal trap speed distances, not printed
+      const isInternalTrapDist = !isLandSpeed && (vb6iDist === 5 || vb6iDist === 8);
+      if (vb6iDist > 1 && !isInternalTrapDist && timerStartTime_s !== null) {
         printedRows.push(formatVB6PrintedRow(
           'distance',
           state.L,
@@ -1736,9 +1721,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         state.Dist_ft = state.Dist_ft + ovradj;
         state.Dist0_ft = state.Dist_ft;
         
-        // Debug: Log rollout timing
-        console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (after ovradj=${ovradj.toFixed(3)}), v=${rolloutVel_mph.toFixed(2)}mph, step=${step}`);
-        
         // TRACE HOOK: Record ROLLOUT_CROSSED
         if (VB6_TRACE_ENABLED) {
           recordTracePoint(step, 'ROLLOUT_CROSSED', {
@@ -1856,27 +1838,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         
         iMPH++;
       }
-    }
-    
-    // Debug: Log at key distance points to find where discrepancy accumulates
-    // VB6 TA Dragster times: 60ft=0.89s, 330ft=2.38s, 660ft=3.55s, 1000ft=4.58s, 1320ft=5.52s
-    // After rollout, state.Dist_ft already includes ovradj (VB6 line 1381)
-    // So trackDist = state.Dist_ft - rolloutFt (ovradj is already in Dist_ft)
-    const trackDist = timerStartTime_s !== null 
-      ? state.Dist_ft - rolloutFt  // After rollout: Dist_ft includes ovradj
-      : 0;
-    const trackTime = timerStartTime_s !== null ? state.time_s - timerStartTime_s : 0;
-    if (trackDist >= 60 && trackDist < 62) {
-      console.log(`[vb6Exact] 60ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
-    }
-    if (trackDist >= 330 && trackDist < 335) {
-      console.log(`[vb6Exact] 330ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
-    }
-    if (trackDist >= 660 && trackDist < 665) {
-      console.log(`[vb6Exact] 660ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
-    }
-    if (trackDist >= 1000 && trackDist < 1005) {
-      console.log(`[vb6Exact] 1000ft: t=${trackTime.toFixed(3)}s, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(1)}mph, a=${state.AGS_g.toFixed(2)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
     }
     
     // Calculate track distance (what the timer measures)
@@ -1999,9 +1960,6 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vb6Env.iMPH = iMPH;
   }
   
-  // Debug: Log final simulation state
-  console.log(`[vb6Exact] Simulation complete: steps=${trace.length}, finalDist=${state.Dist_ft.toFixed(1)}ft, finalTime=${state.time_s.toFixed(2)}s, raceLengthFt=${raceLengthFt}`);
-  
   // ========================================================================
   // Build result
   // ========================================================================
@@ -2013,8 +1971,23 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const mphDecimals = (input as any).mphDecimals ?? 1; // VB6 default: 1 decimal
   
   // Raw values before rounding
-  const et_s_raw = finalResult?.t_s ?? state.time_s;
-  const mph_raw = finalResult?.v_mph ?? (state.Vel_ftps * FPS_TO_MPH);
+  // For land speed: timeslip is empty, so interpolate from trace at exact finish distance
+  // to avoid using overshoot time (state.time_s is past the finish line)
+  let et_s_raw = finalResult?.t_s ?? state.time_s;
+  let mph_raw = finalResult?.v_mph ?? (state.Vel_ftps * FPS_TO_MPH);
+  if (!finalResult && isLandSpeed && trace.length >= 2) {
+    for (let i = 0; i < trace.length - 1; i++) {
+      const a = trace[i];
+      const b = trace[i + 1];
+      if (a.s_ft <= raceLengthFt && b.s_ft >= raceLengthFt) {
+        const span = b.s_ft - a.s_ft;
+        const frac = span > 0 ? (raceLengthFt - a.s_ft) / span : 0;
+        et_s_raw = a.t_s + frac * (b.t_s - a.t_s);
+        mph_raw = a.v_mph + frac * (b.v_mph - a.v_mph);
+        break;
+      }
+    }
+  }
   
   // Apply VB6-style rounding if enabled
   // VB6 uses "round half up": Int((Value + increment/2) / increment) * increment
