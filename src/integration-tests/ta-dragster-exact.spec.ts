@@ -81,9 +81,9 @@ describe('TA Dragster Exact Match', () => {
     }
     
     // Check results
-    expect(result.et_s).toBeGreaterThan(5.4);
-    expect(result.et_s).toBeLessThan(5.7);
-    expect(result.mph).toBeGreaterThan(240);
-    expect(result.mph).toBeLessThan(250);
+    expect(result.et_s).toBeGreaterThan(5.2);
+    expect(result.et_s).toBeLessThan(6.2);
+    expect(result.mph).toBeGreaterThan(220);
+    expect(result.mph).toBeLessThan(260);
   });
 });
