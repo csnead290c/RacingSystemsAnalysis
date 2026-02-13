@@ -14,7 +14,6 @@ export {
   vb6Tire,
   calcCAXI,
   calcAX,
-  TABY,
   type VB6SimState,
   type VB6VehicleParams,
   type VB6EnvParams,

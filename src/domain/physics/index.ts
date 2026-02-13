@@ -3,9 +3,7 @@
  * 
  * Models:
  * - SimpleV1: Current baseline physics (simplified)
- * - RSACLASSIC: Advanced physics for Quarter Jr/Pro parity
  * - VB6Exact: Exact VB6 TIMESLIP.FRM replication (bit-for-bit parity)
- * - Blend: RSACLASSIC + adaptive learning
  */
 
 import type { Vehicle } from '../schemas/vehicle.schema';
@@ -16,7 +14,63 @@ import { predictBaseline } from '../../worker/pipeline';
 /**
  * Available physics model identifiers.
  */
-export type PhysicsModelId = 'SimpleV1' | 'RSACLASSIC' | 'VB6Exact' | 'Blend';
+export type PhysicsModelId = 'SimpleV1' | 'VB6Exact' | 'RSACLASSIC' | 'Blend';
+
+/**
+ * Legacy model IDs that are mapped to current models for backward compatibility.
+ * Old saved inputs or presets may still contain these strings.
+ */
+const LEGACY_MODEL_MAP: Record<string, PhysicsModelId> = {
+  RSACLASSIC: 'VB6Exact',
+  rsaclassic: 'VB6Exact',
+  RSAClassic: 'VB6Exact',
+  Blend: 'VB6Exact',
+  blend: 'VB6Exact',
+};
+
+const _legacyWarned = new Set<string>();
+
+/** @internal Reset warn-once state (for testing only). */
+export function _resetLegacyWarnings(): void {
+  _legacyWarned.clear();
+}
+
+/**
+ * Resolve a model ID string to a valid PhysicsModelId.
+ * Maps legacy/unknown IDs to VB6Exact with a console warning (once per ID).
+ * 
+ * Use this at trust boundaries where the model ID comes from external input
+ * (worker messages, saved presets, URL params, localStorage).
+ */
+export function resolveModelId(raw: string | undefined | null): PhysicsModelId {
+  if (!raw) {
+    if (!_legacyWarned.has('__empty__')) {
+      console.warn('[resolveModelId] No model ID provided, defaulting to VB6Exact');
+      _legacyWarned.add('__empty__');
+    }
+    return 'VB6Exact';
+  }
+  
+  // Check if it's already a valid model ID
+  if (raw in models) return raw as PhysicsModelId;
+  
+  // Check legacy map
+  const mapped = LEGACY_MODEL_MAP[raw];
+  if (mapped) {
+    if (!_legacyWarned.has(raw)) {
+      console.warn(`[resolveModelId] Legacy model "${raw}" mapped to "${mapped}". Update saved data.`);
+      _legacyWarned.add(raw);
+    }
+    return mapped;
+  }
+  
+  // Unknown model — default to VB6Exact
+  if (!_legacyWarned.has(raw)) {
+    console.warn(`[resolveModelId] Unknown model "${raw}" defaulting to VB6Exact`);
+    _legacyWarned.add(raw);
+  }
+  return 'VB6Exact';
+}
 
 /**
  * Extended vehicle configuration for advanced physics models.
@@ -245,10 +299,8 @@ class SimpleV1Model implements PhysicsModel {
   }
 }
 
-// Import RSACLASSIC, VB6Exact, and Blend implementations
-import { RSACLASSIC as RSACLASSICImpl } from './models/rsaclassic';
+// Import VB6Exact implementation
 import { simulateVB6Exact } from './models/vb6Exact';
-import { Blend as BlendImpl } from './models/blend';
 
 /**
  * VB6 Exact model wrapper
@@ -272,17 +324,18 @@ class VB6ExactModel implements PhysicsModel {
 /**
  * Model registry.
  */
+const _vb6Exact = new VB6ExactModel();
 const models: Record<PhysicsModelId, PhysicsModel> = {
   SimpleV1: new SimpleV1Model(),
-  RSACLASSIC: RSACLASSICImpl,
-  VB6Exact: new VB6ExactModel(),
-  Blend: BlendImpl,
+  VB6Exact: _vb6Exact,
+  RSACLASSIC: _vb6Exact,
+  Blend: _vb6Exact,
 };
 
 /**
  * Get a physics model by ID.
  * 
- * @param id - Model identifier
+ * @param id - Model identifier (strict — use resolveModelId() for untrusted input)
  * @returns Physics model instance
  */
 export function getModel(id: PhysicsModelId): PhysicsModel {
@@ -291,4 +344,12 @@ export function getModel(id: PhysicsModelId): PhysicsModel {
     throw new Error(`Unknown physics model: ${id}`);
   }
   return model;
+}
+
+/**
+ * Get a physics model by raw string ID (safe for untrusted input).
+ * Maps legacy/unknown IDs to VB6Exact with a warning.
+ */
+export function getModelSafe(rawId: string | undefined | null): PhysicsModel {
+  return getModel(resolveModelId(rawId));
 }

@@ -6,6 +6,64 @@
  * These are the exact VB6 Lagrangian interpolation routines used for:
  * - HP curve interpolation (TABY - 1D)
  * - ENGINE() synthetic curve generation (DTABY - 2D)
+ * 
+ * ============================================================================
+ * VB6↔TS CROSSWALK (authoritative)
+ * ============================================================================
+ * 
+ * VB6 TABY (RSALIB.BAS:531-573):
+ * ```vb
+ * Static Sub TABY(XTAB() As Single, YTAB() As Single, N%, L%, XVAL As Single, YVAL As Single)
+ *     KBOTM% = 1: KTOP% = 2
+ *     If N% = 1 Then GoTo T100
+ *     If N% = 2 Then GoTo T400
+ *     Call BISC(XTAB(), XVAL, N%, KBOTM%, KTOP%, JJ%)
+ *     If KBOTM% <> KTOP% Then GoTo T200
+ * T100:
+ *     YVAL = YTAB(KBOTM%): Exit Sub
+ * T200:
+ *     If JJ% = 1 Or L% <= 1 Then GoTo T400
+ *     KTOP% = KTOP% + 1
+ *     If L% >= 3 Then GoTo T300
+ *     If KTOP% <= N% Then GoTo T400
+ * T300:
+ *     If KTOP% > N% Then KTOP% = N%
+ *     KBOTM% = KBOTM% - 1: If KBOTM% < 1 Then KBOTM% = 1
+ * T400:
+ *     YVAL = 0
+ *     For j% = KBOTM% To KTOP%
+ *         P = 1
+ *         xtabj = XTAB(j%)
+ *         For i% = KBOTM% To KTOP%
+ *             If (i% = j%) Then
+ *                 P = P * YTAB(j%)
+ *             Else
+ *                 xtabi = XTAB(i%)
+ *                 P = P * (XVAL - xtabi) / (xtabj - xtabi)
+ *             End If
+ *         Next
+ *         YVAL = YVAL + P
+ *     Next
+ * End Sub
+ * ```
+ * 
+ * VB6 Variable Types:
+ *   XTAB(), YTAB() - Single arrays (1-indexed)
+ *   N%, L%, KBOTM%, KTOP%, JJ%, i%, j% - Integer
+ *   XVAL, YVAL - Single
+ *   P, xtabj, xtabi - Variant→Double (no suffix = Double in arithmetic)
+ * 
+ * VB6 Coercion Rules:
+ *   1. P computed in Double (Variant promotes to Double in arithmetic)
+ *   2. Division (XVAL - xtabi) / (xtabj - xtabi) in Double
+ *   3. YVAL = YVAL + P truncates to Single per iteration (YVAL is Single)
+ *   4. VB6 arrays are 1-indexed; TS uses 0-indexed
+ * 
+ * TS Implementation Notes:
+ *   - bisc() and taby() compute entirely in Double (JS default)
+ *   - No per-operation truncation (matches VB6 expression evaluation)
+ *   - Caller is responsible for Single truncation if assigning to Single var
+ * ============================================================================
  */
 
 /**
@@ -126,12 +184,28 @@ export function taby(
     }
     
     // Expand bracket based on interpolation order
+    // VB6 RSALIB.BAS:548-556 (T200/T300 logic)
     if (JJ !== 1 && L > 1) {
+      // VB6:549 - KTOP% = KTOP% + 1
       KTOP = KTOP + 1;
-      if (L >= 3 || KTOP > N - 1) {
+      
+      // VB6:550 - If L% >= 3 Then GoTo T300
+      if (L >= 3) {
+        // T300: expand both directions
         if (KTOP > N - 1) KTOP = N - 1;
         KBOTM = KBOTM - 1;
         if (KBOTM < 0) KBOTM = 0;
+      } else {
+        // L = 2 (quadratic)
+        // VB6:551 - If KTOP% <= N% Then GoTo T400
+        if (KTOP > N - 1) {
+          // KTOP exceeded limit, must expand lower instead
+          // T300 logic
+          KTOP = N - 1;
+          KBOTM = KBOTM - 1;
+          if (KBOTM < 0) KBOTM = 0;
+        }
+        // else: KTOP is valid, go to T400 (use 3 points: KBOTM, KBOTM+1, KTOP)
       }
     }
   }

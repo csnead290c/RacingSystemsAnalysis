@@ -15,13 +15,14 @@ const GC = 32.174; // gravitational constant
  * Calculate angle of maximum piston speed
  * From VB6 ENGPERF.BAS
  */
-// @ts-expect-error - Reserved for future use
-function calcAngMPS(lrqs: number): number {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _calcAngMPS(lrqs: number): number {
   // Maximum piston speed angle (degrees ATDC)
   const lrqs2 = 2 * lrqs;
   const angRad = Math.asin(1 / lrqs2);
   return angRad * 180 / PI;
 }
+void _calcAngMPS; // Suppress unused warning - reserved for future use
 
 /**
  * Mechanical Details Data Point

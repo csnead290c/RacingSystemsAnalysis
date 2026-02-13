@@ -11,7 +11,6 @@ import {
   vb6SimulationStep, 
   vb6InitState, 
   vb6CalcTSMaxInit,
-  TABY,
   vb6DoOpt,
   type VB6VehicleParams,
   type VB6EnvParams,
@@ -20,7 +19,7 @@ import {
   type VB6ASV,
 } from '../vb6/vb6SimulationStep';
 import { airDensityVB6, type FuelSystemType } from '../vb6/air';
-import { gc, FPS_TO_MPH, roundET, roundMPH } from '../vb6/constants';
+import { gc, FPS_TO_MPH, roundET, roundMPH, PI } from '../vb6/constants';
 import { setFloat32Mode } from '../vb6/vb6SimulationStep';
 import { buildEngineCurve, convertToZeroIndexed } from '../vb6/engineCurve';
 import { 
@@ -35,6 +34,8 @@ import { type FuelSystemValue } from '../vb6/calcWork';
 import { taby } from '../vb6/dtaby';
 import { Z6 } from '../vb6/constants';
 import { RACE_LENGTH_INFO, type RaceLength } from '../../config/raceLengths';
+import { formatVB6PrintedRow, type VB6PrintedRow } from '../vb6/vb6PrintedRow';
+import { VB6_TRACE_ENABLED, recordTracePoint, clearTrace } from '../vb6/vb6TraceHook';
 
 /**
  * Get race length in feet from race length key
@@ -389,6 +390,8 @@ export interface VB6ExactResult extends SimResult {
       mph: number;
     };
   };
+  // VB6 Printed Row Stream - authoritative output for strict equivalence testing
+  printedRows?: VB6PrintedRow[];
 }
 
 /**
@@ -404,13 +407,19 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const vehicle = input.vehicle;
   const env = input.env;
   
-  // VB6 32-bit precision mode - disabled for now as it's causing issues
-  // TODO: Investigate why Float32 precision makes results worse
-  const vb6Strict = (input as any).vb6Strict ?? false;  // Default to FALSE until we fix the issue
-  setFloat32Mode(vb6Strict);
-  if (vb6Strict) {
-    console.log('[vb6Exact] VB6 32-bit precision mode enabled (Float32)');
-  }
+  // DEPRECATED: vb6Strict flag no longer affects numerical behavior
+  // VB6 semantics (Double computation, Single assignment truncation via vb6AssignSingle)
+  // are now ALWAYS active. The setFloat32Mode() call is kept for API compatibility only.
+  // See vb6SimulationStep.ts for details on the refactoring.
+  //
+  // TODO: Remove this entire block once vb6Strict is retired from SimInputs.
+  // Steps to remove:
+  // 1. Remove vb6Strict from SimInputs type (if defined there)
+  // 2. Remove this const and setFloat32Mode() call
+  // 3. Remove setFloat32Mode import from this file
+  // 4. Remove setFloat32Mode export from vb6SimulationStep.ts
+  const vb6Strict = (input as any).vb6Strict ?? false;
+  setFloat32Mode(vb6Strict);  // No-op, kept for API compatibility
   
   // Race length - default to quarter mile (1320 ft)
   // Support all track types from raceLengths.ts
@@ -530,8 +539,13 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const NGR = gearRatios.length;
   
   // Tire dimensions - check nested tire object (fixture format) and flat properties
+  // VB6 TIMESLIP.FRM:683-687 - If tire is specified as circumference (rollout), divide by PI
+  // If gc_TireDia.UOM = UOM_NORMAL Then TireDia = gc_TireDia.Value
+  // Else TireDia = gc_TireDia.Value / PI
   const tire = (vehicle as any).tire;
-  const tireDiaIn = tire?.diameter_in ?? vehicle.tireDiaIn ?? 32;
+  const tireRolloutIn = (vehicle as any).tireRolloutIn ?? tire?.rollout_in;
+  const tireDiaIn = tire?.diameter_in ?? vehicle.tireDiaIn ?? (vehicle as any).tireDiameterIn ??
+    (tireRolloutIn ? tireRolloutIn / PI : 32);  // VB6: TireDia = TireRollout / PI
   const tireWidthIn = tire?.width_in ?? vehicle.tireWidthIn ?? 17;
   
   // Body style - calculate from weight if not provided (VB6: QTRPERF.BAS CalcBodyStyle)
@@ -826,7 +840,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const launchRPM_calc = isClutch 
     ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
     : stallRPM;
-  const HP_launch_calc = TABY(xrpm, yhp, NHP, 1, launchRPM_calc);
+  const HP_launch_calc = taby(xrpm, yhp, NHP, 1, launchRPM_calc);
   // Use hpTqMult_early (defined earlier for stall calculation)
   const HP_corrected = hpTqMult_early * HP_launch_calc / hpc;
   
@@ -850,7 +864,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   const force = TQ * finalDrive * overallEfficiency / (tireSlipAtLaunch * tireDiaIn / 24) - dragForceAtLaunch;
   
   // VB6 TIMESLIP.FRM:1023-1027 - Estimate Ags0
-  // Clutch: 0.88 (12% losses), Converter: 0.96 (4% losses)
+  // VB6: If gc_TransType.Value Then Ags0 = 0.96 * force / Weight (converter = 4% losses)
+  //      Else Ags0 = 0.88 * force / Weight (clutch = 12% losses)
+  // gc_TransType.Value = True means CONVERTER, False means CLUTCH (see line 703, 721-722)
   const launchEfficiency = isClutch ? 0.88 : 0.96;
   const Ags0 = launchEfficiency * force / weight;
   
@@ -949,9 +965,12 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6: If DistToPrint(1) = 0 Then DistToPrint(1) = 1 (lines 815, 822, etc.)
   // These are used for distance targeting to hit exact print points
   const rolloutTarget = rolloutFt > 0 ? rolloutFt : 1;  // VB6: If rollout = 0, use 1ft
+  // VB6 TIMESLIP.FRM distance print points:
+  // Quarter mile: rollout, 30ft, 60ft, 330ft, 660ft, 1000ft, 1320ft
+  // Bonneville: rollout, then 1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 miles (converted to feet)
   const distPrintPoints = isLandSpeed 
-    ? [rolloutTarget, 660, 1320, 1980, 2640, 3300, 3960, 4620, 5280] // Bonneville
-    : [rolloutTarget, 30, 60, 330, 594, 660, 1000, 1254, 1320];      // Quarter mile
+    ? [rolloutTarget, 5280, 10560, 13200, 15840, 18480, 21120, 23760, 26400] // Bonneville (miles * 5280)
+    : [rolloutTarget, 30, 60, 330, 660, 1000, 1320];                         // Quarter mile
   let distPrintIdx = 0;
   
   // VB6 TIMESLIP.FRM:878-918 - Calculate TimePrintInc based on estimated ET
@@ -1005,16 +1024,35 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       break;
     }
   }
-  let TimePrint = TimePrintInc;  // VB6: TimePrint = TimePrintInc (line 918)
+  
+  // Override for Bonneville Pro: VB6 uses 10s time print intervals for land speed runs
+  // This matches the VB6 BonnevillePro output format
+  if (isLandSpeed) {
+    TimePrintInc = 10.0;
+  }
+  
+  // Assertion: Verify TimePrintInc matches expected values for each mode
+  // QuarterPro = 0.5s, QuarterJr = 1.0s, Bonneville = 10.0s
+  const expectedTimePrintInc = isLandSpeed ? 10.0 : (isQuarterJr ? 1.0 : 0.5);
+  if (TimePrintInc !== expectedTimePrintInc) {
+    console.warn(`[vb6Exact] TimePrintInc mismatch: got ${TimePrintInc}, expected ${expectedTimePrintInc} for ${isLandSpeed ? 'Bonneville' : isQuarterJr ? 'QuarterJr' : 'QuarterPro'}`);
+  }
+  
+  // nextEtPrint_s is the NEXT time print target in ET space (elapsed time from rollout)
+  // absTimePrint_s is computed each loop as timerStartTime_s + nextEtPrint_s
+  let nextEtPrint_s = TimePrintInc;  // VB6: TimePrint = TimePrintInc (line 918)
+  console.log(`[vb6Exact] TimePrintInc=${TimePrintInc}, estimatedET=${estimatedET.toFixed(2)}, kd=${kd}, NGR=${NGR}, isLandSpeed=${isLandSpeed}`);
   let Shift2PrintTime: number | undefined = undefined;  // VB6 line 1071 - set ONCE when ShiftFlag transitions 1→2
   
   // VB6 TIMESLIP.FRM:818 - MPHtoPrint array for VelMPHMatch velocity revision
-  // Quarter Pro: MPHtoPrint(1) = 60/Z5, MPHtoPrint(2) = 100/Z5 (in ft/s)
+  // Quarter Pro: Only 60 MPH print (based on fixture analysis)
+  // Bonneville: 100 MPH and 200 MPH prints
   // Z5 = 3600/5280 = 0.681818 (already defined above)
   const MPHtoPrint = isLandSpeed 
     ? [100 / Z5, 200 / Z5]  // Bonneville: 100 and 200 MPH
-    : [60 / Z5, 100 / Z5];  // Quarter Pro: 60 and 100 MPH
+    : [60 / Z5];            // Quarter Pro: 60 MPH only
   let iMPH = 1;  // VB6 TIMESLIP.FRM:1002 - iMPH starts at 1
+  const maxMPHPrints = isLandSpeed ? 2 : 1;  // Quarter Pro only prints 60 MPH
   
   // ovradj is already calculated above (line ~418) using VB6 TIMESLIP.FRM:811-813
   
@@ -1029,7 +1067,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     nextDistPrint: distPrintPoints[distPrintIdx], // First target is rollout
     prevDistPrint: 0,  // Previous distance target (0 for first target)
     TimePrintInc,
-    TimePrint,
+    // absTimePrint_s is computed each loop iteration based on timerStartTime_s + nextEtPrint_s
+    absTimePrint_s: Infinity,  // Start with Infinity (no time limiting pre-rollout)
     shiftRPMs,  // VB6 ShiftRPM array for VelShiftMatch calculation
     iMPH,       // VB6 iMPH for VelMPHMatch velocity revision
     MPHtoPrint, // VB6 MPHtoPrint array [60/Z5, 100/Z5] in ft/s
@@ -1041,6 +1080,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // ========================================================================
   // Use the same LaunchRPM that was set in vb6Vehicle to ensure consistency
   const launchRPM = vb6Vehicle.LaunchRPM;
+  
+  // Clear trace buffer at start of simulation
+  if (VB6_TRACE_ENABLED) {
+    clearTrace();
+  }
   
   const state = vb6InitState(vb6Vehicle, vb6Env, launchRPM);
   
@@ -1059,7 +1103,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // VB6 lines 1063-1064: Quarter mile uses dynamic calculation
     const rolloutFt_tsmax = (vehicle.rolloutIn ?? 12) / 12;
     const DistToPrint1 = rolloutFt_tsmax > 0 ? rolloutFt_tsmax : 1;
-    const HP_launch_raw = TABY(xrpm, yhp, NHP, 1, launchRPM);
+    const HP_launch_raw = taby(xrpm, yhp, NHP, 1, launchRPM);
     const HP_launch_corrected = hpTqMult_early * HP_launch_raw / hpc;
     TSMax = vb6CalcTSMaxInit(
       DistToPrint1,
@@ -1074,7 +1118,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // Run simulation
   // ========================================================================
   // For land speed runs, allow more steps and time
-  const MAX_STEPS = isLandSpeed ? 50000 : 5000;
+  const MAX_STEPS = isLandSpeed ? 200000 : 5000;  // 200k steps for 5-mile run
   const MAX_TIME_S = isLandSpeed ? 300 : 30;  // 5 minutes for land speed
   
   const convergenceHistory: VB6ExactResult['vb6Diagnostics'] = {
@@ -1086,8 +1130,17 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // TIMESLIP recording is now integrated with distPrintIdx (VB6's iDist)
   const timeslip: { d_ft: number; t_s: number; v_mph: number }[] = [];
   
+  // VB6 Printed Row Stream - records rows at exact VB6 AddListLine moments
+  // This is the authoritative output for strict equivalence testing
+  const printedRows: VB6PrintedRow[] = [];
+  
   // Track when the timer starts (when car has moved rolloutFt distance)
   let timerStartTime_s: number | null = rolloutIn === 0 ? 0 : null;
+  let rolloutVel_mph: number | null = null;  // Velocity at rollout moment (for VB6 print parity)
+  let rolloutAccel_g: number | null = null;  // Accel at rollout moment
+  let rolloutRPM: number | null = null;      // RPM at rollout moment
+  let rolloutGear: number | null = null;     // Gear at rollout moment
+  let prevET_s: number = 0;  // Previous elapsed time (for time print interpolation)
   
   // VB6 trap speed calculation: average speed over last 66ft
   // TIMESLIP.FRM:1388,1396,1619,1624 - SaveTime is set at 594ft (for 660) and 1254ft (for 1320)
@@ -1101,6 +1154,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   
   // Add initial trace entry at t=0 with Launch RPM (before first simulation step)
   // VB6 shows this as the first line: 0.00 0 0.0 Ags0 1 LaunchRPM
+  // SLIP flag is set by vb6InitState when Ags0 > AMAX (traction limited)
   trace.push({
     t_s: 0,
     s_ft: 0,
@@ -1111,7 +1165,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     dsrpm: 0,
     lockRpm: 0,
     gear: 1,
-    slip: false,
+    slip: state.SLIP,  // Use SLIP flag from vb6InitState (true if traction limited)
     tireSlip: 1,
     hp: 0,
     dragHp: 0,
@@ -1119,6 +1173,25 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     wheelSpeed_mph: 0,
     throttleStopActive: false,
   });
+  
+  // VB6 TIMESLIP.FRM:1059 - AddListLine for staged row (L=1)
+  // This is the first printed row showing initial state at the starting line
+  printedRows.push(formatVB6PrintedRow(
+    'staged',
+    1,  // L=1
+    0,  // iDist=0 (before first distance target)
+    {
+      time_s: 0,
+      dist_ft: 0,
+      vel_fps: 0,
+      ags_g: state.AGS_g,  // Initial clamped Ags0
+      engRPM: launchRPM,
+      gear: 1,
+      slip: state.SLIP,
+    },
+    NGR,
+    isLandSpeed
+  ));
   
   // Debug: Log initial state for timing analysis
   console.log('[vb6Exact] Initial state:', JSON.stringify({
@@ -1152,16 +1225,18 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   for (let step = 0; step < MAX_STEPS; step++) {
     // Check termination conditions (track distance has passed finish line)
     const currentTrackDist = state.Dist_ft - rolloutFt + ovradj;
-    if (currentTrackDist >= raceLengthFt + 50) break; // Stop shortly after finish line
-    if (state.time_s >= MAX_TIME_S) break;
-    
-    // Debug: Log first 10 steps to compare with VB6
-    if (step < 10) {
-      console.log(`[vb6Exact] Step ${step}: t=${state.time_s.toFixed(4)}, d=${state.Dist_ft.toFixed(3)}, v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph (${state.Vel_ftps.toFixed(3)}fps), a=${state.AGS_g.toFixed(3)}g, rpm=${Math.round(state.EngRPM)}, gear=${state.Gear}`);
+    if (currentTrackDist >= raceLengthFt + 50) {
+      console.log(`[vb6Exact] Terminating: currentTrackDist=${currentTrackDist.toFixed(1)} >= raceLengthFt+50=${raceLengthFt + 50}`);
+      break; // Stop shortly after finish line
+    }
+    if (state.time_s >= MAX_TIME_S) {
+      console.log(`[vb6Exact] Terminating: time=${state.time_s.toFixed(2)} >= MAX_TIME_S=${MAX_TIME_S}`);
+      break;
     }
     
-    // Debug: Check for NaN before step
-    if (!Number.isFinite(state.Vel_ftps) || !Number.isFinite(state.Dist_ft) || !Number.isFinite(state.AGS_g)) {
+    
+    // Check for NaN before step
+    if (!Number.isFinite(state.Vel_ftps) || !Number.isFinite(state.Dist_ft) || !Number.isFinite(state.AGS_g) || !Number.isFinite(state.time_s)) {
       warnings.push(`NaN detected at step ${step}: Vel=${state.Vel_ftps}, Dist=${state.Dist_ft}, AGS=${state.AGS_g}`);
       break;
     }
@@ -1171,7 +1246,47 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     vb6Env.nextDistPrint = distPrintPoints[distPrintIdx];
     vb6Env.prevDistPrint = distPrintIdx > 0 ? distPrintPoints[distPrintIdx - 1] : 0;
     vb6Env.iDist = distPrintIdx + 1;  // Convert 0-based to 1-based like VB6
-    vb6Env.TimePrint = TimePrint;
+    
+    // ========================================================================
+    // TIME PRINT BOUNDARY HANDLING (Part C)
+    // Single advancement rule: nextEtPrint_s advances ONLY when a time print row is emitted
+    // EPS = 1e-6 for floating-point tolerance
+    // ========================================================================
+    const EPS = 1e-6;
+    
+    // PRE-STEP: If at boundary, emit time row using current state (no interpolation needed)
+    if (timerStartTime_s !== null) {
+      const currentET = state.time_s - timerStartTime_s;
+      // If we're at or past the time print target (within EPS), emit and advance
+      while ((nextEtPrint_s - currentET) <= EPS && nextEtPrint_s < 1000) {
+        // Emit time row at boundary using current state
+        printedRows.push(formatVB6PrintedRow(
+          'time',
+          state.L,
+          0,
+          {
+            time_s: nextEtPrint_s,
+            dist_ft: state.Dist_ft - rolloutFt,
+            vel_fps: state.Vel_ftps,
+            ags_g: state.AGS_g,
+            engRPM: state.EngRPM,
+            gear: state.Gear,
+            slip: state.SLIP,
+          },
+          NGR,
+          isLandSpeed
+        ));
+        // Advance to next time print target
+        nextEtPrint_s = nextEtPrint_s + TimePrintInc;
+      }
+    }
+    
+    // Compute absTimePrint_s for dt limiter
+    // Pre-rollout: Infinity (no time limiting)
+    // Post-rollout: timerStartTime_s + nextEtPrint_s
+    vb6Env.absTimePrint_s = timerStartTime_s !== null 
+      ? timerStartTime_s + nextEtPrint_s 
+      : Infinity;
     
     // VB6 TIMESLIP.FRM:1071 - Shift2PrintTime is set by the simulation loop
     // It's set ONCE when ShiftFlag transitions 1→2 (see below after step)
@@ -1194,19 +1309,10 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     let stepResult = vb6SimulationStep(state, vb6Vehicle, vb6Env, TSMax, throttleStopParams);
     
+    
+    
     // VB6 TIMESLIP.FRM:1355, 1433 - Shift recalculation (GoTo 230)
     // If shift triggers during step (EngRPM near ShiftRPM), VB6 recalculates with new gear
-    const ShiftRPMTol_check = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
-    
-    // DEBUG: Log shift detection values AND physics in high-RPM region
-    if (savedShiftFlag === 0 && savedGear < vb6Vehicle.NGR) {
-      const targetShiftRPM = vb6Vehicle.ShiftRPM[savedGear - 1];
-      const rpmDiff = targetShiftRPM !== undefined ? Math.abs(targetShiftRPM - state.EngRPM) : 999;
-      if (state.EngRPM > 9500 && savedGear === 1) {
-        console.log(`[ShiftCheck] Step ${step}: t=${state.time_s.toFixed(4)}, EngRPM=${state.EngRPM.toFixed(0)}, Diff=${rpmDiff.toFixed(0)}, TimeStep=${stepResult.TimeStep_s.toFixed(5)}, HP=${stepResult.HP.toFixed(1)}, ClutchSlip=${stepResult.ClutchSlip.toFixed(4)}, AGS=${state.AGS_g.toFixed(3)}, WillTrigger=${rpmDiff < ShiftRPMTol_check}`);
-      }
-    }
-    
     if (savedShiftFlag === 0 && savedGear < vb6Vehicle.NGR) {
       const targetShiftRPM = vb6Vehicle.ShiftRPM[savedGear - 1];
       // VB6 TIMESLIP.FRM:1355 - VB6 EXACT CODE: Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol
@@ -1223,16 +1329,55 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         //
         // DO NOT RESTORE STATE - use current shift point values!
         
+        // VB6 line 1337: PrintFlag = 1 - emit shift trigger print row (with CURRENT gear, before increment)
+        // This happens BEFORE the gear is incremented
+        if (timerStartTime_s !== null) {
+          const et = state.time_s - timerStartTime_s;
+          printedRows.push(formatVB6PrintedRow(
+            'shift',
+            state.L,
+            0,
+            {
+              time_s: et,
+              dist_ft: state.Dist_ft - rolloutFt,
+              vel_fps: state.Vel_ftps,
+              ags_g: state.AGS_g,
+              engRPM: state.EngRPM,
+              gear: savedGear,  // OLD gear before increment
+              slip: state.SLIP,
+            },
+            NGR,
+            isLandSpeed
+          ));
+          
+          // TRACE HOOK: Record SHIFT_TRIGGER
+          if (VB6_TRACE_ENABLED) {
+            recordTracePoint(step, 'SHIFT_TRIGGER', {
+              time_s: et,
+              dist_ft: state.Dist_ft - rolloutFt,
+              vel_ftps: state.Vel_ftps,
+              rpm: state.EngRPM,
+              AGS_g: state.AGS_g,
+              gear: savedGear,
+            });
+          }
+        }
+        
         // VB6 line 1071: Shift2PrintTime = time(L) + DTShift
         Shift2PrintTime = state.time_s + vb6Vehicle.DTShift;
         vb6Env.Shift2PrintTime = Shift2PrintTime;
         
-        console.log(`[ShiftRecalc] Triggered at step ${step}: shiftPointTime=${state.time_s.toFixed(4)}, Shift2PrintTime=${Shift2PrintTime.toFixed(4)}, EngRPM=${state.EngRPM.toFixed(0)}`);
         
         // Execute shift (VB6 line 1433: ShiftFlag = 2, iGear++)
         // DO NOT restore state - VB6 uses current (shift point) values
         state.ShiftFlag = 2;
         state.Gear++;
+        
+        // NOTE: VB6 line 1433 sets LAdd = 1 and does GoTo 230, which loops back to AddListLine.
+        // However, the fixture shows that the "shift start" row (with new gear) is NOT emitted
+        // at the same time as the trigger row. Instead, VB6 continues the simulation loop
+        // and emits the next row when another print condition is met (time, distance, or shift complete).
+        // So we only emit the trigger row here, not the start row.
         
         // Recalculate with new gear (VB6 GoTo 230)
         // vb6SimulationStep will use TimeStep = DTShift because gear changed
@@ -1276,7 +1421,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
           Ags0: prevAgs_g,
           RPM0: prevRPM,
           DistToPrint: currentDistTarget,
-          TimePrint: TimePrint,
+          absTimePrint_s: vb6Env.absTimePrint_s ?? Infinity,
           MPHtoPrint: MPHtoPrint_current,
           iDist: vb6iDist_doOpt,
           iMPH: iMPH,
@@ -1304,35 +1449,16 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       }
     }
     
-    // VB6 TIMESLIP.FRM:1355 - Check for shift TRIGGER (before distance check!)
-    // This sets ShiftFlag = 1 when at shift point, BEFORE the distance check
-    // The distance check then uses this updated ShiftFlag
-    if (state.ShiftFlag === 0 && state.Gear < vb6Vehicle.NGR) {
-      const shiftMode = vb6Vehicle.ShiftMode ?? 'rpm';
-      
-      if (shiftMode === 'time') {
-        const shiftTime = vb6Vehicle.ShiftTimes?.[state.Gear - 1];
-        if (shiftTime !== undefined && state.time_s >= shiftTime) {
-          state.ShiftFlag = 1;
-        }
-      } else {
-        // VB6 TIMESLIP.FRM:860 - ShiftRPMTol = 10: If ShiftRPM(1) > 8000 Then ShiftRPMTol = 20
-        // VB6 TIMESLIP.FRM:1355 - If iGear < NGR And Abs(ShiftRPM(iGear) - EngRPM(L)) < ShiftRPMTol Then ShiftFlag = 1
-        // VB6 EXACT CODE - tolerance-based only, no additional conditions
-        const shiftRPM = vb6Vehicle.ShiftRPM[state.Gear - 1] ?? 7000;
-        const shiftRPMTol = (vb6Vehicle.ShiftRPM[0] ?? 7000) > 8000 ? 20 : 10;
-        if (Math.abs(shiftRPM - state.EngRPM) < shiftRPMTol) {
-          state.ShiftFlag = 1;
-        }
-      }
-    }
+    // NOTE: Shift trigger detection and handling is done in the block above (lines 1281-1339)
+    // which sets ShiftFlag = 2, increments gear, and calls vb6SimulationStep again.
+    // The shift trigger print row is emitted there with the OLD gear before increment.
     
     // VB6: TIMESLIP.FRM:1373-1418 and doOpt/sub310 - Distance print detection
     // VB6 has TWO mechanisms:
     // 1. Line 1375: (DistStep < DistTol And (DistStep / Vel(L)) < TimeTol) - within tolerance
     // 2. doOpt/sub310: When Dist(L) >= DistToPrint(iDist) + DistTol - overshoot, then interpolate back
     // Both mechanisms trigger distance recording and iDist advancement.
-    const currentTarget = distPrintPoints[distPrintIdx];
+    const currentTarget = distPrintIdx < distPrintPoints.length ? distPrintPoints[distPrintIdx] : raceLengthFt;
     const DistStep = Math.abs(currentTarget - state.Dist_ft);
     // VB6 DistTol is dynamic, updated AFTER each distance target is reached:
     // - Bonneville: DistTol = 1 (TIMESLIP.FRM:999)
@@ -1363,6 +1489,11 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     const toleranceMet = distPrintIdx < distPrintPoints.length && 
         (withinTolerance || overshoot || shiftFallback);
+    
+    // Debug: Log when tolerance is met for distance prints
+    if (toleranceMet && distPrintIdx < 5) {
+      console.log(`[vb6Exact] DIST TOLERANCE MET: Step ${step}, distPrintIdx=${distPrintIdx}, target=${currentTarget?.toFixed(1)}, dist=${state.Dist_ft.toFixed(2)}, withinTol=${withinTolerance}, overshoot=${overshoot}`);
+    }
     
     if (toleranceMet) {
       // VB6 records TIMESLIP values when hitting specific distance print points
@@ -1419,6 +1550,39 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       // VB6 TIMESLIP.FRM:1383-1402 - Match EXACTLY
       // VB6 only records TIMESLIP when ShiftFlag < 2 (not during shift)
       // VB6 uses instantaneous speed Vel(L) * Z5 for non-trap-speed points
+      
+      // Record printed row for distance checkpoint (VB6 AddListLine)
+      // Skip rollout (vb6iDist=1) as it's handled separately when timer starts
+      if (vb6iDist > 1 && timerStartTime_s !== null) {
+        printedRows.push(formatVB6PrintedRow(
+          'distance',
+          state.L,
+          vb6iDist,
+          {
+            time_s: interpolatedTrackTime,
+            dist_ft: currentTarget,
+            vel_fps: recordVel_ftps,
+            ags_g: state.AGS_g,
+            engRPM: state.EngRPM,
+            gear: state.Gear,
+            slip: state.SLIP,
+          },
+          NGR,
+          isLandSpeed
+        ));
+        
+        // TRACE HOOK: Record PRINT_DIST
+        if (VB6_TRACE_ENABLED) {
+          recordTracePoint(step, 'PRINT_DIST', {
+            time_s: interpolatedTrackTime,
+            dist_ft: currentTarget,
+            vel_ftps: recordVel_ftps,
+            rpm: state.EngRPM,
+            AGS_g: state.AGS_g,
+            gear: state.Gear,
+          });
+        }
+      }
       
       // Case 3 (60ft): VB6 line 1383-1385 and sub310
       if (vb6iDist === 3 && timerStartTime_s !== null) {
@@ -1537,13 +1701,160 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         // Timer starts at current simulation time
         timerStartTime_s = state.time_s;
         
+        // VB6 TIMESLIP.FRM:1373-1381 - Rollout row print
+        // VB6 prints the rollout row with ET=0 (time resets at rollout)
+        // The printed values use Vel(L), AGS(L), EngRPM(L), iGear at this moment
+        // NOTE: Land speed runs don't have a rollout row in the fixture
+        if (!isLandSpeed) {
+          printedRows.push(formatVB6PrintedRow(
+            'rollout',
+            state.L,
+            1,  // iDist=1 for rollout
+            {
+              time_s: 0,  // ET = 0 at rollout (VB6 line 1380: time(L) = 0)
+              dist_ft: 0,  // VB6 shows "Rollout" not a distance
+              vel_fps: state.Vel_ftps,
+              ags_g: state.AGS_g,
+              engRPM: state.EngRPM,
+              gear: state.Gear,
+              slip: state.SLIP,
+            },
+            NGR,
+            isLandSpeed
+          ));
+        }
+        
+        // Capture rollout state for legacy compatibility
+        const Z5_f32 = Math.fround(3600 / 5280);
+        rolloutVel_mph = Math.fround(Math.fround(state.Vel_ftps) * Z5_f32);
+        rolloutAccel_g = state.AGS_g;
+        rolloutRPM = state.EngRPM;
+        rolloutGear = state.Gear;
+        
         // VB6 line 1381: Dist(L) = Dist(L) + ovradj - PERMANENTLY adjust distance for front overhang
         // This is critical - after this point, all distances include ovradj
         state.Dist_ft = state.Dist_ft + ovradj;
         state.Dist0_ft = state.Dist_ft;
         
         // Debug: Log rollout timing
-        console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (after ovradj=${ovradj.toFixed(3)}), v=${(state.Vel_ftps * FPS_TO_MPH).toFixed(2)}mph, step=${step}`);
+        console.log(`[vb6Exact] ROLLOUT: t=${timerStartTime_s.toFixed(4)}s, d=${state.Dist_ft.toFixed(4)}ft (after ovradj=${ovradj.toFixed(3)}), v=${rolloutVel_mph.toFixed(2)}mph, step=${step}`);
+        
+        // TRACE HOOK: Record ROLLOUT_CROSSED
+        if (VB6_TRACE_ENABLED) {
+          recordTracePoint(step, 'ROLLOUT_CROSSED', {
+            time_s: state.time_s,
+            dist_ft: state.Dist_ft,
+            vel_ftps: state.Vel_ftps,
+            rpm: state.EngRPM,
+            AGS_g: state.AGS_g,
+            gear: state.Gear,
+          });
+        }
+      }
+    }
+    
+    // ========================================================================
+    // POST-STEP TIME PRINT EMISSION (Part C)
+    // Emit any time prints that were crossed during this step with interpolation
+    // nextEtPrint_s advances ONLY when a time print row is emitted
+    // ========================================================================
+    if (timerStartTime_s !== null) {
+      const etAfterStep = state.time_s - timerStartTime_s;
+      const EPS_post = 1e-6;
+      
+      // Emit all time prints that were crossed during this step
+      while (nextEtPrint_s <= etAfterStep + EPS_post && nextEtPrint_s < 1000) {
+        // Interpolate state at the exact time print moment
+        // Guard against division by zero when etAfterStep === prevET_s
+        const etDiff = etAfterStep - prevET_s;
+        const factor = (prevET_s < nextEtPrint_s && etDiff > 0.0001) 
+          ? (nextEtPrint_s - prevET_s) / etDiff 
+          : 1;
+        
+        const interpVel = prevVel_ftps + factor * (state.Vel_ftps - prevVel_ftps);
+        const interpDist = prevDist_ft + factor * (state.Dist_ft - prevDist_ft);
+        const interpAgs = prevAgs_g + factor * (state.AGS_g - prevAgs_g);
+        const interpRPM = prevRPM + factor * (state.EngRPM - prevRPM);
+        
+        // Emit time-based print row with interpolated values
+        printedRows.push(formatVB6PrintedRow(
+          'time',
+          state.L,
+          0,
+          {
+            time_s: nextEtPrint_s,
+            dist_ft: interpDist - rolloutFt,
+            vel_fps: interpVel,
+            ags_g: interpAgs,
+            engRPM: interpRPM,
+            gear: state.Gear,
+            slip: state.SLIP,
+          },
+          NGR,
+          isLandSpeed
+        ));
+        
+        // TRACE HOOK: Record PRINT_TIME
+        if (VB6_TRACE_ENABLED) {
+          recordTracePoint(step, 'PRINT_TIME', {
+            time_s: nextEtPrint_s,
+            dist_ft: interpDist - rolloutFt,
+            vel_ftps: interpVel,
+            rpm: interpRPM,
+            AGS_g: interpAgs,
+            gear: state.Gear,
+          });
+        }
+        
+        // Advance to next time print target (single advancement rule)
+        nextEtPrint_s = nextEtPrint_s + TimePrintInc;
+      }
+      
+      // Update previous ET for next iteration
+      prevET_s = etAfterStep;
+    }
+    
+    // VB6 TIMESLIP.FRM:1425-1430 - Check for speed match
+    // Quarter Pro: 60 MPH only
+    // Bonneville: 100 MPH and 200 MPH prints
+    if (timerStartTime_s !== null && iMPH <= maxMPHPrints) {
+      // VB6 line 1001: KV = 0.05 / Z5 for Bonneville, 0.02 / Z5 for Quarter Pro
+      const KV = Math.fround((isLandSpeed ? 0.05 : 0.02) / Z5);
+      const targetSpeed_fps = MPHtoPrint[iMPH - 1];
+      
+      if (Math.abs(targetSpeed_fps - state.Vel_ftps) < KV || (state.ShiftFlag === 2 && state.Vel_ftps >= targetSpeed_fps)) {
+        // Emit speed-based print row
+        const et = state.time_s - timerStartTime_s;
+        printedRows.push(formatVB6PrintedRow(
+          'speed',
+          state.L,
+          0,
+          {
+            time_s: et,
+            dist_ft: state.Dist_ft - rolloutFt,
+            vel_fps: state.Vel_ftps,
+            ags_g: state.AGS_g,
+            engRPM: state.EngRPM,
+            gear: state.Gear,
+            slip: state.SLIP,
+          },
+          NGR,
+          isLandSpeed
+        ));
+        
+        // TRACE HOOK: Record PRINT_SPEED
+        if (VB6_TRACE_ENABLED) {
+          recordTracePoint(step, 'PRINT_SPEED', {
+            time_s: et,
+            dist_ft: state.Dist_ft - rolloutFt,
+            vel_ftps: state.Vel_ftps,
+            rpm: state.EngRPM,
+            AGS_g: state.AGS_g,
+            gear: state.Gear,
+          });
+        }
+        
+        iMPH++;
       }
     }
     
@@ -1625,31 +1936,52 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     
     // saveTime_594ft and saveTime_1254ft are recorded inside tolerance block (matching VB6 exactly)
     
-    // VB6 TIMESLIP.FRM:1433-1434 - Execute shift AFTER distance check
-    // Line 1433: If ShiftFlag = 1, set ShiftFlag = 2, increment gear, GoTo 230
+    // VB6 TIMESLIP.FRM:1434 - Shift completion
     // Line 1434: If ShiftFlag = 2, reset ShiftFlag = 0
-    // Note: Shift TRIGGER (0→1) is done BEFORE distance check (see above)
-    if (state.ShiftFlag === 1) {
-      // ShiftFlag was set this step or earlier - now execute shift
-      state.ShiftFlag = 2;
-      state.Gear++;
-      // VB6 TIMESLIP.FRM:1071 - Set Shift2PrintTime ONCE when entering gear change loop (section 230)
-      // Shift2PrintTime = time(L) + DTShift
-      Shift2PrintTime = state.time_s + vb6Vehicle.DTShift;
-    } else if (state.ShiftFlag === 2) {
+    // Note: Shift TRIGGER and START (0→1→2) are now handled at the trigger point (lines 1265-1315)
+    // This block only handles shift COMPLETION (2→0)
+    if (state.ShiftFlag === 2) {
       // Shift complete, reset flag and clear Shift2PrintTime
       state.ShiftFlag = 0;
+      
+      // VB6 line 1434: LAdd = 1 - emit shift complete print row
+      if (timerStartTime_s !== null) {
+        const et = state.time_s - timerStartTime_s;
+        printedRows.push(formatVB6PrintedRow(
+          'shift',
+          state.L,
+          0,
+          {
+            time_s: et,
+            dist_ft: state.Dist_ft - rolloutFt,
+            vel_fps: state.Vel_ftps,
+            ags_g: state.AGS_g,
+            engRPM: state.EngRPM,
+            gear: state.Gear,
+            slip: state.SLIP,
+          },
+          NGR,
+          isLandSpeed
+        ));
+        
+        // TRACE HOOK: Record SHIFT_COMPLETE
+        if (VB6_TRACE_ENABLED) {
+          recordTracePoint(step, 'SHIFT_COMPLETE', {
+            time_s: et,
+            dist_ft: state.Dist_ft - rolloutFt,
+            vel_ftps: state.Vel_ftps,
+            rpm: state.EngRPM,
+            AGS_g: state.AGS_g,
+            gear: state.Gear,
+          });
+        }
+      }
+      
       Shift2PrintTime = undefined;
     }
     
-    // VB6 TIMESLIP.FRM:1421-1422 - Check for time print update (AFTER step completes)
-    // If (Abs(TimePrint - time(L)) < TimeTol) Or (ShiftFlag = 2 And time(L) >= TimePrint) Then
-    //     TimePrint = TimePrint + TimePrintInc
-    const TimeTolForPrint = 0.002;
-    if (Math.abs(TimePrint - state.time_s) < TimeTolForPrint || 
-        (state.ShiftFlag === 2 && state.time_s >= TimePrint)) {
-      TimePrint = TimePrint + TimePrintInc;
-    }
+    // NOTE: Time print advancement is now handled in the time print emission block above (lines 1645-1686)
+    // The old duplicate check here was advancing TimePrint without emitting rows, causing missed prints.
     
     // VB6 TIMESLIP.FRM:1426-1429 - Check for speed match (iMPH update)
     // If iMPH <= 2 Then
@@ -1666,6 +1998,9 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     // Update vb6Env.iMPH for next step
     vb6Env.iMPH = iMPH;
   }
+  
+  // Debug: Log final simulation state
+  console.log(`[vb6Exact] Simulation complete: steps=${trace.length}, finalDist=${state.Dist_ft.toFixed(1)}ft, finalTime=${state.time_s.toFixed(2)}s, raceLengthFt=${raceLengthFt}`);
   
   // ========================================================================
   // Build result
@@ -1761,6 +2096,14 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       mph,
       rolloutTime_s: timerStartTime_s ?? 0,
     },
+    // Rollout row values for VB6 print parity
+    rollout: {
+      time_s: timerStartTime_s ?? 0,
+      vel_mph: rolloutVel_mph ?? 0,
+      accel_g: rolloutAccel_g ?? 0,
+      rpm: rolloutRPM ?? 0,
+      gear: rolloutGear ?? 1,
+    },
     // VB6-style run trace printout
     runTrace: generateRunTrace(trace, rolloutIn, timerStartTime_s ?? 0),
   };
@@ -1774,6 +2117,21 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
       }))
     : timeslip;
   
+  // Sort printed rows by timestamp to match VB6's chronological ordering
+  // VB6 emits rows in order of when events occur during simulation
+  // Staged row (t=0) comes first, then rollout (t=0 ET), then all others by time
+  printedRows.sort((a, b) => {
+    // Staged always first
+    if (a.type === 'staged') return -1;
+    if (b.type === 'staged') return 1;
+    // Rollout second (ET=0)
+    if (a.type === 'rollout') return -1;
+    if (b.type === 'rollout') return 1;
+    // Then sort by time
+    return a.raw.time_s - b.raw.time_s;
+  });
+  
+  
   return {
     et_s,
     mph,
@@ -1786,6 +2144,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
     },
     vb6Diagnostics: convergenceHistory,
     debugData,
+    // VB6 Printed Row Stream - authoritative output for strict equivalence testing
+    printedRows,
   };
 }
 

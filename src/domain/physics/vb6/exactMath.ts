@@ -1,18 +1,68 @@
 /**
  * VB6 Exact Math Helpers
  * 
- * Enforce VB6-like Single (Float32) precision and banker's rounding.
- * Use these for bit-for-bit parity with VB6 Quarter Pro calculations.
+ * CRITICAL VB6 TYPE SEMANTICS (from actual VB6 source inspection):
  * 
- * VB6 used Single precision (32-bit float) for most calculations.
- * JavaScript uses 64-bit doubles, so we must explicitly truncate to Float32
- * after each operation to match VB6's intermediate results.
+ * 1. VB6 `Const X = 3.14` (no suffix) declares X as DOUBLE
+ * 2. VB6 `Dim Y As Single` declares Y as Single (float32)
+ * 3. VB6 computes expressions involving Double operands in DOUBLE precision
+ * 4. VB6 truncates to Single ONLY when assigning to a Single variable
+ * 
+ * Therefore:
+ * - Use plain JS arithmetic (Double) for expression computation
+ * - Use `asSingle()` ONLY at assignment points to Single variables
+ * - Do NOT use f32/F.* for intermediate operations (that's wrong!)
  */
 
 /**
  * Convert a number to Float32 (VB6 Single precision).
+ * Use this ONLY for legacy code or when explicitly needed.
  */
 export const f32 = (x: number): number => Math.fround(x);
+
+/**
+ * VB6 "assign to Single" semantics.
+ * 
+ * VB6 computes expressions in Double, then truncates to Single on assignment.
+ * Use this ONLY at assignment points to Single variables, not for intermediate ops.
+ * 
+ * Example VB6:
+ *   Dim TQ As Single
+ *   TQ = Z6 * HP / EngRPM   ' Z6 is Double, HP/EngRPM are Single
+ *   ' Expression computed in Double, result truncated to Single on assignment
+ * 
+ * Equivalent TS:
+ *   const TQ = asSingle(Z6 * HP / EngRPM);
+ */
+export const asSingle = (x: number): number => Math.fround(x);
+
+/**
+ * VB6 assignment to Single variable.
+ * Explicit name for code parity audits.
+ * 
+ * Source: docs/audit/init_type_coercion_map.md
+ * VB6 evaluates RHS in Double, truncates to Single at assignment boundary.
+ */
+export const vb6AssignSingle = (x: number): number => Math.fround(x);
+
+/**
+ * VB6 assignment to Double variable.
+ * No truncation - Double is JS native precision.
+ */
+export const vb6AssignDouble = (x: number): number => x;
+
+/**
+ * VB6 assignment to Integer variable.
+ * Truncates to 16-bit signed integer range (-32768 to 32767).
+ * VB6 Integer is 16-bit signed.
+ */
+export const vb6AssignInteger = (x: number): number => {
+  const truncated = Math.trunc(x);
+  // Clamp to 16-bit signed range (VB6 Integer)
+  if (truncated > 32767) return 32767;
+  if (truncated < -32768) return -32768;
+  return truncated;
+};
 
 /**
  * Float32 arithmetic operations.
