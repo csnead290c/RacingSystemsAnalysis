@@ -8,8 +8,12 @@ import './shared/ui/tokens.css';
 import './shared/ui/atoms.css';
 import './shared/ui/layout.css';
 
-// VB6 Interpreter test - exposes testVB6Interpreter() to console
-import './domain/physics/vb6/testVB6Console';
+// VB6 Interpreter test - exposes testVB6Interpreter() to console (DEV only, non-fatal)
+// Path built via variable to prevent Vite from statically resolving a missing module
+if (import.meta.env.DEV) {
+  const mod = './domain/physics/vb6/' + 'testVB6Console';
+  import(/* @vite-ignore */ mod).catch(() => {});
+}
 
 // Register service worker for PWA functionality (production only)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

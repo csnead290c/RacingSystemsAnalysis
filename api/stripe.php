@@ -13,6 +13,7 @@
 require_once 'config.php';
 require_once 'functions.php';
 require_once __DIR__ . '/vendor/autoload.php'; // Composer autoload for Stripe SDK
+require_once __DIR__ . '/lib/plans.php';
 
 rsa_setCorsHeaders();
 
@@ -56,7 +57,7 @@ function handleCreateCheckoutSession($pdo) {
     }
     
     // Map plan ID to Stripe price ID
-    $priceId = getPriceIdForPlan($planId, $billingPeriod);
+    $priceId = rsa_getPriceIdForPlan($planId, $billingPeriod);
     if (!$priceId) {
         rsa_jsonResponse(['error' => 'Invalid plan'], 400);
     }
@@ -210,56 +211,8 @@ function handleGetPrices() {
     ]);
 }
 
-/**
- * Map plan ID and billing period to Stripe price ID
- */
-function getPriceIdForPlan($planId, $billingPeriod) {
-    $prices = [
-        'racer' => [
-            'monthly' => STRIPE_PRICE_RACER_MONTHLY,
-            'yearly' => STRIPE_PRICE_RACER_YEARLY,
-        ],
-        'pro' => [
-            'monthly' => STRIPE_PRICE_PRO_MONTHLY,
-            'yearly' => STRIPE_PRICE_PRO_YEARLY,
-        ],
-        'team' => [
-            'monthly' => STRIPE_PRICE_TEAM_MONTHLY,
-            'yearly' => STRIPE_PRICE_TEAM_YEARLY,
-        ],
-    ];
-    
-    return $prices[$planId][$billingPeriod] ?? null;
-}
-
-/**
- * Map Stripe price ID to plan ID
- */
-function getPlanIdFromPrice($priceId) {
-    $mapping = [
-        STRIPE_PRICE_RACER_MONTHLY => 'racer',
-        STRIPE_PRICE_RACER_YEARLY => 'racer',
-        STRIPE_PRICE_PRO_MONTHLY => 'pro',
-        STRIPE_PRICE_PRO_YEARLY => 'pro',
-        STRIPE_PRICE_TEAM_MONTHLY => 'team',
-        STRIPE_PRICE_TEAM_YEARLY => 'team',
-    ];
-    
-    return $mapping[$priceId] ?? null;
-}
-
-/**
- * Map plan ID to RSA products
- */
-function getProductsForPlan($planId) {
-    $products = [
-        'racer' => ['quarter_jr'],
-        'pro' => ['quarter_pro', 'bonneville_pro'],
-        'team' => ['quarter_pro', 'bonneville_pro', 'engine_pro', 'clutch_pro', 'suspension_pro'],
-    ];
-    
-    return $products[$planId] ?? [];
-}
+// Plan mapping functions are now in api/lib/plans.php:
+//   rsa_getPriceIdForPlan(), rsa_getPlanIdFromPrice(), rsa_getProductsForPlan()
 
 /**
  * Get or create a user record for Clerk or legacy users

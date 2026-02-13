@@ -10,6 +10,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { CLERK_PUBLISHABLE_KEY, isClerkConfigured, clerkAppearance, mapClerkUserToRole, mapClerkUserToProducts, getSubscriptionFromClerk, type SubscriptionInfo } from './clerkConfig';
 import type { User } from './types';
 import { getSubscriptionStatus } from '../payments/stripeConfig';
+import { refreshCapabilities, clearCapabilityCache, refreshIfStale } from '../config/capabilityRefresh';
 
 // ============================================================================
 // Clerk Context for RSA Integration
@@ -88,6 +89,9 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
         setDbProducts(status.products || []);
         setDbSubscription({ plan: status.plan, status: status.status });
         
+        // Refresh server-side capabilities cache
+        await refreshCapabilities(() => getToken() as Promise<string | null>);
+        
         // Store products in localStorage for auth system
         if (status.products && status.products.length > 0) {
           localStorage.setItem('rsa.auth.apiProducts', JSON.stringify(status.products));
@@ -160,10 +164,21 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
         localStorage.removeItem('rsa.auth.apiProducts');
         localStorage.removeItem('rsa.auth.clerkSession');
         localStorage.removeItem('rsa.auth.clerkToken');
+        clearCapabilityCache();
         console.log('Clerk session ended, cleared RSA auth');
       }
     }
   }, [isLoaded, isSignedIn, user, getToken, dbProducts, dbSubscription]);
+  
+  // Refresh capabilities on window focus if cache is stale
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const handleFocus = () => {
+      refreshIfStale(() => getToken() as Promise<string | null>);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [isSignedIn, getToken]);
   
   const subscription = isSignedIn && user ? getSubscriptionFromClerk(user) : { plan: null, status: 'none' as const };
   

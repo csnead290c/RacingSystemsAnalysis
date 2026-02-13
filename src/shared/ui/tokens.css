@@ -15,6 +15,9 @@
   --color-border: #dee2e6;
   --color-error: #dc3545;
   --color-success: #28a745;
+  --color-input-bg: #ffffff;
+  --color-warning-bg: #fff3cd;
+  --color-warning-border: #ffc107;
   
   /* Chart colors for light mode */
   --color-chart-grid: #e9ecef;
@@ -66,6 +69,9 @@
   --color-border: #495057;
   --color-error: #f56565;
   --color-success: #48bb78;
+  --color-input-bg: #2d2d2d;
+  --color-warning-bg: #3d3520;
+  --color-warning-border: #b8860b;
   
   /* Chart colors for dark mode */
   --color-chart-grid: #3a3a3a;

@@ -107,13 +107,24 @@ function AccessDenied({ feature, product, role }: { feature?: string; product?: 
           ? `This page requires ${role} access.`
           : product 
             ? `This feature requires the ${product.replace(/_/g, ' ')} product.`
-            : feature
-              ? `You don't have access to the ${feature.replace(/_/g, ' ')} feature.`
-              : 'You don\'t have permission to access this page.'
+            : feature === 'et_sim'
+              ? 'The ET Simulator requires a Basic (Racer) plan or higher.'
+              : feature === 'race_tools'
+                ? 'Race Day, Dial-In, and related tools require a Basic (Racer) plan or higher.'
+                : feature === 'run_logging'
+                  ? 'Run logging and history require a Basic (Racer) plan or higher.'
+                  : feature === 'save_vehicles'
+                    ? 'Vehicle management requires a Basic (Racer) plan or higher.'
+                    : feature
+                    ? `You don't have access to the ${feature.replace(/_/g, ' ')} feature.`
+                    : 'You don\'t have permission to access this page.'
         }
       </p>
       <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem' }}>
-        Please contact support to upgrade your account.
+        {feature === 'et_sim' || feature === 'race_tools' || feature === 'run_logging' || feature === 'save_vehicles'
+          ? 'Upgrade to the Racer plan to unlock simulation, race tools, run logging, and more.'
+          : 'Please contact support to upgrade your account.'
+        }
       </p>
     </div>
   );

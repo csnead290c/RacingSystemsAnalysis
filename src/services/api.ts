@@ -240,6 +240,45 @@ export interface ApiVehicle {
   updated_at: string;
 }
 
+// Engine Sims API
+export interface ApiEngineSim {
+  id: string;
+  name: string;
+  data: any;  // EngineSimDocumentV1 stored as JSON
+  created_at: string;
+  updated_at: string;
+}
+
+export const engineSimsApi = {
+  async getAll() {
+    return apiRequest<{ engine_sims: ApiEngineSim[] }>('/engine_sims.php');
+  },
+
+  async get(id: string) {
+    return apiRequest<{ engine_sim: ApiEngineSim }>(`/engine_sims.php?id=${id}`);
+  },
+
+  async create(sim: { name: string; data: any }) {
+    return apiRequest<{ success: boolean; engine_sim: ApiEngineSim }>('/engine_sims.php', {
+      method: 'POST',
+      body: JSON.stringify(sim),
+    });
+  },
+
+  async update(id: string, sim: { name?: string; data?: any }) {
+    return apiRequest<{ success: boolean }>(`/engine_sims.php?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(sim),
+    });
+  },
+
+  async delete(id: string) {
+    return apiRequest<{ success: boolean }>(`/engine_sims.php?id=${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export interface ApiRun {
   id: string;
   vehicle_id: string;

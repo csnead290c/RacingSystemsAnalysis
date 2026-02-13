@@ -72,6 +72,8 @@ export interface TierFeatures {
   weatherHistory: boolean;       // Historical weather data
   
   // Simulation Features
+  etSim: boolean;                // Access to ET Sim / Predict page (basic+)
+  raceTools: boolean;            // Race Day, Dial-In, Opponents, Ladder, Tech Card (basic+)
   basicSim: boolean;             // Basic ET/MPH prediction
   advancedSim: boolean;          // Full simulation with incremental data
   runCompletion: boolean;        // Run completion from partial data
@@ -83,6 +85,8 @@ export interface TierFeatures {
   throttleStopOptimizer: boolean; // Throttle stop duration optimizer
   
   // Data & Charts
+  saveVehicles: boolean;         // Vehicle save/manage (basic+)
+  runLogging: boolean;           // Run logging + history (basic+)
   basicCharts: boolean;          // Simple result charts
   advancedCharts: boolean;       // Detailed analysis charts
   dataExport: boolean;           // CSV/JSON export
@@ -117,7 +121,9 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     liveWeather: false,
     weatherHistory: false,
     
-    // Simulation - basic only
+    // Simulation - basic calculators only, NO ET Sim / race tools
+    etSim: false,
+    raceTools: false,
     basicSim: true,
     advancedSim: false,
     runCompletion: false,
@@ -129,6 +135,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     throttleStopOptimizer: false,
     
     // Data - none
+    saveVehicles: false,
+    runLogging: false,
     basicCharts: true,
     advancedCharts: false,
     dataExport: false,
@@ -162,7 +170,9 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     liveWeather: false,
     weatherHistory: false,
     
-    // Simulation - basic with run completion
+    // Simulation - ET Sim + race tools + basic with run completion
+    etSim: true,
+    raceTools: true,
     basicSim: true,
     advancedSim: false,
     runCompletion: true,
@@ -173,7 +183,9 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     launchOptimizer: false,
     throttleStopOptimizer: false,
     
-    // Data - basic charts, no export
+    // Data - basic charts + run logging, no export
+    saveVehicles: true,
+    runLogging: true,
     basicCharts: true,
     advancedCharts: false,
     dataExport: false,
@@ -208,6 +220,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     weatherHistory: true,
     
     // Simulation - full access
+    etSim: true,
+    raceTools: true,
     basicSim: true,
     advancedSim: true,
     runCompletion: true,
@@ -219,6 +233,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     throttleStopOptimizer: true,
     
     // Data - full access
+    saveVehicles: true,
+    runLogging: true,
     basicCharts: true,
     advancedCharts: true,
     dataExport: true,
@@ -250,6 +266,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     liveWeather: true,
     weatherHistory: true,
     
+    etSim: true,
+    raceTools: true,
     basicSim: true,
     advancedSim: true,
     runCompletion: true,
@@ -259,6 +277,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     launchOptimizer: true,
     throttleStopOptimizer: true,
     
+    saveVehicles: true,
+    runLogging: true,
     basicCharts: true,
     advancedCharts: true,
     dataExport: true,
@@ -289,6 +309,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     liveWeather: true,
     weatherHistory: true,
     
+    etSim: true,
+    raceTools: true,
     basicSim: true,
     advancedSim: true,
     runCompletion: true,
@@ -298,6 +320,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     launchOptimizer: true,
     throttleStopOptimizer: true,
     
+    saveVehicles: true,
+    runLogging: true,
     basicCharts: true,
     advancedCharts: true,
     dataExport: true,
@@ -327,6 +351,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     liveWeather: true,
     weatherHistory: true,
     
+    etSim: true,
+    raceTools: true,
     basicSim: true,
     advancedSim: true,
     runCompletion: true,
@@ -336,6 +362,8 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     launchOptimizer: true,
     throttleStopOptimizer: true,
     
+    saveVehicles: true,
+    runLogging: true,
     basicCharts: true,
     advancedCharts: true,
     dataExport: true,

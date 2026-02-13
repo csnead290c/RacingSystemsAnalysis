@@ -6,6 +6,7 @@
 
 require_once 'config.php';
 require_once 'functions.php';
+require_once __DIR__ . '/lib/capabilities.php';
 rsa_setCorsHeaders();
 
 $pdo = getDB();
@@ -85,6 +86,11 @@ function handlePost($pdo, $auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
     
+    // Server-side capability enforcement: creating vehicles requires data.vehicles
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'data.vehicles');
+    
     try {
         $input = rsa_getJsonInput();
         $name = $input['name'] ?? '';
@@ -133,6 +139,11 @@ function handlePut($pdo, $auth) {
     if (!$auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: updating vehicles requires data.vehicles
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'data.vehicles');
     
     try {
         $uuid = $_GET['id'] ?? null;
@@ -231,6 +242,11 @@ function handleDelete($pdo, $auth) {
     if (!$auth) {
         rsa_jsonResponse(['error' => 'Unauthorized'], 401);
     }
+    
+    // Server-side capability enforcement: deleting vehicles requires data.vehicles
+    $userId = rsa_resolveUserId($pdo, $auth);
+    $role = rsa_getUserRole($pdo, $userId);
+    rsa_requireCapability($pdo, $userId, $role, 'data.vehicles');
     
     $uuid = $_GET['id'] ?? null;
     if (!$uuid) {

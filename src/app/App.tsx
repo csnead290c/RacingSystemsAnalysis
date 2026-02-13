@@ -5,8 +5,15 @@ import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
 import { AuthProvider, ClerkAuthProvider, ClerkUserButton, useClerkRSA } from '../domain/auth';
+import {
+  canAccessEtSim, ET_SIM_FEATURE,
+  RACE_TOOLS_FEATURE,
+  canAccessRunLogging, RUN_LOGGING_FEATURE,
+  canAccessVehicles, VEHICLES_FEATURE,
+} from '../domain/config/guards';
 import { RunHistoryProvider } from '../shared/state/runHistoryStore';
 import { PreferencesProvider } from '../shared/state/preferences';
+import ViewAsBanner from '../domain/config/ViewAsBanner';
 import Home from '../pages/Home';
 import Predict from '../pages/Predict';
 import SuspensionSim from '../pages/SuspensionSim';
@@ -36,6 +43,7 @@ import { useAuth } from '../domain/auth';
 
 // DevPortal - available in dev mode or to owner/admin in production
 const DevPortal = lazy(() => import('../pages/DevPortal'));
+const AdminPortal = lazy(() => import('../pages/AdminPortal'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -170,7 +178,7 @@ function UserMenu() {
 
 function Navigation() {
   const location = useLocation();
-  const { isAuthenticated, hasFeature, hasProduct } = useAuth();
+  const { isAuthenticated, hasFeature } = useAuth();
   const { isClerkSignedIn } = useClerkRSA();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -201,22 +209,21 @@ function Navigation() {
   // Check if user is logged in (either legacy or Clerk)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
 
-  // Check access for each nav item
-  const canAccessVehicles = isLoggedIn && hasFeature('save_vehicles');
-  const canAccessETSim = isLoggedIn && hasProduct('quarter_jr');
+  // Check access for each nav item (centralized guards)
+  const canAccessVehiclesNav = isLoggedIn && canAccessVehicles({ hasFeature });
+  const canAccessETSim = isLoggedIn && canAccessEtSim({ hasFeature });
   const canAccessEngineSim = isLoggedIn; // Engine sim available to all logged-in users
   // Hidden simulators - uncomment when built out:
   // const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
   // const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
-  // const canAccessLog = isLoggedIn && hasFeature('save_runs');
-  const canAccessHistory = isLoggedIn && hasFeature('save_runs');
+  const canAccessHistory = isLoggedIn && canAccessRunLogging({ hasFeature });
 
   const navLinks = (
     <>
       <Link to="/" style={navLinkStyle(isActive('/'))} onClick={() => setMobileMenuOpen(false)}>
         Home
       </Link>
-      {canAccessVehicles && (
+      {canAccessVehiclesNav && (
         <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))} onClick={() => setMobileMenuOpen(false)}>
           Vehicles
         </Link>
@@ -264,6 +271,7 @@ function Navigation() {
       <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={() => setMobileMenuOpen(false)}>
         About
       </Link>
+      <AdminNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
       <DevNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
     </>
   );
@@ -326,6 +334,21 @@ function Navigation() {
         }
       `}</style>
     </>
+  );
+}
+
+function AdminNavLink({ isActive, navLinkStyle }: { isActive: (path: string) => boolean; navLinkStyle: (active: boolean) => React.CSSProperties }) {
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.roleId === 'owner' || user?.roleId === 'admin';
+  
+  if (!isOwnerOrAdmin) {
+    return null;
+  }
+  
+  return (
+    <Link to="/admin" style={navLinkStyle(isActive('/admin'))}>
+      Admin
+    </Link>
   );
 }
 
@@ -411,62 +434,62 @@ function App() {
             
             {/* Quarter Jr/Pro features */}
             <Route path="/vehicles" element={
-              <ProtectedRoute requireFeature="save_vehicles">
+              <ProtectedRoute requireFeature={VEHICLES_FEATURE}>
                 <Vehicles />
               </ProtectedRoute>
             } />
             <Route path="/et-sim" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={ET_SIM_FEATURE}>
                 <Predict />
               </ProtectedRoute>
             } />
             <Route path="/predict" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={ET_SIM_FEATURE}>
                 <Predict />
               </ProtectedRoute>
             } />
             <Route path="/log" element={
-              <ProtectedRoute requireFeature="save_runs">
+              <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
                 <Log />
               </ProtectedRoute>
             } />
             <Route path="/history" element={
-              <ProtectedRoute requireFeature="save_runs">
+              <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
                 <History />
               </ProtectedRoute>
             } />
             <Route path="/dial-in" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
                 <DialIn />
               </ProtectedRoute>
             } />
             
             <Route path="/opponents" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
                 <Opponents />
               </ProtectedRoute>
             } />
             
             <Route path="/race-day" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
                 <RaceDay />
               </ProtectedRoute>
             } />
             
             <Route path="/import" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
                 <DataImport />
               </ProtectedRoute>
             } />
             
             <Route path="/tech-card" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
                 <TechCard />
               </ProtectedRoute>
             } />
             
             <Route path="/ladder" element={
-              <ProtectedRoute requireFeature="basic_sim">
+              <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
                 <Ladder />
               </ProtectedRoute>
             } />
@@ -505,6 +528,7 @@ function App() {
               </ProtectedRoute>
             } />
             
+            
             {/* Four Link features */}
             <Route path="/suspension-sim" element={
               <ProtectedRoute requireProduct="fourlink">
@@ -541,6 +565,15 @@ function App() {
               </ProtectedRoute>
             } />
             
+            {/* Admin Portal - owner/admin only */}
+            <Route path="/admin" element={
+              <ProtectedRoute requireRole={['owner', 'admin']}>
+                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                  <AdminPortal />
+                </Suspense>
+              </ProtectedRoute>
+            } />
+            
             {/* Dev Portal - available in dev mode or to owner/admin */}
             <Route path="/dev" element={
               <ProtectedRoute requireRole={['owner', 'admin']}>
@@ -564,6 +597,7 @@ function App() {
         >
           © RSA 2025
         </footer>
+        <ViewAsBanner />
       </div>
             </BrowserRouter>
             </Vb6FixtureProvider>
