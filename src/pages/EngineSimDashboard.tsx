@@ -8,7 +8,7 @@ import Page from '../shared/components/Page';
 import { simulateEngine, type EngineSimConfig } from '../domain/physics/engine/engineAdapter';
 import { generateVB6DynoCurve } from '../domain/physics/engine/vb6CurveGen';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload, Car } from 'lucide-react';
+import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload } from 'lucide-react';
 import { CompressionRatioCalculator } from '../shared/components/CompressionRatioCalculator';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import {
@@ -214,6 +214,8 @@ export function EngineSimDashboard() {
   const [saveAsName, setSaveAsName] = useState('');
   // Engine asset ID — tracks the library asset linked to this sim document
   const [engineAssetId, setEngineAssetId] = useState<string | null>(null);
+  // SavedEngine ID — tracks the vehicle component linked to this sim document
+  const [savedEngineId, setSavedEngineId] = useState<string | null>(null);
   // Save feedback toast
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const saveToastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -253,6 +255,7 @@ export function EngineSimDashboard() {
     setNotes('');
     setDocName('Unsaved Simulation');
     setDocId(null);
+    setSavedEngineId(null);
     markClean(DEFAULT_CONFIG);
     setFileError(null);
     setWsTab('dyno_data');
@@ -285,6 +288,7 @@ export function EngineSimDashboard() {
       setNotes(record.doc.notes ?? '');
       setDocName(record.name);
       setDocId(record.id);
+      setSavedEngineId(null);
       markClean(cfg);
       setShowLibrary(false);
       // Hydrate flowbench from saved data, or reset so auto-init generates defaults
@@ -728,6 +732,7 @@ export function EngineSimDashboard() {
   const result = useMemo(() => simulateEngine(config), [config]);
 
   // Keep syncAssetRef up to date with current result/displacement/config
+  // Also syncs a SavedEngine so VehicleEditor's engine dropdown auto-populates
   syncAssetRef.current = (name: string): number | undefined => {
     try {
       const summary: EngineResultSummary = {
@@ -739,20 +744,40 @@ export function EngineSimDashboard() {
         numCylinders: config.numCylinders,
         camshaftType: config.camshaftType,
       };
+      let revision: number | undefined;
       if (engineAssetId && getEngineAsset(engineAssetId)) {
         const updated = updateEngineAsset(engineAssetId, {
           name,
           payload: { engineSimConfig: config, engineSimResultSummary: summary },
         } as any);
-        return updated?.revision;
+        revision = updated?.revision;
       } else {
         const asset = createEngineAsset({
           name, scope: 'personal', kind: 'sim',
           payload: { engineSimConfig: config, engineSimResultSummary: summary },
         } as Parameters<typeof createEngineAsset>[0]);
         setEngineAssetId(asset.id);
-        return asset.revision;
+        revision = asset.revision;
       }
+
+      // Auto-sync a SavedEngine so VehicleEditor can reference it via engineRef
+      const vb6Curve = generateVB6DynoCurve(
+        result.peakHP, result.rpmPeakHP,
+        result.peakTQ, result.rpmPeakTQ,
+        result.redline, displacement
+      );
+      const hpCurve = vb6Curve.map((p: { rpm: number; hp: number }) => ({ rpm: p.rpm, hp: Math.round(p.hp) }));
+      const engine = createEngineFromSim(name, result.peakHP, result.rpmPeakHP, hpCurve, 'enginePro', config);
+      // Reuse existing SavedEngine ID on subsequent saves to avoid duplicates
+      if (savedEngineId) engine.id = savedEngineId;
+      engine.peakTorque = result.peakTQ;
+      engine.rpmAtPeakTorque = result.rpmPeakTQ;
+      engine.displacement = displacement;
+      engine.fuelType = config.fuelType ?? 'Gasoline';
+      const saved = saveSavedEngine(engine);
+      setSavedEngineId(saved.id);
+
+      return revision;
     } catch (e: unknown) {
       console.error('Failed to sync engine asset:', e);
       return undefined;
@@ -775,26 +800,6 @@ export function EngineSimDashboard() {
       torque: Math.round(p.torque_lbft),
     }));
   }, [result, displacement]);
-
-  const handleSaveToVehicle = useCallback(() => {
-    const name = docName !== 'Unsaved Simulation' ? docName : 'Engine Sim';
-    const engine = createEngineFromSim(
-      name,
-      result.peakHP,
-      result.rpmPeakHP,
-      chartData.map((p: { rpm: number; hp: number }) => ({ rpm: p.rpm, hp: p.hp })),
-      'enginePro',
-      config
-    );
-    engine.peakTorque = result.peakTQ;
-    engine.rpmAtPeakTorque = result.rpmPeakTQ;
-    engine.displacement = displacement;
-    engine.fuelType = config.fuelType ?? 'Gasoline';
-    saveSavedEngine(engine);
-    clearTimeout(saveToastTimer.current);
-    setSaveToast(`Saved "${name}" to Vehicle Components — select it in Vehicle Editor → Engine`);
-    saveToastTimer.current = setTimeout(() => setSaveToast(null), 5000);
-  }, [docName, result, chartData, config, displacement]);
 
   // Helper: resolve RPM label for VB6-style headers
   function rpmLabel(rpm: number): string {
@@ -1086,10 +1091,6 @@ export function EngineSimDashboard() {
           </button>
           <button style={{ ...styles.fileBtn, padding: '4px 10px', fontSize: '12px' }} onClick={handleImportEng} disabled={fileBusy}>
             <Upload size={12} /> Import .eng
-          </button>
-          <span style={{ width: '1px', height: '20px', backgroundColor: 'var(--color-border)', margin: '0 2px' }} />
-          <button style={{ ...styles.fileBtn, padding: '4px 10px', fontSize: '12px', color: '#22c55e' }} onClick={handleSaveToVehicle} title="Save engine data as a Vehicle Component so it can be selected in the Vehicle Editor">
-            <Car size={12} /> Use in Vehicle
           </button>
         </div>
         {fileError && (
