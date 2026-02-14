@@ -204,7 +204,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check for existing session
     const currentUser = loadFromStorage<User | null>(STORAGE_KEYS.CURRENT_USER, null);
     if (currentUser) {
-      const userStillValid = storedUsers.find(u => u.id === currentUser.id && u.status === 'active');
+      // Clerk-managed users (id starts with "clerk_") are not in the local users DB.
+      // Trust them as-is — Clerk's ClerkRSASync will re-validate the session.
+      const isClerkUser = currentUser.id?.startsWith('clerk_');
+      const userStillValid = isClerkUser
+        ? currentUser
+        : storedUsers.find(u => u.id === currentUser.id && u.status === 'active');
       if (userStillValid) {
         setState({
           isAuthenticated: true,

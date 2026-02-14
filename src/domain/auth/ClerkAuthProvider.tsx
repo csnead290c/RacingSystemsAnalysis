@@ -6,7 +6,7 @@
  */
 
 import { ClerkProvider, useUser, useAuth as useClerkAuth, SignIn, SignUp, UserButton } from '@clerk/clerk-react';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { CLERK_PUBLISHABLE_KEY, isClerkConfigured, clerkAppearance, mapClerkUserToRole, mapClerkUserToProducts, getSubscriptionFromClerk, type SubscriptionInfo } from './clerkConfig';
 import type { User } from './types';
 import { getSubscriptionStatus } from '../payments/stripeConfig';
@@ -47,6 +47,12 @@ export function useClerkRSA() {
 function ClerkRSASync({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useClerkAuth();
+  
+  // Track whether we have ever seen a signed-in state in this component lifecycle.
+  // On refresh, Clerk briefly reports isSignedIn=false before restoring the session.
+  // We must NOT clear auth localStorage during that transient state.
+  const hasEverBeenSignedIn = useRef(false);
+  if (isSignedIn) hasEverBeenSignedIn.current = true;
   
   // Sync Clerk user to localStorage for RSA auth system
   // State for database subscription/products
@@ -157,7 +163,10 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
         }
       });
     } else {
-      // Only clear if this was a Clerk session
+      // Only clear if the user explicitly signed out (transition from signed-in → signed-out).
+      // On page refresh, Clerk briefly reports isSignedIn=false before restoring the session.
+      // Without this guard, the transient false state wipes auth localStorage.
+      if (!hasEverBeenSignedIn.current) return; // Still loading — don't clear
       const wasClerkSession = localStorage.getItem('rsa.auth.clerkSession') === 'true';
       if (wasClerkSession) {
         localStorage.removeItem('rsa.auth.currentUser');
