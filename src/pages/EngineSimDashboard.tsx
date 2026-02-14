@@ -8,7 +8,7 @@ import Page from '../shared/components/Page';
 import { simulateEngine, type EngineSimConfig } from '../domain/physics/engine/engineAdapter';
 import { generateVB6DynoCurve } from '../domain/physics/engine/vb6CurveGen';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload } from 'lucide-react';
+import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload, Car } from 'lucide-react';
 import { CompressionRatioCalculator } from '../shared/components/CompressionRatioCalculator';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import {
@@ -59,6 +59,7 @@ import {
   type EngineSimListItem,
 } from '../state/engineSims';
 import { createEngineAsset, updateEngineAsset, getEngineAsset } from '../state/engineAssets';
+import { createEngineFromSim, saveSavedEngine } from '../state/components';
 import type { EngineResultSummary } from '../domain/library/engineAssets';
 import {
   calcCarbCfm,
@@ -358,7 +359,6 @@ export function EngineSimDashboard() {
       setFileBusy(false);
     }
   }, [config, markClean]);
-
 
   const handleImportEng = useCallback(async () => {
     if (!confirmIfDirty()) return;
@@ -776,6 +776,26 @@ export function EngineSimDashboard() {
     }));
   }, [result, displacement]);
 
+  const handleSaveToVehicle = useCallback(() => {
+    const name = docName !== 'Unsaved Simulation' ? docName : 'Engine Sim';
+    const engine = createEngineFromSim(
+      name,
+      result.peakHP,
+      result.rpmPeakHP,
+      chartData.map((p: { rpm: number; hp: number }) => ({ rpm: p.rpm, hp: p.hp })),
+      'enginePro',
+      config
+    );
+    engine.peakTorque = result.peakTQ;
+    engine.rpmAtPeakTorque = result.rpmPeakTQ;
+    engine.displacement = displacement;
+    engine.fuelType = config.fuelType ?? 'Gasoline';
+    saveSavedEngine(engine);
+    clearTimeout(saveToastTimer.current);
+    setSaveToast(`Saved "${name}" to Vehicle Components — select it in Vehicle Editor → Engine`);
+    saveToastTimer.current = setTimeout(() => setSaveToast(null), 5000);
+  }, [docName, result, chartData, config, displacement]);
+
   // Helper: resolve RPM label for VB6-style headers
   function rpmLabel(rpm: number): string {
     if (rpm === result.rpmPeakTQ) return 'Peak TQ';
@@ -1066,6 +1086,10 @@ export function EngineSimDashboard() {
           </button>
           <button style={{ ...styles.fileBtn, padding: '4px 10px', fontSize: '12px' }} onClick={handleImportEng} disabled={fileBusy}>
             <Upload size={12} /> Import .eng
+          </button>
+          <span style={{ width: '1px', height: '20px', backgroundColor: 'var(--color-border)', margin: '0 2px' }} />
+          <button style={{ ...styles.fileBtn, padding: '4px 10px', fontSize: '12px', color: '#22c55e' }} onClick={handleSaveToVehicle} title="Save engine data as a Vehicle Component so it can be selected in the Vehicle Editor">
+            <Car size={12} /> Use in Vehicle
           </button>
         </div>
         {fileError && (
