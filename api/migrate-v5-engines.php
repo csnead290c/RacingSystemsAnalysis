@@ -146,5 +146,14 @@ try {
     echo "   FAILED: " . $e->getMessage() . "\n\n";
 }
 
+// ── 5. Add engine_uuid + engine_revision columns to vehicles table ───────
+
+echo "5. Adding engine columns to vehicles table...\n";
+addColumnSafeV5($pdo, 'vehicles', 'engine_uuid VARCHAR(36) NULL');
+addColumnSafeV5($pdo, 'vehicles', 'engine_revision INT NULL');
+addIndexSafeV5($pdo, 'idx_veh_engine', "CREATE INDEX idx_veh_engine ON vehicles(engine_uuid)");
+echo "   OK\n\n";
+
 echo "=== Migration v5 Complete ===\n";
 echo "Tables: engines, engine_revisions, engine_sims\n";
+echo "Columns: vehicles.engine_uuid, vehicles.engine_revision\n";

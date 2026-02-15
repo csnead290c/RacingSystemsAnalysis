@@ -252,6 +252,7 @@ export function EngineSimDashboard() {
     setNotes('');
     setDocName('Unsaved Simulation');
     setDocId(null);
+    setEngineAssetId(null);
     markClean(DEFAULT_CONFIG);
     setFileError(null);
     setWsTab('dyno_data');
@@ -312,7 +313,7 @@ export function EngineSimDashboard() {
   }, [docId]);
 
   // Ref to hold syncEngineAsset so save handlers can call it without stale closures
-  const syncAssetRef = useRef<((name: string) => number | undefined) | null>(null);
+  const syncAssetRef = useRef<((name: string) => Promise<number | undefined>) | null>(null);
 
   const handleSave = useCallback(async () => {
     setFileError(null);
@@ -327,9 +328,9 @@ export function EngineSimDashboard() {
       const doc = buildDoc();
       await updateEngineSim(docId, docName, doc);
       markClean(config);
-      const rev = syncAssetRef.current?.(docName);
+      const rev = await syncAssetRef.current?.(docName);
       clearTimeout(saveToastTimer.current);
-      setSaveToast(rev ? `Updated Engine Library (rev ${rev})` : 'Saved to Engine Library');
+      setSaveToast(rev ? `Saved to Engine Library (rev ${rev})` : 'Saved to Engine Library');
       saveToastTimer.current = setTimeout(() => setSaveToast(null), 3000);
     } catch (e: unknown) {
       setFileError(e instanceof Error ? e.message : 'Failed to save.');
@@ -348,9 +349,9 @@ export function EngineSimDashboard() {
       setDocId(record.id);
       setDocName(record.name);
       markClean(config);
-      const rev = syncAssetRef.current?.(name);
+      const rev = await syncAssetRef.current?.(name);
       clearTimeout(saveToastTimer.current);
-      setSaveToast(rev ? `Updated Engine Library (rev ${rev})` : 'Saved to Engine Library');
+      setSaveToast(rev ? `Saved to Engine Library (rev ${rev})` : 'Saved to Engine Library');
       saveToastTimer.current = setTimeout(() => setSaveToast(null), 3000);
     } catch (e: unknown) {
       setFileError(e instanceof Error ? e.message : 'Failed to save.');
@@ -728,7 +729,7 @@ export function EngineSimDashboard() {
 
   // Keep syncAssetRef up to date with current result/displacement/config
   // Writes to DB-backed engine library (with localStorage fallback)
-  syncAssetRef.current = (name: string): number | undefined => {
+  syncAssetRef.current = async (name: string): Promise<number | undefined> => {
     try {
       const vb6Curve = generateVB6DynoCurve(
         result.peakHP, result.rpmPeakHP,
@@ -752,21 +753,16 @@ export function EngineSimDashboard() {
         engine_sim_doc_id: docId ?? undefined,
       };
 
-      let revisionNum: number | undefined;
       if (engineAssetId) {
         // Save = new revision on existing engine
-        saveEngineRevision(engineAssetId, payload).then(detail => {
-          revisionNum = detail.revision;
-        }).catch(e => console.error('Failed to save engine revision:', e));
+        const detail = await saveEngineRevision(engineAssetId, payload);
+        return detail.revision;
       } else {
         // Save As = new engine + first revision
-        createEngine(payload).then(detail => {
-          setEngineAssetId(detail.id);
-          revisionNum = detail.revision;
-        }).catch(e => console.error('Failed to create engine:', e));
+        const detail = await createEngine(payload);
+        setEngineAssetId(detail.id);
+        return detail.revision;
       }
-
-      return revisionNum;
     } catch (e: unknown) {
       console.error('Failed to sync engine asset:', e);
       return undefined;

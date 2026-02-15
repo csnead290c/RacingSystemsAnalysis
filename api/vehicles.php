@@ -108,16 +108,21 @@ function handlePost($pdo, $auth) {
         
         $uuid = generateUUID();
         
+        $engineUuid = $input['engine_uuid'] ?? ($data['engineRef'] ?? null);
+        $engineRevision = $input['engine_revision'] ?? null;
+        
         $stmt = $pdo->prepare("
-            INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO vehicles (uuid, user_id, name, is_public, data, engine_uuid, engine_revision) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $uuid,
             $auth['user_id'],
             $name,
             $isPublic ? 1 : 0,
-            json_encode($data)
+            json_encode($data),
+            $engineUuid,
+            $engineRevision
         ]);
         
         rsa_jsonResponse([
@@ -127,7 +132,9 @@ function handlePost($pdo, $auth) {
                 'name' => $name,
                 'is_public' => $isPublic,
                 'is_owner' => true,
-                'data' => $data
+                'data' => $data,
+                'engine_uuid' => $engineUuid,
+                'engine_revision' => $engineRevision
             ]
         ], 201);
     } catch (Exception $e) {
@@ -175,16 +182,21 @@ function handlePut($pdo, $auth) {
             }
             
             try {
+                $engineUuid = $input['engine_uuid'] ?? ($data['engineRef'] ?? null);
+                $engineRevision = $input['engine_revision'] ?? null;
+                
                 $stmt = $pdo->prepare("
-                    INSERT INTO vehicles (uuid, user_id, name, is_public, data) 
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO vehicles (uuid, user_id, name, is_public, data, engine_uuid, engine_revision) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
                 $result = $stmt->execute([
                     $uuid,
                     $auth['user_id'],
                     $name,
                     $isPublic ? 1 : 0,
-                    json_encode($data)
+                    json_encode($data),
+                    $engineUuid,
+                    $engineRevision
                 ]);
                 
                 error_log("vehicles.php PUT upsert: Insert result=" . ($result ? 'true' : 'false') . ", rowCount=" . $stmt->rowCount());
@@ -206,7 +218,9 @@ function handlePut($pdo, $auth) {
                     'name' => $name,
                     'is_public' => $isPublic,
                     'is_owner' => true,
-                    'data' => $data
+                    'data' => $data,
+                    'engine_uuid' => $engineUuid ?? null,
+                    'engine_revision' => $engineRevision ?? null
                 ]
             ], 201);
             return;
@@ -227,10 +241,14 @@ function handlePut($pdo, $auth) {
             $isPublic = $vehicle['is_public'];
         }
         
+        // Extract engine linkage from input or data blob
+        $engineUuid = $input['engine_uuid'] ?? ($data['engineRef'] ?? $vehicle['engine_uuid']);
+        $engineRevision = $input['engine_revision'] ?? $vehicle['engine_revision'];
+        
         $stmt = $pdo->prepare("
-            UPDATE vehicles SET name = ?, is_public = ?, data = ? WHERE uuid = ?
+            UPDATE vehicles SET name = ?, is_public = ?, data = ?, engine_uuid = ?, engine_revision = ? WHERE uuid = ?
         ");
-        $stmt->execute([$name, $isPublic ? 1 : 0, json_encode($data), $uuid]);
+        $stmt->execute([$name, $isPublic ? 1 : 0, json_encode($data), $engineUuid, $engineRevision, $uuid]);
         
         rsa_jsonResponse(['success' => true]);
     } catch (Exception $e) {
@@ -281,6 +299,8 @@ function formatVehicle($row) {
         'is_owner' => isset($row['user_id']),
         'owner_name' => $row['owner_name'] ?? null,
         'data' => json_decode($row['data'], true),
+        'engine_uuid' => $row['engine_uuid'] ?? null,
+        'engine_revision' => $row['engine_revision'] !== null ? (int)$row['engine_revision'] : null,
         'created_at' => $row['created_at'],
         'updated_at' => $row['updated_at']
     ];

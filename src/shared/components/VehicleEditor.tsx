@@ -623,11 +623,13 @@ export default function VehicleEditor({
                     updateField('engineRef', engineId);
                     if (engineId) {
                       // Fetch full engine detail from DB (async) to get hpCurve etc.
+                      // Pin to current_revision so the vehicle is reproducible
                       getEngine(engineId).then(detail => {
                         if (detail) {
                           onChange({
                             ...vehicle,
                             engineRef: engineId,
+                            engineRevision: detail.currentRevision,
                             powerHP: detail.peakHP,
                             rpmAtPeakHP: detail.rpmAtPeakHP,
                             hpCurve: detail.hpCurve ?? undefined,
@@ -635,6 +637,9 @@ export default function VehicleEditor({
                           });
                         }
                       });
+                    } else {
+                      // Clearing engine selection
+                      onChange({ ...vehicle, engineRef: undefined, engineRevision: undefined });
                     }
                   }}
                 >

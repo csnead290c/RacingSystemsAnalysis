@@ -112,7 +112,8 @@ export const VehicleSchema = z.object({
   
   // Component References (optional - use saved components from sims)
   // When a ref is set, inline data for that component is ignored
-  engineRef: z.string().optional(),            // ID of SavedEngine (from Engine Sim)
+  engineRef: z.string().optional(),            // UUID of engine (from Engine Library DB)
+  engineRevision: z.number().optional(),      // Pinned revision number (null = use latest)
   clutchRef: z.string().optional(),            // ID of SavedClutch (from Clutch Sim)
   converterRef: z.string().optional(),         // ID of SavedConverter (from Converter Sim)
 });
