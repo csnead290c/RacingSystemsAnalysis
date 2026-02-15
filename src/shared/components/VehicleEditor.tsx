@@ -26,6 +26,9 @@ import {
   FrontalAreaWorksheet, 
   TireWidthWorksheet, 
   GearRatioWorksheet,
+  PMIWorksheet,
+  TireRolloutWorksheet,
+  VehicleRolloutWorksheet,
 } from './WorksheetModal';
 import { TOOLTIPS } from '../../domain/config/tooltips';
 
@@ -357,6 +360,11 @@ export default function VehicleEditor({
   const [showFrontalAreaWorksheet, setShowFrontalAreaWorksheet] = useState(false);
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
+  const [showEnginePMIWorksheet, setShowEnginePMIWorksheet] = useState(false);
+  const [showTransPMIWorksheet, setShowTransPMIWorksheet] = useState(false);
+  const [showTiresPMIWorksheet, setShowTiresPMIWorksheet] = useState(false);
+  const [showTireRolloutWorksheet, setShowTireRolloutWorksheet] = useState(false);
+  const [showVehicleRolloutWorksheet, setShowVehicleRolloutWorksheet] = useState(false);
   
   // Load saved engines from DB (with localStorage fallback for immediate display)
   const [savedEngines, setSavedEngines] = useState<EngineListItem[]>(() =>
@@ -490,7 +498,12 @@ export default function VehicleEditor({
               onChange={(e) => updateField('weightLb', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Rollout - inches" required hint={TOOLTIPS.rollout}>
+          <Field 
+            label="Rollout - inches" 
+            required 
+            hint={TOOLTIPS.rollout}
+            worksheetButton={<WorksheetButton onClick={() => setShowVehicleRolloutWorksheet(true)} tooltip="Staging rollout worksheet" />}
+          >
             <input
               type="number"
               step="0.1"
@@ -529,7 +542,11 @@ export default function VehicleEditor({
         onToggle={() => toggleSection('finalDrive')}
       >
         <div style={styles.grid}>
-          <Field label="Gear Ratio" required>
+          <Field 
+            label="Gear Ratio" 
+            required
+            worksheetButton={<WorksheetButton onClick={() => setShowGearRatioWorksheet(true)} tooltip="Calculate gear ratio from ring & pinion teeth" />}
+          >
             <input
               type="number"
               step="0.01"
@@ -552,7 +569,12 @@ export default function VehicleEditor({
           )}
           {/* Jr: Tire Diameter | Pro: Tire Rollout with mode selector */}
           {isPro ? (
-            <Field label="Tire Rollout - inches" required hint="Circumference or diameter">
+            <Field 
+              label="Tire Rollout - inches" 
+              required 
+              hint="Circumference or diameter"
+              worksheetButton={<WorksheetButton onClick={() => setShowTireRolloutWorksheet(true)} tooltip="Tire rollout calculator" />}
+            >
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <input
                   type="number"
@@ -1223,7 +1245,10 @@ export default function VehicleEditor({
         hasProAccess={isPro}
       >
         <div style={styles.grid}>
-          <Field label="Engine + Flywheel + Clutch">
+          <Field 
+            label="Engine + Flywheel + Clutch"
+            worksheetButton={<WorksheetButton onClick={() => setShowEnginePMIWorksheet(true)} tooltip="Calculate Engine PMI" />}
+          >
             <input
               type="number"
               step="0.01"
@@ -1233,7 +1258,10 @@ export default function VehicleEditor({
               placeholder="3.42"
             />
           </Field>
-          <Field label="Transmission + Driveshaft">
+          <Field 
+            label="Transmission + Driveshaft"
+            worksheetButton={<WorksheetButton onClick={() => setShowTransPMIWorksheet(true)} tooltip="Calculate Trans PMI" />}
+          >
             <input
               type="number"
               step="0.001"
@@ -1243,7 +1271,10 @@ export default function VehicleEditor({
               placeholder=".247"
             />
           </Field>
-          <Field label="Tires + Wheels + Ring Gear">
+          <Field 
+            label="Tires + Wheels + Ring Gear"
+            worksheetButton={<WorksheetButton onClick={() => setShowTiresPMIWorksheet(true)} tooltip="Calculate Tire PMI" />}
+          >
             <input
               type="number"
               step="0.1"
@@ -1351,6 +1382,62 @@ export default function VehicleEditor({
             updateField('rearGear', ratio);
             setShowGearRatioWorksheet(false);
           }}
+        />
+      )}
+      {showEnginePMIWorksheet && (
+        <PMIWorksheet
+          isOpen={showEnginePMIWorksheet}
+          onClose={() => setShowEnginePMIWorksheet(false)}
+          type="engine"
+          onApply={(values) => {
+            updateField('enginePMI', values.engine);
+            setShowEnginePMIWorksheet(false);
+          }}
+        />
+      )}
+      {showTransPMIWorksheet && (
+        <PMIWorksheet
+          isOpen={showTransPMIWorksheet}
+          onClose={() => setShowTransPMIWorksheet(false)}
+          type="trans"
+          onApply={(values) => {
+            updateField('transPMI', values.trans);
+            setShowTransPMIWorksheet(false);
+          }}
+        />
+      )}
+      {showTiresPMIWorksheet && (
+        <PMIWorksheet
+          isOpen={showTiresPMIWorksheet}
+          onClose={() => setShowTiresPMIWorksheet(false)}
+          type="tires"
+          onApply={(values) => {
+            updateField('tiresPMI', values.tires);
+            setShowTiresPMIWorksheet(false);
+          }}
+        />
+      )}
+      {showTireRolloutWorksheet && (
+        <TireRolloutWorksheet
+          isOpen={showTireRolloutWorksheet}
+          onClose={() => setShowTireRolloutWorksheet(false)}
+          onApply={(value) => {
+            updateField('tireDiaIn', value);
+            setShowTireRolloutWorksheet(false);
+          }}
+          tireDiameter={vehicle.tireDiaIn ?? 28}
+          mode="diameter"
+        />
+      )}
+      {showVehicleRolloutWorksheet && (
+        <VehicleRolloutWorksheet
+          isOpen={showVehicleRolloutWorksheet}
+          onClose={() => setShowVehicleRolloutWorksheet(false)}
+          onApply={(value) => {
+            updateField('rolloutIn', value);
+            setShowVehicleRolloutWorksheet(false);
+          }}
+          currentValue={vehicle.rolloutIn ?? 12}
         />
       )}
     </div>

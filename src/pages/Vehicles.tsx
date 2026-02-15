@@ -14,6 +14,8 @@ import {
   TireWidthWorksheet, 
   GearRatioWorksheet,
   TireRolloutWorksheet,
+  PMIWorksheet,
+  VehicleRolloutWorksheet,
 } from '../shared/components/WorksheetModal';
 import { TOOLTIPS } from '../domain/config/tooltips';
 import { importDatFile } from '../domain/import';
@@ -162,6 +164,10 @@ function Vehicles() {
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
   const [showTireRolloutWorksheet, setShowTireRolloutWorksheet] = useState(false);
+  const [showEnginePMIWorksheet, setShowEnginePMIWorksheet] = useState(false);
+  const [showTransPMIWorksheet, setShowTransPMIWorksheet] = useState(false);
+  const [showTiresPMIWorksheet, setShowTiresPMIWorksheet] = useState(false);
+  const [showVehicleRolloutWorksheet, setShowVehicleRolloutWorksheet] = useState(false);
   
   // Collapsible advanced sections (Pro mode)
   const [showAdvancedGeometry, setShowAdvancedGeometry] = useState(false);
@@ -597,7 +603,10 @@ function Vehicles() {
                   <input type="number" step="1" className="input" value={form.weightLb ?? ''} onChange={(e) => updateForm('weightLb', parseFloat(e.target.value))} />
                 </div>
                 <div>
-                  <label className="label">Staging Rollout (in) *</label>
+                  <label className="label">
+                    Staging Rollout (in) *
+                    <WorksheetButton onClick={() => setShowVehicleRolloutWorksheet(true)} tooltip="Staging rollout worksheet" />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.rolloutIn ?? ''} onChange={(e) => updateForm('rolloutIn', parseFloat(e.target.value))} />
                   <small style={{ color: 'var(--color-muted)' }}>{TOOLTIPS.rollout}</small>
                 </div>
@@ -835,7 +844,10 @@ function Vehicles() {
                   <input type="number" step="0.1" className="input" value={form.tireDiaIn ?? ''} onChange={(e) => updateForm('tireDiaIn', parseFloat(e.target.value))} />
                 </div>
                 <div>
-                  <label className="label">Staging Rollout (in) *</label>
+                  <label className="label">
+                    Staging Rollout (in) *
+                    <WorksheetButton onClick={() => setShowVehicleRolloutWorksheet(true)} tooltip="Staging rollout worksheet" />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.rolloutIn ?? ''} onChange={(e) => updateForm('rolloutIn', parseFloat(e.target.value))} />
                 </div>
               </div>
@@ -1127,17 +1139,26 @@ function Vehicles() {
             <div className="mb-4">
               <div className="grid grid-3 gap-4">
                 <div>
-                  <label className="label">Engine PMI (slug-ft²)</label>
+                  <label className="label">
+                    Engine PMI (slug-ft²)
+                    <WorksheetButton onClick={() => setShowEnginePMIWorksheet(true)} tooltip="Calculate Engine PMI" />
+                  </label>
                   <input type="number" step="0.01" className="input" value={form.enginePMI ?? ''} onChange={(e) => updateForm('enginePMI', parseFloat(e.target.value))} />
                   <small style={{ color: 'var(--color-muted)' }}>Engine, flywheel, clutch</small>
                 </div>
                 <div>
-                  <label className="label">Trans PMI (slug-ft²)</label>
+                  <label className="label">
+                    Trans PMI (slug-ft²)
+                    <WorksheetButton onClick={() => setShowTransPMIWorksheet(true)} tooltip="Calculate Trans PMI" />
+                  </label>
                   <input type="number" step="0.001" className="input" value={form.transPMI ?? ''} onChange={(e) => updateForm('transPMI', parseFloat(e.target.value))} />
                   <small style={{ color: 'var(--color-muted)' }}>Transmission, driveshaft</small>
                 </div>
                 <div>
-                  <label className="label">Tires PMI (slug-ft²)</label>
+                  <label className="label">
+                    Tires PMI (slug-ft²)
+                    <WorksheetButton onClick={() => setShowTiresPMIWorksheet(true)} tooltip="Calculate Tire PMI" />
+                  </label>
                   <input type="number" step="0.1" className="input" value={form.tiresPMI ?? ''} onChange={(e) => updateForm('tiresPMI', parseFloat(e.target.value))} />
                   <small style={{ color: 'var(--color-muted)' }}>Tires, wheels, ring gear</small>
                 </div>
@@ -1569,6 +1590,50 @@ function Vehicles() {
         tireDiameter={form.tireDiaIn}
         mode="diameter"
       />
+      {showEnginePMIWorksheet && (
+        <PMIWorksheet
+          isOpen={showEnginePMIWorksheet}
+          onClose={() => setShowEnginePMIWorksheet(false)}
+          type="engine"
+          onApply={(values) => {
+            updateForm('enginePMI', values.engine);
+            setShowEnginePMIWorksheet(false);
+          }}
+        />
+      )}
+      {showTransPMIWorksheet && (
+        <PMIWorksheet
+          isOpen={showTransPMIWorksheet}
+          onClose={() => setShowTransPMIWorksheet(false)}
+          type="trans"
+          onApply={(values) => {
+            updateForm('transPMI', values.trans);
+            setShowTransPMIWorksheet(false);
+          }}
+        />
+      )}
+      {showTiresPMIWorksheet && (
+        <PMIWorksheet
+          isOpen={showTiresPMIWorksheet}
+          onClose={() => setShowTiresPMIWorksheet(false)}
+          type="tires"
+          onApply={(values) => {
+            updateForm('tiresPMI', values.tires);
+            setShowTiresPMIWorksheet(false);
+          }}
+        />
+      )}
+      {showVehicleRolloutWorksheet && (
+        <VehicleRolloutWorksheet
+          isOpen={showVehicleRolloutWorksheet}
+          onClose={() => setShowVehicleRolloutWorksheet(false)}
+          onApply={(value) => {
+            updateForm('rolloutIn', value);
+            setShowVehicleRolloutWorksheet(false);
+          }}
+          currentValue={form.rolloutIn ?? 12}
+        />
+      )}
       
       {/* Duplicate Vehicle Name Prompt */}
       {duplicateVehicle && (
