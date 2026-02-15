@@ -5,8 +5,8 @@
  * correct fields, and that applying it to a Vehicle (the same way
  * VehicleEditor does) populates the expected engine fields.
  */
-import { describe, it, expect } from 'vitest';
-import { createEngineFromSim } from '../components';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { createEngineFromSim, saveSavedEngine, loadSavedEngines, getSavedEngine } from '../components';
 import type { SavedEngine } from '../../domain/schemas/components.schema';
 import type { Vehicle } from '../../domain/schemas/vehicle.schema';
 
@@ -101,5 +101,110 @@ describe('Engine Sim → Vehicle mapping', () => {
     expect(engine.rpmAtPeakHP).toBe(6500);
     expect(engine.hpCurve).toBeUndefined();
     expect(engine.source).toBe('engineJr');
+  });
+});
+
+// ============================================================================
+// Full round-trip regression: save → localStorage → load → select → vehicle
+// ============================================================================
+
+describe('Engine Sim → localStorage → Vehicle Editor round-trip', () => {
+  let mockStore: Record<string, string>;
+
+  beforeEach(() => {
+    mockStore = {};
+    const fakeStorage = {
+      getItem: (key: string) => mockStore[key] ?? null,
+      setItem: (key: string, value: string) => { mockStore[key] = value; },
+      removeItem: (key: string) => { delete mockStore[key]; },
+      clear: () => { mockStore = {}; },
+      get length() { return Object.keys(mockStore).length; },
+      key: (i: number) => Object.keys(mockStore)[i] ?? null,
+    };
+    vi.stubGlobal('localStorage', fakeStorage);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const PEAK_HP = 510;
+  const RPM_PEAK_HP = 7000;
+  const HP_CURVE = [
+    { rpm: 4000, hp: 300 },
+    { rpm: 5500, hp: 420 },
+    { rpm: 7000, hp: 510 },
+    { rpm: 7500, hp: 490 },
+  ];
+
+  it('saveSavedEngine persists and loadSavedEngines retrieves it', () => {
+    const engine = createEngineFromSim('Round Trip Engine', PEAK_HP, RPM_PEAK_HP, HP_CURVE, 'enginePro');
+    engine.displacement = 383;
+    saveSavedEngine(engine);
+
+    const loaded = loadSavedEngines();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].id).toBe(engine.id);
+    expect(loaded[0].name).toBe('Round Trip Engine');
+    expect(loaded[0].peakHP).toBe(PEAK_HP);
+    expect(loaded[0].rpmAtPeakHP).toBe(RPM_PEAK_HP);
+    expect(loaded[0].hpCurve).toHaveLength(HP_CURVE.length);
+    expect(loaded[0].displacement).toBe(383);
+  });
+
+  it('getSavedEngine retrieves by ID after save', () => {
+    const engine = createEngineFromSim('Lookup Engine', PEAK_HP, RPM_PEAK_HP, HP_CURVE, 'enginePro');
+    saveSavedEngine(engine);
+
+    const found = getSavedEngine(engine.id);
+    expect(found).toBeDefined();
+    expect(found!.name).toBe('Lookup Engine');
+    expect(found!.peakHP).toBe(PEAK_HP);
+  });
+
+  it('subsequent save with same ID updates in place (no duplicates)', () => {
+    const engine = createEngineFromSim('Dup Test', 400, 6500, HP_CURVE, 'enginePro');
+    saveSavedEngine(engine);
+    expect(loadSavedEngines()).toHaveLength(1);
+
+    // "Re-save" with updated HP but same ID
+    engine.peakHP = 520;
+    saveSavedEngine(engine);
+    const loaded = loadSavedEngines();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].peakHP).toBe(520);
+  });
+
+  it('loaded engine maps to vehicle fields correctly (VehicleEditor contract)', () => {
+    const engine = createEngineFromSim('Vehicle Map', PEAK_HP, RPM_PEAK_HP, HP_CURVE, 'enginePro');
+    engine.displacement = 383;
+    saveSavedEngine(engine);
+
+    // Simulate VehicleEditor selecting this engine by ID
+    const found = getSavedEngine(engine.id);
+    expect(found).toBeDefined();
+
+    const vehicle = {
+      id: 'v1',
+      name: 'Test Car',
+      weightLb: 2400,
+      powerHP: 300,
+      // Apply engine (mirrors VehicleEditor onChange)
+      engineRef: found!.id,
+      ...(found && {
+        powerHP: found.peakHP,
+        rpmAtPeakHP: found.rpmAtPeakHP,
+        hpCurve: found.hpCurve,
+        displacementCID: found.displacement,
+      }),
+    };
+
+    expect(vehicle.engineRef).toBe(engine.id);
+    expect(vehicle.powerHP).toBe(PEAK_HP);
+    expect(vehicle.rpmAtPeakHP).toBe(RPM_PEAK_HP);
+    expect(vehicle.hpCurve).toHaveLength(HP_CURVE.length);
+    expect(vehicle.displacementCID).toBe(383);
+    // Original fields preserved
+    expect(vehicle.weightLb).toBe(2400);
   });
 });

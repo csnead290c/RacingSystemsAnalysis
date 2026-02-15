@@ -777,6 +777,9 @@ export function EngineSimDashboard() {
       const saved = saveSavedEngine(engine);
       setSavedEngineId(saved.id);
 
+      // Notify VehicleEditor (same-tab) that the engine list changed
+      window.dispatchEvent(new Event('rsa-engines-updated'));
+
       return revision;
     } catch (e: unknown) {
       console.error('Failed to sync engine asset:', e);

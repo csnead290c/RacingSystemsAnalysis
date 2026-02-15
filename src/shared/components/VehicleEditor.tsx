@@ -359,9 +359,25 @@ export default function VehicleEditor({
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
   
-  // Load saved components
-  const savedEngines = useMemo(() => loadSavedEngines(), []);
+  // Load saved components — reactive: reloads on mount, on storage events,
+  // and on the custom 'rsa-engines-updated' event fired by EngineSimDashboard.
+  const [savedEngines, setSavedEngines] = useState(() => loadSavedEngines());
   const savedClutches = useMemo(() => loadSavedClutches(), []);
+
+  useEffect(() => {
+    // Reload every time the component mounts (e.g. navigating back from Engine Sim)
+    setSavedEngines(loadSavedEngines());
+
+    const reload = () => setSavedEngines(loadSavedEngines());
+    // Cross-tab localStorage changes
+    window.addEventListener('storage', reload);
+    // Same-tab custom event from EngineSimDashboard save
+    window.addEventListener('rsa-engines-updated', reload);
+    return () => {
+      window.removeEventListener('storage', reload);
+      window.removeEventListener('rsa-engines-updated', reload);
+    };
+  }, []);
   
   // Get currently selected components
   const selectedEngine = useMemo(() => 
@@ -587,38 +603,44 @@ export default function VehicleEditor({
           ) : null
         }
       >
-        {/* Pro only: Component selector */}
-        {isPro && savedEngines.length > 0 && (
+        {/* Pro only: Component selector — always shown for Pro users */}
+        {isPro && (
           <div style={styles.componentSelector}>
             <div style={{ flex: 1 }}>
-              <select
-                style={{ ...styles.select, width: '100%' }}
-                value={vehicle.engineRef ?? ''}
-                onChange={(e) => {
-                  const engineId = e.target.value || undefined;
-                  updateField('engineRef', engineId);
-                  if (engineId) {
-                    const engine = getSavedEngine(engineId);
-                    if (engine) {
-                      onChange({
-                        ...vehicle,
-                        engineRef: engineId,
-                        powerHP: engine.peakHP,
-                        rpmAtPeakHP: engine.rpmAtPeakHP,
-                        hpCurve: engine.hpCurve,
-                        displacementCID: engine.displacement,
-                      });
+              {savedEngines.length > 0 ? (
+                <select
+                  style={{ ...styles.select, width: '100%' }}
+                  value={vehicle.engineRef ?? ''}
+                  onChange={(e) => {
+                    const engineId = e.target.value || undefined;
+                    updateField('engineRef', engineId);
+                    if (engineId) {
+                      const engine = getSavedEngine(engineId);
+                      if (engine) {
+                        onChange({
+                          ...vehicle,
+                          engineRef: engineId,
+                          powerHP: engine.peakHP,
+                          rpmAtPeakHP: engine.rpmAtPeakHP,
+                          hpCurve: engine.hpCurve,
+                          displacementCID: engine.displacement,
+                        });
+                      }
                     }
-                  }
-                }}
-              >
-                <option value="">Manual Entry</option>
-                {savedEngines.map(eng => (
-                  <option key={eng.id} value={eng.id}>
-                    {eng.name} ({Math.round(eng.peakHP)} HP)
-                  </option>
-                ))}
-              </select>
+                  }}
+                >
+                  <option value="">Manual Entry</option>
+                  {savedEngines.map(eng => (
+                    <option key={eng.id} value={eng.id}>
+                      {eng.name} ({Math.round(eng.peakHP)} HP)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                  No saved engines — save one in Engine Sim first
+                </span>
+              )}
             </div>
             {selectedEngine && (
               <button
