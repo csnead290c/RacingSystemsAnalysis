@@ -14,14 +14,13 @@ import type { Vehicle } from '../../domain/schemas/vehicle.schema';
 import type { RaceLength } from '../../domain/config/raceLengths';
 import { useSubscription } from '../../domain/config/useSubscription';
 import { isFieldSuperseded } from '../../domain/schemas/components.schema';
-// Types imported for documentation - actual types inferred from storage functions
 import { 
   loadSavedEngines, 
   loadSavedClutches,
-  getSavedEngine,
   getSavedClutch,
   getSavedConverter,
 } from '../../state/components';
+import { listEngines, getEngine, type EngineListItem } from '../../state/engines';
 import { 
   WorksheetButton, 
   FrontalAreaWorksheet, 
@@ -359,16 +358,24 @@ export default function VehicleEditor({
   const [showTireWidthWorksheet, setShowTireWidthWorksheet] = useState(false);
   const [showGearRatioWorksheet, setShowGearRatioWorksheet] = useState(false);
   
-  // Load saved components — reactive: reloads on mount, on storage events,
-  // and on the custom 'rsa-engines-updated' event fired by EngineSimDashboard.
-  const [savedEngines, setSavedEngines] = useState(() => loadSavedEngines());
+  // Load saved engines from DB (with localStorage fallback for immediate display)
+  const [savedEngines, setSavedEngines] = useState<EngineListItem[]>(() =>
+    loadSavedEngines().map(se => ({
+      id: se.id, name: se.name, source: se.source ?? 'enginePro',
+      currentRevision: 1, peakHP: se.peakHP, rpmAtPeakHP: se.rpmAtPeakHP,
+      displacementCID: se.displacement ?? null,
+      updatedAt: se.updatedAt ? new Date(se.updatedAt).toISOString() : new Date(se.createdAt).toISOString(),
+    }))
+  );
   const savedClutches = useMemo(() => loadSavedClutches(), []);
 
   useEffect(() => {
-    // Reload every time the component mounts (e.g. navigating back from Engine Sim)
-    setSavedEngines(loadSavedEngines());
+    // Fetch from DB on mount (replaces stale localStorage data)
+    listEngines().then(setSavedEngines).catch(() => {/* keep localStorage fallback */});
 
-    const reload = () => setSavedEngines(loadSavedEngines());
+    const reload = () => {
+      listEngines().then(setSavedEngines).catch(() => {/* keep current */});
+    };
     // Cross-tab localStorage changes
     window.addEventListener('storage', reload);
     // Same-tab custom event from EngineSimDashboard save
@@ -379,10 +386,10 @@ export default function VehicleEditor({
     };
   }, []);
   
-  // Get currently selected components
+  // Get currently selected engine (find in already-loaded list)
   const selectedEngine = useMemo(() => 
-    vehicle.engineRef ? getSavedEngine(vehicle.engineRef) : undefined,
-    [vehicle.engineRef]
+    vehicle.engineRef ? savedEngines.find(e => e.id === vehicle.engineRef) : undefined,
+    [vehicle.engineRef, savedEngines]
   );
   const selectedClutch = useMemo(() => 
     vehicle.clutchRef ? getSavedClutch(vehicle.clutchRef) : undefined,
@@ -615,17 +622,19 @@ export default function VehicleEditor({
                     const engineId = e.target.value || undefined;
                     updateField('engineRef', engineId);
                     if (engineId) {
-                      const engine = getSavedEngine(engineId);
-                      if (engine) {
-                        onChange({
-                          ...vehicle,
-                          engineRef: engineId,
-                          powerHP: engine.peakHP,
-                          rpmAtPeakHP: engine.rpmAtPeakHP,
-                          hpCurve: engine.hpCurve,
-                          displacementCID: engine.displacement,
-                        });
-                      }
+                      // Fetch full engine detail from DB (async) to get hpCurve etc.
+                      getEngine(engineId).then(detail => {
+                        if (detail) {
+                          onChange({
+                            ...vehicle,
+                            engineRef: engineId,
+                            powerHP: detail.peakHP,
+                            rpmAtPeakHP: detail.rpmAtPeakHP,
+                            hpCurve: detail.hpCurve ?? undefined,
+                            displacementCID: detail.displacementCID ?? undefined,
+                          });
+                        }
+                      });
                     }
                   }}
                 >
@@ -666,7 +675,8 @@ export default function VehicleEditor({
             <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>{selectedEngine.name}</div>
             <div style={{ color: 'var(--color-muted)' }}>
               {Math.round(selectedEngine.peakHP)} HP @ {selectedEngine.rpmAtPeakHP} RPM
-              {selectedEngine.hpCurve && ` • ${selectedEngine.hpCurve.length} point curve`}
+              {selectedEngine.displacementCID && ` • ${Math.round(selectedEngine.displacementCID)} CID`}
+              {selectedEngine.currentRevision > 1 && ` • rev ${selectedEngine.currentRevision}`}
             </div>
           </div>
         )}

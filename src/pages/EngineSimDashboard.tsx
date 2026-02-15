@@ -58,9 +58,8 @@ import {
   deleteEngineSim,
   type EngineSimListItem,
 } from '../state/engineSims';
-import { createEngineAsset, updateEngineAsset, getEngineAsset } from '../state/engineAssets';
-import { createEngineFromSim, saveSavedEngine } from '../state/components';
-import type { EngineResultSummary } from '../domain/library/engineAssets';
+import { createEngine, saveEngineRevision } from '../state/engines';
+import type { EngineRevisionPayload } from '../services/api';
 import {
   calcCarbCfm,
   clampNumBoresPrimary,
@@ -214,8 +213,6 @@ export function EngineSimDashboard() {
   const [saveAsName, setSaveAsName] = useState('');
   // Engine asset ID — tracks the library asset linked to this sim document
   const [engineAssetId, setEngineAssetId] = useState<string | null>(null);
-  // SavedEngine ID — tracks the vehicle component linked to this sim document
-  const [savedEngineId, setSavedEngineId] = useState<string | null>(null);
   // Save feedback toast
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const saveToastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -255,7 +252,6 @@ export function EngineSimDashboard() {
     setNotes('');
     setDocName('Unsaved Simulation');
     setDocId(null);
-    setSavedEngineId(null);
     markClean(DEFAULT_CONFIG);
     setFileError(null);
     setWsTab('dyno_data');
@@ -288,7 +284,6 @@ export function EngineSimDashboard() {
       setNotes(record.doc.notes ?? '');
       setDocName(record.name);
       setDocId(record.id);
-      setSavedEngineId(null);
       markClean(cfg);
       setShowLibrary(false);
       // Hydrate flowbench from saved data, or reset so auto-init generates defaults
@@ -732,55 +727,46 @@ export function EngineSimDashboard() {
   const result = useMemo(() => simulateEngine(config), [config]);
 
   // Keep syncAssetRef up to date with current result/displacement/config
-  // Also syncs a SavedEngine so VehicleEditor's engine dropdown auto-populates
+  // Writes to DB-backed engine library (with localStorage fallback)
   syncAssetRef.current = (name: string): number | undefined => {
     try {
-      const summary: EngineResultSummary = {
-        peakHP: result.peakHP,
-        peakHpRpm: result.rpmPeakHP,
-        peakTQ: result.peakTQ,
-        peakTqRpm: result.rpmPeakTQ,
-        displacement_ci: displacement,
-        numCylinders: config.numCylinders,
-        camshaftType: config.camshaftType,
-      };
-      let revision: number | undefined;
-      if (engineAssetId && getEngineAsset(engineAssetId)) {
-        const updated = updateEngineAsset(engineAssetId, {
-          name,
-          payload: { engineSimConfig: config, engineSimResultSummary: summary },
-        } as any);
-        revision = updated?.revision;
-      } else {
-        const asset = createEngineAsset({
-          name, scope: 'personal', kind: 'sim',
-          payload: { engineSimConfig: config, engineSimResultSummary: summary },
-        } as Parameters<typeof createEngineAsset>[0]);
-        setEngineAssetId(asset.id);
-        revision = asset.revision;
-      }
-
-      // Auto-sync a SavedEngine so VehicleEditor can reference it via engineRef
       const vb6Curve = generateVB6DynoCurve(
         result.peakHP, result.rpmPeakHP,
         result.peakTQ, result.rpmPeakTQ,
         result.redline, displacement
       );
       const hpCurve = vb6Curve.map((p: { rpm: number; hp: number }) => ({ rpm: p.rpm, hp: Math.round(p.hp) }));
-      const engine = createEngineFromSim(name, result.peakHP, result.rpmPeakHP, hpCurve, 'enginePro', config);
-      // Reuse existing SavedEngine ID on subsequent saves to avoid duplicates
-      if (savedEngineId) engine.id = savedEngineId;
-      engine.peakTorque = result.peakTQ;
-      engine.rpmAtPeakTorque = result.rpmPeakTQ;
-      engine.displacement = displacement;
-      engine.fuelType = config.fuelType ?? 'Gasoline';
-      const saved = saveSavedEngine(engine);
-      setSavedEngineId(saved.id);
 
-      // Notify VehicleEditor (same-tab) that the engine list changed
-      window.dispatchEvent(new Event('rsa-engines-updated'));
+      const payload: EngineRevisionPayload = {
+        name,
+        source: 'enginePro',
+        scope: 'personal',
+        peak_hp: result.peakHP,
+        rpm_at_peak_hp: result.rpmPeakHP,
+        peak_torque: result.peakTQ,
+        rpm_at_peak_torque: result.rpmPeakTQ,
+        displacement_cid: displacement,
+        fuel_type: config.fuelType ?? 'Gasoline',
+        hp_curve: hpCurve,
+        engine_sim_config: config,
+        engine_sim_doc_id: docId ?? undefined,
+      };
 
-      return revision;
+      let revisionNum: number | undefined;
+      if (engineAssetId) {
+        // Save = new revision on existing engine
+        saveEngineRevision(engineAssetId, payload).then(detail => {
+          revisionNum = detail.revision;
+        }).catch(e => console.error('Failed to save engine revision:', e));
+      } else {
+        // Save As = new engine + first revision
+        createEngine(payload).then(detail => {
+          setEngineAssetId(detail.id);
+          revisionNum = detail.revision;
+        }).catch(e => console.error('Failed to create engine:', e));
+      }
+
+      return revisionNum;
     } catch (e: unknown) {
       console.error('Failed to sync engine asset:', e);
       return undefined;

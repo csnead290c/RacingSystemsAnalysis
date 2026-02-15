@@ -279,6 +279,76 @@ export const engineSimsApi = {
   },
 };
 
+// Engines API (DB-backed engine library with versioning)
+export interface ApiEngine {
+  id: string;           // uuid
+  name: string;
+  source: string;
+  scope: string;
+  current_revision: number;
+  revision: number;     // revision of the returned data
+  peak_hp: number;
+  rpm_at_peak_hp: number;
+  peak_torque: number | null;
+  rpm_at_peak_torque: number | null;
+  displacement_cid: number | null;
+  fuel_type: string | null;
+  hp_curve: { rpm: number; hp: number }[] | null;
+  engine_sim_config: any | null;
+  engine_sim_doc_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  revision_created_at?: string;
+}
+
+export interface EngineRevisionPayload {
+  name?: string;
+  source?: string;
+  scope?: string;
+  peak_hp: number;
+  rpm_at_peak_hp: number;
+  peak_torque?: number | null;
+  rpm_at_peak_torque?: number | null;
+  displacement_cid?: number | null;
+  fuel_type?: string | null;
+  hp_curve?: { rpm: number; hp: number }[] | null;
+  engine_sim_config?: any | null;
+  engine_sim_doc_id?: string | null;
+  notes?: string | null;
+}
+
+export const enginesApi = {
+  async getAll() {
+    return apiRequest<{ engines: ApiEngine[] }>('/engines.php');
+  },
+
+  async get(id: string, rev?: number) {
+    const revParam = rev !== undefined ? `&rev=${rev}` : '';
+    return apiRequest<{ engine: ApiEngine }>(`/engines.php?id=${id}${revParam}`);
+  },
+
+  async create(payload: EngineRevisionPayload) {
+    return apiRequest<{ success: boolean; engine: ApiEngine }>('/engines.php', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async update(id: string, payload: EngineRevisionPayload) {
+    return apiRequest<{ success: boolean; engine: ApiEngine }>(`/engines.php?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async delete(id: string) {
+    return apiRequest<{ success: boolean }>(`/engines.php?id=${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export interface ApiRun {
   id: string;
   vehicle_id: string;
