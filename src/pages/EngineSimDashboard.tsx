@@ -1370,6 +1370,17 @@ export function EngineSimDashboard() {
               />
             </div>
             <div style={styles.inputGroup}>
+              <label style={styles.label}>Max Intake Valve Lift (in)</label>
+              <input
+                type="number"
+                style={styles.input}
+                value={config.maxIntakeValveLift_in ?? 0.55}
+                onChange={e => updateConfig({ maxIntakeValveLift_in: parseFloat(e.target.value) || 0.55 })}
+                onBlur={() => commitField('maxIntakeValveLift_in')}
+                step={0.001}
+              />
+            </div>
+            <div style={styles.inputGroup}>
               <label style={styles.label}>Maximum Intake Port Flow (CFM)</label>
               <div style={{ display: 'flex', gap: '4px', flex: 1 }}>
                 <input

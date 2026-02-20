@@ -29,14 +29,14 @@
 | Max Intake Port Flow CFM | `EngineSimDashboard.tsx:1356` | ✅ | + Intake Flow / Flow Bench button |
 | Flow Test Pressure | `EngineSimDashboard.tsx:1378` | ✅ | |
 | Reference Bore Diameter | `EngineSimDashboard.tsx:1388` | ✅ | |
-| Max Intake Valve Lift | (no direct input in basic mode) | ⚠️ | Only editable in Pro Flow Bench/Flow Details tabs. Basic users stuck at 0.550" default. VB6 had this as a main-screen input. |
+| Max Intake Valve Lift | `EngineSimDashboard.tsx:1372` | ✅ | Added to main input panel. Also editable in Pro Flow Bench/Flow Details tabs. |
 | Notes | `EngineSimDashboard.tsx:1399` | ✅ | |
 
 ### 1.2 Worksheet Buttons / Helper Calculators
 
 | VB6 Feature Name | File / Component | Status | Notes |
 |---|---|---|---|
-| CR Calculator (Compression Ratio) | `CompressionRatioCalculator.tsx` | ⚠️ | **Opens but does NOT receive current bore/stroke/deck/gasket from config.** Always starts with hardcoded defaults. VB6 pre-populated from current engine. This is the #1 Engine Sim dead click. |
+| CR Calculator (Compression Ratio) | `CompressionRatioCalculator.tsx` | ✅ | Pre-populates from current config (bore, stroke, deck, gasket, chamber, dome). Apply writes all sub-values back to config via `onApplyWithDetails`. |
 | Carb CFM Worksheet | `EngineSimDashboard.tsx:1547` + `carbCfmWorksheet.ts` | ✅ | Full VB6 parity. Apply transfers value back. |
 | Intake Flow Worksheet | `EngineSimDashboard.tsx:1628` + `intakeFlowWorksheet.ts` | ✅ | Full VB6 parity. CS Area sub-calculator included. |
 | Cross-Section Area Calculator | `EngineSimDashboard.tsx:1695` + `csaWorksheet.ts` | ✅ | Opens from within Intake Flow modal. Apply transfers area. |
@@ -63,8 +63,8 @@
 
 ### 1.5 Engine Sim Dead Clicks / Gaps (Top 5)
 
-1. **CR Calculator ignores current config** — Opens with hardcoded bore=4.03, stroke=3.48 etc. instead of passing current `config.bore_in`, `config.stroke_in`, `config.pistonToDeckHeight_in`, `config.headGasketThickness_in`. User must re-enter all values manually. **BLOCKS real workflow.**
-2. **No Max Intake Valve Lift input in basic mode** — VB6 had this on the main screen. Currently only editable in Pro Flow Bench/Flow Details tabs. Basic users are stuck at 0.550" default with no way to change it.
+1. ~~**CR Calculator ignores current config**~~ — **FIXED.** Now pre-populates from config and writes sub-values back.
+2. ~~**No Max Intake Valve Lift input in basic mode**~~ — **FIXED.** Added to main input panel after Intake Valve Diameter.
 3. **No Exhaust Duration input** — VB6 ENGPERF had exhaust duration as an input. Currently only appears as a calculated recommendation.
 4. **No LSA/ILC inputs on main screen** — Only editable as overrides in Flow Details tab (Pro). VB6 had these as main inputs.
 5. **No .eng file export** — Import works but there's no Export to .eng for sharing.
@@ -178,16 +178,16 @@
 
 | Module | ✅ Implemented + Wired | ⚠️ Partially Wired | 🔲 Stub | ❌ Missing |
 |---|---|---|---|---|
-| **Engine Sim** | 28 | 2 | 0 | 0 |
+| **Engine Sim** | 30 | 0 | 0 | 0 |
 | **Quarter-Mile** | 25 | 0 | 0 | 0 |
 | **Land Speed** | 5 | 0 | 0 | 0 |
 | **FourLink** | 1 (route) | 0 | 1 | 1 (nav) |
-| **Total** | **59** | **2** | **1** | **1** |
+| **Total** | **61** | **0** | **1** | **1** |
 
-### Top Blockers (Ranked)
+### Top Remaining Blockers (Ranked)
 
-1. **Engine Sim: CR Calculator ignores current config** — Easy fix, high impact. Users must re-enter bore/stroke/deck/gasket every time.
-2. **Engine Sim: No Max Intake Valve Lift input in basic mode** — Affects simulation accuracy for non-Pro users.
+1. ~~Engine Sim: CR Calculator ignores current config~~ — **FIXED**
+2. ~~Engine Sim: No Max Intake Valve Lift input in basic mode~~ — **FIXED**
 3. **Quarter-Mile: No Detailed Parameters screen** — VB6 power users expect step-by-step sim output.
 4. **Land Speed: Incomplete mile-marker timeslip** — Only 4 of 7 VB6 checkpoints shown for Bonneville Long.
 5. **Engine Sim: No .eng export** — Users can import but not export/share.
