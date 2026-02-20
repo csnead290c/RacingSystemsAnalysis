@@ -5,7 +5,7 @@ import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehicles } from '../domain/config/guards';
 import { useCapabilities } from '../domain/config/useCapabilities';
-import { getQuarterProgramName } from '../domain/ui/programDisplayNames';
+import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
 import { formatHp, formatLb, formatIn } from '../shared/format/formatNumber';
 import Landing from './Landing';
 
@@ -58,32 +58,30 @@ function Home() {
           </h2>
         </div>
 
-        {/* Quick Actions */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
-            Quick Actions
+        {/* Primary CTAs — Simulators */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--color-text)' }}>
+            Simulators
           </h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-            gap: '1rem' 
-          }}>
-            {/* ET Sim access (basic+ plans) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+            {/* Quarter — primary CTA */}
             {canAccessEtSim({ hasFeature }) && (
-              <Link 
-                to="/et-sim" 
+              <Link
+                to="/et-sim"
                 className="card"
-                style={{ 
+                style={{
                   textDecoration: 'none',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '1rem',
-                  padding: '1rem',
+                  padding: '1.25rem 1rem',
+                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.08))',
+                  borderLeft: '3px solid var(--color-primary)',
                 }}
               >
                 <div style={{ fontSize: '2rem' }}>🏁</div>
                 <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>{getQuarterProgramName(can)}</h4>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1rem' }}>{getQuarterProgramName(can)}</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
                     Predict ET & MPH
                   </p>
@@ -91,96 +89,126 @@ function Home() {
               </Link>
             )}
 
+            {/* Engine — primary CTA */}
+            <Link
+              to="/engine-sim"
+              className="card"
+              style={{
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                padding: '1.25rem 1rem',
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(249, 115, 22, 0.08))',
+                borderLeft: '3px solid #ef4444',
+              }}
+            >
+              <div style={{ fontSize: '2rem' }}>�</div>
+              <div>
+                <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1rem' }}>{getEngineProgramName(can)}</h4>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                  Dyno curve & engine analysis
+                </p>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Secondary — Tools */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem', color: 'var(--color-muted)' }}>
+            Tools
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
             {/* Vehicles */}
             {canAccessVehicles({ hasFeature }) && (
-              <Link 
-                to="/vehicles" 
+              <Link
+                to="/vehicles"
                 className="card"
-                style={{ 
+                style={{
                   textDecoration: 'none',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
+                  gap: '0.75rem',
+                  padding: '0.75rem',
                 }}
               >
-                <div style={{ fontSize: '2rem' }}>🚗</div>
+                <div style={{ fontSize: '1.5rem' }}>�</div>
                 <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Vehicles</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                    {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''} configured
+                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Vehicles</h4>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                    {vehicles.length} configured
                   </p>
                 </div>
               </Link>
             )}
 
-            {/* Run History — dev/owner only until polished */}
+            {/* Calculators */}
+            <Link
+              to="/calculators"
+              className="card"
+              style={{
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem',
+              }}
+            >
+              <div style={{ fontSize: '1.5rem' }}>🔢</div>
+              <div>
+                <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Calculators</h4>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                  Racing math tools
+                </p>
+              </div>
+            </Link>
+
+            {/* Run History — dev/owner only */}
             {canAccessRunLogging({ hasFeature }) && isDevOrOwner && (
-              <Link 
-                to="/history" 
+              <Link
+                to="/history"
                 className="card"
-                style={{ 
+                style={{
                   textDecoration: 'none',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
+                  gap: '0.75rem',
+                  padding: '0.75rem',
                 }}
               >
-                <div style={{ fontSize: '2rem' }}>📝</div>
+                <div style={{ fontSize: '1.5rem' }}>📝</div>
                 <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Run History</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Run History</h4>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
                     Log & analyze runs
                   </p>
                 </div>
               </Link>
             )}
 
-            {/* Race Day Dashboard — dev/owner only until polished */}
+            {/* Race Day — dev/owner only */}
             {canAccessRaceTools({ hasFeature }) && isDevOrOwner && (
-              <Link 
-                to="/race-day" 
+              <Link
+                to="/race-day"
                 className="card"
-                style={{ 
+                style={{
                   textDecoration: 'none',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
-                  background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(59, 130, 246, 0.1))',
+                  gap: '0.75rem',
+                  padding: '0.75rem',
                 }}
               >
-                <div style={{ fontSize: '2rem' }}>🏁</div>
+                <div style={{ fontSize: '1.5rem' }}>🏁</div>
                 <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Race Day Dashboard</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                    Live dial-in & round tracking
+                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Race Day</h4>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                    Dial-in & rounds
                   </p>
                 </div>
               </Link>
             )}
-
-            {/* Calculators - always available */}
-            <Link 
-              to="/calculators" 
-              className="card"
-              style={{ 
-                textDecoration: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                padding: '1rem',
-              }}
-            >
-              <div style={{ fontSize: '2rem' }}>🔢</div>
-              <div>
-                <h4 style={{ margin: 0, color: 'var(--color-text)' }}>Calculators</h4>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                  Racing math tools
-                </p>
-              </div>
-            </Link>
           </div>
         </div>
 
@@ -190,14 +218,14 @@ function Home() {
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
               Your Vehicles
             </h3>
-            <div className="card">
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="card" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '320px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <th style={{ textAlign: 'left', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Name</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Weight</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Power</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500 }}>Tire</th>
+                    <th style={{ textAlign: 'left', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Name</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Weight</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Power</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Tire</th>
                   </tr>
                 </thead>
                 <tbody>

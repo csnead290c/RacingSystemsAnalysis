@@ -21,6 +21,7 @@ import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '..
 import { useSubscription } from '../domain/config/useSubscription';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { getQuarterProgramName, getLandSpeedProgramName } from '../domain/ui/programDisplayNames';
+import { formatHp, formatLb } from '../shared/format/formatNumber';
 import { useSharedEnv } from '../shared/state/useSharedEnv';
 import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
 
@@ -483,7 +484,7 @@ function Predict() {
                   >
                     {availableVehicles.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name} ({v.powerHP} HP, {v.weightLb} lb)
+                        {v.name} ({formatHp(v.powerHP)} HP, {formatLb(v.weightLb)} lb)
                       </option>
                     ))}
                   </select>
@@ -835,6 +836,21 @@ function Predict() {
           .et-slip-final .et-slip-value {
             font-size: 14px !important;
           }
+          /* Action buttons: grid layout for tappability */
+          .et-slip-actions {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px !important;
+          }
+          .et-slip-actions button,
+          .et-slip-actions span {
+            min-height: 36px;
+            font-size: 0.65rem !important;
+          }
+          /* Vehicle selector row */
+          .et-slip-vehicle select {
+            font-size: 0.65rem !important;
+          }
           .et-sim-chart-area {
             /* Larger chart for phones - make it usable */
             height: 350px !important;
@@ -870,6 +886,9 @@ function Predict() {
             font-size: 11px;
             padding: 10px 12px;
             max-width: 240px;
+          }
+          .et-slip-actions {
+            grid-template-columns: 1fr !important;
           }
         }
         /* Print styles */
@@ -1032,7 +1051,7 @@ function Predict() {
             </div>
             
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+            <div className="et-slip-actions" style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
               {features.quarterProFields ? (
                 <button
                   onClick={handleSaveRun}

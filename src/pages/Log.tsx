@@ -16,6 +16,7 @@ import { useSubscription } from '../domain/config/useSubscription';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import { parseCsv, mapWeatherRow, csvToObjects } from '../shared/utils/csvImport';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
+import { formatHp, formatLb, formatIn } from '../shared/format/formatNumber';
 import { RoundTypes, type RunRecordV1 } from '../domain/schemas/run.schema';
 import { calculateMOV, formatMOV, describeRaceOutcome } from '../domain/physics/calculations/marginOfVictory';
 import type { RaceLength } from '../domain/config/raceLengths';
@@ -472,7 +473,7 @@ function Log() {
             )}
             {selectedVehicle && (
               <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}>
-                {selectedVehicle.weightLb} lb • {selectedVehicle.powerHP} HP • {selectedVehicle.tireDiaIn}" tire
+                {formatLb(selectedVehicle.weightLb)} lb • {formatHp(selectedVehicle.powerHP)} HP • {formatIn(selectedVehicle.tireDiaIn)}" tire
               </div>
             )}
           </div>

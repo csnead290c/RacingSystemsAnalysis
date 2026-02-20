@@ -94,3 +94,24 @@ describe('formatMph', () => {
     expect(formatMph(138.456, 2)).toBe('138.46');
   });
 });
+
+describe('vehicle display row regression', () => {
+  // Simulates the pattern used in Log.tsx, Predict.tsx, Home.tsx
+  // to ensure no raw long-decimal floats leak into the UI
+  const mockVehicle = {
+    weightLb: 2847.9999999999995,
+    powerHP: 461.345678901234,
+    tireDiaIn: 32.812345678901234,
+  };
+
+  it('formats vehicle stats without long decimals', () => {
+    const row = `${formatLb(mockVehicle.weightLb)} lb • ${formatHp(mockVehicle.powerHP)} HP • ${formatIn(mockVehicle.tireDiaIn)}" tire`;
+    expect(row).toBe('2848 lb • 461.3 HP • 32.8" tire');
+    expect(row).not.toMatch(/\.\d{2,}/); // no 2+ decimal digits on lb
+  });
+
+  it('formats vehicle selector option without long decimals', () => {
+    const option = `Test Car (${formatHp(mockVehicle.powerHP)} HP, ${formatLb(mockVehicle.weightLb)} lb)`;
+    expect(option).toBe('Test Car (461.3 HP, 2848 lb)');
+  });
+});
