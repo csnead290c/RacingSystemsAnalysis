@@ -5,7 +5,7 @@ import EnvironmentForm from '../shared/components/EnvironmentForm';
 import { simulate } from '../workerBridge';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import type { Vehicle } from '../domain/schemas/vehicle.schema';
-import { type RaceLength, RACE_LENGTH_INFO, DISTANCES } from '../domain/config/raceLengths';
+import { type RaceLength, RACE_LENGTH_INFO, DISTANCES, getLandSpeedCheckpoints } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { SimResult } from '../domain/physics';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
@@ -27,6 +27,7 @@ const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLogge
 const RPMHistogram = lazy(() => import('../shared/components/charts/RPMHistogram'));
 const OptimizerModal = lazy(() => import('../shared/components/OptimizerModal'));
 const VehicleEditorPopup = lazy(() => import('../shared/components/VehicleEditorPopup'));
+const DetailedParametersModal = lazy(() => import('../shared/components/DetailedParameters'));
 import { DebugPanel, type DebugData } from '../shared/components/DebugPanel';
 
 interface LocationState {
@@ -101,6 +102,9 @@ function Predict() {
   
   // Vehicle editor popup state
   const [showVehicleEditor, setShowVehicleEditor] = useState(false);
+  
+  // Detailed parameters modal state
+  const [showDetailedParams, setShowDetailedParams] = useState(false);
   
   // Average 60ft from database (CCP-style feature)
   const [avg60ftStats, setAvg60ftStats] = useState<{
@@ -944,25 +948,17 @@ function Predict() {
               </>
             ) : (
               <>
-                {/* Land speed splits - show mile markers */}
-                <div className="et-slip-row">
-                  <span className="et-slip-label">1/8 mi</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(1)} mph</span>
-                </div>
-                <div className="et-slip-row">
-                  <span className="et-slip-label">1/4 mi</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 1320)?.v_mph ?? 0).toFixed(1)} mph</span>
-                </div>
-                <div className="et-slip-row">
-                  <span className="et-slip-label">1/2 mi</span>
-                  <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 2640)?.v_mph ?? 0).toFixed(1)} mph</span>
-                </div>
-                {RACE_LENGTH_INFO[raceLength]?.lengthFt >= 5280 && (
-                  <div className="et-slip-row">
-                    <span className="et-slip-label">1 mi</span>
-                    <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 5280)?.v_mph ?? 0).toFixed(1)} mph</span>
-                  </div>
-                )}
+                {/* Land speed splits - use checkpoint config for full coverage */}
+                {(getLandSpeedCheckpoints(raceLength) ?? []).map((cp, idx) => {
+                  const entry = timeslip.find(s => s.d_ft === cp.dist_ft);
+                  const mph_val = entry?.v_mph ?? 0;
+                  return (
+                    <div className="et-slip-row" key={idx}>
+                      <span className="et-slip-label">{cp.label}</span>
+                      <span className="et-slip-value">{mph_val.toFixed(1)} mph</span>
+                    </div>
+                  );
+                })}
               </>
             )}
             
@@ -1114,6 +1110,23 @@ racingsystemsanalysis.com`;
               >
                 🖨️
               </button>
+              {simResult?.traces && simResult.traces.length > 0 && (
+                <button
+                  onClick={() => setShowDetailedParams(true)}
+                  style={{
+                    padding: '6px 8px',
+                    fontSize: '0.7rem',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#333',
+                    color: 'white',
+                    cursor: 'pointer',
+                  }}
+                  title="Detailed Parameters — step-by-step simulation output"
+                >
+                  📊 Detail
+                </button>
+              )}
             </div>
             
             {/* Comparison indicator with weather impact */}
@@ -1509,6 +1522,21 @@ racingsystemsanalysis.com`;
             onApplyToSession={(optimizedVehicle: Vehicle) => {
               setVehicle(optimizedVehicle);
             }}
+          />
+        )}
+      </Suspense>
+      
+      {/* Detailed Parameters Modal */}
+      <Suspense fallback={null}>
+        {simResult?.traces && (
+          <DetailedParametersModal
+            isOpen={showDetailedParams}
+            onClose={() => setShowDetailedParams(false)}
+            traces={simResult.traces as any}
+            raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
+            vehicleName={vehicle?.name}
+            et={simResult.et_s}
+            mph={simResult.mph}
           />
         )}
       </Suspense>

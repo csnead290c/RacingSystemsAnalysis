@@ -1,216 +1,288 @@
 /**
- * Detailed Parameters Component
- * 
- * Shows detailed simulation output similar to VB6 Quarter Pro's
- * "Detailed Parameters" screen - a tabular view of all calculated
- * vehicle performance data during the run.
+ * Detailed Parameters Modal
+ *
+ * Full step-by-step simulation output table matching VB6 Quarter Pro's
+ * "Detailed Parameters" screen.  Shows every trace row from the sim loop
+ * with distance, time, speed, RPM, gear, accel, HP, drag HP, and slip flags.
+ *
+ * Opened via a button on the Predict results view.
  */
 
-import { useState } from 'react';
+import { useMemo, useCallback, useState } from 'react';
+import { X } from 'lucide-react';
 
-interface TracePoint {
+/** Trace point shape emitted by VB6Exact (superset of SimResult.traces). */
+export interface DetailedTracePoint {
   t_s: number;
-  v_mph: number;
-  a_g: number;
   s_ft: number;
+  v_mph: number;
+  v_fps?: number;
+  a_g: number;
   rpm: number;
+  dsrpm?: number;
   gear: number;
+  slip?: boolean;
+  tireSlip?: number;
   hp?: number;
+  dragHp?: number;
+  netHp?: number;
+  wheelSpeed_mph?: number;
+  throttleStopActive?: boolean;
 }
 
-interface DetailedParametersProps {
-  traces: TracePoint[];
+interface DetailedParametersModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  traces: DetailedTracePoint[];
   raceLengthFt: number;
-  collapsed?: boolean;
+  vehicleName?: string;
+  et?: number;
+  mph?: number;
 }
 
-// Key distance triggers (like VB6)
-const DISTANCE_TRIGGERS = [0, 30, 60, 330, 660, 1000, 1320, 2640, 5280, 10560, 26400];
+// ---- helpers ----
 
-// Key speed triggers
-const SPEED_TRIGGERS = [60, 100, 150, 200, 250, 300];
+const thStyle: React.CSSProperties = {
+  padding: '4px 6px',
+  textAlign: 'right',
+  whiteSpace: 'nowrap',
+  fontSize: '11px',
+  fontWeight: 600,
+  color: 'var(--color-text-muted)',
+  borderBottom: '2px solid var(--color-border)',
+  position: 'sticky',
+  top: 0,
+  backgroundColor: 'var(--color-surface)',
+  zIndex: 1,
+};
 
-export default function DetailedParameters({ traces, raceLengthFt, collapsed = true }: DetailedParametersProps) {
-  const [isExpanded, setIsExpanded] = useState(!collapsed);
-  
-  if (!traces || traces.length === 0) {
-    return null;
-  }
+const tdStyle: React.CSSProperties = {
+  padding: '2px 6px',
+  textAlign: 'right',
+  fontSize: '11px',
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
+};
 
-  // Find key events in the trace data
-  const keyEvents: (TracePoint & { event: string })[] = [];
-  
-  // Add initial conditions
-  if (traces[0]) {
-    keyEvents.push({ ...traces[0], event: 'Start' });
-  }
-  
-  // Find distance triggers
-  for (const dist of DISTANCE_TRIGGERS) {
-    if (dist > raceLengthFt) break;
-    const point = traces.find(t => t.s_ft >= dist);
-    if (point && !keyEvents.some(e => e.s_ft === point.s_ft && e.event.includes("'"))) {
-      const label = dist === 660 ? '1/8 mi' : 
-                    dist === 1320 ? '1/4 mi' :
-                    dist === 2640 ? '1/2 mi' :
-                    dist === 5280 ? '1 mi' :
-                    dist === 10560 ? '2 mi' :
-                    dist === 26400 ? '5 mi' :
-                    `${dist}'`;
-      keyEvents.push({ ...point, event: label });
+function fmtDec(v: number, d: number): string {
+  return v.toFixed(d);
+}
+
+function buildCSV(traces: DetailedTracePoint[], hasHp: boolean, hasDragHp: boolean, hasSlip: boolean): string {
+  const hdr = ['Step', 'Time_s', 'Dist_ft', 'Speed_mph', 'Accel_g', 'RPM', 'Gear'];
+  if (hasHp) hdr.push('HP');
+  if (hasDragHp) hdr.push('DragHP');
+  if (hasSlip) hdr.push('Slip');
+  const rows = traces.map((t, i) => {
+    const r: (string | number)[] = [
+      i,
+      fmtDec(t.t_s, 4),
+      fmtDec(t.s_ft, 2),
+      fmtDec(t.v_mph, 2),
+      fmtDec(t.a_g, 4),
+      Math.round(t.rpm),
+      t.gear,
+    ];
+    if (hasHp) r.push(t.hp != null ? Math.round(t.hp) : '');
+    if (hasDragHp) r.push(t.dragHp != null ? Math.round(t.dragHp) : '');
+    if (hasSlip) r.push(t.slip ? 'SLIP' : '');
+    return r.join(',');
+  });
+  return [hdr.join(','), ...rows].join('\n');
+}
+
+// ---- component ----
+
+export default function DetailedParametersModal({
+  isOpen,
+  onClose,
+  traces,
+  raceLengthFt,
+  vehicleName,
+  et,
+  mph,
+}: DetailedParametersModalProps) {
+  const [copied, setCopied] = useState(false);
+
+  // Detect which optional columns have data
+  const hasHp = useMemo(() => traces.some(t => t.hp != null && t.hp !== 0), [traces]);
+  const hasDragHp = useMemo(() => traces.some(t => t.dragHp != null && t.dragHp !== 0), [traces]);
+  const hasSlip = useMemo(() => traces.some(t => t.slip === true), [traces]);
+
+  // Memoize gear-change indices for row highlighting
+  const gearChangeSet = useMemo(() => {
+    const set = new Set<number>();
+    for (let i = 1; i < traces.length; i++) {
+      if (traces[i].gear !== traces[i - 1].gear) set.add(i);
     }
-  }
-  
-  // Find speed triggers (0-60, 0-100, etc.)
-  for (const speed of SPEED_TRIGGERS) {
-    const point = traces.find(t => t.v_mph >= speed);
-    if (point && !keyEvents.some(e => Math.abs(e.t_s - point.t_s) < 0.01)) {
-      keyEvents.push({ ...point, event: `0-${speed} mph` });
+    return set;
+  }, [traces]);
+
+  // CSV copy handler
+  const handleCopyCSV = useCallback(() => {
+    const csv = buildCSV(traces, hasHp, hasDragHp, hasSlip);
+    navigator.clipboard.writeText(csv).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [traces, hasHp, hasDragHp, hasSlip]);
+
+  // Focus trap
+  const trapFocus = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') { onClose(); return; }
+    if (e.key !== 'Tab') return;
+    const all = e.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), [tabindex]:not([tabindex="-1"]):not(:disabled)'
+    );
+    const focusable = Array.from(all).filter(el => el.offsetParent !== null);
+    if (focusable.length === 0) { e.preventDefault(); return; }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
-  }
-  
-  // Find gear changes
-  let lastGear = traces[0]?.gear ?? 1;
-  for (let i = 1; i < traces.length; i++) {
-    if (traces[i].gear !== lastGear) {
-      // Add point before shift
-      if (traces[i-1]) {
-        keyEvents.push({ ...traces[i-1], event: `Shift ${lastGear}→${traces[i].gear}` });
-      }
-      lastGear = traces[i].gear;
-    }
-  }
-  
-  // Add finish
-  const finish = traces[traces.length - 1];
-  if (finish) {
-    keyEvents.push({ ...finish, event: 'Finish' });
-  }
-  
-  // Sort by time and remove duplicates
-  keyEvents.sort((a, b) => a.t_s - b.t_s);
-  const uniqueEvents = keyEvents.filter((e, i, arr) => 
-    i === 0 || Math.abs(e.t_s - arr[i-1].t_s) > 0.001
-  );
+  }, [onClose]);
+
+  if (!isOpen) return null;
 
   return (
-    <div className="card" style={{ padding: '12px 16px' }}>
-      <div 
-        style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          cursor: 'pointer',
-          marginBottom: isExpanded ? '12px' : 0,
+    <div
+      style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: '16px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          backgroundColor: 'var(--color-surface, #1e293b)',
+          borderRadius: '12px',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+          maxWidth: '960px', width: '100%', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column',
+          border: '1px solid var(--color-border, #334155)',
         }}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={trapFocus}
       >
-        <span style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '0.8rem' }}>
-          Detailed Parameters
-        </span>
-        <button
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--color-text-muted)',
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            padding: '4px 8px',
-          }}
-        >
-          {isExpanded ? '▼ Collapse' : '▶ Expand'}
-        </button>
-      </div>
-      
-      {isExpanded && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ 
-            width: '100%', 
-            borderCollapse: 'collapse', 
-            fontSize: '0.75rem',
-            fontFamily: 'monospace',
-          }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                <th style={{ textAlign: 'left', padding: '6px 8px', whiteSpace: 'nowrap' }}>Event</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>Time (s)</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>Dist (ft)</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>MPH</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>Accel (g)</th>
-                <th style={{ textAlign: 'center', padding: '6px 8px' }}>Gear</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>RPM</th>
-                {uniqueEvents.some(e => e.hp !== undefined) && (
-                  <th style={{ textAlign: 'right', padding: '6px 8px' }}>HP</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {uniqueEvents.map((event, i) => (
-                <tr 
-                  key={i} 
-                  style={{ 
-                    borderBottom: '1px solid var(--color-border)',
-                    backgroundColor: event.event === 'Finish' ? 'rgba(34, 197, 94, 0.1)' :
-                                     event.event.includes('Shift') ? 'rgba(59, 130, 246, 0.05)' :
-                                     'transparent',
-                  }}
-                >
-                  <td style={{ padding: '6px 8px', whiteSpace: 'nowrap', fontWeight: event.event === 'Finish' ? '600' : 'normal' }}>
-                    {event.event}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '6px 8px' }}>{event.t_s.toFixed(3)}</td>
-                  <td style={{ textAlign: 'right', padding: '6px 8px' }}>{event.s_ft.toFixed(1)}</td>
-                  <td style={{ textAlign: 'right', padding: '6px 8px' }}>{event.v_mph.toFixed(2)}</td>
-                  <td style={{ textAlign: 'right', padding: '6px 8px' }}>{event.a_g.toFixed(3)}</td>
-                  <td style={{ textAlign: 'center', padding: '6px 8px' }}>{event.gear}</td>
-                  <td style={{ textAlign: 'right', padding: '6px 8px' }}>{Math.round(event.rpm).toLocaleString()}</td>
-                  {uniqueEvents.some(e => e.hp !== undefined) && (
-                    <td style={{ textAlign: 'right', padding: '6px 8px' }}>
-                      {event.hp !== undefined ? Math.round(event.hp) : '-'}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          
-          {/* Summary stats */}
-          <div style={{ 
-            marginTop: '12px', 
-            paddingTop: '12px', 
-            borderTop: '1px solid var(--color-border)',
-            display: 'flex',
-            gap: '24px',
-            flexWrap: 'wrap',
-            fontSize: '0.75rem',
-          }}>
-            <div>
-              <span style={{ color: 'var(--color-text-muted)' }}>Peak Accel: </span>
-              <span style={{ fontWeight: '600' }}>
-                {Math.max(...traces.map(t => t.a_g)).toFixed(3)} g
-              </span>
-            </div>
-            <div>
-              <span style={{ color: 'var(--color-text-muted)' }}>Peak RPM: </span>
-              <span style={{ fontWeight: '600' }}>
-                {Math.max(...traces.map(t => t.rpm)).toLocaleString()}
-              </span>
-            </div>
-            <div>
-              <span style={{ color: 'var(--color-text-muted)' }}>Avg Accel: </span>
-              <span style={{ fontWeight: '600' }}>
-                {(traces.reduce((sum, t) => sum + t.a_g, 0) / traces.length).toFixed(3)} g
-              </span>
-            </div>
-            <div>
-              <span style={{ color: 'var(--color-text-muted)' }}>Data Points: </span>
-              <span style={{ fontWeight: '600' }}>
-                {traces.length.toLocaleString()}
-              </span>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 16px', borderBottom: '1px solid var(--color-border)',
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--color-text)' }}>
+              Detailed Parameters
+            </h2>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              {vehicleName && <span>{vehicleName} &middot; </span>}
+              {et != null && <span>ET {et.toFixed(3)}s &middot; </span>}
+              {mph != null && <span>{mph.toFixed(1)} mph &middot; </span>}
+              {traces.length.toLocaleString()} steps &middot; {fmtDec(raceLengthFt, 0)} ft
             </div>
           </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={handleCopyCSV}
+              style={{
+                padding: '5px 10px', fontSize: '12px', borderRadius: '4px',
+                border: '1px solid var(--color-border)', cursor: 'pointer',
+                backgroundColor: copied ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)',
+                color: copied ? '#22c55e' : 'var(--color-text)',
+              }}
+            >
+              {copied ? '✓ Copied' : '📋 Copy CSV'}
+            </button>
+            <button
+              onClick={onClose}
+              style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '4px' }}
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Table body — scrollable */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '0 4px' }}>
+          {traces.length === 0 ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+              No simulation data available. Run a simulation first.
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>#</th>
+                  <th style={thStyle}>Time (s)</th>
+                  <th style={thStyle}>Dist (ft)</th>
+                  <th style={thStyle}>Speed (mph)</th>
+                  <th style={thStyle}>Accel (g)</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Gear</th>
+                  <th style={thStyle}>RPM</th>
+                  {hasHp && <th style={thStyle}>HP</th>}
+                  {hasDragHp && <th style={thStyle}>Drag HP</th>}
+                  {hasSlip && <th style={{ ...thStyle, textAlign: 'center' }}>Slip</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {traces.map((t, i) => {
+                  const isGearChange = gearChangeSet.has(i);
+                  const isFinish = i === traces.length - 1;
+                  return (
+                    <tr
+                      key={i}
+                      style={{
+                        borderBottom: '1px solid var(--color-border)',
+                        backgroundColor: isFinish
+                          ? 'rgba(34,197,94,0.08)'
+                          : isGearChange
+                            ? 'rgba(59,130,246,0.06)'
+                            : i % 2 === 0
+                              ? 'transparent'
+                              : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <td style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '10px' }}>{i}</td>
+                      <td style={tdStyle}>{fmtDec(t.t_s, 4)}</td>
+                      <td style={tdStyle}>{fmtDec(t.s_ft, 1)}</td>
+                      <td style={tdStyle}>{fmtDec(t.v_mph, 2)}</td>
+                      <td style={tdStyle}>{fmtDec(t.a_g, 3)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center', fontWeight: isGearChange ? 700 : 400, color: isGearChange ? '#3b82f6' : 'inherit' }}>
+                        {t.gear}
+                      </td>
+                      <td style={tdStyle}>{Math.round(t.rpm).toLocaleString()}</td>
+                      {hasHp && <td style={tdStyle}>{t.hp != null ? Math.round(t.hp) : ''}</td>}
+                      {hasDragHp && <td style={tdStyle}>{t.dragHp != null ? Math.round(t.dragHp) : ''}</td>}
+                      {hasSlip && (
+                        <td style={{ ...tdStyle, textAlign: 'center', color: t.slip ? '#ef4444' : 'transparent', fontWeight: 600, fontSize: '10px' }}>
+                          {t.slip ? 'SLIP' : ''}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer summary */}
+        {traces.length > 0 && (
+          <div style={{
+            padding: '8px 16px', borderTop: '1px solid var(--color-border)',
+            display: 'flex', gap: '20px', flexWrap: 'wrap', fontSize: '11px',
+          }}>
+            <span><span style={{ color: 'var(--color-text-muted)' }}>Peak Accel:</span> <strong>{fmtDec(Math.max(...traces.map(t => t.a_g)), 3)} g</strong></span>
+            <span><span style={{ color: 'var(--color-text-muted)' }}>Peak RPM:</span> <strong>{Math.max(...traces.map(t => t.rpm)).toLocaleString()}</strong></span>
+            {hasHp && <span><span style={{ color: 'var(--color-text-muted)' }}>Peak HP:</span> <strong>{Math.round(Math.max(...traces.filter(t => t.hp != null).map(t => t.hp!)))}</strong></span>}
+            <span><span style={{ color: 'var(--color-text-muted)' }}>Gear Changes:</span> <strong>{gearChangeSet.size}</strong></span>
+            {hasSlip && <span><span style={{ color: 'var(--color-text-muted)' }}>Slip Steps:</span> <strong style={{ color: '#ef4444' }}>{traces.filter(t => t.slip).length}</strong></span>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

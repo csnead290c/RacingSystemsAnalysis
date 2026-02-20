@@ -132,7 +132,7 @@
 
 ### 2.5 Quarter-Mile Dead Clicks / Gaps (Top 5)
 
-1. **No "Detailed Parameters" screen** — VB6 had a detailed output list showing every simulation step (distance, time, speed, RPM, gear). Currently only the ET slip + chart are shown.
+1. ~~**No "Detailed Parameters" screen**~~ — **FIXED.** Full step-by-step modal with every trace row (time, dist, speed, accel, gear, RPM, HP, drag HP, slip). Accessible via "Detail" button on ET slip. Includes CSV copy.
 2. **No motorcycle final drive worksheet** — VB6 had a motorcycle-specific final drive calculator. Not present (motorcycle mode itself may not be fully exposed).
 3. **No "What-If" for tire diameter/rollout** — VB6 allowed quick what-if on tire size. Current what-if only covers HP and weight.
 4. **No run comparison table** — VB6 showed side-by-side comparison of saved runs in a table. Current comparison is chart overlay only.
@@ -154,9 +154,9 @@
 
 ### 3.2 Land Speed Dead Clicks / Gaps (Top 5)
 
-1. **No Bonneville Pro detailed output** — VB6 ISBVPRO mode had a detailed mile-by-mile output list. Not implemented.
+1. ~~**No Bonneville Pro detailed output**~~ — **Partially addressed.** Detailed Parameters modal now available for all track types including land speed. Full VB6 DistToPrint checkpoint rows shown in timeslip.
 2. **No land-speed-specific vehicle fields** — VB6 Bonneville Pro had parachute deployment distance, streamliner body type, etc. Not present.
-3. **No land speed timeslip shows only 4 checkpoints** — VB6 showed 7 rows (2mi through 5mi at 0.5mi intervals for BV Long). Current UI shows only 1/8, 1/4, 1/2, 1mi.
+3. ~~**No land speed timeslip shows only 4 checkpoints**~~ — **FIXED.** Now uses `getLandSpeedCheckpoints()` config for all 8 VB6 DistToPrint rows per track type.
 4. **No wind direction indicator** — VB6 had a visual wind direction dial for land speed. Current wind is numeric-only.
 5. **Chart styling doesn't differentiate land speed** — Only a subtle purple background on the race length selector. No visual distinction in the chart area.
 
@@ -179,15 +179,15 @@
 | Module | ✅ Implemented + Wired | ⚠️ Partially Wired | 🔲 Stub | ❌ Missing |
 |---|---|---|---|---|
 | **Engine Sim** | 30 | 0 | 0 | 0 |
-| **Quarter-Mile** | 25 | 0 | 0 | 0 |
-| **Land Speed** | 5 | 0 | 0 | 0 |
+| **Quarter-Mile** | 26 | 0 | 0 | 0 |
+| **Land Speed** | 6 | 0 | 0 | 0 |
 | **FourLink** | 1 (route) | 0 | 1 | 1 (nav) |
-| **Total** | **61** | **0** | **1** | **1** |
+| **Total** | **63** | **0** | **1** | **1** |
 
 ### Top Remaining Blockers (Ranked)
 
 1. ~~Engine Sim: CR Calculator ignores current config~~ — **FIXED**
 2. ~~Engine Sim: No Max Intake Valve Lift input in basic mode~~ — **FIXED**
-3. **Quarter-Mile: No Detailed Parameters screen** — VB6 power users expect step-by-step sim output.
-4. **Land Speed: Incomplete mile-marker timeslip** — Only 4 of 7 VB6 checkpoints shown for Bonneville Long.
+3. ~~**Quarter-Mile: No Detailed Parameters screen**~~ — **FIXED**
+4. ~~**Land Speed: Incomplete mile-marker timeslip**~~ — **FIXED.** Now uses `getLandSpeedCheckpoints()` for full VB6-parity checkpoint rows (8 rows for BV Long).
 5. **Engine Sim: No .eng export** — Users can import but not export/share.
