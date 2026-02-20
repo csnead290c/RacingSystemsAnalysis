@@ -19,6 +19,7 @@ function Home() {
   // Check if user is logged in (either legacy or Clerk)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
   const activeUser = isClerkSignedIn ? rsaUser : user;
+  const isDevOrOwner = user?.roleId === 'owner' || user?.roleId === 'admin' || import.meta.env.DEV;
 
   useEffect(() => {
     const loadData = async () => {
@@ -113,8 +114,8 @@ function Home() {
               </Link>
             )}
 
-            {/* Run History (basic+ plans) */}
-            {canAccessRunLogging({ hasFeature }) && (
+            {/* Run History — dev/owner only until polished */}
+            {canAccessRunLogging({ hasFeature }) && isDevOrOwner && (
               <Link 
                 to="/history" 
                 className="card"
@@ -136,8 +137,8 @@ function Home() {
               </Link>
             )}
 
-            {/* Race Day Dashboard (basic+ plans) */}
-            {canAccessRaceTools({ hasFeature }) && (
+            {/* Race Day Dashboard — dev/owner only until polished */}
+            {canAccessRaceTools({ hasFeature }) && isDevOrOwner && (
               <Link 
                 to="/race-day" 
                 className="card"

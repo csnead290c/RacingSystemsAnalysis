@@ -1556,7 +1556,7 @@ export function EngineSimDashboard() {
             <div style={styles.cardTitle}>Dyno Curve</div>
             <div className="esd-detail-row">
               <div className="esd-detail-chart">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={360}>
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" />
                     <XAxis

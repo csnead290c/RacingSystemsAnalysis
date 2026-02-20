@@ -42,7 +42,7 @@ import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { useSubscription } from '../domain/config/useSubscription';
-import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
+import { getQuarterTier, getEngineTier } from '../domain/ui/programDisplayNames';
 
 // DevPortal - available in dev mode or to owner/admin in production
 const DevPortal = lazy(() => import('../pages/DevPortal'));
@@ -184,7 +184,7 @@ function UserMenu() {
 
 function Navigation() {
   const location = useLocation();
-  const { isAuthenticated, hasFeature } = useAuth();
+  const { isAuthenticated, hasFeature, user } = useAuth();
   const { isClerkSignedIn } = useClerkRSA();
   const { can } = useCapabilities();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -193,109 +193,124 @@ function Navigation() {
   // Listen for products update event to re-render navigation
   useEffect(() => {
     const handleProductsUpdate = () => {
-      console.log('Products updated, re-rendering navigation');
       forceUpdate(n => n + 1);
     };
-    
     window.addEventListener('rsa-products-updated', handleProductsUpdate);
     return () => window.removeEventListener('rsa-products-updated', handleProductsUpdate);
   }, []);
 
   const isActive = (path: string) => location.pathname === path;
 
-  const navLinkStyle = (active: boolean, disabled: boolean = false) => ({
-    color: disabled ? 'rgba(255, 255, 255, 0.3)' : 'var(--color-header-text)',
+  const navLinkStyle = (active: boolean): React.CSSProperties => ({
+    color: 'var(--color-header-text)',
     textDecoration: 'none',
-    padding: 'var(--space-2) var(--space-3)',
+    padding: '6px 10px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: active ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+    backgroundColor: active ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
     transition: 'background-color 0.2s',
-    pointerEvents: disabled ? 'none' as const : 'auto' as const,
-    whiteSpace: 'nowrap' as const,
+    whiteSpace: 'nowrap',
+    fontSize: '0.8rem',
+    fontWeight: active ? 600 : 400,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  });
+
+  const tierPill = (tier: string): React.CSSProperties => ({
+    fontSize: '0.55rem',
+    fontWeight: 700,
+    padding: '1px 5px',
+    borderRadius: '6px',
+    backgroundColor: tier === 'Pro' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+    color: tier === 'Pro' ? '#93c5fd' : 'rgba(255, 255, 255, 0.6)',
+    letterSpacing: '0.3px',
+    textTransform: 'uppercase' as const,
+    lineHeight: '1.4',
   });
 
   // Check if user is logged in (either legacy or Clerk)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
+  const isDevOrOwner = user?.roleId === 'owner' || user?.roleId === 'admin' || import.meta.env.DEV;
 
   // Check access for each nav item (centralized guards)
   const canAccessVehiclesNav = isLoggedIn && canAccessVehicles({ hasFeature });
   const canAccessETSim = isLoggedIn && canAccessEtSim({ hasFeature });
-  const canAccessEngineSim = isLoggedIn; // Engine sim available to all logged-in users
-  // Hidden simulators - uncomment when built out:
-  // const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
-  // const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
+  const canAccessEngineSim = isLoggedIn;
   const canAccessHistory = isLoggedIn && canAccessRunLogging({ hasFeature });
   const { features } = useSubscription();
   const canAccessTeam = isLoggedIn && features.teamManagement;
 
-  const navLinks = (
+  const close = () => setMobileMenuOpen(false);
+
+  // ── Primary links: always visible in desktop top bar ──
+  const primaryLinks = (
     <>
-      <Link to="/" style={navLinkStyle(isActive('/'))} onClick={() => setMobileMenuOpen(false)}>
-        Home
-      </Link>
+      <Link to="/" style={navLinkStyle(isActive('/'))} onClick={close}>Home</Link>
       {canAccessVehiclesNav && (
-        <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))} onClick={() => setMobileMenuOpen(false)}>
-          Vehicles
-        </Link>
+        <Link to="/vehicles" style={navLinkStyle(isActive('/vehicles'))} onClick={close}>Vehicles</Link>
       )}
       {canAccessETSim && (
-        <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          {getQuarterProgramName(can)}
+        <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))} onClick={close}>
+          Quarter <span style={tierPill(getQuarterTier(can))}>{getQuarterTier(can)}</span>
         </Link>
       )}
       {canAccessEngineSim && (
-        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          {getEngineProgramName(can)}
+        <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))} onClick={close}>
+          Engine <span style={tierPill(getEngineTier(can))}>{getEngineTier(can)}</span>
         </Link>
       )}
-      {/* Hidden for now - these simulators are not yet built out:
-      {canAccessSuspSim && (
-        <Link to="/suspension-sim" style={navLinkStyle(isActive('/suspension-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          Susp Sim
-        </Link>
+    </>
+  );
+
+  // ── Secondary links: hamburger menu only ──
+  const secondaryLinks = (
+    <>
+      <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))} onClick={close}>Calculators</Link>
+      {canAccessHistory && isDevOrOwner && (
+        <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={close}>History</Link>
       )}
-      {canAccessClutchSim && (
-        <Link to="/clutch-sim" style={navLinkStyle(isActive('/clutch-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          Clutch Sim
-        </Link>
+      {canAccessTeam && isDevOrOwner && (
+        <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={close}>Team</Link>
       )}
-      {canAccessClutchSim && (
-        <Link to="/converter-sim" style={navLinkStyle(isActive('/converter-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          Conv Sim
-        </Link>
+      <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={close}>About</Link>
+      {isDevOrOwner && (
+        <>
+          <AdminNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
+          <DevNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
+        </>
       )}
-      */}
-      <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))} onClick={() => setMobileMenuOpen(false)}>
-        Calcs
-      </Link>
-      {canAccessHistory && (
-        <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={() => setMobileMenuOpen(false)}>
-          History
-        </Link>
-      )}
-      {canAccessTeam && (
-        <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={() => setMobileMenuOpen(false)}>
-          Team
-        </Link>
-      )}
-      <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={() => setMobileMenuOpen(false)}>
-        About
-      </Link>
-      <AdminNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
-      <DevNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
     </>
   );
 
   return (
     <>
-      {/* Desktop nav - hidden on mobile */}
-      <nav className="desktop-nav" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-        {navLinks}
+      {/* Desktop nav — primary links only */}
+      <nav className="rsa-desktop-nav" style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+        {primaryLinks}
+        {/* Hamburger for secondary items — always visible on desktop too */}
+        <button
+          className="rsa-more-btn"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--color-header-text)',
+            fontSize: '1.1rem',
+            cursor: 'pointer',
+            padding: '6px 8px',
+            borderRadius: 'var(--radius-sm)',
+            lineHeight: 1,
+          }}
+          aria-label="More menu"
+          title="More"
+        >
+          ☰
+        </button>
       </nav>
-      
-      {/* Mobile hamburger button */}
+
+      {/* Mobile hamburger button — replaces entire nav on small screens */}
       <button
-        className="mobile-menu-btn"
+        className="rsa-mobile-btn"
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         style={{
           display: 'none',
@@ -310,37 +325,46 @@ function Navigation() {
       >
         {mobileMenuOpen ? '✕' : '☰'}
       </button>
-      
-      {/* Mobile dropdown menu */}
+
+      {/* Dropdown menu (shared by desktop "more" and mobile hamburger) */}
       {mobileMenuOpen && (
         <nav
-          className="mobile-nav"
+          className="rsa-dropdown-nav"
           style={{
             position: 'absolute',
             top: '100%',
-            left: 0,
             right: 0,
+            minWidth: '180px',
             backgroundColor: 'var(--color-header-bg)',
-            padding: '1rem',
+            padding: '0.75rem',
             display: 'flex',
             flexDirection: 'column',
-            gap: '0.5rem',
+            gap: '2px',
             boxShadow: 'var(--shadow-lg)',
+            borderRadius: '0 0 8px 8px',
             zIndex: 1000,
           }}
         >
-          {navLinks}
+          {/* On mobile, show primary links too */}
+          <div className="rsa-dropdown-primary">
+            {primaryLinks}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '4px 0' }} />
+          </div>
+          {secondaryLinks}
         </nav>
       )}
-      
-      {/* Inject responsive styles */}
+
+      {/* Responsive styles */}
       <style>{`
-        @media (max-width: 768px) {
-          .desktop-nav { display: none !important; }
-          .mobile-menu-btn { display: block !important; }
-        }
-        @media (min-width: 769px) {
-          .mobile-nav { display: none !important; }
+        /* Desktop: show desktop nav, hide mobile button */
+        .rsa-mobile-btn { display: none !important; }
+        .rsa-dropdown-primary { display: none; }
+
+        /* ≤900px: hide desktop nav, show mobile button, show primary links in dropdown */
+        @media (max-width: 900px) {
+          .rsa-desktop-nav { display: none !important; }
+          .rsa-mobile-btn { display: block !important; }
+          .rsa-dropdown-primary { display: block; }
         }
       `}</style>
     </>

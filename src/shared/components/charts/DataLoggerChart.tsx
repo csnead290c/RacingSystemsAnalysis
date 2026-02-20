@@ -249,6 +249,14 @@ function DataLoggerChart({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Responsive overrides for chart controls */}
+      <style>{`
+        @media (max-width: 600px) {
+          .dlc-xaxis-btn { padding: 5px 12px !important; font-size: 0.75rem !important; }
+          .dlc-series-row { gap: 4px !important; }
+          .dlc-series-pill { padding: 3px 7px !important; font-size: 0.6rem !important; }
+        }
+      `}</style>
       {/* Controls row */}
       <div style={{ 
         display: 'flex', 
@@ -259,23 +267,24 @@ function DataLoggerChart({
       }}>
         {/* X-axis mode toggle - segmented control style */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>X-Axis</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>X-Axis</span>
           <div style={{
             display: 'inline-flex',
             borderRadius: 'var(--radius-md)',
             overflow: 'hidden',
-            border: '2px solid var(--color-border)',
+            border: '1px solid var(--color-border)',
             backgroundColor: 'var(--color-bg-secondary)',
           }}>
             <button
+              className="dlc-xaxis-btn"
               onClick={() => setXAxisMode('time')}
               style={{
-                padding: '8px 20px',
+                padding: '5px 14px',
                 border: 'none',
                 backgroundColor: xAxisMode === 'time' ? 'var(--color-primary)' : 'transparent',
                 color: xAxisMode === 'time' ? 'white' : 'var(--color-text)',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
                 transition: 'all 0.15s ease',
               }}
@@ -283,15 +292,16 @@ function DataLoggerChart({
               Time (s)
             </button>
             <button
+              className="dlc-xaxis-btn"
               onClick={() => setXAxisMode('distance')}
               style={{
-                padding: '8px 20px',
+                padding: '5px 14px',
                 border: 'none',
-                borderLeft: '2px solid var(--color-border)',
+                borderLeft: '1px solid var(--color-border)',
                 backgroundColor: xAxisMode === 'distance' ? 'var(--color-primary)' : 'transparent',
                 color: xAxisMode === 'distance' ? 'white' : 'var(--color-text)',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
                 transition: 'all 0.15s ease',
               }}
@@ -323,11 +333,14 @@ function DataLoggerChart({
           )}
         </div>
 
-        {/* Series toggles - compact pills */}
-        <div style={{ 
+        {/* Series toggles - horizontal scroll on mobile, wrap on desktop */}
+        <div className="dlc-series-row" style={{ 
           display: 'flex', 
-          flexWrap: 'wrap', 
-          gap: '6px',
+          gap: '5px',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch' as any,
+          scrollbarWidth: 'none' as any,
+          flexWrap: 'wrap',
         }}>
           {(Object.entries(SERIES_CONFIG) as [SeriesKey, typeof SERIES_CONFIG[SeriesKey]][]).map(([key, config]) => {
             const hasData = data.some(d => d[key as keyof TraceData] !== undefined);
@@ -336,6 +349,7 @@ function DataLoggerChart({
             const isEnabled = enabledSeries.has(key);
             return (
               <button
+                className="dlc-series-pill"
                 key={key}
                 onClick={() => toggleSeries(key)}
                 title={config.name}
@@ -343,16 +357,18 @@ function DataLoggerChart({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  padding: '4px 10px',
-                  borderRadius: '12px',
+                  padding: '3px 8px',
+                  borderRadius: '10px',
                   border: 'none',
                   backgroundColor: isEnabled ? config.color : 'var(--color-bg-secondary)',
                   color: isEnabled ? 'white' : 'var(--color-text-muted)',
                   cursor: 'pointer',
-                  fontSize: '0.7rem',
+                  fontSize: '0.65rem',
                   fontWeight: 600,
                   transition: 'all 0.15s ease',
                   opacity: isEnabled ? 1 : 0.7,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
               >
                 <span style={{

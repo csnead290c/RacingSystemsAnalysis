@@ -89,6 +89,18 @@ export function getAllProgramNames(can: CanFn): ProgramNames {
   };
 }
 
+// ── Short-form helpers (for compact nav labels) ─────────────────────
+
+/** Returns just the tier label: 'Pro' or 'Jr' for Quarter/BV */
+export function getQuarterTier(can: CanFn): ProgramTier {
+  return isQuarterPro(can) ? 'Pro' : 'Jr';
+}
+
+/** Returns just the tier label: 'Pro' or 'Jr' for Engine */
+export function getEngineTier(can: CanFn): ProgramTier {
+  return isEnginePro(can) ? 'Pro' : 'Jr';
+}
+
 // ── Public API (plan-based, for non-React contexts) ──────────────────
 
 const PRO_PLANS: ReadonlySet<PlanId> = new Set(['pro', 'team']);
