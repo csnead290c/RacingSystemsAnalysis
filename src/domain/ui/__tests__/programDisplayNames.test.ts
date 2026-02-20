@@ -91,6 +91,30 @@ describe('getAllProgramNames', () => {
   });
 });
 
+// ── Edge-case: capability isolation ──────────────────────────────────
+
+describe('capability isolation', () => {
+  it('track.bonneville alone does NOT grant Pro names (track access ≠ feature tier)', () => {
+    const canTrackOnly = canWith('vehicle.editor.basic', 'sim.et', 'sim.basic', 'track.bonneville');
+    expect(getQuarterProgramName(canTrackOnly)).toBe('Quarter Jr');
+    expect(getLandSpeedProgramName(canTrackOnly)).toBe('Bonneville Jr');
+  });
+
+  it('sim.advanced without engine.proMode → Quarter Pro but Engine Jr', () => {
+    const canAdvancedOnly = canWith('sim.advanced');
+    expect(getQuarterProgramName(canAdvancedOnly)).toBe('Quarter Pro');
+    expect(getLandSpeedProgramName(canAdvancedOnly)).toBe('Bonneville Pro');
+    expect(getEngineProgramName(canAdvancedOnly)).toBe('Engine Jr');
+  });
+
+  it('engine.proMode without sim.advanced → Engine Pro but Quarter Jr', () => {
+    const canEngineOnly = canWith('engine.proMode');
+    expect(getEngineProgramName(canEngineOnly)).toBe('Engine Pro');
+    expect(getQuarterProgramName(canEngineOnly)).toBe('Quarter Jr');
+    expect(getLandSpeedProgramName(canEngineOnly)).toBe('Bonneville Jr');
+  });
+});
+
 // ── Plan-based tests ─────────────────────────────────────────────────
 
 describe('plan-based resolvers', () => {

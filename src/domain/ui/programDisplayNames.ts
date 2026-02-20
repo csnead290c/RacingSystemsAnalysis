@@ -36,11 +36,12 @@ type CanFn = (cap: Capability) => boolean;
 
 /**
  * Determine whether the user is at "Pro" tier for Quarter-Mile features.
- * Pro is granted when the user has the `vehicle.editor.pro` capability,
- * which maps to the pro/team plans (and fullAccess roles).
+ * Pro is granted when the user has the `sim.advanced` capability — the same
+ * gate that controls `features.quarterProFields` in the subscription system.
+ * This is pro/team/beta/owner only; free/basic/racer get Jr.
  */
 function isQuarterPro(can: CanFn): boolean {
-  return can('vehicle.editor.pro');
+  return can('sim.advanced');
 }
 
 /**
@@ -53,10 +54,12 @@ function isEnginePro(can: CanFn): boolean {
 
 /**
  * Determine whether the user is at "Pro" tier for Land Speed features.
- * Land speed tracks require `track.bonneville`, which is pro-only.
+ * Uses the same `sim.advanced` gate as Quarter Pro — land speed Pro features
+ * are the Quarter Pro feature set applied to a land speed track.
+ * (`track.bonneville` gates track *access*, not feature tier.)
  */
 function isLandSpeedPro(can: CanFn): boolean {
-  return can('track.bonneville');
+  return can('sim.advanced');
 }
 
 // ── Public API (capability-based) ────────────────────────────────────
