@@ -12,13 +12,30 @@ import { useFlagsStore } from '../domain/flags/store.tsx';
 // Note: In a real test environment, we'd need to mock localStorage
 // For now, we test the store API directly
 
+// Provide a minimal localStorage mock if jsdom's is broken
+const _ls: Record<string, string> = {};
+beforeEach(() => {
+  for (const k of Object.keys(_ls)) delete _ls[k];
+});
+if (typeof globalThis !== 'undefined') {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (key: string) => _ls[key] ?? null,
+      setItem: (key: string, val: string) => { _ls[key] = val; },
+      removeItem: (key: string) => { delete _ls[key]; },
+      clear: () => { for (const k of Object.keys(_ls)) delete _ls[k]; },
+      get length() { return Object.keys(_ls).length; },
+      key: (i: number) => Object.keys(_ls)[i] ?? null,
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+
 describe('Dev Portal - Feature Flags', () => {
   beforeEach(() => {
-    // Clear localStorage before each test
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('rsa.flags.v1');
-    }
-    // Reset test store state
+    // Clear mock localStorage and reset test store state
+    for (const k of Object.keys(_ls)) delete _ls[k];
     useFlagsStore._reset();
   });
 

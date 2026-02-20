@@ -16,6 +16,7 @@ import {
   type RaceLength,
   RACE_LENGTH_INFO,
   getLandSpeedCheckpoints,
+  getDistanceMarkers,
 } from '../domain/config/raceLengths';
 
 // ---------------------------------------------------------------------------
@@ -236,5 +237,44 @@ describe('Land Speed Checkpoints — config coverage', () => {
       const raceFt = RACE_LENGTH_INFO[rl].lengthFt;
       expect(maxCp, `${rl} terminal checkpoint should match race length`).toBe(raceFt);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chart distance markers — source-of-truth unification
+// ---------------------------------------------------------------------------
+
+describe('Chart Distance Markers — source-of-truth', () => {
+  it('BONNEVILLE_LONG markers should equal checkpoint distances (8 values)', () => {
+    const markers = getDistanceMarkers('BONNEVILLE_LONG');
+    const checkpoints = getLandSpeedCheckpoints('BONNEVILLE_LONG')!;
+    expect(markers).toEqual(checkpoints.map(c => c.dist_ft));
+    expect(markers.length).toBe(8);
+  });
+
+  it('BONNEVILLE_SHORT markers should equal checkpoint distances (8 values)', () => {
+    const markers = getDistanceMarkers('BONNEVILLE_SHORT');
+    const checkpoints = getLandSpeedCheckpoints('BONNEVILLE_SHORT')!;
+    expect(markers).toEqual(checkpoints.map(c => c.dist_ft));
+  });
+
+  it('all land speed tracks: markers === checkpoint distances', () => {
+    const landSpeedLengths: RaceLength[] = (Object.keys(RACE_LENGTH_INFO) as RaceLength[])
+      .filter(k => RACE_LENGTH_INFO[k].category === 'landspeed');
+    for (const rl of landSpeedLengths) {
+      const markers = getDistanceMarkers(rl);
+      const checkpoints = getLandSpeedCheckpoints(rl)!;
+      expect(markers, `${rl} markers should match checkpoints`).toEqual(checkpoints.map(c => c.dist_ft));
+    }
+  });
+
+  it('QUARTER markers should be standard drag markers', () => {
+    const markers = getDistanceMarkers('QUARTER');
+    expect(markers).toEqual([60, 330, 660, 1000, 1320]);
+  });
+
+  it('EIGHTH markers should be drag markers up to 660 ft', () => {
+    const markers = getDistanceMarkers('EIGHTH');
+    expect(markers).toEqual([60, 330, 660]);
   });
 });

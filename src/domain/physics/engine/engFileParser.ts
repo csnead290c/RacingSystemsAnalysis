@@ -192,6 +192,91 @@ function parseV2(ver: string, description: string, lines: string[]): EngFileData
   return { version: ver, description, inputs };
 }
 
+// ── EngineSimConfig → .ENG file export (v3.1) ───────────────────────
+
+/** Forward maps for EngineSimConfig string enums → VB6 numeric codes */
+const LAYOUT_FWD: Record<string, number> = {
+  'inline': 0, 'vee': 1, 'flat': 2,
+};
+const CAM_TYPE_FWD: Record<string, number> = {
+  'overhead_cam': 0, 'roller': 1, 'mushroom_tappet': 2,
+  'high_rate_flat_tappet': 3, 'normal_flat_tappet': 4,
+  'hydraulic_roller': 5, 'hydraulic_flat_tappet': 6,
+};
+const FUEL_FWD: Record<string, number> = {
+  'gasoline': 1, 'racing_gasoline': 2, 'methanol': 3,
+};
+const MANIFOLD_FWD: Record<string, number> = {
+  'plenum': 1, 'individual_runner': 2, 'dual_plane_divided': 3, 'dual_plane_slot': 4,
+};
+
+/**
+ * Export an EngineSimConfig to VB6-compatible v3.1 .ENG file text.
+ *
+ * Output matches VB6 Engine Pro `Print #` save format so legacy apps can
+ * import the file.  Lines use comma-separated values (VB6 `Input #` format).
+ *
+ * VB6 v3.1 line layout:
+ *   Line 0: version string  ("3.1")
+ *   Line 1: description string
+ *   Line 2: inline, noCyl, bore, stroke, rod, CR
+ *   Line 3: camType, inCamDur, carb(-1/0), carbCFM, fuel
+ *   Line 4: manifold, curved(-1/0), manFlow
+ *   Line 5: noInValves, valveDia, maxInFlow, deltaP, refBore
+ *   Line 6: valveLift, csArea  (0 if unknown)
+ *   Line 7: chamber, deck, gasket, dome
+ *   Line 8: noTB, tbDia, tvDia, tbType  (throttle body — 0 defaults)
+ *   Line 9: noTBS, tbDiaS, tvDiaS       (secondary TB — 0 defaults)
+ *   Line 10: seatDia, stemDia, vsAngle, vsWidth
+ */
+export function configToEngFileContent(
+  config: EngineSimConfig,
+  description?: string,
+): string {
+  const inline = LAYOUT_FWD[config.layout] ?? 1;
+  const camType = CAM_TYPE_FWD[config.camshaftType] ?? 4;
+  const fuel = FUEL_FWD[config.fuelType] ?? 1;
+  const manifold = MANIFOLD_FWD[config.intakeManifoldType] ?? 1;
+  const carb = config.isEFI ? 0 : -1;        // VB6: -1 = True (carb), 0 = False (EFI)
+  const curved = config.runnerStyle === 'curved' ? -1 : 0;
+
+  const valveLift = config.maxIntakeValveLift_in ?? 0;
+  const csArea = 0; // Cross-section area — calculated, not stored
+
+  const chamber = config.combustionChamberVolume_cc ?? 0;
+  const deck = config.pistonToDeckHeight_in ?? 0;
+  const gasket = config.headGasketThickness_in ?? 0;
+  const dome = config.pistonDomeVolume_cc ?? 0;
+
+  // Valve seat geometry (v3.1 fields)
+  const seatDia = config.seatDia_in ?? 0;
+  const stemDia = config.stemDia_in ?? 0;
+  const vsAngle = config.vsAngle_deg ?? 45;
+  const vsWidth = config.vsWidth_in ?? 0;
+
+  const desc = description ?? 'RSA Engine Export';
+
+  const lines = [
+    '"3.1"',                                                          // Line 0: version
+    `"${desc}"`,                                                      // Line 1: description
+    [inline, config.numCylinders, config.bore_in, config.stroke_in,   // Line 2
+     config.rodLength_in, config.compressionRatio].join(','),
+    [camType, config.intakeDuration050_deg, carb,                     // Line 3
+     config.throttleCFM_at_1_5inHg, fuel].join(','),
+    [manifold, curved, config.intakeManifoldFlowFactor_pct].join(','),// Line 4
+    [config.numIntakeValvesPerCyl, config.intakeValveDia_in,          // Line 5
+     config.maxIntakeFlow_cfm, config.flowTestPressure_inH2O,
+     config.flowTestBoreDia_in].join(','),
+    [valveLift, csArea].join(','),                                    // Line 6
+    [chamber, deck, gasket, dome].join(','),                          // Line 7
+    [0, 0, 0, 0].join(','),                                          // Line 8: TB defaults
+    [0, 0, 0].join(','),                                              // Line 9: secondary TB
+    [seatDia, stemDia, vsAngle, vsWidth].join(','),                   // Line 10: valve seat
+  ];
+
+  return lines.join('\r\n') + '\r\n';
+}
+
 // ── EngineInputs → EngineSimConfig adapter ──────────────────────────
 
 /** Reverse maps for EngineInputs numeric codes → EngineSimConfig string enums */

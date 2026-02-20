@@ -5,7 +5,7 @@ import EnvironmentForm from '../shared/components/EnvironmentForm';
 import { simulate } from '../workerBridge';
 import { DEFAULT_ENV } from '../domain/schemas/env.schema';
 import type { Vehicle } from '../domain/schemas/vehicle.schema';
-import { type RaceLength, RACE_LENGTH_INFO, DISTANCES, getLandSpeedCheckpoints } from '../domain/config/raceLengths';
+import { type RaceLength, RACE_LENGTH_INFO, DISTANCES, getLandSpeedCheckpoints, getDistanceMarkers } from '../domain/config/raceLengths';
 import type { Env } from '../domain/schemas/env.schema';
 import type { SimResult } from '../domain/physics';
 import { useVb6Fixture } from '../shared/state/vb6FixtureStore';
@@ -1239,6 +1239,7 @@ racingsystemsanalysis.com`;
                   <DataLoggerChart 
                     data={simResult.traces as any} 
                     raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
+                    distanceMarkers={getDistanceMarkers(raceLength)}
                     comparisonData={comparisonRun?.traces as any}
                     comparisonLabel={comparisonRun ? `${comparisonRun.vehicleName} (${comparisonRun.result.et_s.toFixed(3)}s)` : undefined}
                   />

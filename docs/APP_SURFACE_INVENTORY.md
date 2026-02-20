@@ -149,7 +149,7 @@
 | Race length selector (land speed courses) | `Predict.tsx:1272` | ✅ | 7 courses: 1mi, El Mirage, Muroc, 2mi, BV Short, BV Long, 10mi. Pro-gated. |
 | Land speed timeslip (MPH at mile markers) | `Predict.tsx:947` | ✅ | Shows 1/8mi, 1/4mi, 1/2mi, 1mi MPH. Conditional on `category === 'landspeed'`. |
 | Labels adapt (Time/Top Speed vs ET/MPH) | `Predict.tsx:971,975` | ✅ | |
-| Data Logger Chart | `DataLoggerChart.tsx` | ✅ | `raceLengthFt` passed correctly for land speed distances |
+| Data Logger Chart | `DataLoggerChart.tsx` | ✅ | `raceLengthFt` + `distanceMarkers` from `getDistanceMarkers()` — unified with checkpoint source-of-truth |
 | Distance checkpoints | `raceLengths.ts:24-30` | ✅ | All 7 courses have correct checkpoint arrays |
 
 ### 3.2 Land Speed Dead Clicks / Gaps (Top 5)
@@ -158,7 +158,7 @@
 2. **No land-speed-specific vehicle fields** — VB6 Bonneville Pro had parachute deployment distance, streamliner body type, etc. Not present.
 3. ~~**No land speed timeslip shows only 4 checkpoints**~~ — **FIXED.** Now uses `getLandSpeedCheckpoints()` config for all 8 VB6 DistToPrint rows per track type.
 4. **No wind direction indicator** — VB6 had a visual wind direction dial for land speed. Current wind is numeric-only.
-5. **Chart styling doesn't differentiate land speed** — Only a subtle purple background on the race length selector. No visual distinction in the chart area.
+5. ~~**Chart distance markers don't match checkpoints**~~ — **FIXED.** Chart now uses `getDistanceMarkers(raceLength)` which derives from `getLandSpeedCheckpoints()`, unifying timeslip and chart markers.
 
 ---
 
@@ -178,11 +178,11 @@
 
 | Module | ✅ Implemented + Wired | ⚠️ Partially Wired | 🔲 Stub | ❌ Missing |
 |---|---|---|---|---|
-| **Engine Sim** | 30 | 0 | 0 | 0 |
+| **Engine Sim** | 31 | 0 | 0 | 0 |
 | **Quarter-Mile** | 26 | 0 | 0 | 0 |
-| **Land Speed** | 6 | 0 | 0 | 0 |
+| **Land Speed** | 7 | 0 | 0 | 0 |
 | **FourLink** | 1 (route) | 0 | 1 | 1 (nav) |
-| **Total** | **63** | **0** | **1** | **1** |
+| **Total** | **65** | **0** | **1** | **1** |
 
 ### Top Remaining Blockers (Ranked)
 
@@ -190,4 +190,4 @@
 2. ~~Engine Sim: No Max Intake Valve Lift input in basic mode~~ — **FIXED**
 3. ~~**Quarter-Mile: No Detailed Parameters screen**~~ — **FIXED**
 4. ~~**Land Speed: Incomplete mile-marker timeslip**~~ — **FIXED.** Now uses `getLandSpeedCheckpoints()` for full VB6-parity checkpoint rows (8 rows for BV Long).
-5. **Engine Sim: No .eng export** — Users can import but not export/share.
+5. ~~**Engine Sim: No .eng export**~~ — **FIXED.** Export .eng button added to EngineSimDashboard. Uses `configToEngFileContent()` to produce VB6-compatible v3.1 format. Round-trip tested.

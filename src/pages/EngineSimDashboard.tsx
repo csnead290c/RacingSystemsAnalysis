@@ -8,7 +8,7 @@ import Page from '../shared/components/Page';
 import { simulateEngine, type EngineSimConfig } from '../domain/physics/engine/engineAdapter';
 import { generateVB6DynoCurve } from '../domain/physics/engine/vb6CurveGen';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload } from 'lucide-react';
+import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload, Download } from 'lucide-react';
 import { CompressionRatioCalculator } from '../shared/components/CompressionRatioCalculator';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import {
@@ -42,7 +42,7 @@ import {
   type EngineSimDocumentV1,
 } from '../domain/physics/engine/engineSimDocument';
 import { uploadEngFile } from '../domain/physics/engine/engineSimFileIO';
-import { parseLegacyEngToConfig } from '../domain/physics/engine/engFileParser';
+import { parseLegacyEngToConfig, configToEngFileContent } from '../domain/physics/engine/engFileParser';
 import {
   commitConfigField,
   commitCamTypeChange,
@@ -383,6 +383,25 @@ export function EngineSimDashboard() {
       setFileError(e instanceof Error ? e.message : 'Failed to import .eng file.');
     }
   }, [confirmIfDirty]);
+
+  const handleExportEng = useCallback(() => {
+    try {
+      const desc = docName || 'RSA Engine Export';
+      const content = configToEngFileContent(config, desc);
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeName = (docName || 'engine').replace(/[^a-zA-Z0-9_\- ]/g, '_');
+      a.download = `${safeName}.eng`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setFileError(e instanceof Error ? e.message : 'Failed to export .eng file.');
+    }
+  }, [config, docName]);
 
   // --- Carb CFM Worksheet state ---
   const [carbWS, setCarbWS] = useState<CarbWorksheetInputs>(() => ({ ...CARB_WS_DEFAULTS }));
@@ -1094,6 +1113,9 @@ export function EngineSimDashboard() {
           </button>
           <button style={{ ...styles.fileBtn, padding: '4px 10px', fontSize: '12px' }} onClick={handleImportEng} disabled={fileBusy}>
             <Upload size={12} /> Import .eng
+          </button>
+          <button style={{ ...styles.fileBtn, padding: '4px 10px', fontSize: '12px' }} onClick={handleExportEng}>
+            <Download size={12} /> Export .eng
           </button>
         </div>
         {fileError && (

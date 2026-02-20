@@ -3,31 +3,33 @@
  * Tests LocalStorageStorage with mocked localStorage.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { LocalStorageStorage } from '../state/storage';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 
+// Provide a minimal localStorage mock that works in jsdom/node
+const _ls: Record<string, string> = {};
+if (typeof globalThis !== 'undefined') {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (key: string) => _ls[key] ?? null,
+      setItem: (key: string, val: string) => { _ls[key] = val; },
+      removeItem: (key: string) => { delete _ls[key]; },
+      clear: () => { for (const k of Object.keys(_ls)) delete _ls[k]; },
+      get length() { return Object.keys(_ls).length; },
+      key: (i: number) => Object.keys(_ls)[i] ?? null,
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+
 describe('LocalStorageStorage', () => {
   let storage: LocalStorageStorage;
-  let mockLocalStorage: Record<string, string>;
 
   beforeEach(() => {
-    // Mock localStorage
-    mockLocalStorage = {};
-    
-    // Clear and mock localStorage methods
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
-      return mockLocalStorage[key] || null;
-    });
-    
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation((key: string, value: string) => {
-      mockLocalStorage[key] = value;
-    });
-    
-    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation((key: string) => {
-      delete mockLocalStorage[key];
-    });
-
+    // Clear mock localStorage
+    for (const k of Object.keys(_ls)) delete _ls[k];
     storage = new LocalStorageStorage();
   });
 
@@ -208,7 +210,7 @@ describe('LocalStorageStorage', () => {
 
   it('should handle corrupted data gracefully', async () => {
     // Set invalid JSON
-    mockLocalStorage['rsa.runs.v1'] = 'invalid json{';
+    _ls['rsa.runs.v1'] = 'invalid json{';
 
     const runs = await storage.loadRuns();
     expect(runs).toEqual([]);
@@ -216,7 +218,7 @@ describe('LocalStorageStorage', () => {
 
   it('should handle non-array data gracefully', async () => {
     // Set valid JSON but not an array
-    mockLocalStorage['rsa.runs.v1'] = JSON.stringify({ not: 'an array' });
+    _ls['rsa.runs.v1'] = JSON.stringify({ not: 'an array' });
 
     const runs = await storage.loadRuns();
     expect(runs).toEqual([]);

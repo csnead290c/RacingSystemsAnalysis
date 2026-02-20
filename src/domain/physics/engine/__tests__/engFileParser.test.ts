@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseEngFile, parseLegacyEngToConfig } from '../engFileParser';
+import { parseEngFile, parseLegacyEngToConfig, configToEngFileContent } from '../engFileParser';
+import { createDefaultEngineProConfig } from '../engineAdapter';
 
 // ── Fixtures ────────────────────────────────────────────────────────
 
@@ -192,5 +193,91 @@ describe('parseLegacyEngToConfig', () => {
     expect(config.pistonToDeckHeight_in).toBe(0.015);
     expect(config.headGasketThickness_in).toBe(0.039);
     expect(config.pistonDomeVolume_cc).toBe(12);
+  });
+});
+
+// ── configToEngFileContent export tests ─────────────────────────────
+
+describe('configToEngFileContent', () => {
+  it('produces a v3.1 header', () => {
+    const config = createDefaultEngineProConfig();
+    const text = configToEngFileContent(config, 'Test Engine');
+    const lines = text.split(/\r?\n/);
+    expect(lines[0]).toBe('"3.1"');
+    expect(lines[1]).toBe('"Test Engine"');
+  });
+
+  it('includes required section lines (at least 11 lines)', () => {
+    const config = createDefaultEngineProConfig();
+    const text = configToEngFileContent(config);
+    const lines = text.split(/\r?\n/).filter(l => l.length > 0);
+    expect(lines.length).toBeGreaterThanOrEqual(11);
+  });
+
+  it('round-trip: export then import preserves core geometry', () => {
+    const original = createDefaultEngineProConfig();
+    const text = configToEngFileContent(original, 'Round Trip Test');
+    const { config: reimported } = parseLegacyEngToConfig(text);
+
+    expect(reimported.numCylinders).toBe(original.numCylinders);
+    expect(reimported.layout).toBe(original.layout);
+    expect(reimported.bore_in).toBe(original.bore_in);
+    expect(reimported.stroke_in).toBe(original.stroke_in);
+    expect(reimported.rodLength_in).toBe(original.rodLength_in);
+    expect(reimported.compressionRatio).toBe(original.compressionRatio);
+  });
+
+  it('round-trip: export then import preserves cam and fuel', () => {
+    const original = createDefaultEngineProConfig();
+    const text = configToEngFileContent(original, 'RT Cam');
+    const { config: reimported } = parseLegacyEngToConfig(text);
+
+    expect(reimported.camshaftType).toBe(original.camshaftType);
+    expect(reimported.intakeDuration050_deg).toBe(original.intakeDuration050_deg);
+    expect(reimported.throttleCFM_at_1_5inHg).toBe(original.throttleCFM_at_1_5inHg);
+    expect(reimported.isEFI).toBe(original.isEFI);
+    expect(reimported.fuelType).toBe(original.fuelType);
+  });
+
+  it('round-trip: export then import preserves intake and flow', () => {
+    const original = createDefaultEngineProConfig();
+    const text = configToEngFileContent(original, 'RT Flow');
+    const { config: reimported } = parseLegacyEngToConfig(text);
+
+    expect(reimported.intakeManifoldType).toBe(original.intakeManifoldType);
+    expect(reimported.runnerStyle).toBe(original.runnerStyle);
+    expect(reimported.intakeManifoldFlowFactor_pct).toBe(original.intakeManifoldFlowFactor_pct);
+    expect(reimported.intakeValveDia_in).toBe(original.intakeValveDia_in);
+    expect(reimported.maxIntakeFlow_cfm).toBe(original.maxIntakeFlow_cfm);
+    expect(reimported.flowTestPressure_inH2O).toBe(original.flowTestPressure_inH2O);
+    expect(reimported.flowTestBoreDia_in).toBe(original.flowTestBoreDia_in);
+  });
+
+  it('round-trip: export then import preserves CR worksheet values', () => {
+    const original = createDefaultEngineProConfig();
+    const text = configToEngFileContent(original, 'RT CR');
+    const { config: reimported } = parseLegacyEngToConfig(text);
+
+    expect(reimported.combustionChamberVolume_cc).toBe(original.combustionChamberVolume_cc);
+    expect(reimported.pistonToDeckHeight_in).toBe(original.pistonToDeckHeight_in);
+    expect(reimported.headGasketThickness_in).toBe(original.headGasketThickness_in);
+    expect(reimported.pistonDomeVolume_cc).toBe(original.pistonDomeVolume_cc);
+  });
+
+  it('round-trip: export then import preserves description', () => {
+    const original = createDefaultEngineProConfig();
+    const text = configToEngFileContent(original, 'My Pro Stock V8');
+    const { description } = parseLegacyEngToConfig(text);
+    expect(description).toBe('My Pro Stock V8');
+  });
+
+  it('exported text uses comma-separated values on data lines', () => {
+    const config = createDefaultEngineProConfig();
+    const text = configToEngFileContent(config);
+    const lines = text.split(/\r?\n/).filter(l => l.length > 0);
+    // Line 2 (geometry) should have commas
+    expect(lines[2]).toContain(',');
+    // Should contain bore value
+    expect(lines[2]).toContain('4.03');
   });
 });
