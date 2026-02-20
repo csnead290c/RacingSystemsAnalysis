@@ -61,7 +61,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     stripePriceIdMonthly: 'price_1ScCEJLhFtG9ySfYTncD5d5u', // Set from Stripe dashboard
     stripePriceIdYearly: 'price_1ScCEJLhFtG9ySfYLapGFU4N',
     features: [
-      'ET Simulator',
+      'Quarter Jr',
       'Weather Integration',
       'Run Logbook',
       '5 Vehicles',

@@ -21,7 +21,7 @@ const tiers: Tier[] = [
     annualPrice: 99,
     description: 'For weekend bracket racers who want better predictions',
     features: [
-      'ET Simulator (Quarter Jr Mode)',
+      'Quarter Jr',
       'Weather Integration',
       'Run Logbook (100 runs)',
       'Dial-In Calculator',
@@ -38,7 +38,7 @@ const tiers: Tier[] = [
     description: 'For serious competitors who want every advantage',
     features: [
       'Everything in Racer, plus:',
-      'Full ET Simulator (Pro Mode)',
+      'Quarter Pro',
       'Full HP Curve Input',
       'Throttle Stop Simulation',
       'Optimizer Tools (Gear/Converter)',

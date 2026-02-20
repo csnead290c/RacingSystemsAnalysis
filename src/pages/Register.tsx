@@ -32,7 +32,7 @@ const tiers: TierInfo[] = [
     name: 'Racer',
     price: '$9.99/mo',
     description: 'For weekend bracket racers',
-    features: ['Everything in Free', 'ET Simulator', 'Run Logbook', '5 Vehicles'],
+    features: ['Everything in Free', 'Quarter Jr', 'Run Logbook', '5 Vehicles'],
   },
   {
     id: 'pro',

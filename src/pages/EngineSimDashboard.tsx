@@ -387,13 +387,15 @@ export function EngineSimDashboard() {
 
   const handleExportEng = useCallback(() => {
     try {
-      const desc = docName || 'RSA Engine Export';
+      const programName = getEngineProgramName(can);
+      const desc = docName || `RSA ${programName} Export`;
       const content = configToEngFileContent(config, desc);
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const safeName = (docName || 'engine').replace(/[^a-zA-Z0-9_\- ]/g, '_');
+      const baseName = docName || 'engine';
+      const safeName = `${baseName}_${programName.replace(/\s+/g, '_')}`.replace(/[^a-zA-Z0-9_\- ]/g, '_');
       a.download = `${safeName}.eng`;
       document.body.appendChild(a);
       a.click();
@@ -402,7 +404,7 @@ export function EngineSimDashboard() {
     } catch (e: unknown) {
       setFileError(e instanceof Error ? e.message : 'Failed to export .eng file.');
     }
-  }, [config, docName]);
+  }, [config, docName, can]);
 
   // --- Carb CFM Worksheet state ---
   const [carbWS, setCarbWS] = useState<CarbWorksheetInputs>(() => ({ ...CARB_WS_DEFAULTS }));

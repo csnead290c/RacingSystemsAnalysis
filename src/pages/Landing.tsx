@@ -349,7 +349,7 @@ export default function Landing() {
                 listStyle: 'none',
                 fontSize: '0.9rem',
               }}>
-                {['ET Simulator', 'Weather Integration', 'Run Logbook', 'Dial-In Calculator', '5 Vehicles'].map(f => (
+                {['Quarter Jr', 'Weather Integration', 'Run Logbook', 'Dial-In Calculator', '5 Vehicles'].map(f => (
                   <li key={f} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
                     ✓ {f}
                   </li>
