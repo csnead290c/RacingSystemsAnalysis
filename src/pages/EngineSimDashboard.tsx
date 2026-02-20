@@ -1050,6 +1050,24 @@ export function EngineSimDashboard() {
             updateConfig({ compressionRatio: cr });
             setShowCRCalculator(false);
           }}
+          onApplyWithDetails={(vals) => {
+            updateConfig({
+              compressionRatio: vals.compressionRatio,
+              pistonToDeckHeight_in: vals.deckHeight_in,
+              headGasketThickness_in: vals.gasketThickness_in,
+              combustionChamberVolume_cc: vals.chamberVolume_cc,
+              pistonDomeVolume_cc: vals.pistonDomeVolume_cc,
+            });
+            setShowCRCalculator(false);
+          }}
+          initialValues={{
+            bore_in: config.bore_in,
+            stroke_in: config.stroke_in,
+            deckHeight_in: config.pistonToDeckHeight_in,
+            gasketThickness_in: config.headGasketThickness_in,
+            pistonDomeVolume_cc: config.pistonDomeVolume_cc,
+            chamberVolume_cc: config.combustionChamberVolume_cc,
+          }}
         />
       )}
 

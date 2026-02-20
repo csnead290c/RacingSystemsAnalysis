@@ -7,10 +7,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Calculator } from 'lucide-react';
 
+export interface CRWorksheetValues {
+  bore_in: number;
+  stroke_in: number;
+  chamberVolume_cc: number;
+  deckHeight_in: number;
+  gasketThickness_in: number;
+  pistonDomeVolume_cc: number;
+  compressionRatio: number;
+}
+
 interface CompressionRatioCalculatorProps {
   isOpen: boolean;
   onClose: () => void;
   onApply: (compressionRatio: number) => void;
+  onApplyWithDetails?: (values: CRWorksheetValues) => void;
   initialValues?: {
     bore_in?: number;
     stroke_in?: number;
@@ -25,6 +36,7 @@ export function CompressionRatioCalculator({
   isOpen,
   onClose,
   onApply,
+  onApplyWithDetails,
   initialValues = {},
 }: CompressionRatioCalculatorProps) {
   const [bore, setBore] = useState(initialValues.bore_in || 4.03);
@@ -63,7 +75,19 @@ export function CompressionRatioCalculator({
   const compressionRatio = (cylCID + clearanceVolume) / clearanceVolume;
 
   const handleApply = () => {
-    onApply(compressionRatio);
+    if (onApplyWithDetails) {
+      onApplyWithDetails({
+        bore_in: bore,
+        stroke_in: stroke,
+        chamberVolume_cc: chamber,
+        deckHeight_in: deck,
+        gasketThickness_in: gasket,
+        pistonDomeVolume_cc: dome,
+        compressionRatio,
+      });
+    } else {
+      onApply(compressionRatio);
+    }
     onClose();
   };
 
