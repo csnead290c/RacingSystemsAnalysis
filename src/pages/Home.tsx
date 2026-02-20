@@ -6,6 +6,7 @@ import { useAuth, useClerkRSA } from '../domain/auth';
 import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehicles } from '../domain/config/guards';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { getQuarterProgramName } from '../domain/ui/programDisplayNames';
+import { formatHp, formatLb, formatIn } from '../shared/format/formatNumber';
 import Landing from './Landing';
 
 function Home() {
@@ -204,9 +205,9 @@ function Home() {
                       <td style={{ padding: '0.5rem' }}>
                         <Link to="/vehicles" style={{ color: 'var(--color-primary)' }}>{v.name}</Link>
                       </td>
-                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{v.weightLb} lb</td>
-                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{v.powerHP} HP</td>
-                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{v.tireDiaIn}"</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatLb(v.weightLb)} lb</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatHp(v.powerHP)} HP</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatIn(v.tireDiaIn)}"</td>
                     </tr>
                   ))}
                 </tbody>

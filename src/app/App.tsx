@@ -41,6 +41,7 @@ import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
 import { useCapabilities } from '../domain/config/useCapabilities';
+import { useSubscription } from '../domain/config/useSubscription';
 import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
 
 // DevPortal - available in dev mode or to owner/admin in production
@@ -50,6 +51,7 @@ const AdminPortal = lazy(() => import('../pages/AdminPortal'));
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
   const { isClerkSignedIn } = useClerkRSA();
+  const { features: menuFeatures } = useSubscription();
   const [showMenu, setShowMenu] = useState(false);
   
   // If signed in via Clerk, show Clerk's user button
@@ -145,18 +147,20 @@ function UserMenu() {
           >
             My Account
           </Link>
-          <Link
-            to="/team"
-            onClick={() => setShowMenu(false)}
-            style={{
-              display: 'block',
-              padding: '0.75rem 1rem',
-              color: 'var(--color-text)',
-              textDecoration: 'none',
-            }}
-          >
-            Team
-          </Link>
+          {menuFeatures.teamManagement && (
+            <Link
+              to="/team"
+              onClick={() => setShowMenu(false)}
+              style={{
+                display: 'block',
+                padding: '0.75rem 1rem',
+                color: 'var(--color-text)',
+                textDecoration: 'none',
+              }}
+            >
+              Team
+            </Link>
+          )}
           <button
             onClick={() => { logout(); setShowMenu(false); }}
             style={{
@@ -207,6 +211,7 @@ function Navigation() {
     backgroundColor: active ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
     transition: 'background-color 0.2s',
     pointerEvents: disabled ? 'none' as const : 'auto' as const,
+    whiteSpace: 'nowrap' as const,
   });
 
   // Check if user is logged in (either legacy or Clerk)
@@ -220,6 +225,8 @@ function Navigation() {
   // const canAccessSuspSim = isLoggedIn && hasProduct('fourlink');
   // const canAccessClutchSim = isLoggedIn && hasFeature('clutch_sim');
   const canAccessHistory = isLoggedIn && canAccessRunLogging({ hasFeature });
+  const { features } = useSubscription();
+  const canAccessTeam = isLoggedIn && features.teamManagement;
 
   const navLinks = (
     <>
@@ -266,7 +273,7 @@ function Navigation() {
           History
         </Link>
       )}
-      {isLoggedIn && (
+      {canAccessTeam && (
         <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={() => setMobileMenuOpen(false)}>
           Team
         </Link>
@@ -408,7 +415,7 @@ function App() {
               style={{ height: '40px', width: 'auto' }}
             />
           </Link>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', overflow: 'hidden' }}>
             <Navigation />
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>

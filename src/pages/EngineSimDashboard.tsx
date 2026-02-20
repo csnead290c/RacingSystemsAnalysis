@@ -1063,6 +1063,15 @@ export function EngineSimDashboard() {
             grid-template-columns: 1fr 1fr;
           }
         }
+        /* ≤640px: mobile-specific overrides */
+        @media (max-width: 640px) {
+          .esd-perf-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+          .esd-detail-row > .esd-detail-chart {
+            min-height: 250px;
+          }
+        }
       `}</style>
       {showCRCalculator && (
         <CompressionRatioCalculator
