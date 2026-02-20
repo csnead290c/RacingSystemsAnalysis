@@ -31,32 +31,34 @@ function About() {
 
           <div className="mb-4">
             <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
-              Quarter Pro
+              Quarter Jr / Quarter Pro
             </h3>
             <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
-              Our flagship drag racing simulation for 1/4 mile and 1/8 mile racing. Includes ET prediction, 
-              trap speed calculation, 60-foot analysis, and detailed run simulation with shift points, 
-              tire slip, and environmental corrections.
+              Drag racing simulation for 1/4 mile and 1/8 mile racing. Includes ET prediction,
+              trap speed calculation, 60-foot analysis, and detailed run simulation with shift points,
+              tire slip, and environmental corrections. Quarter Jr provides the core simulation;
+              Quarter Pro adds advanced inputs, optimizers, and detailed analysis.
             </p>
           </div>
 
           <div className="mb-4">
             <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
-              Quarter Jr
+              Bonneville Jr / Bonneville Pro
             </h3>
             <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
-              Simplified version of Quarter Pro for bracket racers and sportsman competitors. 
-              Quick and easy ET predictions without the complexity of the full simulation.
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
-              Bonneville Pro
-            </h3>
-            <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
-              Land speed racing simulation for Bonneville Salt Flats and other long-course venues. 
+              Land speed racing simulation for Bonneville Salt Flats and other long-course venues.
               Optimized for high-speed aerodynamics, extended acceleration, and mile/kilometer runs.
+              Included within the Quarter programs.
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
+              Engine Jr / Engine Pro
+            </h3>
+            <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
+              Engine dyno simulation and power curve analysis. Engine Jr covers core design inputs
+              and performance outputs; Engine Pro adds flowbench data, mechanical details, and recommendations.
             </p>
           </div>
 
@@ -67,7 +69,6 @@ function About() {
             <ul className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6', marginLeft: 'var(--space-5)' }}>
               <li><strong>Four Link Pro:</strong> Suspension geometry and anti-squat analysis</li>
               <li><strong>Clutch Pro:</strong> Clutch setup and management simulation</li>
-              <li><strong>Engine Pro:</strong> Engine dyno simulation and power curve analysis</li>
             </ul>
           </div>
         </div>
