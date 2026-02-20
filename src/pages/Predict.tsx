@@ -19,6 +19,8 @@ import { getAverage60ft } from '../state/storage';
 import { getAllTracks, type Track } from '../domain/config/tracks';
 import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
 import { useSubscription } from '../domain/config/useSubscription';
+import { useCapabilities } from '../domain/config/useCapabilities';
+import { getQuarterProgramName, getLandSpeedProgramName } from '../domain/ui/programDisplayNames';
 import { useSharedEnv } from '../shared/state/useSharedEnv';
 import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
 
@@ -38,6 +40,7 @@ interface LocationState {
 function Predict() {
   const location = useLocation();
   const { features } = useSubscription();
+  const { can } = useCapabilities();
   
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const { env: sharedEnv, setEnv: setSharedEnv } = useSharedEnv();
@@ -445,7 +448,7 @@ function Predict() {
     };
 
     return (
-      <Page title="ET Simulator">
+      <Page title={getQuarterProgramName(can)}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <div className="card" style={{ padding: '2rem' }}>
             <h2 style={{ marginBottom: '1.5rem' }}>Select Vehicle & Track</h2>
@@ -680,7 +683,7 @@ function Predict() {
   };
 
   return (
-    <Page wide>
+    <Page wide title={RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? getLandSpeedProgramName(can) : getQuarterProgramName(can)}>
       <style>{`
         .et-sim-dashboard {
           display: flex;
@@ -1067,7 +1070,7 @@ function Predict() {
               )}
               <button
                 onClick={() => {
-                  const text = `RSA ${strictMode ? 'Quarter Pro' : 'Quarter Jr'} Prediction
+                  const text = `RSA ${getQuarterProgramName(can)} Prediction
 ${vehicle.name}
 ${new Date().toLocaleDateString()}
 

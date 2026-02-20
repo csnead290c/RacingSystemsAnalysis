@@ -4,11 +4,14 @@ import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehicles } from '../domain/config/guards';
+import { useCapabilities } from '../domain/config/useCapabilities';
+import { getQuarterProgramName } from '../domain/ui/programDisplayNames';
 import Landing from './Landing';
 
 function Home() {
   const { isAuthenticated, user, hasFeature } = useAuth();
   const { isClerkSignedIn, rsaUser } = useClerkRSA();
+  const { can } = useCapabilities();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -78,7 +81,7 @@ function Home() {
               >
                 <div style={{ fontSize: '2rem' }}>🏁</div>
                 <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>ET Simulator</h4>
+                  <h4 style={{ margin: 0, color: 'var(--color-text)' }}>{getQuarterProgramName(can)}</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
                     Predict ET & MPH
                   </p>

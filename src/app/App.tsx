@@ -40,6 +40,8 @@ import TeamHub from '../pages/TeamHub';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import { useAuth } from '../domain/auth';
+import { useCapabilities } from '../domain/config/useCapabilities';
+import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
 
 // DevPortal - available in dev mode or to owner/admin in production
 const DevPortal = lazy(() => import('../pages/DevPortal'));
@@ -180,6 +182,7 @@ function Navigation() {
   const location = useLocation();
   const { isAuthenticated, hasFeature } = useAuth();
   const { isClerkSignedIn } = useClerkRSA();
+  const { can } = useCapabilities();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [, forceUpdate] = useState(0);
 
@@ -230,12 +233,12 @@ function Navigation() {
       )}
       {canAccessETSim && (
         <Link to="/et-sim" style={navLinkStyle(isActive('/et-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          ET Sim
+          {getQuarterProgramName(can)}
         </Link>
       )}
       {canAccessEngineSim && (
         <Link to="/engine-sim" style={navLinkStyle(isActive('/engine-sim'))} onClick={() => setMobileMenuOpen(false)}>
-          Engine Sim
+          {getEngineProgramName(can)}
         </Link>
       )}
       {/* Hidden for now - these simulators are not yet built out:
@@ -595,7 +598,7 @@ function App() {
             borderTop: '1px solid var(--color-border)',
           }}
         >
-          © RSA 2025
+          Racing Systems Analysis © 2026
         </footer>
         <ViewAsBanner />
       </div>

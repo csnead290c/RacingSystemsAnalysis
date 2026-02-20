@@ -11,6 +11,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Calculator, Lock, FilePlus, FolderOpen, Save, Upload, Download } from 'lucide-react';
 import { CompressionRatioCalculator } from '../shared/components/CompressionRatioCalculator';
 import { useCapabilities } from '../domain/config/useCapabilities';
+import { getEngineProgramName } from '../domain/ui/programDisplayNames';
 import {
   calcMechDetails,
   calcFlowDetails,
@@ -982,7 +983,7 @@ export function EngineSimDashboard() {
   }, [isProMode, config, result]);
 
   return (
-    <Page wide>
+    <Page wide title={getEngineProgramName(can)}>
       <style>{`
         .esd-input-row {
           display: grid;
