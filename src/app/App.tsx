@@ -37,6 +37,7 @@ import Ladder from '../pages/Ladder';
 import Pricing from '../pages/Pricing';
 import Register from '../pages/Register';
 import TeamHub from '../pages/TeamHub';
+import NotFound from '../pages/NotFound';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import InternalRoute from '../shared/components/InternalRoute';
@@ -624,6 +625,8 @@ function App() {
                 </InternalRoute>
               </ProtectedRoute>
             } />
+
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
 
