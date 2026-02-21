@@ -7,6 +7,7 @@ import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehic
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
 import { formatHp, formatLb, formatIn } from '../shared/format/formatNumber';
+import { isInternalUser, buildVisibilityContext } from '../domain/ui/publicSurface';
 import Landing from './Landing';
 
 function Home() {
@@ -19,7 +20,7 @@ function Home() {
   // Check if user is logged in (either legacy or Clerk)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
   const activeUser = isClerkSignedIn ? rsaUser : user;
-  const isDevOrOwner = user?.roleId === 'owner' || user?.roleId === 'admin' || import.meta.env.DEV;
+  const isDevOrOwner = isInternalUser(buildVisibilityContext(user?.roleId));
 
   useEffect(() => {
     const loadData = async () => {

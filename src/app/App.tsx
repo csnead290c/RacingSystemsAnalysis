@@ -39,10 +39,12 @@ import Register from '../pages/Register';
 import TeamHub from '../pages/TeamHub';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
+import InternalRoute from '../shared/components/InternalRoute';
 import { useAuth } from '../domain/auth';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { useSubscription } from '../domain/config/useSubscription';
 import { getQuarterTier, getEngineTier } from '../domain/ui/programDisplayNames';
+import { isInternalUser, buildVisibilityContext } from '../domain/ui/publicSurface';
 
 // DevPortal - available in dev mode or to owner/admin in production
 const DevPortal = lazy(() => import('../pages/DevPortal'));
@@ -53,6 +55,7 @@ function UserMenu() {
   const { isClerkSignedIn } = useClerkRSA();
   const { features: menuFeatures } = useSubscription();
   const [showMenu, setShowMenu] = useState(false);
+  const visCtx = buildVisibilityContext(user?.roleId);
   
   // If signed in via Clerk, show Clerk's user button
   if (isClerkSignedIn) {
@@ -147,7 +150,7 @@ function UserMenu() {
           >
             My Account
           </Link>
-          {menuFeatures.teamManagement && (
+          {menuFeatures.teamManagement && isInternalUser(visCtx) && (
             <Link
               to="/team"
               onClick={() => setShowMenu(false)}
@@ -230,7 +233,8 @@ function Navigation() {
 
   // Check if user is logged in (either legacy or Clerk)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
-  const isDevOrOwner = user?.roleId === 'owner' || user?.roleId === 'admin' || import.meta.env.DEV;
+  const visCtxNav = buildVisibilityContext(user?.roleId);
+  const isDevOrOwner = isInternalUser(visCtxNav);
 
   // Check access for each nav item (centralized guards)
   const canAccessVehiclesNav = isLoggedIn && canAccessVehicles({ hasFeature });
@@ -484,47 +488,47 @@ function App() {
             } />
             <Route path="/log" element={
               <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
-                <Log />
+                <InternalRoute><Log /></InternalRoute>
               </ProtectedRoute>
             } />
             <Route path="/history" element={
               <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
-                <History />
+                <InternalRoute><History /></InternalRoute>
               </ProtectedRoute>
             } />
             <Route path="/dial-in" element={
               <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
-                <DialIn />
+                <InternalRoute><DialIn /></InternalRoute>
               </ProtectedRoute>
             } />
             
             <Route path="/opponents" element={
               <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
-                <Opponents />
+                <InternalRoute><Opponents /></InternalRoute>
               </ProtectedRoute>
             } />
             
             <Route path="/race-day" element={
               <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
-                <RaceDay />
+                <InternalRoute><RaceDay /></InternalRoute>
               </ProtectedRoute>
             } />
             
             <Route path="/import" element={
               <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
-                <DataImport />
+                <InternalRoute><DataImport /></InternalRoute>
               </ProtectedRoute>
             } />
             
             <Route path="/tech-card" element={
               <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
-                <TechCard />
+                <InternalRoute><TechCard /></InternalRoute>
               </ProtectedRoute>
             } />
             
             <Route path="/ladder" element={
               <ProtectedRoute requireFeature={RACE_TOOLS_FEATURE}>
-                <Ladder />
+                <InternalRoute><Ladder /></InternalRoute>
               </ProtectedRoute>
             } />
             
@@ -570,50 +574,54 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* Team Hub - Tabbed Team Management (Pro feature) */}
+            {/* Team Hub - Tabbed Team Management (internal only) */}
             <Route path="/team" element={
               <ProtectedRoute>
-                <TeamHub />
+                <InternalRoute><TeamHub /></InternalRoute>
               </ProtectedRoute>
             } />
             
             {/* Legacy routes redirect to team hub */}
             <Route path="/parts" element={
               <ProtectedRoute>
-                <TeamHub />
+                <InternalRoute><TeamHub /></InternalRoute>
               </ProtectedRoute>
             } />
             <Route path="/events" element={
               <ProtectedRoute>
-                <TeamHub />
+                <InternalRoute><TeamHub /></InternalRoute>
               </ProtectedRoute>
             } />
             <Route path="/maintenance" element={
               <ProtectedRoute>
-                <TeamHub />
+                <InternalRoute><TeamHub /></InternalRoute>
               </ProtectedRoute>
             } />
             <Route path="/expenses" element={
               <ProtectedRoute>
-                <TeamHub />
+                <InternalRoute><TeamHub /></InternalRoute>
               </ProtectedRoute>
             } />
             
-            {/* Admin Portal - owner/admin only */}
+            {/* Admin Portal - internal only (owner/admin) */}
             <Route path="/admin" element={
               <ProtectedRoute requireRole={['owner', 'admin']}>
-                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
-                  <AdminPortal />
-                </Suspense>
+                <InternalRoute>
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                    <AdminPortal />
+                  </Suspense>
+                </InternalRoute>
               </ProtectedRoute>
             } />
             
-            {/* Dev Portal - available in dev mode or to owner/admin */}
+            {/* Dev Portal - internal only (owner/admin or DEV mode) */}
             <Route path="/dev" element={
               <ProtectedRoute requireRole={['owner', 'admin']}>
-                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
-                  <DevPortal />
-                </Suspense>
+                <InternalRoute>
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                    <DevPortal />
+                  </Suspense>
+                </InternalRoute>
               </ProtectedRoute>
             } />
           </Routes>
