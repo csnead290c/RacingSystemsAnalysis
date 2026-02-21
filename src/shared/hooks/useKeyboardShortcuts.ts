@@ -6,6 +6,8 @@
 
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../domain/auth';
+import { isInternalUser, buildVisibilityContext } from '../../domain/ui/publicSurface';
 
 interface ShortcutConfig {
   key: string;
@@ -88,16 +90,21 @@ export function useKeyboardShortcuts(shortcuts: ShortcutConfig[]) {
  */
 export function useNavigationShortcuts() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const internal = isInternalUser(buildVisibilityContext(user?.roleId));
 
   const shortcuts: ShortcutConfig[] = [
     { key: 'h', action: () => navigate('/'), description: 'Go to Home' },
     { key: 's', action: () => navigate('/predict'), description: 'Go to Simulator' },
-    { key: 'l', action: () => navigate('/log'), description: 'Go to Log' },
-    { key: 'd', action: () => navigate('/dial-in'), description: 'Go to Dial-In' },
     { key: 'v', action: () => navigate('/vehicles'), description: 'Go to Vehicles' },
     { key: 'c', action: () => navigate('/calculators'), description: 'Go to Calculators' },
-    { key: 'r', action: () => navigate('/race-day'), description: 'Go to Race Day' },
     { key: '?', shift: true, action: () => showShortcutsHelp(), description: 'Show shortcuts help' },
+    // Internal-only shortcuts
+    ...(internal ? [
+      { key: 'l', action: () => navigate('/log'), description: 'Go to Log' },
+      { key: 'd', action: () => navigate('/dial-in'), description: 'Go to Dial-In' },
+      { key: 'r', action: () => navigate('/race-day'), description: 'Go to Race Day' },
+    ] : []),
   ];
 
   useKeyboardShortcuts(shortcuts);

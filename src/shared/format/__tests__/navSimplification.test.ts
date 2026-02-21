@@ -179,9 +179,7 @@ describe('Nav tier pill helpers', () => {
 describe('Route guard integration (logic-level)', () => {
   it('non-internal user hitting an internal route should be blocked', () => {
     const publicUser: VisibilityContext = { roleId: 'racer', isDev: false };
-    // InternalRoute component checks isInternalUser — should return false for all internal routes
     expect(isInternalUser(publicUser)).toBe(false);
-    // Verify there are actually internal routes to guard
     expect(Object.keys(INTERNAL_ROUTES).length).toBeGreaterThanOrEqual(14);
   });
 
@@ -198,6 +196,60 @@ describe('Route guard integration (logic-level)', () => {
     const routeModules = new Set(Object.values(INTERNAL_ROUTES));
     for (const mod of INTERNAL_MODULES) {
       expect(routeModules.has(mod)).toBe(true);
+    }
+  });
+
+  it('all expected internal paths are catalogued', () => {
+    const expectedPaths = [
+      '/history', '/log', '/team', '/parts', '/events',
+      '/maintenance', '/expenses', '/race-day', '/dial-in',
+      '/opponents', '/import', '/tech-card', '/ladder',
+      '/admin', '/dev',
+    ];
+    for (const path of expectedPaths) {
+      expect(isInternalRoute(path)).toBe(true);
+    }
+  });
+});
+
+// ── Keyboard shortcut gating ────────────────────────────────────────
+
+describe('Keyboard shortcut gating (logic-level)', () => {
+  // The useNavigationShortcuts hook gates /log, /dial-in, /race-day
+  // behind isInternalUser. These tests verify the gating logic.
+  const internalShortcutPaths = ['/log', '/dial-in', '/race-day'];
+  const publicShortcutPaths = ['/', '/predict', '/vehicles', '/calculators'];
+
+  it('internal shortcut paths are all internal routes', () => {
+    for (const path of internalShortcutPaths) {
+      expect(isInternalRoute(path)).toBe(true);
+    }
+  });
+
+  it('public shortcut paths are NOT internal routes', () => {
+    for (const path of publicShortcutPaths) {
+      expect(isInternalRoute(path)).toBe(false);
+    }
+  });
+
+  it('non-internal user should not have access to internal shortcuts', () => {
+    const publicUser: VisibilityContext = { roleId: 'pro', isDev: false };
+    expect(isInternalUser(publicUser)).toBe(false);
+  });
+
+  it('internal user should have access to all shortcuts', () => {
+    const internalUser: VisibilityContext = { roleId: 'owner', isDev: false };
+    expect(isInternalUser(internalUser)).toBe(true);
+  });
+});
+
+// ── Coming Soon page links ──────────────────────────────────────────
+
+describe('Coming Soon page links (logic-level)', () => {
+  it('core module paths are all public (not internal)', () => {
+    const coreModulePaths = ['/et-sim', '/engine-sim', '/vehicles', '/calculators'];
+    for (const path of coreModulePaths) {
+      expect(isInternalRoute(path)).toBe(false);
     }
   });
 });
