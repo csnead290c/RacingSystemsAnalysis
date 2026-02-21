@@ -6,17 +6,29 @@
  */
 
 // Clerk publishable key - set in environment variables
+// Use pk_live_* for production, pk_test_* for development only.
 export const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
+
+// Runtime guard: warn loudly if a test key leaks into a production build.
+if (
+  import.meta.env.PROD &&
+  CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')
+) {
+  console.error(
+    '[RSA] Clerk is using a TEST publishable key in a PRODUCTION build. ' +
+    'Set VITE_CLERK_PUBLISHABLE_KEY to a pk_live_* key for production.',
+  );
+}
 
 // Check if Clerk is configured
 export const isClerkConfigured = (): boolean => {
   return CLERK_PUBLISHABLE_KEY.length > 0 && CLERK_PUBLISHABLE_KEY.startsWith('pk_');
 };
 
-// Clerk appearance customization to match RSA theme
+// Clerk appearance customization to match RSA brand (red/white/black)
 export const clerkAppearance = {
   variables: {
-    colorPrimary: '#3b82f6',
+    colorPrimary: '#dc2626',
     colorBackground: 'var(--color-bg)',
     colorText: 'var(--color-text)',
     colorInputBackground: 'var(--color-surface)',
@@ -36,13 +48,13 @@ export const clerkAppearance = {
       color: 'var(--color-text-muted)',
     },
     formButtonPrimary: {
-      backgroundColor: '#22c55e',
+      backgroundColor: '#dc2626',
       '&:hover': {
-        backgroundColor: '#16a34a',
+        backgroundColor: '#b91c1c',
       },
     },
     footerActionLink: {
-      color: '#3b82f6',
+      color: '#dc2626',
     },
   },
 };

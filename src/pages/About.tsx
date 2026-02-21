@@ -30,7 +30,7 @@ function About() {
           </h2>
 
           <div className="mb-4">
-            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
+            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: '#dc2626' }}>
               Quarter Jr / Quarter Pro
             </h3>
             <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
@@ -42,7 +42,7 @@ function About() {
           </div>
 
           <div className="mb-4">
-            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
+            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: '#dc2626' }}>
               Bonneville Jr / Bonneville Pro
             </h3>
             <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
@@ -52,24 +52,14 @@ function About() {
             </p>
           </div>
 
-          <div className="mb-4">
-            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
+          <div>
+            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: '#dc2626' }}>
               Engine Jr / Engine Pro
             </h3>
             <p className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
               Engine dyno simulation and power curve analysis. Engine Jr covers core design inputs
               and performance outputs; Engine Pro adds flowbench data, mechanical details, and recommendations.
             </p>
-          </div>
-
-          <div>
-            <h3 className="mb-2" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-primary)' }}>
-              Additional Modules
-            </h3>
-            <ul className="text-muted" style={{ fontSize: '0.95rem', lineHeight: '1.6', marginLeft: 'var(--space-5)' }}>
-              <li><strong>Four Link Pro:</strong> Suspension geometry and anti-squat analysis</li>
-              <li><strong>Clutch Pro:</strong> Clutch setup and management simulation</li>
-            </ul>
           </div>
         </div>
 
@@ -82,13 +72,13 @@ function About() {
           <div style={{ fontSize: '0.95rem', lineHeight: '1.8' }}>
             <p className="text-muted mb-2">
               <strong>Website:</strong>{' '}
-              <a href="https://racingsystemsanalysis.com" style={{ color: 'var(--color-primary)' }}>
+              <a href="https://racingsystemsanalysis.com" style={{ color: '#dc2626' }}>
                 racingsystemsanalysis.com
               </a>
             </p>
             <p className="text-muted mb-2">
               <strong>Email:</strong>{' '}
-              <a href="mailto:support@racingsystemsanalysis.com" style={{ color: 'var(--color-primary)' }}>
+              <a href="mailto:support@racingsystemsanalysis.com" style={{ color: '#dc2626' }}>
                 support@racingsystemsanalysis.com
               </a>
             </p>
@@ -100,7 +90,7 @@ function About() {
 
         {/* Footer */}
         <div className="text-center text-muted" style={{ fontSize: '0.875rem', padding: 'var(--space-4)' }}>
-          <p>Racing Systems Analysis © 1992-2025</p>
+          <p>Racing Systems Analysis © 1992-2026</p>
           <p style={{ marginTop: 'var(--space-2)' }}>
             Trusted by racers worldwide for over 30 years
           </p>

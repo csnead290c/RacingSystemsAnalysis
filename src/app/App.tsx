@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { lazy, useState, useEffect, Suspense } from 'react';
+import { lazy, useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
@@ -191,17 +191,27 @@ function Navigation() {
   const { isAuthenticated, hasFeature, user } = useAuth();
   const { isClerkSignedIn } = useClerkRSA();
   const { can } = useCapabilities();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [, forceUpdate] = useState(0);
+  const menuRef = useRef<HTMLElement>(null);
 
   // Listen for products update event to re-render navigation
   useEffect(() => {
-    const handleProductsUpdate = () => {
-      forceUpdate(n => n + 1);
-    };
+    const handleProductsUpdate = () => { forceUpdate(n => n + 1); };
     window.addEventListener('rsa-products-updated', handleProductsUpdate);
     return () => window.removeEventListener('rsa-products-updated', handleProductsUpdate);
   }, []);
+
+  // Close menu on ESC key
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
+  // Close menu on route change
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -225,8 +235,8 @@ function Navigation() {
     fontWeight: 700,
     padding: '1px 5px',
     borderRadius: '6px',
-    backgroundColor: tier === 'Pro' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.1)',
-    color: tier === 'Pro' ? '#93c5fd' : 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: tier === 'Pro' ? 'rgba(220, 38, 38, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+    color: tier === 'Pro' ? '#fca5a5' : 'rgba(255, 255, 255, 0.6)',
     letterSpacing: '0.3px',
     textTransform: 'uppercase' as const,
     lineHeight: '1.4',
@@ -245,7 +255,7 @@ function Navigation() {
   const { features } = useSubscription();
   const canAccessTeam = isLoggedIn && features.teamManagement;
 
-  const close = () => setMobileMenuOpen(false);
+  const close = useCallback(() => setMenuOpen(false), []);
 
   // ── Primary links: always visible in desktop top bar ──
   const primaryLinks = (
@@ -295,7 +305,7 @@ function Navigation() {
         {/* Hamburger for secondary items — always visible on desktop too */}
         <button
           className="rsa-more-btn"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onClick={() => setMenuOpen(o => !o)}
           style={{
             background: 'none',
             border: 'none',
@@ -307,6 +317,7 @@ function Navigation() {
             lineHeight: 1,
           }}
           aria-label="More menu"
+          aria-expanded={menuOpen}
           title="More"
         >
           ☰
@@ -316,7 +327,7 @@ function Navigation() {
       {/* Mobile hamburger button — replaces entire nav on small screens */}
       <button
         className="rsa-mobile-btn"
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        onClick={() => setMenuOpen(o => !o)}
         style={{
           display: 'none',
           background: 'none',
@@ -327,18 +338,34 @@ function Navigation() {
           padding: '4px 8px',
         }}
         aria-label="Toggle menu"
+        aria-expanded={menuOpen}
       >
-        {mobileMenuOpen ? '✕' : '☰'}
+        {menuOpen ? '✕' : '☰'}
       </button>
 
+      {/* Backdrop — click outside to close */}
+      {menuOpen && (
+        <div
+          data-testid="rsa-menu-backdrop"
+          onClick={close}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999,
+          }}
+        />
+      )}
+
       {/* Dropdown menu (shared by desktop "more" and mobile hamburger) */}
-      {mobileMenuOpen && (
+      {menuOpen && (
         <nav
+          ref={menuRef}
           className="rsa-dropdown-nav"
+          data-testid="rsa-dropdown-nav"
           style={{
             position: 'absolute',
             top: '100%',
-            right: 0,
+            right: '1rem',
             minWidth: '180px',
             backgroundColor: 'var(--color-header-bg)',
             padding: '0.75rem',

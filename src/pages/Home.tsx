@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
+import { listEngines, type EngineListItem } from '../state/engines';
 import { useAuth, useClerkRSA } from '../domain/auth';
 import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehicles } from '../domain/config/guards';
 import { useCapabilities } from '../domain/config/useCapabilities';
@@ -15,6 +16,7 @@ function Home() {
   const { isClerkSignedIn, rsaUser } = useClerkRSA();
   const { can } = useCapabilities();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
+  const [engines, setEngines] = useState<EngineListItem[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Check if user is logged in (either legacy or Clerk)
@@ -25,8 +27,9 @@ function Home() {
   useEffect(() => {
     const loadData = async () => {
       if (isLoggedIn) {
-        const data = await loadVehicles();
-        setVehicles(data);
+        const [vData, eData] = await Promise.all([loadVehicles(), listEngines()]);
+        setVehicles(vData);
+        setEngines(eData);
       }
       setLoading(false);
     };
@@ -47,6 +50,8 @@ function Home() {
   if (!isLoggedIn) {
     return <Landing />;
   }
+
+  const engineProgramName = getEngineProgramName(can);
 
   // Dashboard for authenticated users
   return (
@@ -76,8 +81,8 @@ function Home() {
                   alignItems: 'center',
                   gap: '1rem',
                   padding: '1.25rem 1rem',
-                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.08))',
-                  borderLeft: '3px solid var(--color-primary)',
+                  background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.08), rgba(239, 68, 68, 0.06))',
+                  borderLeft: '3px solid #dc2626',
                 }}
               >
                 <div style={{ fontSize: '2rem' }}>🏁</div>
@@ -104,9 +109,9 @@ function Home() {
                 borderLeft: '3px solid #ef4444',
               }}
             >
-              <div style={{ fontSize: '2rem' }}>�</div>
+              <div style={{ fontSize: '2rem' }}>🔧</div>
               <div>
-                <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1rem' }}>{getEngineProgramName(can)}</h4>
+                <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1rem' }}>{engineProgramName}</h4>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
                   Dyno curve & engine analysis
                 </p>
@@ -134,7 +139,7 @@ function Home() {
                   padding: '0.75rem',
                 }}
               >
-                <div style={{ fontSize: '1.5rem' }}>�</div>
+                <div style={{ fontSize: '1.5rem' }}>🚗</div>
                 <div>
                   <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Vehicles</h4>
                   <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
@@ -213,9 +218,9 @@ function Home() {
           </div>
         </div>
 
-        {/* Recent Vehicles */}
+        {/* Your Vehicles */}
         {vehicles.length > 0 && (
-          <div>
+          <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
               Your Vehicles
             </h3>
@@ -252,6 +257,78 @@ function Home() {
             </div>
           </div>
         )}
+
+        {/* Your Engines */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text)' }}>
+            Your Engines
+          </h3>
+          {engines.length > 0 ? (
+            <div className="card" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '320px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ textAlign: 'left', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Name</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Peak HP</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>RPM</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>CID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {engines.slice(0, 5).map((e) => (
+                    <tr key={e.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.5rem' }}>
+                        <Link to="/engine-sim" style={{ color: 'var(--color-primary)' }}>{e.name}</Link>
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatHp(e.peakHP)}</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{e.rpmAtPeakHP.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{e.displacementCID ? Math.round(e.displacementCID) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {engines.length > 5 && (
+                <div style={{ padding: '0.5rem', textAlign: 'center' }}>
+                  <Link to="/engine-sim" style={{ fontSize: '0.875rem', color: 'var(--color-primary)' }}>
+                    View all {engines.length} engines →
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              className="card"
+              style={{
+                padding: '1.5rem',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ fontSize: '2rem' }}>🔧</div>
+              <p style={{ margin: 0, color: 'var(--color-muted)', fontSize: '0.9rem' }}>
+                Save engines to see them here
+              </p>
+              <Link
+                to="/engine-sim"
+                style={{
+                  display: 'inline-block',
+                  padding: '0.5rem 1.25rem',
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                }}
+              >
+                Go to {engineProgramName}
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </Page>
   );

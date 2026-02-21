@@ -24,7 +24,7 @@ export default function Landing() {
       <section style={{
         padding: '80px 20px 60px',
         textAlign: 'center',
-        background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%)',
+        background: 'linear-gradient(180deg, rgba(220, 38, 38, 0.08) 0%, transparent 100%)',
       }}>
         <div style={{ maxWidth: '900px', margin: '0 auto' }}>
           <div style={{ 
@@ -39,7 +39,7 @@ export default function Landing() {
               fontSize: '2.5rem', 
               fontWeight: 800, 
               margin: 0,
-              background: 'linear-gradient(135deg, #3b82f6, #22c55e)',
+              background: 'linear-gradient(135deg, #dc2626, #1a1a1a)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}>
@@ -64,7 +64,7 @@ export default function Landing() {
             lineHeight: 1.6,
           }}>
             The modern drag racing platform that combines physics-based simulation 
-            with AI-powered predictions to help you be <strong>deadly consistent</strong>.
+            with real-world data to help you be <strong>deadly consistent</strong>.
           </p>
           
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -72,13 +72,13 @@ export default function Landing() {
               to={getStartedLink}
               style={{
                 padding: '16px 32px',
-                backgroundColor: '#22c55e',
+                backgroundColor: '#dc2626',
                 color: 'white',
                 borderRadius: '8px',
                 textDecoration: 'none',
                 fontWeight: 700,
                 fontSize: '1.1rem',
-                boxShadow: '0 4px 14px rgba(34, 197, 94, 0.4)',
+                boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)',
                 transition: 'transform 0.2s, box-shadow 0.2s',
               }}
             >
@@ -126,11 +126,11 @@ export default function Landing() {
           flexWrap: 'wrap',
         }}>
           <div>
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--color-accent)' }}>10,000+</div>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: '#dc2626' }}>10,000+</div>
             <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Runs Simulated</div>
           </div>
           <div>
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: '#22c55e' }}>±0.01s</div>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: '#dc2626' }}>±0.01s</div>
             <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Prediction Accuracy</div>
           </div>
           <div>
@@ -229,7 +229,7 @@ export default function Landing() {
             maxWidth: '600px',
             margin: '0 auto 48px',
           }}>
-            From prediction to logging to opponent tracking — all in one place.
+            From ET prediction to engine simulation to vehicle setup — all in one place.
           </p>
           
           <div style={{ 
@@ -245,33 +245,33 @@ export default function Landing() {
                 tag: 'Core',
               },
               {
+                icon: '🔧',
+                title: 'Engine Simulation',
+                desc: 'Build and analyze engine dyno curves. Compare setups, estimate peak HP, and optimize your powerplant.',
+                tag: 'Core',
+              },
+              {
                 icon: '🌡️',
                 title: 'Live Weather',
                 desc: 'Auto-fetch weather from any track. DA, density altitude, and correction factors calculated instantly.',
                 tag: 'Core',
               },
               {
-                icon: '📊',
-                title: 'Run Logbook',
-                desc: 'Log runs in seconds. Track trends, compare conditions, and never lose data again.',
+                icon: '🚗',
+                title: 'Vehicle Garage',
+                desc: 'Store and manage all your vehicle setups. Swap between cars instantly and keep every detail organized.',
                 tag: 'Core',
               },
               {
-                icon: '🤖',
-                title: 'AI Opponent Prediction',
-                desc: 'Track opponents and predict their next run. Know their tendencies before they stage.',
-                tag: 'Pro',
+                icon: '🔢',
+                title: 'Racing Calculators',
+                desc: 'Gear ratio, converter stall, weight-to-power, and more. Essential math tools for every racer.',
+                tag: 'Core',
               },
               {
                 icon: '⚡',
-                title: 'Optimizer',
+                title: 'Pro Optimizer',
                 desc: 'One-click find your best gear ratio or converter stall. Stop guessing, start optimizing.',
-                tag: 'Pro',
-              },
-              {
-                icon: '🏆',
-                title: 'Race Day Dashboard',
-                desc: 'Live dial-in, round tracking, weather updates — your command center at the track.',
                 tag: 'Pro',
               },
             ].map(feature => (
@@ -291,8 +291,8 @@ export default function Landing() {
                     top: '12px',
                     right: '12px',
                     padding: '4px 8px',
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                    color: 'var(--color-accent)',
+                    backgroundColor: 'rgba(220, 38, 38, 0.2)',
+                    color: '#dc2626',
                     borderRadius: '4px',
                     fontSize: '0.7rem',
                     fontWeight: 600,
@@ -349,7 +349,7 @@ export default function Landing() {
                 listStyle: 'none',
                 fontSize: '0.9rem',
               }}>
-                {['Quarter Jr', 'Weather Integration', 'Run Logbook', 'Dial-In Calculator', '5 Vehicles'].map(f => (
+                {['Quarter Jr', 'Engine Jr', 'Weather Integration', 'Racing Calculators', '5 Vehicles'].map(f => (
                   <li key={f} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
                     ✓ {f}
                   </li>
@@ -377,7 +377,7 @@ export default function Landing() {
               padding: '32px 24px',
               backgroundColor: 'var(--color-surface)',
               borderRadius: '16px',
-              border: '2px solid var(--color-accent)',
+              border: '2px solid #dc2626',
               position: 'relative',
             }}>
               <div style={{
@@ -386,7 +386,7 @@ export default function Landing() {
                 left: '50%',
                 transform: 'translateX(-50%)',
                 padding: '4px 16px',
-                backgroundColor: 'var(--color-accent)',
+                backgroundColor: '#dc2626',
                 color: 'white',
                 borderRadius: '12px',
                 fontSize: '0.8rem',
@@ -408,7 +408,7 @@ export default function Landing() {
                 listStyle: 'none',
                 fontSize: '0.9rem',
               }}>
-                {['Everything in Racer', 'AI Opponent Prediction', 'Race Day Dashboard', 'Optimizer Tools', 'Unlimited Vehicles'].map(f => (
+                {['Everything in Racer', 'Quarter Pro', 'Engine Pro', 'Optimizer Tools', 'Unlimited Vehicles'].map(f => (
                   <li key={f} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
                     ✓ {f}
                   </li>
@@ -419,7 +419,7 @@ export default function Landing() {
                 style={{
                   display: 'block',
                   padding: '12px 24px',
-                  backgroundColor: 'var(--color-accent)',
+                  backgroundColor: '#dc2626',
                   color: 'white',
                   borderRadius: '8px',
                   textDecoration: 'none',
@@ -432,31 +432,8 @@ export default function Landing() {
           </div>
           
           <p style={{ marginTop: '24px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-            Save 17% with annual billing • <Link to="/pricing" style={{ color: 'var(--color-accent)' }}>See all plans</Link>
+            Save 17% with annual billing • <Link to="/pricing" style={{ color: '#dc2626' }}>See all plans</Link>
           </p>
-        </div>
-      </section>
-
-      {/* Testimonial / Quote */}
-      <section style={{ 
-        padding: '80px 20px',
-        backgroundColor: 'var(--color-surface)',
-        textAlign: 'center',
-      }}>
-        <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-          <blockquote style={{ 
-            fontSize: '1.5rem', 
-            fontStyle: 'italic',
-            lineHeight: 1.6,
-            margin: '0 0 24px',
-            color: 'var(--color-text)',
-          }}>
-            "RSA helped me understand why my car was running different every round. 
-            Now I'm deadly consistent and turning on more win lights than ever."
-          </blockquote>
-          <div style={{ color: 'var(--color-text-muted)' }}>
-            — Bracket Racer, Super Pro Class
-          </div>
         </div>
       </section>
 
@@ -482,13 +459,13 @@ export default function Landing() {
             style={{
               display: 'inline-block',
               padding: '18px 48px',
-              backgroundColor: '#22c55e',
+              backgroundColor: '#dc2626',
               color: 'white',
               borderRadius: '8px',
               textDecoration: 'none',
               fontWeight: 700,
               fontSize: '1.2rem',
-              boxShadow: '0 4px 14px rgba(34, 197, 94, 0.4)',
+              boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)',
             }}
           >
             Get Started Now
@@ -514,10 +491,8 @@ export default function Landing() {
             flexWrap: 'wrap',
           }}>
             <Link to="/pricing" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Pricing</Link>
-            <Link to="/features" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Features</Link>
-            <Link to="/calcs" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Free Calculators</Link>
             <Link to="/about" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>About</Link>
-            <Link to="/contact" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Contact</Link>
+            <Link to="/calcs" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Free Calculators</Link>
           </div>
           <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0 }}>
             © {new Date().getFullYear()} Racing Systems Analysis. All rights reserved.
@@ -562,7 +537,7 @@ export default function Landing() {
                 to={getStartedLink}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: '#22c55e',
+                  backgroundColor: '#dc2626',
                   color: 'white',
                   borderRadius: '8px',
                   textDecoration: 'none',
