@@ -60,6 +60,15 @@ export const INTERNAL_ROUTES: Record<string, InternalModule> = {
   '/dial-in': 'dialIn',
 };
 
+/** Public core routes (always safe to link for non-internal users). */
+export const PUBLIC_CORE_ROUTES = [
+  '/et-sim',
+  '/engine-sim',
+  '/vehicles',
+  '/calculators',
+  '/about',
+] as const;
+
 // ── Context for visibility checks ──────────────────────────────────
 
 export interface VisibilityContext {

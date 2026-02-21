@@ -22,6 +22,7 @@ import {
   isInternalRoute,
   INTERNAL_MODULES,
   INTERNAL_ROUTES,
+  PUBLIC_CORE_ROUTES,
   type VisibilityContext,
 } from '../../../domain/ui/publicSurface';
 
@@ -247,9 +248,14 @@ describe('Keyboard shortcut gating (logic-level)', () => {
 
 describe('Coming Soon page links (logic-level)', () => {
   it('core module paths are all public (not internal)', () => {
-    const coreModulePaths = ['/et-sim', '/engine-sim', '/vehicles', '/calculators'];
-    for (const path of coreModulePaths) {
+    for (const path of PUBLIC_CORE_ROUTES) {
       expect(isInternalRoute(path)).toBe(false);
+    }
+  });
+
+  it('core route list does not include any internal paths', () => {
+    for (const path of PUBLIC_CORE_ROUTES) {
+      expect(Object.keys(INTERNAL_ROUTES)).not.toContain(path);
     }
   });
 });

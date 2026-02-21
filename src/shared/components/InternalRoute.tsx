@@ -21,6 +21,8 @@
 
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../domain/auth';
+import { useCapabilities } from '../../domain/config/useCapabilities';
+import { getQuarterProgramName, getEngineProgramName } from '../../domain/ui/programDisplayNames';
 import { isInternalUser, buildVisibilityContext } from '../../domain/ui/publicSurface';
 
 interface InternalRouteProps {
@@ -39,9 +41,10 @@ export default function InternalRoute({ children }: InternalRouteProps) {
 }
 
 function ComingSoon() {
+  const { can } = useCapabilities();
   const coreModules = [
-    { to: '/et-sim', label: 'Quarter Mile Sim', icon: '🏁' },
-    { to: '/engine-sim', label: 'Engine Sim', icon: '🔧' },
+    { to: '/et-sim', label: getQuarterProgramName(can), icon: '🏁' },
+    { to: '/engine-sim', label: getEngineProgramName(can), icon: '🔧' },
     { to: '/vehicles', label: 'Vehicles', icon: '🚗' },
     { to: '/calculators', label: 'Calculators', icon: '🔢' },
   ];
