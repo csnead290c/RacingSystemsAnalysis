@@ -19,6 +19,7 @@ import {
 } from '../shared/components/WorksheetModal';
 import { TOOLTIPS } from '../domain/config/tooltips';
 import { importDatFile } from '../domain/import';
+import { isVehicleProLocked } from '../domain/config/vehicleProLock';
 
 type TransType = 'clutch' | 'converter';
 
@@ -1466,10 +1467,27 @@ function Vehicles() {
                 </tr>
               </thead>
               <tbody>
-                {filteredVehicles.map((vehicle) => (
+                {filteredVehicles.map((vehicle) => {
+                  const vLock = isVehicleProLocked(vehicle, features.quarterProFields);
+                  return (
                 <tr key={vehicle.id}>
                   <td style={{ fontWeight: '500' }}>
                     {vehicle.name}
+                    {vLock.locked && (
+                      <span style={{ 
+                        marginLeft: '0.5rem', 
+                        padding: '0.125rem 0.375rem', 
+                        fontSize: '0.7rem', 
+                        backgroundColor: 'rgba(245, 158, 11, 0.15)', 
+                        color: '#d97706',
+                        borderRadius: '9999px',
+                        fontWeight: 500,
+                      }}
+                        title={`Pro features: ${vLock.proFields.join(', ')}`}
+                      >
+                        🔒 Pro
+                      </span>
+                    )}
                     {vehicle.is_public && (
                       <span style={{ 
                         marginLeft: '0.5rem', 
@@ -1503,6 +1521,7 @@ function Vehicles() {
                     <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
                       <button
                         onClick={() => {
+                          if (vLock.locked) return;
                           // Navigate to ET Sim with this vehicle selected
                           // Store selected vehicle ID in sessionStorage for Predict page to pick up
                           sessionStorage.setItem('selectedVehicleId', vehicle.id);
@@ -1510,13 +1529,15 @@ function Vehicles() {
                           navigate('/predict');
                         }}
                         className="btn"
+                        disabled={vLock.locked}
                         style={{
                           padding: 'var(--space-2) var(--space-3)',
                           fontSize: '0.875rem',
+                          ...(vLock.locked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
                         }}
-                        title="Run ET simulation with this vehicle"
+                        title={vLock.locked ? 'Upgrade to Pro to run this vehicle' : 'Run ET simulation with this vehicle'}
                       >
-                        Run Sim
+                        {vLock.locked ? '🔒 Pro' : 'Run Sim'}
                       </button>
                       <button
                         onClick={() => handleEdit(vehicle)}
@@ -1552,7 +1573,8 @@ function Vehicles() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                  );
+                })}
             </tbody>
           </table>
           </div>

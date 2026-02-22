@@ -861,7 +861,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
   // VB6: HP = gc_HPTQMult.Value * HP / hpc
   const launchRPM_calc = isClutch 
     ? (clutch?.launchRPM ?? (vehicle as any).clutchLaunchRPM ?? stallRPM) 
-    : stallRPM;
+    : ((vehicle as any).converterLaunchRPM ?? converter?.launchRPM ?? stallRPM);
   const HP_launch_calc = taby(xrpm, yhp, NHP, 1, launchRPM_calc);
   // Use hpTqMult_early (defined earlier for stall calculation)
   const HP_corrected = hpTqMult_early * HP_launch_calc / hpc;

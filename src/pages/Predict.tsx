@@ -24,6 +24,7 @@ import { getQuarterProgramName, getLandSpeedProgramName } from '../domain/ui/pro
 import { formatHp, formatLb } from '../shared/format/formatNumber';
 import { useSharedEnv } from '../shared/state/useSharedEnv';
 import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
+import { isVehicleProLocked } from '../domain/config/vehicleProLock';
 
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -245,6 +246,16 @@ function Predict() {
     };
     
     function runSimulation() {
+      // Client-side guard: prevent running sim with Pro-locked vehicle
+      if (currentVehicle) {
+        const lock = isVehicleProLocked(currentVehicle, features.quarterProFields);
+        if (lock.locked) {
+          setError(`This vehicle requires Pro access (uses: ${lock.proFields.slice(0, 3).join(', ')})`);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(true);
       setError(null);
 
@@ -430,9 +441,15 @@ function Predict() {
 
   // Show vehicle selector if no vehicle is loaded
   if (showVehicleSelector || (!vehicle && !loading)) {
+    // Check if selected vehicle is Pro-locked
+    const selectedVehicleObj = availableVehicles.find(v => v.id === selectedVehicleId);
+    const proLock = selectedVehicleObj
+      ? isVehicleProLocked(selectedVehicleObj, features.quarterProFields)
+      : { locked: false, proFields: [] as string[] };
+
     const handleStartSimulation = () => {
-      const selectedVehicle = availableVehicles.find(v => v.id === selectedVehicleId);
-      if (selectedVehicle) {
+      const selectedVehicle = selectedVehicleObj;
+      if (selectedVehicle && !proLock.locked) {
         setVehicle(selectedVehicle as Vehicle);
         setEnv(DEFAULT_ENV);
         setShowVehicleSelector(false);
@@ -482,13 +499,36 @@ function Predict() {
                       fontSize: '1rem',
                     }}
                   >
-                    {availableVehicles.map(v => (
-                      <option key={v.id} value={v.id}>
-                        {v.name} ({formatHp(v.powerHP)} HP, {formatLb(v.weightLb)} lb)
-                      </option>
-                    ))}
+                    {availableVehicles.map(v => {
+                      const vLock = isVehicleProLocked(v, features.quarterProFields);
+                      return (
+                        <option key={v.id} value={v.id} disabled={vLock.locked}>
+                          {vLock.locked ? '🔒 ' : ''}{v.name} ({formatHp(v.powerHP)} HP, {formatLb(v.weightLb)} lb)
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
+
+                {proLock.locked && (
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.85rem',
+                  }}>
+                    <div style={{ fontWeight: 600, color: '#f59e0b', marginBottom: '0.25rem' }}>
+                      🔒 Pro Vehicle — Upgrade Required
+                    </div>
+                    <div style={{ color: 'var(--color-muted)', fontSize: '0.8rem' }}>
+                      This vehicle uses Pro features: {proLock.proFields.slice(0, 3).join(', ')}
+                      {proLock.proFields.length > 3 ? ` (+${proLock.proFields.length - 3} more)` : ''}.
+                      <Link to="/account" style={{ marginLeft: '0.5rem', color: '#3b82f6' }}>Upgrade to Pro →</Link>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
@@ -520,9 +560,15 @@ function Predict() {
                 <button
                   onClick={handleStartSimulation}
                   className="btn"
-                  style={{ width: '100%', padding: '0.875rem', fontSize: '1rem' }}
+                  disabled={proLock.locked}
+                  style={{
+                    width: '100%',
+                    padding: '0.875rem',
+                    fontSize: '1rem',
+                    ...(proLock.locked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                  }}
                 >
-                  Run Simulation →
+                  {proLock.locked ? '🔒 Upgrade to Run' : 'Run Simulation →'}
                 </button>
               </>
             )}

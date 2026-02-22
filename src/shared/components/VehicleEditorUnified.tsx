@@ -829,6 +829,15 @@ export default function VehicleEditorUnified({
                   onChange={(e) => updateField('converterStallRPM', parseFloat(e.target.value))}
                 />
               </Field>
+              <Field label="Launch RPM" hint="RPM at launch (defaults to Stall)" compact={compact}>
+                <input
+                  type="number"
+                  step="100"
+                  style={styles.input}
+                  value={vehicle.converterLaunchRPM ?? vehicle.converterStallRPM ?? 3500}
+                  onChange={(e) => updateField('converterLaunchRPM', parseFloat(e.target.value))}
+                />
+              </Field>
               {!showAdvanced && (
                 /* Simple mode: show diameter */
                 <Field label="Diameter (in)" compact={compact}>
