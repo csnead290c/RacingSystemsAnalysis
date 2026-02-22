@@ -907,6 +907,13 @@ function Predict() {
           .et-slip-actions {
             grid-template-columns: 1fr !important;
           }
+          .et-slip-actions button,
+          .et-slip-actions span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
         }
         /* Print styles */
         @media print {
@@ -1068,7 +1075,7 @@ function Predict() {
             </div>
             
             {/* Action Buttons */}
-            <div className="et-slip-actions" style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+            <div className="et-slip-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px', minWidth: 0 }}>
               {features.quarterProFields ? (
                 <button
                   onClick={handleSaveRun}
@@ -1163,7 +1170,7 @@ racingsystemsanalysis.com`;
                   }}
                   title="Detailed Parameters — step-by-step simulation output"
                 >
-                  📊 Detail
+                  📊 Detail
                 </button>
               )}
             </div>

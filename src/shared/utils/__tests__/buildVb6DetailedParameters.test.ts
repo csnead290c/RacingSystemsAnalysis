@@ -10,8 +10,6 @@ import { describe, it, expect } from 'vitest';
 import {
   fromPrintedRows,
   fromTraces,
-  buildCSV,
-  type DetailedParamRow,
 } from '../buildVb6DetailedParameters';
 import type { VB6PrintedRow } from '../../../domain/physics/vb6/vb6PrintedRow';
 import { simulateVB6Exact } from '../../../domain/physics/models/vb6Exact';
@@ -196,44 +194,128 @@ describe('fromTraces', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Unit tests: buildCSV
+// Shift labeling: Pre/Post
 // ---------------------------------------------------------------------------
 
-describe('buildCSV', () => {
-  it('produces valid CSV with header and data rows', () => {
-    const rows: DetailedParamRow[] = [
-      {
-        type: 'staged', reason: 'STAGED',
-        time: '0.00', dist: '0', mph: '0.0', accel: '0.00', rpm: '0', gear: '1', slip: '',
-        time_s: 0, dist_ft: 0, mph_num: 0, accel_g: 0, rpm_num: 0, gear_num: 1,
-      },
+describe('shift labeling (pre/post)', () => {
+  it('labels consecutive shift pair as Pre N\u2013M / Post N\u2013M', () => {
+    const input: VB6PrintedRow[] = [
+      makePrintedRow({
+        type: 'staged',
+        formatted: { time: '0.00', dist: '0', mph: '0.0', accel: '0.00', rpm: '0', gear: '1', slip: '' },
+        quantized: { time_s: 0, dist_ft: 0, mph: 0, accel_g: 0, rpm: 0, gear: 1 },
+        reason: 'STAGED',
+      }),
+      makePrintedRow({
+        type: 'shift',
+        formatted: { time: '1.04', dist: '50', mph: '60.0', accel: '1.00', rpm: '8,000', gear: '1', slip: '' },
+        quantized: { time_s: 1.04, dist_ft: 50, mph: 60, accel_g: 1.0, rpm: 8000, gear: 1 },
+        reason: 'SHIFT@1',
+      }),
+      makePrintedRow({
+        type: 'shift',
+        formatted: { time: '1.24', dist: '70', mph: '62.0', accel: '0.90', rpm: '6,500', gear: '2', slip: '' },
+        quantized: { time_s: 1.24, dist_ft: 70, mph: 62, accel_g: 0.9, rpm: 6500, gear: 2 },
+        reason: 'SHIFT@2',
+      }),
     ];
-    const csv = buildCSV(rows);
-    const lines = csv.split('\n');
-    expect(lines[0]).toBe('Time_s,Dist_ft,MPH,Accel_g,RPM,Gear,Slip,Type');
-    expect(lines[1]).toBe('0.00,0,0.0,0.00,0,1,,staged');
+
+    const rows = fromPrintedRows(input);
+    expect(rows[1].label).toBe('Pre 1\u20132 shift');
+    expect(rows[2].label).toBe('Post 1\u20132 shift');
+  });
+
+  it('labels two consecutive shift pairs correctly', () => {
+    const input: VB6PrintedRow[] = [
+      makePrintedRow({ type: 'shift',
+        formatted: { time: '1.04', dist: '50', mph: '60.0', accel: '1.00', rpm: '8,000', gear: '1', slip: '' },
+        quantized: { time_s: 1.04, dist_ft: 50, mph: 60, accel_g: 1.0, rpm: 8000, gear: 1 },
+        reason: 'SHIFT@1',
+      }),
+      makePrintedRow({ type: 'shift',
+        formatted: { time: '1.24', dist: '70', mph: '62.0', accel: '0.90', rpm: '6,500', gear: '2', slip: '' },
+        quantized: { time_s: 1.24, dist_ft: 70, mph: 62, accel_g: 0.9, rpm: 6500, gear: 2 },
+        reason: 'SHIFT@2',
+      }),
+      makePrintedRow({ type: 'shift',
+        formatted: { time: '1.69', dist: '120', mph: '80.0', accel: '0.80', rpm: '8,200', gear: '2', slip: '' },
+        quantized: { time_s: 1.69, dist_ft: 120, mph: 80, accel_g: 0.8, rpm: 8200, gear: 2 },
+        reason: 'SHIFT@2',
+      }),
+      makePrintedRow({ type: 'shift',
+        formatted: { time: '1.89', dist: '150', mph: '82.0', accel: '0.75', rpm: '6,800', gear: '3', slip: '' },
+        quantized: { time_s: 1.89, dist_ft: 150, mph: 82, accel_g: 0.75, rpm: 6800, gear: 3 },
+        reason: 'SHIFT@3',
+      }),
+    ];
+
+    const rows = fromPrintedRows(input);
+    expect(rows[0].label).toBe('Pre 1\u20132 shift');
+    expect(rows[1].label).toBe('Post 1\u20132 shift');
+    expect(rows[2].label).toBe('Pre 2\u20133 shift');
+    expect(rows[3].label).toBe('Post 2\u20133 shift');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Columns match VB6 spec
+// Rollout row formatting
 // ---------------------------------------------------------------------------
 
-describe('VB6 column spec', () => {
-  it('DetailedParamRow has all 7 VB6 columns', () => {
-    const row: DetailedParamRow = {
-      type: 'time', reason: 'TIME@0.50',
-      time: '0.50', dist: '120', mph: '55.3', accel: '1.10', rpm: '6,500', gear: '2', slip: '',
-      time_s: 0.5, dist_ft: 120, mph_num: 55.3, accel_g: 1.1, rpm_num: 6500, gear_num: 2,
-    };
-    // VB6 columns: Time, Dist, MPH, Accel, RPM, Gear, Slip
-    expect(row.time).toBeDefined();
-    expect(row.dist).toBeDefined();
-    expect(row.mph).toBeDefined();
-    expect(row.accel).toBeDefined();
-    expect(row.rpm).toBeDefined();
-    expect(row.gear).toBeDefined();
-    expect(row.slip).toBeDefined();
+describe('rollout row formatting', () => {
+  it('rollout row time contains race time and rollout time', () => {
+    const input: VB6PrintedRow[] = [
+      makePrintedRow({
+        type: 'rollout',
+        formatted: { time: '0.123/0.00 Rollout', dist: '1', mph: '5.0', accel: '0.50', rpm: '3,000', gear: '1', slip: '' },
+        quantized: { time_s: 0.12, dist_ft: 1, mph: 5, accel_g: 0.5, rpm: 3000, gear: 1 },
+        reason: 'ROLLOUT',
+      }),
+    ];
+
+    const rows = fromPrintedRows(input);
+    expect(rows[0].type).toBe('rollout');
+    expect(rows[0].label).toBe('Rollout');
+    // The time column preserves the VB6 "raceTime/rolloutTime Rollout" format
+    expect(rows[0].time).toContain('/0.00 Rollout');
+    expect(rows[0].time).toMatch(/^\d+\.\d+\/0\.00 Rollout$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Label generation
+// ---------------------------------------------------------------------------
+
+describe('label generation', () => {
+  it('generates correct labels for all row types', () => {
+    const input: VB6PrintedRow[] = [
+      makePrintedRow({ type: 'staged', reason: 'STAGED',
+        formatted: { time: '0.00', dist: '0', mph: '0.0', accel: '0.00', rpm: '0', gear: '1', slip: '' },
+        quantized: { time_s: 0, dist_ft: 0, mph: 0, accel_g: 0, rpm: 0, gear: 1 },
+      }),
+      makePrintedRow({ type: 'rollout', reason: 'ROLLOUT',
+        formatted: { time: '0.100/0.00 Rollout', dist: '1', mph: '3.0', accel: '0.30', rpm: '2,000', gear: '1', slip: '' },
+        quantized: { time_s: 0.1, dist_ft: 1, mph: 3, accel_g: 0.3, rpm: 2000, gear: 1 },
+      }),
+      makePrintedRow({ type: 'time', reason: 'TIME@0.50',
+        formatted: { time: '0.50', dist: '30', mph: '40.0', accel: '1.20', rpm: '6,000', gear: '1', slip: '' },
+        quantized: { time_s: 0.5, dist_ft: 30, mph: 40, accel_g: 1.2, rpm: 6000, gear: 1 },
+      }),
+      makePrintedRow({ type: 'distance', reason: 'DIST@60',
+        formatted: { time: '1.00', dist: '60', mph: '50.0', accel: '1.10', rpm: '7,000', gear: '1', slip: '' },
+        quantized: { time_s: 1.0, dist_ft: 60, mph: 50, accel_g: 1.1, rpm: 7000, gear: 1 },
+      }),
+      makePrintedRow({ type: 'speed', reason: 'SPEED@60',
+        formatted: { time: '0.90', dist: '45', mph: '60.0', accel: '1.00', rpm: '7,500', gear: '1', slip: '' },
+        quantized: { time_s: 0.9, dist_ft: 45, mph: 60, accel_g: 1.0, rpm: 7500, gear: 1 },
+      }),
+    ];
+
+    const rows = fromPrintedRows(input);
+    expect(rows[0].label).toBe('Staged');
+    expect(rows[1].label).toBe('Rollout');
+    expect(rows[2].label).toBe('t=0.50s');
+    expect(rows[3].label).toBe('60 ft');
+    expect(rows[4].label).toBe('60.0 mph');
   });
 });
 
@@ -306,6 +388,23 @@ describe('VB6 Parity: ProStock_Pro detailed parameters', () => {
     const shiftRows = rows.filter(r => r.type === 'shift');
     // ProStock_Pro has 5 gears → at least some shift events
     expect(shiftRows.length).toBeGreaterThan(0);
+  });
+
+  it('shift rows should have Pre/Post labels', () => {
+    const rows = fromPrintedRows(printedRows!);
+    const shiftRows = rows.filter(r => r.type === 'shift');
+    // Every shift row should have a Pre or Post label
+    for (const row of shiftRows) {
+      expect(row.label).toMatch(/^(Pre|Post) \d\u2013\d shift$/);
+    }
+  });
+
+  it('rollout row time contains VB6 format with /0.00 Rollout', () => {
+    const rows = fromPrintedRows(printedRows!);
+    const rolloutRow = rows.find(r => r.type === 'rollout');
+    expect(rolloutRow).toBeDefined();
+    expect(rolloutRow!.time).toContain('/0.00 Rollout');
+    expect(rolloutRow!.label).toBe('Rollout');
   });
 
   it('VB6 rounding: RPM values should be rounded to nearest 10', () => {
