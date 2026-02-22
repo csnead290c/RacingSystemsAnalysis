@@ -399,12 +399,26 @@ describe('VB6 Parity: ProStock_Pro detailed parameters', () => {
     }
   });
 
-  it('rollout row time contains VB6 format with /0.00 Rollout', () => {
+  it('rollout row time is non-zero and matches VB6 format "<rolloutTime>/0.00 Rollout"', () => {
     const rows = fromPrintedRows(printedRows!);
     const rolloutRow = rows.find(r => r.type === 'rollout');
     expect(rolloutRow).toBeDefined();
-    expect(rolloutRow!.time).toContain('/0.00 Rollout');
     expect(rolloutRow!.label).toBe('Rollout');
+
+    // Must match VB6 format: digits.digits/0.00 Rollout
+    expect(rolloutRow!.time).toMatch(/^[0-9]+\.[0-9]{3}\/0\.00 Rollout$/);
+
+    // Left value (rollout elapsed time) must be > 0
+    const leftValue = parseFloat(rolloutRow!.time.split('/')[0]);
+    expect(leftValue).toBeGreaterThan(0);
+
+    // Cross-reference: rollout row raw.time_s should match result's rollout time
+    const rolloutPrintedRow = printedRows!.find(r => r.type === 'rollout')!;
+    const debugRolloutTime = (result as any).debugData?.rollout?.time_s
+      ?? (result as any).debugData?.simParams?.rolloutTime_s;
+    if (debugRolloutTime !== undefined) {
+      expect(rolloutPrintedRow.raw.time_s).toBeCloseTo(debugRolloutTime, 4);
+    }
   });
 
   it('VB6 rounding: RPM values should be rounded to nearest 10', () => {

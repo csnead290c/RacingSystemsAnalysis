@@ -1687,7 +1687,8 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
         timerStartTime_s = state.time_s;
         
         // VB6 TIMESLIP.FRM:1373-1381 - Rollout row print
-        // VB6 prints the rollout row with ET=0 (time resets at rollout)
+        // VB6 prints BEFORE resetting time(L)=0, so time(L) is the absolute
+        // simulation time (staged→rollout). The "/0.00" suffix is the race ET (always 0 at rollout).
         // The printed values use Vel(L), AGS(L), EngRPM(L), iGear at this moment
         // NOTE: Land speed runs don't have a rollout row in the fixture
         if (!isLandSpeed) {
@@ -1696,7 +1697,7 @@ export function simulateVB6Exact(input: SimInputs): VB6ExactResult {
             state.L,
             1,  // iDist=1 for rollout
             {
-              time_s: 0,  // ET = 0 at rollout (VB6 line 1380: time(L) = 0)
+              time_s: state.time_s,  // VB6 prints BEFORE resetting time(L)=0, so this is absolute time (staged→rollout)
               dist_ft: 0,  // VB6 shows "Rollout" not a distance
               vel_fps: state.Vel_ftps,
               ags_g: state.AGS_g,
