@@ -126,6 +126,7 @@ function Home() {
                     <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Weight</th>
                     <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Power</th>
                     <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Tire</th>
+                    <th style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Last Run</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -137,6 +138,11 @@ function Home() {
                       <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatLb(v.weightLb)} lb</td>
                       <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatHp(v.powerHP)} HP</td>
                       <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)' }}>{formatIn(v.tireDiaIn)}"</td>
+                      <td style={{ textAlign: 'right', padding: '0.5rem', color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
+                        {v.lastSimQuarter
+                          ? `${v.lastSimQuarter.et_s.toFixed(2)} @ ${v.lastSimQuarter.mph.toFixed(1)}`
+                          : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

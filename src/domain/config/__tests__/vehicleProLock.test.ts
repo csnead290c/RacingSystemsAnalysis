@@ -140,6 +140,58 @@ describe('markProUsedIfNeeded', () => {
   });
 });
 
+// ── Trigger correctness (prevent accidental flips) ───────────────────
+
+describe('markProUsedIfNeeded — trigger correctness', () => {
+  it('advanced editor mode flips the flag', () => {
+    const v = { ...basicVehicle, editorMode: 'advanced' as const };
+    const result = markProUsedIfNeeded(v, true) as any;
+    expect(result.usesQuarterProFeatures).toBe(true);
+  });
+
+  it('throttle stop enabled flips the flag', () => {
+    const v = { ...basicVehicle, throttleStopEnabled: true };
+    const result = markProUsedIfNeeded(v, true) as any;
+    expect(result.usesQuarterProFeatures).toBe(true);
+  });
+
+  it('PMI fields flip the flag', () => {
+    const v = { ...basicVehicle, enginePMI: 3.0, transPMI: 0.5 };
+    const result = markProUsedIfNeeded(v, true) as any;
+    expect(result.usesQuarterProFeatures).toBe(true);
+  });
+
+  it('converter slippage flips the flag', () => {
+    const v = { ...basicVehicle, converterSlippage: 0.12 };
+    const result = markProUsedIfNeeded(v, true) as any;
+    expect(result.usesQuarterProFeatures).toBe(true);
+  });
+
+  it('basic-only edits do NOT flip the flag (weight, HP, gears, name)', () => {
+    const v = {
+      ...basicVehicle,
+      name: 'Renamed Car',
+      weightLb: 3200,
+      powerHP: 450,
+      rearGear: 4.10,
+      gearRatios: [2.48, 1.48, 1.0],
+      shiftRPMs: [6000, 6000],
+      rolloutIn: 14,
+      tireDiaIn: 29,
+      frontalAreaFt2: 22,
+      converterStallRPM: 3500,
+      converterLaunchRPM: 4200,
+      fuelSystem: 'Gas+Carb',
+      n2oEnabled: true,
+      bodyStyle: 1,
+      group: 'Test',
+      notes: 'Some notes',
+    };
+    const result = markProUsedIfNeeded(v, true) as any;
+    expect(result.usesQuarterProFeatures).toBeUndefined();
+  });
+});
+
 // ── Schema validation for new fields ──────────────────────────────────
 
 describe('Vehicle schema — new fields', () => {
