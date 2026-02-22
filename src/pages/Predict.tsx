@@ -1568,17 +1568,16 @@ racingsystemsanalysis.com`;
       
       {/* Detailed Parameters Modal */}
       <Suspense fallback={null}>
-        {simResult?.traces && (
-          <DetailedParametersModal
-            isOpen={showDetailedParams}
-            onClose={() => setShowDetailedParams(false)}
-            traces={simResult.traces as any}
-            raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
-            vehicleName={vehicle?.name}
-            et={simResult.et_s}
-            mph={simResult.mph}
-          />
-        )}
+        <DetailedParametersModal
+          isOpen={showDetailedParams}
+          onClose={() => setShowDetailedParams(false)}
+          printedRows={(simResult as any)?.printedRows}
+          traces={simResult?.traces as any}
+          raceLengthFt={RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320}
+          vehicleName={vehicle?.name}
+          et={simResult?.et_s}
+          mph={simResult?.mph}
+        />
       </Suspense>
       
       {/* Vehicle Editor Popup */}
