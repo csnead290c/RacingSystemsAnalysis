@@ -576,18 +576,16 @@ function Predict() {
                   >
                     {availableVehicles.map(v => {
                       const vLock = isVehicleProLocked(v, features.quarterProFields);
-                      const lastSim = v.lastSimQuarter;
-                      const lastRunText = lastSim ? ` — ${lastSim.et_s.toFixed(2)} @ ${lastSim.mph.toFixed(1)}` : '';
                       return (
                         <option key={v.id} value={v.id} disabled={vLock.locked}>
-                          {vLock.locked ? '🔒 ' : ''}{v.name} ({formatHp(v.powerHP)} HP, {formatLb(v.weightLb)} lb){lastRunText}
+                          {vLock.locked ? '🔒 ' : ''}{v.name} ({formatHp(v.powerHP)} HP, {formatLb(v.weightLb)} lb)
                         </option>
                       );
                     })}
                   </select>
                   {selectedVehicleObj && !proLock.locked && (selectedVehicleObj as Vehicle).savedEnvQuarter && (
                     <div style={{ marginTop: '0.375rem', fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                      ✓ Saved environment will be loaded for this vehicle
+                      ✓ Will load saved environment when you start simulation
                     </div>
                   )}
                   {selectedVehicleObj && !proLock.locked && (selectedVehicleObj as Vehicle).lastSimQuarter && (
