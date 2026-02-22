@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -124,6 +124,10 @@ function DataLoggerChart({
     new Set(['rpm', 'v_mph', 'a_g'])
   );
 
+  // Pinned tooltip state for touch-friendly inspection
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
   // Toggle a series on/off
   const toggleSeries = (key: SeriesKey) => {
     setEnabledSeries(prev => {
@@ -236,6 +240,26 @@ function DataLoggerChart({
     return shifts;
   }, [chartData]);
 
+  // Handle chart click to pin/unpin tooltip
+  const handleChartClick = useCallback((state: any) => {
+    if (!state || !state.activeTooltipIndex) {
+      // Click on empty area — clear pin
+      setPinnedIndex(prev => prev !== null ? null : prev);
+      return;
+    }
+    const idx = state.activeTooltipIndex;
+    setPinnedIndex(prev => prev === idx ? null : idx);
+  }, []);
+
+  // Handle scrub slider change
+  const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const idx = Number(e.target.value);
+    setPinnedIndex(idx);
+  }, []);
+
+  // Clear pin
+  const clearPin = useCallback(() => setPinnedIndex(null), []);
+
   if (!data || data.length === 0) {
     return (
       <div className="text-center text-muted" style={{ padding: 'var(--space-6)' }}>
@@ -247,6 +271,11 @@ function DataLoggerChart({
   // Count active axes for margin calculation
   const rightAxesCount = ['speed', 'accel', 'hp'].filter(a => activeYAxes.has(a)).length;
 
+  // Pinned data point for display
+  const pinnedPoint = pinnedIndex !== null && pinnedIndex >= 0 && pinnedIndex < chartData.length
+    ? chartData[pinnedIndex]
+    : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Responsive overrides for chart controls */}
@@ -255,6 +284,11 @@ function DataLoggerChart({
           .dlc-xaxis-btn { padding: 5px 12px !important; font-size: 0.75rem !important; }
           .dlc-series-row { gap: 4px !important; }
           .dlc-series-pill { padding: 3px 7px !important; font-size: 0.6rem !important; }
+          .dlc-legend { gap: 6px !important; font-size: 0.65rem !important; }
+        }
+        @media (max-width: 400px) {
+          .dlc-legend { display: none !important; }
+          .dlc-series-row { flex-wrap: nowrap !important; overflow-x: auto !important; }
         }
       `}</style>
       {/* Controls row */}
@@ -385,9 +419,9 @@ function DataLoggerChart({
       </div>
 
       {/* Chart */}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div ref={chartContainerRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 20, right: rightAxesCount * 35, left: 5, bottom: 20 }}>
+          <ComposedChart data={chartData} margin={{ top: 20, right: rightAxesCount * 35, left: 5, bottom: 20 }} onClick={handleChartClick}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
           
           {/* X-Axis - use 'number' type for proper scaling */}
@@ -494,6 +528,7 @@ function DataLoggerChart({
           ))}
 
           <Tooltip
+            active={pinnedIndex !== null ? true : undefined}
             contentStyle={{
               backgroundColor: 'var(--color-bg)',
               border: '1px solid var(--color-border)',
@@ -568,13 +603,84 @@ function DataLoggerChart({
         </ResponsiveContainer>
       </div>
 
+      {/* Pinned value readout */}
+      {pinnedPoint && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '4px 8px',
+          marginTop: '4px',
+          backgroundColor: 'var(--color-bg-secondary)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '0.7rem',
+          flexWrap: 'wrap',
+          border: '1px solid var(--color-border)',
+        }}>
+          <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+            {xAxisMode === 'time'
+              ? `T: ${pinnedPoint.t_s.toFixed(3)}s`
+              : `D: ${pinnedPoint.s_ft.toFixed(0)} ft`}
+          </span>
+          {enabledSeries.has('rpm') && <span style={{ color: SERIES_CONFIG.rpm.color }}>{Math.round(pinnedPoint.rpm)} RPM</span>}
+          {enabledSeries.has('v_mph') && <span style={{ color: SERIES_CONFIG.v_mph.color }}>{pinnedPoint.v_mph.toFixed(1)} mph</span>}
+          {enabledSeries.has('a_g') && <span style={{ color: SERIES_CONFIG.a_g.color }}>{pinnedPoint.a_g.toFixed(3)} g</span>}
+          {enabledSeries.has('hp') && pinnedPoint.hp != null && <span style={{ color: SERIES_CONFIG.hp.color }}>{Math.round(pinnedPoint.hp)} HP</span>}
+          <span style={{ color: 'var(--color-text-muted)' }}>Gear {pinnedPoint.gear}</span>
+          <button
+            onClick={clearPin}
+            data-testid="clear-pin"
+            style={{
+              marginLeft: 'auto',
+              padding: '1px 6px',
+              fontSize: '0.65rem',
+              border: '1px solid var(--color-border)',
+              borderRadius: '3px',
+              backgroundColor: 'transparent',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Scrub slider — mobile-first inspection */}
+      <div className="dlc-scrub-row" style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginTop: '4px',
+        fontSize: '0.7rem',
+        color: 'var(--color-text-muted)',
+      }}>
+        <span style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>Scrub</span>
+        <input
+          type="range"
+          min={0}
+          max={chartData.length - 1}
+          value={pinnedIndex ?? 0}
+          onChange={handleScrub}
+          data-testid="scrub-slider"
+          style={{ flex: 1, cursor: 'pointer' }}
+        />
+        <span style={{ whiteSpace: 'nowrap', minWidth: '60px', textAlign: 'right' }}>
+          {pinnedPoint
+            ? (xAxisMode === 'time'
+                ? `${pinnedPoint.t_s.toFixed(2)}s`
+                : `${pinnedPoint.s_ft.toFixed(0)} ft`)
+            : '—'}
+        </span>
+      </div>
+
       {/* Compact legend below chart */}
-      <div style={{ 
+      <div className="dlc-legend" style={{ 
         display: 'flex', 
         flexWrap: 'wrap', 
         justifyContent: 'center',
         gap: '12px',
-        marginTop: '8px',
+        marginTop: '6px',
         fontSize: '0.75rem',
       }}>
         {(Object.entries(SERIES_CONFIG) as [SeriesKey, typeof SERIES_CONFIG[SeriesKey]][]).map(([key, config]) => {

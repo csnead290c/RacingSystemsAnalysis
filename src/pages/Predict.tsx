@@ -692,12 +692,19 @@ function Predict() {
           gap: var(--space-2);
           height: calc(100vh - 90px);
           min-height: 450px;
+          max-width: 100%;
+          overflow: hidden;
+        }
+        .et-sim-dashboard * {
+          box-sizing: border-box;
         }
         .et-sim-top-row {
           display: flex;
           gap: var(--space-2);
           flex: 7;
           min-height: 200px;
+          min-width: 0;
+          max-width: 100%;
         }
         .et-sim-bottom-row {
           display: flex;
@@ -705,11 +712,15 @@ function Predict() {
           flex: 0 0 auto;
           min-height: 120px;
           max-height: 160px;
+          min-width: 0;
+          max-width: 100%;
         }
         .et-sim-chart-area {
           flex: 1;
           min-width: 0;
+          max-width: 100%;
           position: relative;
+          overflow: hidden;
         }
         .et-slip {
           font-family: 'Courier New', monospace;
@@ -732,6 +743,7 @@ function Predict() {
             0 4px 8px rgba(0,0,0,0.08),
             inset 0 0 0 1px rgba(0,0,0,0.05);
           width: 175px;
+          max-width: 100%;
           flex-shrink: 0;
           display: flex;
           flex-direction: column;
@@ -806,12 +818,15 @@ function Predict() {
           .et-sim-bottom-row {
             flex-direction: column;
             height: auto;
+            max-height: none;
             flex: none;
             gap: var(--space-2);
+            overflow: visible;
           }
           .et-sim-bottom-row > * {
             width: 100% !important;
             min-width: 0 !important;
+            max-width: 100% !important;
           }
         }
         /* Mobile phones */
@@ -858,9 +873,11 @@ function Predict() {
           }
           .et-sim-bottom-row {
             padding: var(--space-2);
+            overflow: visible;
           }
           .et-sim-bottom-row .card {
             padding: 10px !important;
+            overflow: hidden;
           }
           .env-compact {
             font-size: 0.7rem;
