@@ -20,6 +20,7 @@ import {
 import { TOOLTIPS } from '../domain/config/tooltips';
 import { importDatFile } from '../domain/import';
 import { isVehicleProLocked, markProUsedIfNeeded } from '../domain/config/vehicleProLock';
+import HelpLink from '../shared/components/HelpLink';
 
 type TransType = 'clutch' | 'converter';
 
@@ -447,6 +448,7 @@ function Vehicles() {
       actions={
         !showForm && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <HelpLink manual="quick-start" label="Help" />
             {/* Vehicle count indicator */}
             <span style={{ 
               fontSize: '0.875rem', 

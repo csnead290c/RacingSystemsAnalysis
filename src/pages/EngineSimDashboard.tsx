@@ -5,6 +5,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Page from '../shared/components/Page';
+import HelpLink from '../shared/components/HelpLink';
 import { simulateEngine, type EngineSimConfig } from '../domain/physics/engine/engineAdapter';
 import { generateVB6DynoCurve } from '../domain/physics/engine/vb6CurveGen';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -985,7 +986,7 @@ export function EngineSimDashboard() {
   }, [isProMode, config, result]);
 
   return (
-    <Page wide title={getEngineProgramName(can)}>
+    <Page wide title={getEngineProgramName(can)} actions={<HelpLink manual="engine" label="Manual" />}>
       <style>{`
         .esd-input-row {
           display: grid;

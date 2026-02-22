@@ -26,6 +26,7 @@ import { useSharedEnv } from '../shared/state/useSharedEnv';
 import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
 import { isVehicleProLocked } from '../domain/config/vehicleProLock';
 import { saveVehicle } from '../state/vehicles';
+import HelpLink from '../shared/components/HelpLink';
 
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -541,7 +542,7 @@ function Predict() {
     };
 
     return (
-      <Page title={getQuarterProgramName(can)}>
+      <Page title={getQuarterProgramName(can)} actions={<HelpLink manual="quarter" label="Manual" />}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <div className="card" style={{ padding: '2rem' }}>
             <h2 style={{ marginBottom: '1.5rem' }}>Select Vehicle & Track</h2>
@@ -814,7 +815,7 @@ function Predict() {
   };
 
   return (
-    <Page wide title={RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? getLandSpeedProgramName(can) : getQuarterProgramName(can)}>
+    <Page wide title={RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? getLandSpeedProgramName(can) : getQuarterProgramName(can)} actions={<HelpLink manual="quarter" label="Manual" />}>
       <style>{`
         .et-sim-dashboard {
           display: flex;

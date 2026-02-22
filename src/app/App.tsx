@@ -38,6 +38,7 @@ import Pricing from '../pages/Pricing';
 import Register from '../pages/Register';
 import TeamHub from '../pages/TeamHub';
 import NotFound from '../pages/NotFound';
+import Help from '../pages/Help';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
 import InternalRoute from '../shared/components/InternalRoute';
@@ -287,6 +288,7 @@ function Navigation() {
       {canAccessTeam && isDevOrOwner && (
         <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={close}>Team</Link>
       )}
+      <Link to="/help" style={navLinkStyle(isActive('/help'))} onClick={close}>Help</Link>
       <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={close}>About</Link>
       {isDevOrOwner && (
         <>
@@ -490,6 +492,7 @@ function App() {
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/calculators" element={<Calculators />} />
             <Route path="/calcs" element={<Calculators />} />
+            <Route path="/help" element={<Help />} />
             
             {/* Protected routes - require auth */}
             <Route path="/account" element={
