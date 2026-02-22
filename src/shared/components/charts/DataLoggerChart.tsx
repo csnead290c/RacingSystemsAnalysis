@@ -128,6 +128,9 @@ function DataLoggerChart({
   const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
+  // Mobile inspect mode — scrub slider hidden by default, toggled via button
+  const [showInspect, setShowInspect] = useState(false);
+
   // Toggle a series on/off
   const toggleSeries = (key: SeriesKey) => {
     setEnabledSeries(prev => {
@@ -285,6 +288,8 @@ function DataLoggerChart({
           .dlc-series-row { gap: 4px !important; }
           .dlc-series-pill { padding: 3px 7px !important; font-size: 0.6rem !important; }
           .dlc-legend { gap: 6px !important; font-size: 0.65rem !important; }
+          .dlc-inspect-btn { display: inline-block !important; }
+          .dlc-scrub-row { display: flex !important; }
         }
         @media (max-width: 400px) {
           .dlc-legend { display: none !important; }
@@ -646,32 +651,56 @@ function DataLoggerChart({
         </div>
       )}
 
-      {/* Scrub slider — mobile-first inspection */}
-      <div className="dlc-scrub-row" style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
+      {/* Inspect toggle + scrub slider — hidden on desktop, compact on mobile */}
+      <div className="dlc-inspect-row" style={{
         marginTop: '4px',
         fontSize: '0.7rem',
         color: 'var(--color-text-muted)',
       }}>
-        <span style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>Scrub</span>
-        <input
-          type="range"
-          min={0}
-          max={chartData.length - 1}
-          value={pinnedIndex ?? 0}
-          onChange={handleScrub}
-          data-testid="scrub-slider"
-          style={{ flex: 1, cursor: 'pointer' }}
-        />
-        <span style={{ whiteSpace: 'nowrap', minWidth: '60px', textAlign: 'right' }}>
-          {pinnedPoint
-            ? (xAxisMode === 'time'
-                ? `${pinnedPoint.t_s.toFixed(2)}s`
-                : `${pinnedPoint.s_ft.toFixed(0)} ft`)
-            : '—'}
-        </span>
+        {/* Toggle button — only visible on mobile via CSS */}
+        <button
+          onClick={() => setShowInspect(prev => !prev)}
+          data-testid="inspect-toggle"
+          className="dlc-inspect-btn"
+          style={{
+            display: 'none', /* shown via media query on mobile */
+            padding: '3px 8px',
+            fontSize: '0.65rem',
+            border: '1px solid var(--color-border)',
+            borderRadius: '3px',
+            backgroundColor: showInspect ? 'var(--color-primary)' : 'transparent',
+            color: showInspect ? 'white' : 'var(--color-text-muted)',
+            cursor: 'pointer',
+            marginBottom: showInspect ? '4px' : 0,
+          }}
+        >
+          {showInspect ? 'Hide Inspect' : 'Inspect'}
+        </button>
+        {/* Scrub slider — only shown on mobile when inspect is active */}
+        {showInspect && (
+          <div className="dlc-scrub-row" style={{
+            display: 'none', /* shown via media query on mobile when inspect active */
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <input
+              type="range"
+              min={0}
+              max={chartData.length - 1}
+              value={pinnedIndex ?? 0}
+              onChange={handleScrub}
+              data-testid="scrub-slider"
+              style={{ flex: 1, cursor: 'pointer' }}
+            />
+            <span style={{ whiteSpace: 'nowrap', minWidth: '60px', textAlign: 'right' }}>
+              {pinnedPoint
+                ? (xAxisMode === 'time'
+                    ? `${pinnedPoint.t_s.toFixed(2)}s`
+                    : `${pinnedPoint.s_ft.toFixed(0)} ft`)
+                : '—'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Compact legend below chart */}

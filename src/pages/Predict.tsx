@@ -299,13 +299,13 @@ function Predict() {
         windAngleDeg: currentEnv.windAngleDeg,
       };
       
-      // Update vehicle in-memory and persist to API (fire-and-forget)
+      // Persist to API (fire-and-forget) — do NOT call setVehicle here,
+      // as that would trigger the sim useEffect and cause an infinite loop.
       const updatedVehicle = {
         ...currentVehicle,
         lastSimQuarter,
         savedEnvQuarter,
       } as any;
-      setVehicle(updatedVehicle);
       saveVehicle(updatedVehicle).catch(err => 
         console.warn('Failed to persist run snapshot:', err)
       );
