@@ -1,115 +1,72 @@
 import { describe, it, expect } from 'vitest';
-import { isVehicleProLocked, hasProFields } from '../vehicleProLock';
+import { isVehicleProLocked, hasProFields, markProUsedIfNeeded } from '../vehicleProLock';
+import { VehicleSchema } from '../../schemas/vehicle.schema';
 
-describe('isVehicleProLocked', () => {
-  const basicVehicle = {
-    id: 'v1',
-    name: 'Basic Car',
-    weightLb: 3000,
-    tireDiaIn: 28,
-    rearGear: 3.73,
-    rolloutIn: 12,
-    powerHP: 400,
-    defaultRaceLength: 'QUARTER' as const,
-  };
+// ── Fixtures ──────────────────────────────────────────────────────────
 
-  const proVehicle = {
-    ...basicVehicle,
-    id: 'v2',
-    name: 'Pro Car',
-    editorMode: 'advanced' as const,
-    hpCurve: [{ rpm: 3000, hp: 200 }, { rpm: 6000, hp: 400 }],
-    cd: 0.45,
-    liftCoeff: 0.15,
-    enginePMI: 3.0,
-    transPMI: 0.5,
-    tiresPMI: 30,
-    clutchLaunchRPM: 5500,
-    clutchSlippage: 1.004,
-    gearEfficiencies: [0.97, 0.99],
-  };
+const basicVehicle = {
+  id: 'v1',
+  name: 'Basic Car',
+  weightLb: 3000,
+  tireDiaIn: 28,
+  rearGear: 3.73,
+  rolloutIn: 12,
+  powerHP: 400,
+  defaultRaceLength: 'QUARTER' as const,
+};
 
-  it('returns locked=false for Pro user regardless of vehicle', () => {
-    const result = isVehicleProLocked(proVehicle, true);
-    expect(result.locked).toBe(false);
-    expect(result.proFields).toEqual([]);
-  });
+const proVehicle = {
+  ...basicVehicle,
+  id: 'v2',
+  name: 'Pro Car',
+  usesQuarterProFeatures: true,
+  editorMode: 'advanced' as const,
+  hpCurve: [{ rpm: 3000, hp: 200 }, { rpm: 6000, hp: 400 }],
+  cd: 0.45,
+  enginePMI: 3.0,
+};
 
-  it('returns locked=false for basic vehicle with basic user', () => {
+// ── Strategy A: isVehicleProLocked (explicit boolean) ─────────────────
+
+describe('isVehicleProLocked — Strategy A', () => {
+  it('new basic vehicle is NOT locked by default', () => {
     const result = isVehicleProLocked(basicVehicle, false);
     expect(result.locked).toBe(false);
-    expect(result.proFields).toEqual([]);
   });
 
-  it('returns locked=true for pro vehicle with basic user', () => {
+  it('returns locked=false for Pro user regardless of vehicle flag', () => {
+    const result = isVehicleProLocked(proVehicle, true);
+    expect(result.locked).toBe(false);
+  });
+
+  it('returns locked=true for vehicle with usesQuarterProFeatures=true + Basic user', () => {
     const result = isVehicleProLocked(proVehicle, false);
     expect(result.locked).toBe(true);
-    expect(result.proFields.length).toBeGreaterThan(0);
   });
 
-  it('detects HP curve as Pro field', () => {
-    const v = { ...basicVehicle, hpCurve: [{ rpm: 3000, hp: 200 }] };
+  it('returns locked=false when usesQuarterProFeatures is undefined (legacy vehicle)', () => {
+    const result = isVehicleProLocked(basicVehicle, false);
+    expect(result.locked).toBe(false);
+  });
+
+  it('returns locked=false when usesQuarterProFeatures is explicitly false', () => {
+    const v = { ...basicVehicle, usesQuarterProFeatures: false };
     const result = isVehicleProLocked(v, false);
-    expect(result.locked).toBe(true);
-    expect(result.proFields).toContain('HP curve');
+    expect(result.locked).toBe(false);
   });
 
-  it('detects advanced editor mode as Pro field', () => {
-    const v = { ...basicVehicle, editorMode: 'advanced' as const };
+  it('vehicle with Pro fields but NO flag is NOT locked (Strategy A = explicit only)', () => {
+    const v = { ...basicVehicle, hpCurve: [{ rpm: 3000, hp: 200 }], cd: 0.45 };
     const result = isVehicleProLocked(v, false);
-    expect(result.locked).toBe(true);
-    expect(result.proFields).toContain('Advanced editor mode');
-  });
-
-  it('detects PMI fields as Pro', () => {
-    const v = { ...basicVehicle, enginePMI: 3.0 };
-    const result = isVehicleProLocked(v, false);
-    expect(result.locked).toBe(true);
-    expect(result.proFields).toContain('Engine PMI');
-  });
-
-  it('detects converter torque mult as Pro', () => {
-    const v = { ...basicVehicle, converterTorqueMult: 2.0 };
-    const result = isVehicleProLocked(v, false);
-    expect(result.locked).toBe(true);
-    expect(result.proFields).toContain('Converter torque mult');
-  });
-
-  it('detects throttle stop as Pro', () => {
-    const v = { ...basicVehicle, throttleStopEnabled: true };
-    const result = isVehicleProLocked(v, false);
-    expect(result.locked).toBe(true);
-    expect(result.proFields).toContain('Throttle stop');
-  });
-
-  it('detects drag coefficient as Pro', () => {
-    const v = { ...basicVehicle, cd: 0.45 };
-    const result = isVehicleProLocked(v, false);
-    expect(result.locked).toBe(true);
-    expect(result.proFields).toContain('Drag coefficient');
-  });
-
-  it('does not flag throttleStopEnabled=false as Pro', () => {
-    const v = { ...basicVehicle, throttleStopEnabled: false };
-    const result = isVehicleProLocked(v, false);
-    expect(result.proFields).not.toContain('Throttle stop');
-  });
-
-  it('does not flag empty hpCurve as Pro', () => {
-    const v = { ...basicVehicle, hpCurve: [] };
-    const result = isVehicleProLocked(v, false);
-    expect(result.proFields).not.toContain('HP curve');
-  });
-
-  it('lists multiple Pro fields when present', () => {
-    const result = isVehicleProLocked(proVehicle, false);
-    expect(result.proFields.length).toBeGreaterThanOrEqual(5);
+    expect(result.locked).toBe(false);
   });
 });
 
+// ── hasProFields (field detection for markProUsedIfNeeded) ────────────
+
 describe('hasProFields', () => {
   it('returns false for basic vehicle', () => {
-    expect(hasProFields({ weightLb: 3000, tireDiaIn: 28 })).toBe(false);
+    expect(hasProFields(basicVehicle)).toBe(false);
   });
 
   it('returns true for vehicle with HP curve', () => {
@@ -118,5 +75,114 @@ describe('hasProFields', () => {
 
   it('returns true for vehicle with PMI', () => {
     expect(hasProFields({ enginePMI: 3.0 })).toBe(true);
+  });
+
+  it('returns true for advanced editor mode', () => {
+    expect(hasProFields({ editorMode: 'advanced' })).toBe(true);
+  });
+
+  it('returns true for throttle stop enabled', () => {
+    expect(hasProFields({ throttleStopEnabled: true })).toBe(true);
+  });
+
+  it('returns false for throttleStopEnabled=false', () => {
+    expect(hasProFields({ throttleStopEnabled: false })).toBe(false);
+  });
+
+  it('returns false for empty hpCurve', () => {
+    expect(hasProFields({ hpCurve: [] })).toBe(false);
+  });
+
+  it('returns true for drag coefficient', () => {
+    expect(hasProFields({ cd: 0.45 })).toBe(true);
+  });
+
+  it('returns true for converter torque mult', () => {
+    expect(hasProFields({ converterTorqueMult: 2.0 })).toBe(true);
+  });
+});
+
+// ── markProUsedIfNeeded (save pipeline) ───────────────────────────────
+
+describe('markProUsedIfNeeded', () => {
+  it('does nothing for Basic user (cannot trigger flag)', () => {
+    const v = { ...basicVehicle, hpCurve: [{ rpm: 3000, hp: 200 }] };
+    const result = markProUsedIfNeeded(v, false) as any;
+    expect(result.usesQuarterProFeatures).toBeUndefined();
+  });
+
+  it('sets usesQuarterProFeatures=true when Pro user saves with Pro fields', () => {
+    const v = { ...basicVehicle, hpCurve: [{ rpm: 3000, hp: 200 }] };
+    const result = markProUsedIfNeeded(v, true) as any;
+    expect(result.usesQuarterProFeatures).toBe(true);
+  });
+
+  it('does not set flag when Pro user saves basic vehicle (no Pro fields)', () => {
+    const result = markProUsedIfNeeded(basicVehicle, true) as any;
+    expect(result.usesQuarterProFeatures).toBeUndefined();
+  });
+
+  it('never reverts flag once set (sticky)', () => {
+    const v = { ...basicVehicle, usesQuarterProFeatures: true as const };
+    const result = markProUsedIfNeeded(v, true);
+    expect(result.usesQuarterProFeatures).toBe(true);
+  });
+
+  it('Pro user edits Pro field → flag set → Basic user cannot run', () => {
+    // Step 1: Pro user saves with HP curve
+    const draft = { ...basicVehicle, hpCurve: [{ rpm: 3000, hp: 200 }] };
+    const saved = markProUsedIfNeeded(draft, true) as any;
+    expect(saved.usesQuarterProFeatures).toBe(true);
+
+    // Step 2: Basic user tries to run it
+    const lock = isVehicleProLocked(saved, false);
+    expect(lock.locked).toBe(true);
+  });
+});
+
+// ── Schema validation for new fields ──────────────────────────────────
+
+describe('Vehicle schema — new fields', () => {
+  it('accepts usesQuarterProFeatures boolean', () => {
+    const v = { ...basicVehicle, usesQuarterProFeatures: true };
+    const result = VehicleSchema.safeParse(v);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts savedEnvQuarter object', () => {
+    const v = {
+      ...basicVehicle,
+      savedEnvQuarter: {
+        elevation: 500,
+        temperatureF: 85,
+        barometerInHg: 29.80,
+        humidityPct: 40,
+        trackTempF: 120,
+        windMph: 5,
+      },
+    };
+    const result = VehicleSchema.safeParse(v);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts lastSimQuarter object', () => {
+    const v = {
+      ...basicVehicle,
+      lastSimQuarter: {
+        lastRunAt: '2026-02-21T22:00:00Z',
+        raceLengthFt: 1320,
+        et_s: 6.82,
+        mph: 201.8,
+        sixty_ft_s: 1.05,
+        sixty_ft_mph: 72.3,
+      },
+    };
+    const result = VehicleSchema.safeParse(v);
+    expect(result.success).toBe(true);
+  });
+
+  it('omitting new fields still validates (backward compat)', () => {
+    const result = VehicleSchema.safeParse(basicVehicle);
+    expect(result.success).toBe(true);
   });
 });

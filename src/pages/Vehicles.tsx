@@ -19,7 +19,7 @@ import {
 } from '../shared/components/WorksheetModal';
 import { TOOLTIPS } from '../domain/config/tooltips';
 import { importDatFile } from '../domain/import';
-import { isVehicleProLocked } from '../domain/config/vehicleProLock';
+import { isVehicleProLocked, markProUsedIfNeeded } from '../domain/config/vehicleProLock';
 
 type TransType = 'clutch' | 'converter';
 
@@ -327,8 +327,11 @@ function Vehicles() {
         return;
       }
 
+      // Mark Pro features if needed (Strategy A)
+      const finalVehicle = markProUsedIfNeeded(result.data, hasProAccess);
+      
       // Save
-            await saveVehicle(result.data);
+            await saveVehicle(finalVehicle);
             // Small delay to ensure database commit before reload
       await new Promise(resolve => setTimeout(resolve, 500));
             await loadData();
@@ -1483,7 +1486,7 @@ function Vehicles() {
                         borderRadius: '9999px',
                         fontWeight: 500,
                       }}
-                        title={`Pro features: ${vLock.proFields.join(', ')}`}
+                        title="This vehicle uses Quarter Pro features"
                       >
                         🔒 Pro
                       </span>
@@ -1509,6 +1512,11 @@ function Vehicles() {
                       }}>
                         by {vehicle.owner_name}
                       </span>
+                    )}
+                    {vehicle.lastSimQuarter && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.125rem' }}>
+                        Last: {vehicle.lastSimQuarter.et_s.toFixed(3)}s @ {vehicle.lastSimQuarter.mph.toFixed(1)} mph
+                      </div>
                     )}
                   </td>
                   <td style={{ color: vehicle.group ? 'var(--color-text)' : 'var(--color-muted)', fontSize: '0.85rem' }}>

@@ -25,6 +25,7 @@ import { formatHp, formatLb } from '../shared/format/formatNumber';
 import { useSharedEnv } from '../shared/state/useSharedEnv';
 import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
 import { isVehicleProLocked } from '../domain/config/vehicleProLock';
+import { saveVehicle } from '../state/vehicles';
 
 // Lazy load charts and components
 const DataLoggerChart = lazy(() => import('../shared/components/charts/DataLoggerChart'));
@@ -151,7 +152,14 @@ function Predict() {
     if (state?.vehicle && state?.raceLength) {
       setVehicle(state.vehicle);
       setRaceLength(state.raceLength);
-      setEnv(DEFAULT_ENV);
+      // Load sticky env from vehicle if available
+      const savedEnv = state.vehicle.savedEnvQuarter;
+      if (savedEnv) {
+        setEnv(savedEnv as Env);
+        setSharedEnv(savedEnv as any);
+      } else {
+        setEnv(DEFAULT_ENV);
+      }
       setShowVehicleSelector(false);
       setLoading(false);
       // Load throttle stop settings from vehicle
@@ -181,7 +189,14 @@ function Predict() {
             } else if (foundVehicle.defaultRaceLength) {
               setRaceLength(foundVehicle.defaultRaceLength as RaceLength);
             }
-            setEnv(DEFAULT_ENV);
+            // Load sticky env from vehicle if available
+            const savedEnv = (foundVehicle as Vehicle).savedEnvQuarter;
+            if (savedEnv) {
+              setEnv(savedEnv as Env);
+              setSharedEnv(savedEnv as any);
+            } else {
+              setEnv(DEFAULT_ENV);
+            }
             setShowVehicleSelector(false);
             setLoading(false);
             return;
@@ -245,12 +260,63 @@ function Predict() {
       }
     };
     
+    // Persist env + lastSim snapshot to vehicle after successful run
+    function persistRunSnapshot(result: SimResult) {
+      if (!currentVehicle?.id) return;
+      
+      // Build lastSim snapshot from timeslip
+      const ts = result.timeslip;
+      const find = (ft: number) => ts.find(r => Math.abs(r.d_ft - ft) < 1);
+      const s60 = find(60);
+      const s330 = find(330);
+      const s660 = find(660);
+      const s1000 = find(1000);
+      const raceLengthFt = RACE_LENGTH_INFO[raceLength]?.lengthFt ?? 1320;
+      
+      const lastSimQuarter: Vehicle['lastSimQuarter'] = {
+        lastRunAt: new Date().toISOString(),
+        raceLengthFt,
+        et_s: result.et_s,
+        mph: result.mph,
+        sixty_ft_s: s60?.t_s,
+        sixty_ft_mph: s60?.v_mph,
+        three30_s: s330?.t_s,
+        three30_mph: s330?.v_mph,
+        eighth_s: s660?.t_s,
+        eighth_mph: s660?.v_mph,
+        thousand_s: s1000?.t_s,
+        thousand_mph: s1000?.v_mph,
+      };
+      
+      const savedEnvQuarter: Vehicle['savedEnvQuarter'] = {
+        elevation: currentEnv.elevation ?? 0,
+        temperatureF: currentEnv.temperatureF ?? 75,
+        barometerInHg: currentEnv.barometerInHg ?? 29.92,
+        humidityPct: currentEnv.humidityPct ?? 50,
+        trackTempF: currentEnv.trackTempF,
+        tractionIndex: currentEnv.tractionIndex,
+        windMph: currentEnv.windMph,
+        windAngleDeg: currentEnv.windAngleDeg,
+      };
+      
+      // Update vehicle in-memory and persist to API (fire-and-forget)
+      const updatedVehicle = {
+        ...currentVehicle,
+        lastSimQuarter,
+        savedEnvQuarter,
+      } as any;
+      setVehicle(updatedVehicle);
+      saveVehicle(updatedVehicle).catch(err => 
+        console.warn('Failed to persist run snapshot:', err)
+      );
+    }
+
     function runSimulation() {
       // Client-side guard: prevent running sim with Pro-locked vehicle
       if (currentVehicle) {
         const lock = isVehicleProLocked(currentVehicle, features.quarterProFields);
         if (lock.locked) {
-          setError(`This vehicle requires Pro access (uses: ${lock.proFields.slice(0, 3).join(', ')})`);
+          setError('This vehicle requires Pro access (configured with Quarter Pro features)');
           setLoading(false);
           return;
         }
@@ -304,6 +370,7 @@ function Predict() {
               setSimResult(result);
               setDebugData((result as any).debugData ?? null);
               setLoading(false);
+              persistRunSnapshot(result);
             })
             .catch((err) => {
               setError(err instanceof Error ? err.message : String(err));
@@ -378,6 +445,7 @@ function Predict() {
             setSimResult(result);
             setDebugData((result as any).debugData ?? null);
             setLoading(false);
+            persistRunSnapshot(result);
           })
           .catch((err) => {
             setError(err instanceof Error ? err.message : String(err));
@@ -445,13 +513,20 @@ function Predict() {
     const selectedVehicleObj = availableVehicles.find(v => v.id === selectedVehicleId);
     const proLock = selectedVehicleObj
       ? isVehicleProLocked(selectedVehicleObj, features.quarterProFields)
-      : { locked: false, proFields: [] as string[] };
+      : { locked: false };
 
     const handleStartSimulation = () => {
       const selectedVehicle = selectedVehicleObj;
       if (selectedVehicle && !proLock.locked) {
         setVehicle(selectedVehicle as Vehicle);
-        setEnv(DEFAULT_ENV);
+        // Load sticky env from vehicle if available, otherwise use defaults
+        const savedEnv = (selectedVehicle as Vehicle).savedEnvQuarter;
+        if (savedEnv) {
+          setEnv(savedEnv as Env);
+          setSharedEnv(savedEnv as any);
+        } else {
+          setEnv(DEFAULT_ENV);
+        }
         setShowVehicleSelector(false);
         // Load throttle stop settings from vehicle
         if ((selectedVehicle as Vehicle).throttleStopEnabled) {
@@ -523,8 +598,7 @@ function Predict() {
                       🔒 Pro Vehicle — Upgrade Required
                     </div>
                     <div style={{ color: 'var(--color-muted)', fontSize: '0.8rem' }}>
-                      This vehicle uses Pro features: {proLock.proFields.slice(0, 3).join(', ')}
-                      {proLock.proFields.length > 3 ? ` (+${proLock.proFields.length - 3} more)` : ''}.
+                      This vehicle was configured with Quarter Pro features.
                       <Link to="/account" style={{ marginLeft: '0.5rem', color: '#3b82f6' }}>Upgrade to Pro →</Link>
                     </div>
                   </div>

@@ -1,11 +1,12 @@
 /**
- * Vehicle Pro Lock — determines if a vehicle requires Pro access to run.
+ * Vehicle Pro Lock — Strategy A (explicit boolean)
  *
- * A "Pro vehicle" is any vehicle that has Pro-only fields set to non-default values.
- * When a user downgrades from Pro to Basic (Racer), vehicles with Pro-only data
- * should be locked: visible but not selectable/runnable until the user upgrades.
+ * A vehicle is locked for Basic users iff vehicle.usesQuarterProFeatures === true.
+ * This flag is set explicitly when a Pro user saves a vehicle with Pro-only fields,
+ * and is never automatically reverted.
  *
- * The field list mirrors the `isPro &&` guards in VehicleEditor.tsx.
+ * The PRO_ONLY_CHECKS list is retained for markProUsedIfNeeded() which detects
+ * whether Pro-only fields are present during the save pipeline.
  */
 
 import type { Vehicle } from '../schemas/vehicle.schema';
@@ -14,6 +15,7 @@ import type { Vehicle } from '../schemas/vehicle.schema';
  * Pro-only vehicle fields.
  * Each entry is a field key + a predicate that returns true when the field
  * holds a meaningful (non-default) value that only Pro users can set.
+ * Used by markProUsedIfNeeded to decide whether to set usesQuarterProFeatures.
  */
 const PRO_ONLY_CHECKS: Array<{
   field: string;
@@ -62,42 +64,58 @@ const PRO_ONLY_CHECKS: Array<{
 export interface ProLockResult {
   /** True if the vehicle is locked (has Pro fields but user lacks Pro access) */
   locked: boolean;
-  /** List of Pro-only fields that are set on this vehicle */
-  proFields: string[];
 }
 
 /**
- * Check if a vehicle requires Pro access to run.
- *
- * @param vehicle - The vehicle to check
- * @param hasProAccess - Whether the current user has quarterProFields access
- * @returns ProLockResult with locked status and list of Pro fields found
+ * Strategy A: Check if a vehicle is locked for a Basic user.
+ * Locked iff usesQuarterProFeatures === true AND user lacks Pro access.
  */
 export function isVehicleProLocked(
   vehicle: Partial<Vehicle>,
   hasProAccess: boolean,
 ): ProLockResult {
   if (hasProAccess) {
-    return { locked: false, proFields: [] };
-  }
-
-  const proFields: string[] = [];
-  for (const check of PRO_ONLY_CHECKS) {
-    if (check.test(vehicle)) {
-      proFields.push(check.label);
-    }
+    return { locked: false };
   }
 
   return {
-    locked: proFields.length > 0,
-    proFields,
+    locked: vehicle.usesQuarterProFeatures === true,
   };
 }
 
 /**
  * Check if a vehicle has any Pro-only fields set (regardless of user access).
- * Useful for displaying badges.
+ * Useful for displaying badges and for markProUsedIfNeeded.
  */
 export function hasProFields(vehicle: Partial<Vehicle>): boolean {
   return PRO_ONLY_CHECKS.some(check => check.test(vehicle));
+}
+
+/**
+ * Mark a vehicle as using Pro features if needed.
+ * Called in the save pipeline when a Pro user saves a vehicle.
+ *
+ * Rules:
+ * - If userHasPro is false, do nothing (Basic users can't set Pro fields).
+ * - If the vehicle has any Pro-only field set, set usesQuarterProFeatures = true.
+ * - Once true, never automatically revert to false (sticky).
+ *
+ * @returns The vehicle draft with usesQuarterProFeatures potentially set to true.
+ */
+export function markProUsedIfNeeded<T extends Partial<Vehicle>>(
+  vehicleDraft: T,
+  userHasPro: boolean,
+): T {
+  // Only Pro users can trigger the flag
+  if (!userHasPro) return vehicleDraft;
+
+  // Already marked — keep it (never revert)
+  if (vehicleDraft.usesQuarterProFeatures === true) return vehicleDraft;
+
+  // Check if any Pro-only fields are set
+  if (hasProFields(vehicleDraft)) {
+    return { ...vehicleDraft, usesQuarterProFeatures: true };
+  }
+
+  return vehicleDraft;
 }

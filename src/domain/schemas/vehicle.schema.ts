@@ -116,6 +116,38 @@ export const VehicleSchema = z.object({
   engineRevision: z.number().optional(),      // Pinned revision number (null = use latest)
   clutchRef: z.string().optional(),            // ID of SavedClutch (from Clutch Sim)
   converterRef: z.string().optional(),         // ID of SavedConverter (from Converter Sim)
+  
+  // Pro-lock flag (Strategy A) — set to true when a Pro user saves with Pro-only fields
+  // Once true, never automatically reverted. Basic users cannot run vehicles with this flag.
+  usesQuarterProFeatures: z.boolean().optional(), // default: false
+  
+  // Sticky environment — saved on each successful Quarter sim run
+  savedEnvQuarter: z.object({
+    elevation: z.number(),
+    temperatureF: z.number(),
+    barometerInHg: z.number(),
+    humidityPct: z.number(),
+    trackTempF: z.number().optional(),
+    tractionIndex: z.number().optional(),
+    windMph: z.number().optional(),
+    windAngleDeg: z.number().optional(),
+  }).optional(),
+  
+  // Last sim snapshot — saved after each successful Quarter sim run
+  lastSimQuarter: z.object({
+    lastRunAt: z.string(),                     // ISO timestamp
+    raceLengthFt: z.number(),                  // e.g. 1320 for quarter mile
+    et_s: z.number(),                          // Elapsed time (seconds)
+    mph: z.number(),                           // Trap speed (mph)
+    sixty_ft_s: z.number().optional(),         // 60ft ET
+    sixty_ft_mph: z.number().optional(),       // 60ft MPH
+    three30_s: z.number().optional(),          // 330ft ET
+    three30_mph: z.number().optional(),        // 330ft MPH
+    eighth_s: z.number().optional(),           // 660ft ET
+    eighth_mph: z.number().optional(),         // 660ft MPH
+    thousand_s: z.number().optional(),         // 1000ft ET
+    thousand_mph: z.number().optional(),       // 1000ft MPH
+  }).optional(),
 });
 
 export type Vehicle = z.infer<typeof VehicleSchema>;
