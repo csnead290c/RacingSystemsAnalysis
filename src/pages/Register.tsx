@@ -9,7 +9,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth, useClerkRSA, ClerkSignUp, isClerkConfigured } from '../domain/auth';
 import Page from '../shared/components/Page';
 
-type SelectedTier = 'free' | 'racer' | 'pro' | 'team';
+type SelectedTier = 'free' | 'racer' | 'pro';
 
 interface TierInfo {
   id: SelectedTier;
@@ -32,21 +32,14 @@ const tiers: TierInfo[] = [
     name: 'Racer',
     price: '$9.99/mo',
     description: 'For weekend bracket racers',
-    features: ['Everything in Free', 'Quarter Jr', 'Run Logbook', '5 Vehicles'],
+    features: ['Everything in Free', 'Quarter Jr', 'Engine Jr', '5 Vehicles'],
   },
   {
     id: 'pro',
     name: 'Pro',
     price: '$24.99/mo',
     description: 'For serious competitors',
-    features: ['Everything in Racer', 'AI Opponent Prediction', 'Optimizer Tools', 'Unlimited Vehicles'],
-  },
-  {
-    id: 'team',
-    name: 'Team',
-    price: '$49.99/mo',
-    description: 'For teams and professionals',
-    features: ['Everything in Pro', 'Team Collaboration', 'Advanced Simulators', 'API Access'],
+    features: ['Everything in Racer', 'Quarter Pro', 'Engine Pro', 'Optimizer Tools', 'Unlimited Vehicles'],
   },
 ];
 
@@ -186,7 +179,7 @@ export default function Register() {
                       alignItems: 'center',
                       gap: '8px',
                     }}>
-                      <span style={{ color: '#22c55e' }}>✓</span>
+                      <span style={{ color: '#dc2626' }}>✓</span>
                       {feature}
                     </li>
                   ))}
@@ -422,7 +415,7 @@ export default function Register() {
                 padding: '14px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: '#22c55e',
+                backgroundColor: '#dc2626',
                 color: 'white',
                 fontSize: '1rem',
                 fontWeight: 600,
@@ -510,7 +503,7 @@ export default function Register() {
             to="/vehicles"
             style={{
               padding: '16px 32px',
-              backgroundColor: '#22c55e',
+              backgroundColor: '#dc2626',
               color: 'white',
               borderRadius: '8px',
               textDecoration: 'none',

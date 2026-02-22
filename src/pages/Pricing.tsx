@@ -22,9 +22,9 @@ const tiers: Tier[] = [
     description: 'For weekend bracket racers who want better predictions',
     features: [
       'Quarter Jr',
+      'Engine Jr',
       'Weather Integration',
-      'Run Logbook (100 runs)',
-      'Dial-In Calculator',
+      'Racing Calculators',
       '5 Vehicles',
       'Track Database',
       'Print/Export Timeslips',
@@ -39,38 +39,14 @@ const tiers: Tier[] = [
     features: [
       'Everything in Racer, plus:',
       'Quarter Pro',
+      'Engine Pro',
       'Full HP Curve Input',
       'Throttle Stop Simulation',
       'Optimizer Tools (Gear/Converter)',
-      'AI Opponent Prediction',
-      'Race Day Dashboard',
-      'Competition Ladder',
-      'Data Import (CSV)',
-      'Tech Card Generator',
       'Unlimited Vehicles',
-      'Unlimited Run History',
     ],
     highlighted: true,
     cta: 'Subscribe',
-  },
-  {
-    name: 'Team',
-    monthlyPrice: 49.99,
-    annualPrice: 499,
-    description: 'For teams and professionals who need advanced tools',
-    features: [
-      'Everything in Pro, plus:',
-      'Engine Simulator',
-      'Clutch Simulator',
-      'Suspension Simulator',
-      'Match My Times (Auto-tune)',
-      'InstantCalc Mode',
-      'Team Collaboration (5 members)',
-      'API Access',
-      'Priority Support',
-      'White Label Options',
-    ],
-    cta: 'Contact Sales',
   },
 ];
 
@@ -128,7 +104,7 @@ export default function Pricing() {
               <span style={{ 
                 marginLeft: '8px', 
                 padding: '2px 8px', 
-                backgroundColor: '#22c55e',
+                backgroundColor: '#dc2626',
                 color: 'white',
                 borderRadius: '4px',
                 fontSize: '0.75rem',
@@ -241,7 +217,7 @@ export default function Pricing() {
                         gap: '10px',
                       }}
                     >
-                      <span style={{ color: '#22c55e' }}>✓</span>
+                      <span style={{ color: '#dc2626' }}>✓</span>
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -345,13 +321,13 @@ export default function Pricing() {
             style={{
               display: 'inline-block',
               padding: '16px 40px',
-              backgroundColor: '#22c55e',
+              backgroundColor: '#dc2626',
               color: 'white',
               borderRadius: '8px',
               textDecoration: 'none',
               fontWeight: 700,
               fontSize: '1.1rem',
-              boxShadow: '0 4px 14px rgba(34, 197, 94, 0.4)',
+              boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)',
             }}
           >
             Get Started Now

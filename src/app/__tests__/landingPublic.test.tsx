@@ -12,7 +12,7 @@ describe('Landing page (logged-out)', () => {
     render(<App />);
 
     // Wait for the landing page to render
-    await screen.findByText('Turn On More Win Lights');
+    await screen.findByText('Turn On More Win Lights!');
 
     // Testimonials section was removed — verify no testimonial content
     expect(screen.queryByText(/deadly consistent and turning on more win lights/i)).toBeNull();
@@ -22,23 +22,24 @@ describe('Landing page (logged-out)', () => {
   it('does not promote internal-only features', async () => {
     render(<App />);
 
-    await screen.findByText('Turn On More Win Lights');
+    await screen.findByText('Turn On More Win Lights!');
 
-    // Internal features should not appear in the features grid
+    // Internal features should not appear anywhere on the landing page
     expect(screen.queryByText('Run Logbook')).toBeNull();
     expect(screen.queryByText('AI Opponent Prediction')).toBeNull();
     expect(screen.queryByText('Race Day Dashboard')).toBeNull();
+    expect(screen.queryByText(/Team Collaboration/i)).toBeNull();
+    expect(screen.queryByText(/Opponent/i)).toBeNull();
   });
 
   it('promotes public features', async () => {
     render(<App />);
 
-    await screen.findByText('Turn On More Win Lights');
+    await screen.findByText('Turn On More Win Lights!');
 
     // Public features should be present
-    expect(screen.getByText('ET Prediction')).toBeInTheDocument();
-    expect(screen.getByText('Engine Simulation')).toBeInTheDocument();
-    expect(screen.getByText('Vehicle Garage')).toBeInTheDocument();
-    expect(screen.getByText('Racing Calculators')).toBeInTheDocument();
+    expect(screen.getByText('Quarter Jr/Pro')).toBeInTheDocument();
+    expect(screen.getByText('Engine Jr/Pro')).toBeInTheDocument();
+    expect(screen.getByText('Coming Soon!')).toBeInTheDocument();
   });
 });

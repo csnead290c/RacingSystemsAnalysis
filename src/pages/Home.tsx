@@ -4,11 +4,10 @@ import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { listEngines, type EngineListItem } from '../state/engines';
 import { useAuth, useClerkRSA } from '../domain/auth';
-import { canAccessEtSim, canAccessRunLogging, canAccessRaceTools, canAccessVehicles } from '../domain/config/guards';
+import { canAccessEtSim } from '../domain/config/guards';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
 import { formatHp, formatLb, formatIn } from '../shared/format/formatNumber';
-import { isInternalUser, buildVisibilityContext } from '../domain/ui/publicSurface';
 import Landing from './Landing';
 
 function Home() {
@@ -22,7 +21,6 @@ function Home() {
   // Check if user is logged in (either legacy or Clerk)
   const isLoggedIn = isAuthenticated || isClerkSignedIn;
   const activeUser = isClerkSignedIn ? rsaUser : user;
-  const isDevOrOwner = isInternalUser(buildVisibilityContext(user?.roleId));
 
   useEffect(() => {
     const loadData = async () => {
@@ -55,7 +53,7 @@ function Home() {
 
   // Dashboard for authenticated users
   return (
-    <Page title="Dashboard">
+    <Page title="">
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         {/* Welcome Header */}
         <div style={{ marginBottom: '2rem' }}>
@@ -88,9 +86,6 @@ function Home() {
                 <div style={{ fontSize: '2rem' }}>🏁</div>
                 <div>
                   <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1rem' }}>{getQuarterProgramName(can)}</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                    Predict ET & MPH
-                  </p>
                 </div>
               </Link>
             )}
@@ -112,109 +107,8 @@ function Home() {
               <div style={{ fontSize: '2rem' }}>🔧</div>
               <div>
                 <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1rem' }}>{engineProgramName}</h4>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                  Dyno curve & engine analysis
-                </p>
               </div>
             </Link>
-          </div>
-        </div>
-
-        {/* Secondary — Tools */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem', color: 'var(--color-muted)' }}>
-            Tools
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-            {/* Vehicles */}
-            {canAccessVehicles({ hasFeature }) && (
-              <Link
-                to="/vehicles"
-                className="card"
-                style={{
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem',
-                }}
-              >
-                <div style={{ fontSize: '1.5rem' }}>🚗</div>
-                <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Vehicles</h4>
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                    {vehicles.length} configured
-                  </p>
-                </div>
-              </Link>
-            )}
-
-            {/* Calculators */}
-            <Link
-              to="/calculators"
-              className="card"
-              style={{
-                textDecoration: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem',
-              }}
-            >
-              <div style={{ fontSize: '1.5rem' }}>🔢</div>
-              <div>
-                <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Calculators</h4>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                  Racing math tools
-                </p>
-              </div>
-            </Link>
-
-            {/* Run History — dev/owner only */}
-            {canAccessRunLogging({ hasFeature }) && isDevOrOwner && (
-              <Link
-                to="/history"
-                className="card"
-                style={{
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem',
-                }}
-              >
-                <div style={{ fontSize: '1.5rem' }}>📝</div>
-                <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Run History</h4>
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                    Log & analyze runs
-                  </p>
-                </div>
-              </Link>
-            )}
-
-            {/* Race Day — dev/owner only */}
-            {canAccessRaceTools({ hasFeature }) && isDevOrOwner && (
-              <Link
-                to="/race-day"
-                className="card"
-                style={{
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem',
-                }}
-              >
-                <div style={{ fontSize: '1.5rem' }}>🏁</div>
-                <div>
-                  <h4 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem' }}>Race Day</h4>
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                    Dial-in & rounds
-                  </p>
-                </div>
-              </Link>
-            )}
           </div>
         </div>
 
