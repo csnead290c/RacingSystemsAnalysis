@@ -123,13 +123,18 @@ function parity_httpGet(string $url): string|false {
  * When we learn the exact NHRA field names, add them to the front of each list.
  */
 const PARITY_FIELD_ALIASES = [
-    'run_timestamp_utc' => ['RunTimeUtc', 'TimestampUtc', 'TimeStamp', 'UTC_Timestamp', 'RunDateTimeUtc', 'RunDate', 'DateTime'],
+    // Exact NHRA OData field names confirmed via $metadata + peek (2025-10-30 event).
+    // NHRA fields: TimeStamp, Round, Lane, QualPos, CarNumber, Name, ClassIndex,
+    //   DialIn, RT, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320,
+    //   MOV, Win, IsDQ, Place, Category, DumbyID
+    // NOTE: IsDQ and Place contain the car number in real data, NOT boolean/position.
+    'run_timestamp_utc' => ['TimeStamp', 'RunTimeUtc', 'TimestampUtc', 'UTC_Timestamp', 'RunDateTimeUtc', 'RunDate', 'DateTime'],
     'category'          => ['Category', 'Cat', 'EventCategory'],
     'class_index'       => ['ClassIndex', 'Class', 'Class_Name', 'ClassName', 'ClassId'],
     'round'             => ['Round', 'Rnd', 'RoundNumber', 'RoundNum'],
     'lane'              => ['Lane', 'LaneChoice', 'LaneNumber'],
     'driver_name'       => ['Name', 'DriverName', 'Driver', 'DriverFullName', 'Racer'],
-    'car_number'        => ['CarNumber', 'CarNo', 'Car', 'CarNum', 'Number'],
+    'car_number'        => ['CarNumber', 'CarNo', 'Car', 'CarNum'],
     'dial_in'           => ['DialIn', 'Dial', 'DialInTime'],
     'rt'                => ['RT', 'ReactionTime', 'Reaction', 'RxnTime'],
     'ft60'              => ['ft60', 'SixtyFoot', '60ft', 'Sixty', 'ET60'],
@@ -141,10 +146,10 @@ const PARITY_FIELD_ALIASES = [
     'ft1320'            => ['ft1320', 'QuarterMileET', '1320ft', 'ET1320', 'ET', 'ElapsedTime'],
     'mph1320'           => ['mph1320', 'QuarterMileMPH', '1320mph', 'MPH1320', 'MPH', 'Speed'],
     'win_flag'          => ['Win', 'IsWin', 'Winner', 'WinLoss'],
-    'dq_flag'           => ['IsDQ', 'DQ', 'Disqualified', 'Foul'],
+    'dq_flag'           => ['DQ', 'Disqualified', 'Foul'],
     'mov'               => ['MOV', 'MarginOfVictory', 'Margin'],
-    'place'             => ['Place', 'Finish', 'Position', 'FinishPosition'],
-    'source_ref'        => ['Id', 'RunId', 'ResultId', 'RowId', 'UniqueId', 'RecordId'],
+    'place'             => ['QualPos', 'Finish', 'Position', 'FinishPosition'],
+    'source_ref'        => ['DumbyID', 'Id', 'RunId', 'ResultId', 'RowId', 'UniqueId', 'RecordId'],
 ];
 
 /**

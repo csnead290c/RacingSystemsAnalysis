@@ -33,7 +33,7 @@ import {
 // ── Fixtures ──────────────────────────────────────────────────────────
 
 const SAMPLE_ROW_V4 = {
-  RunId: 'R001',
+  DumbyID: 'R001',
   DriverName: 'John Force',
   Category: 'Funny Car',
   ClassIndex: 'FC',
@@ -50,11 +50,38 @@ const SAMPLE_ROW_V4 = {
   mph1320: '320.1',
   DialIn: null,
   Win: true,
-  IsDQ: false,
+  DQ: 'N',
   MOV: '0.0234',
-  Place: '1',
+  QualPos: '1',
   CarNumber: '16',
   TimestampUtc: '2026-02-23T14:30:00Z',
+};
+
+// Real NHRA OData row from peek on 20251030 event
+const SAMPLE_ROW_NHRA_REAL = {
+  TimeStamp: '10/30/2025 07:35:38',
+  Round: 'Q1',
+  Lane: 'L',
+  QualPos: '0',
+  CarNumber: '7801',
+  Name: 'Pete Lanciers',
+  ClassIndex: 'F/SA',
+  DialIn: '12.05',
+  RT: '.008',
+  ft60: '1.442',
+  ft330: '4.430',
+  ft660: '7.005',
+  mph660: '94.78',
+  ft1000: '9.256',
+  mph1000: '',
+  ft1320: '11.173',
+  mph1320: '117.42',
+  MOV: '',
+  Win: 'W',
+  IsDQ: '7801',
+  Place: '7801',
+  Category: 'STOCK ELIMINATOR',
+  DumbyID: '1',
 };
 
 const SAMPLE_ROW_V2 = {
@@ -278,6 +305,33 @@ describe('normalizeRow', () => {
     expect(result.run_timestamp_utc).toBe('2026-02-23T14:30:00.000Z');
   });
 
+  it('normalizes a real NHRA OData row correctly', () => {
+    const result = normalizeRow(SAMPLE_ROW_NHRA_REAL, '20251030');
+    expect(result.race_lookup).toBe('20251030');
+    expect(result.driver_name).toBe('Pete Lanciers');
+    expect(result.category).toBe('STOCK ELIMINATOR');
+    expect(result.class_index).toBe('F/SA');
+    expect(result.round).toBe('Q1');
+    expect(result.lane).toBe('L');
+    expect(result.car_number).toBe('7801');
+    expect(result.dial_in).toBe(12.05);
+    expect(result.rt).toBe(0.008);
+    expect(result.ft60).toBe(1.442);
+    expect(result.ft330).toBe(4.43);
+    expect(result.ft660).toBe(7.005);
+    expect(result.mph660).toBe(94.78);
+    expect(result.ft1000).toBe(9.256);
+    expect(result.mph1000).toBeNull(); // empty string in source
+    expect(result.ft1320).toBe(11.173);
+    expect(result.mph1320).toBe(117.42);
+    expect(result.win_flag).toBe(true); // 'W' → true
+    expect(result.dq_flag).toBeNull(); // IsDQ not in dq_flag aliases (contains car number)
+    expect(result.mov).toBeNull(); // empty string
+    expect(result.place).toBe('0'); // QualPos
+    expect(result.source_ref).toBe('1'); // DumbyID
+    expect(result.run_timestamp_utc).not.toBeNull();
+  });
+
   it('normalizes a v2-style row with different field names', () => {
     const result = normalizeRow(SAMPLE_ROW_V2, '20260223');
     expect(result.driver_name).toBe('Brittany Force');
@@ -322,9 +376,15 @@ describe('computeRowHash', () => {
     expect(hash).toBe('20260223|R001');
   });
 
+  it('uses source_ref from real NHRA DumbyID', () => {
+    const row = normalizeRow(SAMPLE_ROW_NHRA_REAL, '20251030');
+    const hash = computeRowHash('20251030', row);
+    expect(hash).toBe('20251030|1');
+  });
+
   it('uses stable fields when no source_ref', () => {
     const raw = { ...SAMPLE_ROW_V4 };
-    delete (raw as any).RunId;
+    delete (raw as any).DumbyID;
     const row = normalizeRow(raw, '20260223');
     const hash = computeRowHash('20260223', row);
     expect(hash).toContain('20260223');
@@ -340,7 +400,7 @@ describe('computeRowHash', () => {
 
   it('different data produces different hash', () => {
     const row1 = normalizeRow(SAMPLE_ROW_V4, '20260223');
-    const modified = { ...SAMPLE_ROW_V4, RunId: 'R002' };
+    const modified = { ...SAMPLE_ROW_V4, DumbyID: 'R002' };
     const row2 = normalizeRow(modified, '20260223');
     expect(computeRowHash('20260223', row1)).not.toBe(computeRowHash('20260223', row2));
   });
