@@ -115,6 +115,152 @@ export interface ImportsResponse {
   total: number;
 }
 
+// ── Weather / Track / Event Types ────────────────────────────────────────
+
+export interface TrackResponse {
+  id: number;
+  trackName: string;
+  timezoneIana: string;
+}
+
+export interface TracksResponse {
+  tracks: { id: number; track_name: string; timezone_iana: string; created_at: string }[];
+}
+
+export interface CreateEventParams {
+  eventName: string;
+  trackId: number;
+  startDateLocal: string;
+  endDateLocal: string;
+  raceLookup?: string;
+}
+
+export interface EventResponse {
+  id: number;
+  eventName: string;
+  trackId: number;
+  startDateLocal: string;
+  endDateLocal: string;
+  raceLookup: string | null;
+}
+
+export interface EventsResponse {
+  events: {
+    id: number; event_name: string; track_id: number; track_name: string;
+    timezone_iana: string; start_date_local: string; end_date_local: string;
+    race_lookup: string | null; created_at: string;
+  }[];
+}
+
+export interface WeatherBackfillParams {
+  eventId: number;
+  fromDateLocal?: string;
+  toDateLocal?: string;
+  minRowsPerDay?: number;
+}
+
+export interface WeatherBackfillResponse {
+  eventId: number;
+  fromDateLocal: string;
+  toDateLocal: string;
+  timezone: string;
+  daysChecked: number;
+  daysFetched: number;
+  rowsInserted: number;
+  rowsDeduped: number;
+  errors: string[];
+}
+
+export interface WeatherBuildCanonicalParams {
+  startUtc?: string;
+  endUtc?: string;
+  bucketMinutes?: number;
+}
+
+export interface WeatherBuildCanonicalResponse {
+  startUtc: string;
+  endUtc: string;
+  bucketMinutes: number;
+  bucketsProcessed: number;
+}
+
+export interface RunWithWeather extends ParityRun {
+  weather: {
+    timestamp_utc: string;
+    temp_f: number | null;
+    rh_pct: number | null;
+    pressure_inhg: number | null;
+    delta_seconds: number;
+  } | null;
+}
+
+export interface RunsWithWeatherParams {
+  raceLookup: string;
+  windowMinutes?: number;
+  classIndex?: string;
+  driverName?: string;
+  lane?: string;
+  round?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface RunsWithWeatherResponse {
+  runs: RunWithWeather[];
+  total: number;
+  joinedCount: number;
+  windowMinutes: number;
+  limit: number;
+  offset: number;
+  raceLookup: string;
+}
+
+export interface WeatherSample {
+  id: number;
+  timestamp_utc: string;
+  event_id: number | null;
+  track_id: number | null;
+  event_local_time: string | null;
+  temp_c: number | null;
+  temp_f: number | null;
+  rh_pct: number | null;
+  station_pressure_raw: number | null;
+  source: string;
+  created_at: string;
+}
+
+export interface WeatherSamplesParams {
+  eventId?: number;
+  fromUtc?: string;
+  toUtc?: string;
+  limit?: number;
+}
+
+export interface WeatherSamplesResponse {
+  samples: WeatherSample[];
+  count: number;
+}
+
+export interface WeatherCanonicalPoint {
+  id: number;
+  timestamp_utc: string;
+  temp_f: number | null;
+  rh_pct: number | null;
+  pressure_inhg: number | null;
+  created_at: string;
+}
+
+export interface WeatherCanonicalParams {
+  fromUtc?: string;
+  toUtc?: string;
+  limit?: number;
+}
+
+export interface WeatherCanonicalResponse {
+  canonical: WeatherCanonicalPoint[];
+  count: number;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 async function parityRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -182,5 +328,76 @@ export const parityApi = {
     return parityRequest<ImportsResponse>(
       `/parity.php?action=imports&limit=${limit}`
     );
+  },
+
+  // ── Weather / Track / Event ─────────────────────────────────────────
+
+  async createTrack(trackName: string, timezoneIana: string): Promise<TrackResponse> {
+    return parityRequest<TrackResponse>('/parity.php?action=createTrack', {
+      method: 'POST',
+      body: JSON.stringify({ trackName, timezoneIana }),
+    });
+  },
+
+  async createEvent(params: CreateEventParams): Promise<EventResponse> {
+    return parityRequest<EventResponse>('/parity.php?action=createEvent', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async listTracks(): Promise<TracksResponse> {
+    return parityRequest<TracksResponse>('/parity.php?action=tracks');
+  },
+
+  async listEvents(): Promise<EventsResponse> {
+    return parityRequest<EventsResponse>('/parity.php?action=events');
+  },
+
+  async weatherBackfill(params: WeatherBackfillParams): Promise<WeatherBackfillResponse> {
+    return parityRequest<WeatherBackfillResponse>('/parity.php?action=weatherBackfill', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async weatherBuildCanonical(params: WeatherBuildCanonicalParams = {}): Promise<WeatherBuildCanonicalResponse> {
+    return parityRequest<WeatherBuildCanonicalResponse>('/parity.php?action=weatherBuildCanonical', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async runsWithWeather(params: RunsWithWeatherParams): Promise<RunsWithWeatherResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'runsWithWeather');
+    qs.set('raceLookup', params.raceLookup);
+    if (params.windowMinutes) qs.set('windowMinutes', String(params.windowMinutes));
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    if (params.driverName) qs.set('driverName', params.driverName);
+    if (params.lane) qs.set('lane', params.lane);
+    if (params.round) qs.set('round', params.round);
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    return parityRequest<RunsWithWeatherResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async weatherSamples(params: WeatherSamplesParams = {}): Promise<WeatherSamplesResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'weatherSamples');
+    if (params.eventId) qs.set('eventId', String(params.eventId));
+    if (params.fromUtc) qs.set('fromUtc', params.fromUtc);
+    if (params.toUtc) qs.set('toUtc', params.toUtc);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<WeatherSamplesResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async weatherCanonical(params: WeatherCanonicalParams = {}): Promise<WeatherCanonicalResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'weatherCanonical');
+    if (params.fromUtc) qs.set('fromUtc', params.fromUtc);
+    if (params.toUtc) qs.set('toUtc', params.toUtc);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<WeatherCanonicalResponse>(`/parity.php?${qs.toString()}`);
   },
 };

@@ -304,6 +304,224 @@ function parity_computeRowHash(string $raceLookup, array $normalized, array $raw
 }
 
 // ============================================================================
+// Tempest / WeatherFlow Client
+// ============================================================================
+
+/**
+ * Pressure conversion: millibars → inches of mercury.
+ * 1 mb = 0.0295300 inHg (standard conversion factor).
+ * This is UNCORRECTED station pressure, NOT sea-level adjusted.
+ */
+const PARITY_MB_TO_INHG = 0.02953;
+
+/**
+ * Fetch Tempest observations for a time range.
+ *
+ * @param int    $startEpoch     Unix epoch seconds (UTC)
+ * @param int    $endEpoch       Unix epoch seconds (UTC)
+ * @param int    $bucketMinutes  Aggregation bucket (default 30)
+ * @param string $stationId      Tempest station ID (from env)
+ * @param string $apiKey         Tempest API key (from env)
+ * @return array  List of [ 'timestamp_epoch' => int, 'temp_c' => ?float, 'rh_pct' => ?float, 'station_pressure_raw' => ?float ]
+ * @throws RuntimeException on fetch/parse failure
+ */
+function parity_fetchTempest(int $startEpoch, int $endEpoch, int $bucketMinutes, string $stationId, string $apiKey): array {
+    $url = "https://swd.weatherflow.com/swd/rest/observations/stn/{$stationId}"
+         . "?time_start={$startEpoch}&time_end={$endEpoch}"
+         . "&bucket={$bucketMinutes}&api_key={$apiKey}";
+
+    $raw = parity_httpGet($url);
+    if ($raw === false) {
+        throw new RuntimeException("Tempest fetch failed: $url");
+    }
+
+    $json = json_decode($raw, true);
+    if ($json === null) {
+        throw new RuntimeException("Tempest returned invalid JSON");
+    }
+
+    return parity_parseTempestResponse($json);
+}
+
+/**
+ * Parse a Tempest JSON response into sample objects.
+ * Uses ob_fields to locate column indexes dynamically.
+ */
+function parity_parseTempestResponse(array $json): array {
+    $fields = $json['ob_fields'] ?? $json['fields'] ?? [];
+    $obs = $json['obs'] ?? [];
+
+    if (empty($fields) || empty($obs)) {
+        return [];
+    }
+
+    // Build field index map (case-insensitive)
+    $fieldMap = [];
+    foreach ($fields as $i => $name) {
+        $fieldMap[strtolower($name)] = $i;
+    }
+
+    // Locate required columns
+    $tsIdx = $fieldMap['timestamp'] ?? $fieldMap['time_epoch'] ?? null;
+    $tempIdx = $fieldMap['air_temperature'] ?? $fieldMap['air_temp'] ?? $fieldMap['temperature'] ?? null;
+    $rhIdx = $fieldMap['relative_humidity'] ?? $fieldMap['rh'] ?? null;
+    $pressIdx = $fieldMap['station_pressure'] ?? $fieldMap['pressure'] ?? $fieldMap['barometric_pressure'] ?? null;
+
+    if ($tsIdx === null) {
+        throw new RuntimeException("Tempest response missing timestamp field. Fields: " . implode(', ', $fields));
+    }
+
+    $samples = [];
+    foreach ($obs as $row) {
+        if (!is_array($row)) continue;
+
+        $epoch = isset($row[$tsIdx]) ? (int)$row[$tsIdx] : null;
+        if ($epoch === null || $epoch === 0) continue;
+
+        $tempC = ($tempIdx !== null && isset($row[$tempIdx]) && $row[$tempIdx] !== null)
+            ? (float)$row[$tempIdx] : null;
+
+        $rh = ($rhIdx !== null && isset($row[$rhIdx]) && $row[$rhIdx] !== null)
+            ? (float)$row[$rhIdx] : null;
+
+        $press = ($pressIdx !== null && isset($row[$pressIdx]) && $row[$pressIdx] !== null)
+            ? (float)$row[$pressIdx] : null;
+
+        $samples[] = [
+            'timestamp_epoch' => $epoch,
+            'temp_c' => $tempC,
+            'rh_pct' => $rh,
+            'station_pressure_raw' => $press,
+        ];
+    }
+
+    return $samples;
+}
+
+/**
+ * Convert Celsius to Fahrenheit.
+ */
+function parity_cToF(?float $c): ?float {
+    if ($c === null) return null;
+    return round($c * 9.0 / 5.0 + 32.0, 2);
+}
+
+/**
+ * Convert millibars to inches of mercury.
+ */
+function parity_mbToInhg(?float $mb): ?float {
+    if ($mb === null) return null;
+    return round($mb * PARITY_MB_TO_INHG, 4);
+}
+
+/**
+ * Get Tempest config from environment variables.
+ * @return array [ 'station_id' => string, 'api_key' => string, 'bucket_minutes' => int ]
+ * @throws RuntimeException if required vars are missing
+ */
+function parity_getTempestConfig(): array {
+    $stationId = getenv('TEMPEST_STATION_ID') ?: ($_ENV['TEMPEST_STATION_ID'] ?? '');
+    $apiKey = getenv('TEMPEST_API_KEY') ?: ($_ENV['TEMPEST_API_KEY'] ?? '');
+    $bucket = (int)(getenv('TEMPEST_BUCKET_MINUTES') ?: ($_ENV['TEMPEST_BUCKET_MINUTES'] ?? 30));
+
+    if (empty($stationId) || empty($apiKey)) {
+        throw new RuntimeException('TEMPEST_STATION_ID and TEMPEST_API_KEY environment variables are required');
+    }
+
+    return [
+        'station_id' => $stationId,
+        'api_key' => $apiKey,
+        'bucket_minutes' => $bucket ?: 30,
+    ];
+}
+
+// ============================================================================
+// Event / Track Matching
+// ============================================================================
+
+/**
+ * Find the best matching event for a UTC datetime.
+ *
+ * For each event, converts dtUTC to the event's track local time.
+ * If the local time falls within [start_date 00:00:00, end_date 23:59:59], returns immediately.
+ * Otherwise picks the event with the smallest distance to the nearest boundary.
+ *
+ * @param PDO    $pdo
+ * @param string $dtUtc  MySQL DATETIME string in UTC
+ * @return array|null  [ 'event_id' => int, 'track_id' => int, 'local_time' => string, 'timezone' => string ] or null
+ */
+function parity_matchEvent(PDO $pdo, string $dtUtc): ?array {
+    $stmt = $pdo->query("
+        SELECT e.id AS event_id, e.start_date_local, e.end_date_local,
+               t.id AS track_id, t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+    ");
+    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($events)) return null;
+
+    $utcDt = new DateTimeImmutable($dtUtc, new DateTimeZone('UTC'));
+    $bestMatch = null;
+    $bestDistance = PHP_INT_MAX;
+
+    foreach ($events as $ev) {
+        try {
+            $tz = new DateTimeZone($ev['timezone_iana']);
+        } catch (Exception $e) {
+            continue; // skip invalid timezone
+        }
+
+        $localDt = $utcDt->setTimezone($tz);
+        $localStr = $localDt->format('Y-m-d H:i:s');
+
+        $startBound = new DateTimeImmutable($ev['start_date_local'] . ' 00:00:00', $tz);
+        $endBound = new DateTimeImmutable($ev['end_date_local'] . ' 23:59:59', $tz);
+
+        if ($localDt >= $startBound && $localDt <= $endBound) {
+            // Exact match — inside event range
+            return [
+                'event_id' => (int)$ev['event_id'],
+                'track_id' => (int)$ev['track_id'],
+                'local_time' => $localStr,
+                'timezone' => $ev['timezone_iana'],
+            ];
+        }
+
+        // Compute distance to nearest boundary
+        $distStart = abs($localDt->getTimestamp() - $startBound->getTimestamp());
+        $distEnd = abs($localDt->getTimestamp() - $endBound->getTimestamp());
+        $dist = min($distStart, $distEnd);
+
+        if ($dist < $bestDistance) {
+            $bestDistance = $dist;
+            $bestMatch = [
+                'event_id' => (int)$ev['event_id'],
+                'track_id' => (int)$ev['track_id'],
+                'local_time' => $localStr,
+                'timezone' => $ev['timezone_iana'],
+            ];
+        }
+    }
+
+    return $bestMatch;
+}
+
+/**
+ * Convert a local date string + timezone to UTC epoch range [start, end).
+ * Returns [ 'start_epoch' => int, 'end_epoch' => int ]
+ */
+function parity_localDateToUtcRange(string $localDate, string $timezoneIana): array {
+    $tz = new DateTimeZone($timezoneIana);
+    $start = new DateTime($localDate . ' 00:00:00', $tz);
+    $end = new DateTime($localDate . ' 23:59:59', $tz);
+    return [
+        'start_epoch' => $start->getTimestamp(),
+        'end_epoch' => $end->getTimestamp(),
+    ];
+}
+
+// ============================================================================
 // UUID Generation
 // ============================================================================
 

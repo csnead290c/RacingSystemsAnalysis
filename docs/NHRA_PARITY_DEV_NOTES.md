@@ -245,9 +245,89 @@ npm test -- --run
 
 ---
 
+## Phase 2 — Weather Ingestion & Run-to-Weather Join
+
+### Architecture
+
+```
+Tempest/WeatherFlow API
+    │  GET /swd/rest/observations/stn/{STATION_ID}
+    │  Params: time_start, time_end, bucket, api_key
+    │  Response: ob_fields[] + obs[][] (array-of-arrays)
+    ▼
+api/lib/parity.php          ← parity_fetchTempest() + parity_parseTempestResponse()
+    │                          parity_cToF(), parity_mbToInhg(), parity_matchEvent()
+    ▼
+api/parity.php               ← Weather endpoints (see below)
+    │
+    ▼
+MySQL Tables:
+  parity_tracks              ← Track name + IANA timezone
+  parity_events              ← Event name + track FK + local date range
+  parity_weather_samples     ← Raw Tempest observations (de-duped by source+timestamp)
+  parity_weather_canonical   ← Bucketed canonical weather for joins (UNIQUE timestamp)
+```
+
+### Pressure Unit Documentation
+
+| Table | Column | Unit | Source |
+|-------|--------|------|--------|
+| `parity_weather_samples` | `station_pressure_raw` | **millibars (mb)** | Tempest API `station_pressure` field |
+| `parity_weather_canonical` | `pressure_inhg` | **inches of mercury (inHg)** | Converted from mb |
+
+**Conversion:** `pressure_inhg = station_pressure_raw × 0.02953`
+
+This is **UNCORRECTED station pressure** — the actual barometric pressure at the station's elevation, NOT adjusted to sea level. This is the correct value for drag racing performance calculations (density altitude, air density corrections).
+
+Standard atmosphere reference: 1013.25 mb = 29.9213 inHg
+
+### Temperature Unit Documentation
+
+| Table | Column | Unit |
+|-------|--------|------|
+| `parity_weather_samples` | `temp_c` | Celsius (as returned by Tempest) |
+| `parity_weather_samples` | `temp_f` | Fahrenheit (converted on insert) |
+| `parity_weather_canonical` | `temp_f` | Fahrenheit |
+
+**Conversion:** `temp_f = temp_c × 9/5 + 32`
+
+### Weather API Actions
+
+| Action | Method | Description |
+|--------|--------|-------------|
+| `createTrack` | POST | Create track (name + timezone) |
+| `createEvent` | POST | Create event (name + track + dates + raceLookup) |
+| `tracks` | GET | List all tracks |
+| `events` | GET | List all events with track info |
+| `weatherBackfill` | POST | Fetch Tempest data for event date range, de-dupe insert |
+| `weatherBuildCanonical` | POST | Bucket samples into 30-min canonical points |
+| `runsWithWeather` | GET | Query runs joined to nearest canonical weather |
+| `weatherSamples` | GET | Query raw weather samples |
+| `weatherCanonical` | GET | Query canonical weather points |
+
+### Tempest Config (env vars — NOT committed)
+
+```
+TEMPEST_STATION_ID=<station_id>
+TEMPEST_API_KEY=<api_key>
+TEMPEST_BUCKET_MINUTES=30
+```
+
+### Phase 2 Files
+
+| File | Status |
+|------|--------|
+| `api/migrate-v6c-parity-weather.php` | **NEW** — 4 weather tables |
+| `api/parity.php` | **MODIFIED** — 9 new weather actions |
+| `api/lib/parity.php` | **MODIFIED** — Tempest client, event matching, unit conversions |
+| `src/services/parityApi.ts` | **MODIFIED** — Weather types + API methods |
+| `src/pages/ParityPortal.tsx` | **MODIFIED** — Weather tab + Runs+Weather tab |
+| `src/domain/parity/__tests__/weather.test.ts` | **NEW** — 23 tests |
+
+---
+
 ## Future Work
 
-- **Weather ingestion** — Second OData feed for weather data (separate tables)
-- **Frontend UI** — Parity analysis dashboard (internal route, gated by `nhra.parity`)
 - **Scheduled ingestion** — Cron job to auto-ingest after each NHRA event
-- **Field map refinement** — Update `FIELD_ALIASES` once we see actual API response shapes
+- **Weather station per track** — Allow different Tempest stations per track
+- **Corrected altitude pressure** — Optional sea-level correction for comparison across tracks

@@ -6,7 +6,7 @@
  * Server-side enforcement via api/parity.php; client check is UX-only.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import {
   parityApi,
@@ -15,6 +15,9 @@ import {
   type RunsResponse,
   type ParityRun,
   type ImportsResponse,
+  type WeatherBackfillResponse,
+  type WeatherBuildCanonicalResponse,
+  type RunWithWeather,
 } from '../services/parityApi';
 
 // ── Styles ──────────────────────────────────────────────────────────────
@@ -169,7 +172,7 @@ const S = {
   } as React.CSSProperties,
 } as const;
 
-type Tab = 'peek' | 'ingest' | 'query' | 'imports';
+type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather';
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -206,17 +209,25 @@ export default function ParityPortal() {
       </div>
 
       <div style={S.tabs}>
-        {(['peek', 'ingest', 'query', 'imports'] as Tab[]).map(t => (
-          <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>
-            {t === 'peek' ? 'Peek' : t === 'ingest' ? 'Ingest' : t === 'query' ? 'Query Runs' : 'Import History'}
-          </button>
-        ))}
+        {(['peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather'] as Tab[]).map(t => {
+          const labels: Record<Tab, string> = {
+            peek: 'Peek', ingest: 'Ingest', query: 'Query Runs',
+            imports: 'Imports', weather: 'Weather', runsWeather: 'Runs + Weather',
+          };
+          return (
+            <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>
+              {labels[t]}
+            </button>
+          );
+        })}
       </div>
 
       {tab === 'peek' && <PeekPanel raceLookup={raceLookup} />}
       {tab === 'ingest' && <IngestPanel raceLookup={raceLookup} />}
       {tab === 'query' && <QueryPanel raceLookup={raceLookup} />}
       {tab === 'imports' && <ImportsPanel />}
+      {tab === 'weather' && <WeatherPanel />}
+      {tab === 'runsWeather' && <RunsWeatherPanel raceLookup={raceLookup} />}
     </div>
   );
 }
@@ -532,6 +543,318 @@ function ImportsPanel() {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Weather Panel ───────────────────────────────────────────────────────
+
+function WeatherPanel() {
+  const [tracks, setTracks] = useState<{ id: number; track_name: string; timezone_iana: string }[]>([]);
+  const [events, setEvents] = useState<{ id: number; event_name: string; track_id: number; track_name: string; timezone_iana: string; start_date_local: string; end_date_local: string; race_lookup: string | null }[]>([]);
+  const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
+
+  // Create track form
+  const [newTrackName, setNewTrackName] = useState('');
+  const [newTrackTz, setNewTrackTz] = useState('America/New_York');
+
+  // Create event form
+  const [newEventName, setNewEventName] = useState('');
+  const [newEventTrackId, setNewEventTrackId] = useState(0);
+  const [newEventStart, setNewEventStart] = useState('');
+  const [newEventEnd, setNewEventEnd] = useState('');
+  const [newEventRaceLookup, setNewEventRaceLookup] = useState('');
+
+  // Backfill
+  const [bfEventId, setBfEventId] = useState(0);
+  const [bfResult, setBfResult] = useState<WeatherBackfillResponse | null>(null);
+  const [bfLoading, setBfLoading] = useState(false);
+
+  // Canonical
+  const [cnResult, setCnResult] = useState<WeatherBuildCanonicalResponse | null>(null);
+  const [cnLoading, setCnLoading] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setError('');
+    try {
+      const [t, e] = await Promise.all([parityApi.listTracks(), parityApi.listEvents()]);
+      setTracks(t.tracks);
+      setEvents(e.events);
+    } catch (e: any) { setError(e.message); }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const createTrack = useCallback(async () => {
+    if (!newTrackName.trim()) return;
+    setError(''); setMsg('');
+    try {
+      await parityApi.createTrack(newTrackName.trim(), newTrackTz);
+      setMsg(`Track "${newTrackName}" created`);
+      setNewTrackName('');
+      loadData();
+    } catch (e: any) { setError(e.message); }
+  }, [newTrackName, newTrackTz, loadData]);
+
+  const createEvent = useCallback(async () => {
+    if (!newEventName.trim() || !newEventTrackId || !newEventStart || !newEventEnd) return;
+    setError(''); setMsg('');
+    try {
+      await parityApi.createEvent({
+        eventName: newEventName.trim(),
+        trackId: newEventTrackId,
+        startDateLocal: newEventStart,
+        endDateLocal: newEventEnd,
+        raceLookup: newEventRaceLookup || undefined,
+      });
+      setMsg(`Event "${newEventName}" created`);
+      setNewEventName('');
+      loadData();
+    } catch (e: any) { setError(e.message); }
+  }, [newEventName, newEventTrackId, newEventStart, newEventEnd, newEventRaceLookup, loadData]);
+
+  const doBackfill = useCallback(async () => {
+    if (!bfEventId) return;
+    setBfLoading(true); setError(''); setBfResult(null);
+    try {
+      const r = await parityApi.weatherBackfill({ eventId: bfEventId });
+      setBfResult(r);
+    } catch (e: any) { setError(e.message); }
+    setBfLoading(false);
+  }, [bfEventId]);
+
+  const doBuildCanonical = useCallback(async () => {
+    setCnLoading(true); setError(''); setCnResult(null);
+    try {
+      const r = await parityApi.weatherBuildCanonical({});
+      setCnResult(r);
+    } catch (e: any) { setError(e.message); }
+    setCnLoading(false);
+  }, []);
+
+  return (
+    <div>
+      {error && <div style={S.error}>{error}</div>}
+      {msg && <div style={S.hint}>{msg}</div>}
+
+      {/* Tracks */}
+      <div style={S.card}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Tracks ({tracks.length})</h3>
+        {tracks.length > 0 && (
+          <div style={{ marginBottom: '0.75rem' }}>
+            {tracks.map(t => (
+              <div key={t.id} style={S.stat}><b>{t.track_name}</b> ({t.timezone_iana}) #{t.id}</div>
+            ))}
+          </div>
+        )}
+        <div style={S.row}>
+          <input style={S.inputWide} placeholder="Track name" value={newTrackName} onChange={e => setNewTrackName(e.target.value)} />
+          <input style={S.inputWide} placeholder="Timezone (IANA)" value={newTrackTz} onChange={e => setNewTrackTz(e.target.value)} />
+          <button style={S.btn('primary')} onClick={createTrack}>Add Track</button>
+        </div>
+      </div>
+
+      {/* Events */}
+      <div style={S.card}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Events ({events.length})</h3>
+        {events.length > 0 && (
+          <div style={{ overflow: 'auto', maxHeight: 200, marginBottom: '0.75rem' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>ID</th><th style={S.th}>Event</th><th style={S.th}>Track</th>
+                  <th style={S.th}>Start</th><th style={S.th}>End</th><th style={S.th}>Lookup</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map(ev => (
+                  <tr key={ev.id}>
+                    <td style={S.td}>{ev.id}</td>
+                    <td style={S.td}><b>{ev.event_name}</b></td>
+                    <td style={S.td}>{ev.track_name}</td>
+                    <td style={S.td}>{ev.start_date_local}</td>
+                    <td style={S.td}>{ev.end_date_local}</td>
+                    <td style={S.td}>{ev.race_lookup || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div style={S.row}>
+          <input style={S.inputWide} placeholder="Event name" value={newEventName} onChange={e => setNewEventName(e.target.value)} />
+          <select style={{ ...S.input, width: 150 }} value={newEventTrackId} onChange={e => setNewEventTrackId(Number(e.target.value))}>
+            <option value={0}>Select track</option>
+            {tracks.map(t => <option key={t.id} value={t.id}>{t.track_name}</option>)}
+          </select>
+          <input style={S.input} type="date" value={newEventStart} onChange={e => setNewEventStart(e.target.value)} />
+          <input style={S.input} type="date" value={newEventEnd} onChange={e => setNewEventEnd(e.target.value)} />
+          <input style={{ ...S.input, width: 90 }} placeholder="raceLookup" value={newEventRaceLookup} onChange={e => setNewEventRaceLookup(e.target.value)} />
+          <button style={S.btn('primary')} onClick={createEvent}>Add Event</button>
+        </div>
+      </div>
+
+      {/* Backfill */}
+      <div style={S.card}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Weather Backfill</h3>
+        <div style={S.row}>
+          <select style={{ ...S.input, width: 200 }} value={bfEventId} onChange={e => setBfEventId(Number(e.target.value))}>
+            <option value={0}>Select event</option>
+            {events.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name} ({ev.start_date_local})</option>)}
+          </select>
+          <button style={S.btn('primary')} onClick={doBackfill} disabled={bfLoading || !bfEventId}>
+            {bfLoading ? 'Backfilling...' : 'Backfill Weather'}
+          </button>
+        </div>
+        {bfResult && (
+          <div>
+            <span style={S.stat}>Days checked: <b>{bfResult.daysChecked}</b></span>
+            <span style={S.stat}>Days fetched: <b>{bfResult.daysFetched}</b></span>
+            <span style={S.stat}>Inserted: <b>{bfResult.rowsInserted}</b></span>
+            <span style={S.stat}>Deduped: <b>{bfResult.rowsDeduped}</b></span>
+            {bfResult.errors.length > 0 && (
+              <div style={S.error}>{bfResult.errors.join('; ')}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Build Canonical */}
+      <div style={S.card}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Build Canonical Weather</h3>
+        <div style={S.row}>
+          <button style={S.btn('primary')} onClick={doBuildCanonical} disabled={cnLoading}>
+            {cnLoading ? 'Building...' : 'Build Canonical (all samples)'}
+          </button>
+          <span style={{ color: 'var(--color-muted)', fontSize: '0.75rem' }}>
+            Buckets samples into 30-min intervals, converts pressure to inHg
+          </span>
+        </div>
+        {cnResult && (
+          <div>
+            <span style={S.stat}>Buckets: <b>{cnResult.bucketsProcessed}</b></span>
+            <span style={S.stat}>Range: {cnResult.startUtc} — {cnResult.endUtc}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Runs + Weather Panel ────────────────────────────────────────────────
+
+function RunsWeatherPanel({ raceLookup }: { raceLookup: string }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [runs, setRuns] = useState<RunWithWeather[]>([]);
+  const [total, setTotal] = useState(0);
+  const [joinedCount, setJoinedCount] = useState(0);
+  const [windowMinutes, setWindowMinutes] = useState(30);
+  const [classIndex, setClassIndex] = useState('');
+  const [driverName, setDriverName] = useState('');
+
+  const doQuery = useCallback(async () => {
+    if (raceLookup.length !== 8) { setError('Enter 8-digit YYYYMMDD'); return; }
+    setLoading(true); setError('');
+    try {
+      const r = await parityApi.runsWithWeather({
+        raceLookup,
+        windowMinutes,
+        classIndex: classIndex || undefined,
+        driverName: driverName || undefined,
+        limit: 100,
+      });
+      setRuns(r.runs);
+      setTotal(r.total);
+      setJoinedCount(r.joinedCount);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [raceLookup, windowMinutes, classIndex, driverName]);
+
+  const exportCsv = useCallback(() => {
+    if (runs.length === 0) return;
+    const headers = ['Driver', 'Class', 'Round', 'Lane', 'RT', 'ft1320', 'mph1320', 'Temp_F', 'RH%', 'Press_inHg', 'Weather_Delta_s'];
+    const rows = runs.map(r => [
+      r.driver_name || '', r.class_index || '', r.round || '', r.lane || '',
+      r.rt ?? '', r.ft1320 ?? '', r.mph1320 ?? '',
+      r.weather?.temp_f ?? '', r.weather?.rh_pct ?? '', r.weather?.pressure_inhg ?? '',
+      r.weather?.delta_seconds ?? '',
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `runs_weather_${raceLookup}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }, [runs, raceLookup]);
+
+  return (
+    <div style={S.card}>
+      <div style={S.row}>
+        <input style={S.input} placeholder="Class" value={classIndex} onChange={e => setClassIndex(e.target.value)} />
+        <input style={S.inputWide} placeholder="Driver name" value={driverName} onChange={e => setDriverName(e.target.value)} />
+        <label style={{ fontSize: '0.8rem' }}>Window:
+          <input style={{ ...S.input, width: 50, marginLeft: 4 }} type="number" value={windowMinutes}
+            onChange={e => setWindowMinutes(Number(e.target.value))} /> min
+        </label>
+        <button style={S.btn('primary')} onClick={doQuery} disabled={loading}>
+          {loading ? 'Loading...' : 'Query'}
+        </button>
+        {runs.length > 0 && (
+          <button style={S.btn('secondary')} onClick={exportCsv}>Export CSV</button>
+        )}
+      </div>
+
+      {error && <div style={S.error}>{error}</div>}
+
+      {runs.length > 0 && (
+        <>
+          <div style={{ marginBottom: '0.5rem', color: 'var(--color-muted)', fontSize: '0.75rem' }}>
+            Showing {runs.length} of {total} runs | {joinedCount} joined to weather (window: ±{windowMinutes}min)
+          </div>
+          <div style={{ overflow: 'auto', maxHeight: 500 }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Driver</th><th style={S.th}>Class</th><th style={S.th}>Rnd</th>
+                  <th style={S.th}>Ln</th><th style={S.th}>RT</th><th style={S.th}>1320ft</th>
+                  <th style={S.th}>1320mph</th>
+                  <th style={{ ...S.th, background: '#eaf4ff' }}>Temp °F</th>
+                  <th style={{ ...S.th, background: '#eaf4ff' }}>RH%</th>
+                  <th style={{ ...S.th, background: '#eaf4ff' }}>Press inHg</th>
+                  <th style={{ ...S.th, background: '#eaf4ff' }}>Δs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map(r => (
+                  <tr key={r.uuid}>
+                    <td style={S.td}>{r.driver_name || '—'}</td>
+                    <td style={S.td}>{r.class_index || '—'}</td>
+                    <td style={S.td}>{r.round || '—'}</td>
+                    <td style={S.td}>{r.lane || '—'}</td>
+                    <td style={S.td}>{r.rt != null ? r.rt.toFixed(3) : '—'}</td>
+                    <td style={S.td}>{r.ft1320 != null ? r.ft1320.toFixed(3) : '—'}</td>
+                    <td style={S.td}>{r.mph1320 != null ? r.mph1320.toFixed(1) : '—'}</td>
+                    <td style={{ ...S.td, background: '#f0f7ff' }}>
+                      {r.weather?.temp_f != null ? r.weather.temp_f.toFixed(1) : '—'}
+                    </td>
+                    <td style={{ ...S.td, background: '#f0f7ff' }}>
+                      {r.weather?.rh_pct != null ? r.weather.rh_pct.toFixed(1) : '—'}
+                    </td>
+                    <td style={{ ...S.td, background: '#f0f7ff' }}>
+                      {r.weather?.pressure_inhg != null ? r.weather.pressure_inhg.toFixed(3) : '—'}
+                    </td>
+                    <td style={{ ...S.td, background: '#f0f7ff', fontSize: '0.7rem' }}>
+                      {r.weather ? `${r.weather.delta_seconds}s` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
