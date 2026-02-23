@@ -73,10 +73,6 @@ function handleGet($pdo, $auth) {
         
         rsa_jsonResponse([
             'vehicles' => array_map('formatVehicle', $vehicles),
-            '_debug' => [
-                'user_id' => $userId,
-                'count' => count($vehicles)
-            ]
         ]);
     }
 }
