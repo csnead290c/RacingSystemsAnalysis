@@ -420,12 +420,12 @@ function parity_mbToInhg(?float $mb): ?float {
  * @throws RuntimeException if required vars are missing
  */
 function parity_getTempestConfig(): array {
-    $stationId = getenv('TEMPEST_STATION_ID') ?: ($_ENV['TEMPEST_STATION_ID'] ?? '');
-    $apiKey = getenv('TEMPEST_API_KEY') ?: ($_ENV['TEMPEST_API_KEY'] ?? '');
-    $bucket = (int)(getenv('TEMPEST_BUCKET_MINUTES') ?: ($_ENV['TEMPEST_BUCKET_MINUTES'] ?? 30));
+    $stationId = defined('TEMPEST_STATION_ID') ? TEMPEST_STATION_ID : (getenv('TEMPEST_STATION_ID') ?: ($_ENV['TEMPEST_STATION_ID'] ?? ''));
+    $apiKey = defined('TEMPEST_API_KEY') ? TEMPEST_API_KEY : (getenv('TEMPEST_API_KEY') ?: ($_ENV['TEMPEST_API_KEY'] ?? ''));
+    $bucket = defined('TEMPEST_BUCKET_MINUTES') ? (int)TEMPEST_BUCKET_MINUTES : (int)(getenv('TEMPEST_BUCKET_MINUTES') ?: ($_ENV['TEMPEST_BUCKET_MINUTES'] ?? 30));
 
     if (empty($stationId) || empty($apiKey)) {
-        throw new RuntimeException('TEMPEST_STATION_ID and TEMPEST_API_KEY environment variables are required');
+        throw new RuntimeException('TEMPEST_STATION_ID and TEMPEST_API_KEY must be defined in config.php or environment');
     }
 
     return [
