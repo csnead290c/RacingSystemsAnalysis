@@ -97,7 +97,7 @@ These inputs determine how the engine's rated power is adjusted for actual condi
 | Wind Angle | deg | 0 | 0 = headwind, 180 = tailwind (Pro only). |
 | Traction Index | 1–12 | 5 | Track surface grip. 1 = best national event prep, 5–6 = typical bracket race, 8–12 = street. |
 
-> **Important:** The environment is saved with your vehicle after each successful simulation run. When you select that vehicle again (via vehicle selector, "Run Sim" button, or navigation), the saved environment loads automatically. This ensures you can reproduce the exact same run conditions.
+> **Important:** The environment is saved with your vehicle after each successful simulation run. When you select that vehicle again (via vehicle selector, "Run Sim" button, or navigation), the saved environment loads automatically as soon as you click "Start Simulation". This ensures you can reproduce the exact same run conditions.
 
 ### 4.2 Vehicle
 
@@ -217,7 +217,7 @@ Used in bracket racing to slow the vehicle to hit a target ET.
 
 After each successful run:
 - **Last sim snapshot** — ET, MPH, and split times (60ft, 330ft, 660ft, 1000ft) are saved to the vehicle. This snapshot appears in the Vehicles table as "Last: X.XXXs @ XXX.X mph" below the vehicle name.
-- **Environment** — the weather conditions (elevation, temperature, barometer, humidity, traction index, and Pro fields like track temp/wind) are saved so they load automatically next time you select this vehicle.
+- **Environment** — the weather conditions (elevation, temperature, barometer, humidity, traction index, and Pro fields like track temp/wind) are saved. They load automatically when you click "Start Simulation" with this vehicle.
 
 These are saved to the server in the background. You don't need to click Save.
 
@@ -272,10 +272,10 @@ Click the **📊 Detail** button (below the timeslip) to see the full row-by-row
 
 Each row is triggered by an event:
 - **Rollout** — initial conditions and the moment the clock starts. Format: "Rollout x.xxx/0.000" where the first number is time to move the rollout distance, and 0.000 is the ET clock resetting (just like at the track).
-- **Distance markers** — 30 ft, 60 ft, 330 ft, 660 ft, 1000 ft, 1320 ft.
-- **Speed markers** — 0–60 MPH, 0–100 MPH.
+- **Distance markers** — 60 ft, 330 ft, 660 ft, 1000 ft, 1320 ft (quarter mile). Bonneville runs show mile markers instead.
+- **Speed markers** — 60 MPH, 100 MPH (if reached during the run).
 - **Gear changes** — two rows per shift (before and after).
-- **Time intervals** — regular intervals (0.5s, 1.0s, etc.).
+- **Time intervals** — regular intervals based on estimated ET (typically 0.5s, 1.0s, 1.5s, etc.).
 
 **Columns:** Time, Distance, MPH, Acceleration (g), Gear, RPM.
 
@@ -298,11 +298,6 @@ Shows how much time the engine spends at each RPM during the run. Useful for:
 - Click **Save** in the Vehicle Manager to persist changes.
 - Use **Duplicate** to create a copy for what-if experiments.
 - Use **Import .dat** to load a legacy VB6 Quarter data file.
-
-### Run History
-
-- Each simulation result can be saved to your local run history.
-- Use the **Compare** feature to overlay a previous run on the chart.
 
 ---
 

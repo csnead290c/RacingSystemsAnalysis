@@ -69,7 +69,7 @@ The Engine simulator has been calibrated against dyno data from hundreds of high
    - **Camshaft Type** and **Intake Duration**
    - **Throttle CFM** (carburetor or throttle body flow)
 4. Results update instantly — check the **Estimated Peak HP** and **Peak Torque** displayed on screen.
-5. Click the **Dyno Data** button to see the full HP and Torque curves.
+5. The **Dyno Curve Chart** (HP and Torque vs RPM) updates automatically below the inputs.
 6. To save: click **Save** or **Save As** in the File tab.
 
 > **Tip:** The default engine is a good starting point. Modify one variable at a time and watch how it affects the predicted output.
@@ -126,7 +126,7 @@ The Engine Sim recalculates **every time you change an input**. There is no Run 
 When you change a value and press Tab, Enter, or click away:
 1. The cursor briefly pauses while calculations run.
 2. The estimated performance updates on screen.
-3. The dyno curve updates if the chart is open.
+3. The dyno curve chart updates automatically.
 
 This is the same behavior as the original VB6 Engine Jr/Pro software, where every input change triggered an immediate recalculation.
 
@@ -148,11 +148,11 @@ Displayed directly on the main screen:
 
 ### 6.2 Dyno Curve Chart
 
-Click the dyno chart area or the chart button to see:
-- **HP curve** (red) — horsepower vs RPM
-- **Torque curve** (blue) — torque vs RPM
+The dyno curve chart is always visible below the input fields, showing:
+- **HP curve** (blue) — horsepower vs RPM
+- **Torque curve** (red) — torque vs RPM
 
-The chart spans from approximately 25% of peak HP RPM to 125% of peak HP RPM, with points every 125 RPM.
+The chart spans from approximately 25% of peak HP RPM to 125% of peak HP RPM, with points every 125 RPM. It updates automatically whenever you change any input.
 
 <!-- TODO: Screenshot of dyno curve chart -->
 
@@ -271,7 +271,7 @@ Calculates the minimum cross-sectional area of intake ports and runners. Useful 
 | File → Open (.eng) | File tab → Open, or Import button |
 | File → Save (.eng) | File tab → Save / Save As |
 | File → Print | File tab → Print (TODO: not yet available) |
-| Dyno Data button | Dyno curve chart (always visible) |
+| Dyno Data button | Dyno curve chart (always visible below inputs) |
 | Compression Ratio Worksheet | CR Worksheet tab |
 | Throttle CFM Worksheet | Carb CFM Worksheet tab |
 | Intake Port Flow Worksheet | Intake Flow Worksheet tab |

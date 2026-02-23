@@ -94,10 +94,10 @@ In the Vehicle Manager, click the **Duplicate** button next to any vehicle. You'
 
 ### How do I reproduce the same result every time?
 
-The environment is **automatically saved** with your vehicle after each successful simulation run. When you select that vehicle again (via vehicle selector, "Run Sim" button, or navigation), the saved environment loads automatically.
+The environment is **automatically saved** with your vehicle after each successful simulation run. When you select that vehicle again (via vehicle selector, "Run Sim" button, or navigation), the saved environment loads automatically when you click "Start Simulation".
 
 This ensures you can reproduce the exact same run conditions:
-1. The saved environment loads automatically (elevation, temperature, barometer, humidity, traction, wind).
+1. The saved environment loads when you start the simulation (elevation, temperature, barometer, humidity, traction, wind).
 2. The vehicle configuration is unchanged (unless you edit it).
 3. Running the sim again produces the same results (within floating-point precision).
 
@@ -177,10 +177,10 @@ Click the **📊 Detail** button (below the timeslip) to see the full row-by-row
 
 Each row is triggered by an event:
 - **Rollout** — initial conditions and the moment the clock starts
-- **Distance markers** — 30, 60, 330, 660, 1000, 1320 ft
-- **Speed markers** — 0–60 MPH, 0–100 MPH
+- **Distance markers** — 60, 330, 660, 1000, 1320 ft (quarter mile). Bonneville runs show mile markers.
+- **Speed markers** — 60 MPH, 100 MPH (if reached during the run)
 - **Gear changes** — two rows per shift (before/after)
-- **Time intervals** — regular intervals (0.5s, 1.0s, etc.)
+- **Time intervals** — regular intervals based on estimated ET (typically 0.5s, 1.0s, 1.5s, etc.)
 
 **Columns:** Time, Distance, MPH, Acceleration (g), Gear, RPM.
 

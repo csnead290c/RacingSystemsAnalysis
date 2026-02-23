@@ -586,7 +586,7 @@ function Predict() {
                   </select>
                   {selectedVehicleObj && !proLock.locked && (selectedVehicleObj as Vehicle).savedEnvQuarter && (
                     <div style={{ marginTop: '0.375rem', fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                      ✓ Will load saved environment when you start simulation
+                      ✓ Will load saved environment when you click Start Simulation
                     </div>
                   )}
                   {selectedVehicleObj && !proLock.locked && (selectedVehicleObj as Vehicle).lastSimQuarter && (
