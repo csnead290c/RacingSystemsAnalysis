@@ -132,9 +132,11 @@ If you see **larger** differences, double-check that all inputs match exactly, e
 
 ### What is Stall RPM (converter)?
 
-**Stall RPM** is the stall or "flash" speed of the torque converter. This is the RPM at launch — the engine speed when the vehicle is staged and the green light drops.
+**Stall RPM** is the stall or "flash" speed of the torque converter — the RPM where the converter stops multiplying torque and begins to couple.
 
-For most converter cars, this is the RPM the engine reaches when you're on the transbrake or footbrake at the starting line.
+For most converter cars, the Launch RPM (the actual engine RPM when staged and ready to launch) equals the Stall RPM. However, some vehicles stage at idle or on an RPM limiter, in which case the Launch RPM would be lower than the Stall RPM.
+
+**In Quarter Jr mode**, Launch RPM automatically equals Stall RPM. **In Quarter Pro mode**, you can specify a different Launch RPM if your vehicle stages at a different RPM than the converter stall speed.
 
 📖 **See also:** [Quarter Manual - Inputs Reference: Converter](QUARTER_JR_PRO.md#45-transmission)
 

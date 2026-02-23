@@ -157,7 +157,8 @@ In Pro mode, you enter a table of **RPM vs HP** (or RPM vs Torque) with up to 11
 
 | Field | Unit | Default | Description |
 |-------|------|---------|-------------|
-| Stall RPM | RPM | — | Stall or "flash" speed of the torque converter. This is the RPM at launch. |
+| Stall RPM | RPM | — | Stall or "flash" speed of the torque converter — the RPM where the converter stops multiplying torque and begins to couple. |
+| Launch RPM | RPM | — | Engine RPM when staged and ready to launch (Pro only). Defaults to Stall RPM if not specified. Some vehicles stage at idle or on a limiter, in which case Launch RPM would be lower than Stall RPM. |
 | Converter Diameter | in | — | Physical diameter of the converter. |
 | Torque Multiplication | ratio | — | Static torque multiplication factor (Pro only). Typically 1.4–2.0. |
 | Converter Slippage | ratio | — | Slippage above stall RPM (Pro only). Typically 1.03–1.08. |
