@@ -56,14 +56,16 @@ If you have a Pro subscription, you can switch between modes on the **Account** 
 
 A vehicle shows a lock icon (🔒) when it was created or edited using **Pro-only features** — such as an HP curve, advanced aero coefficients, throttle stop, or polar moments of inertia.
 
+**The lock is based on a flag:** `usesQuarterProFeatures` is set to `true` when a Pro user saves a vehicle with any Pro-only fields. This flag never automatically reverts, even if you later remove the Pro-only data.
+
 If your current plan doesn't include Pro access, you cannot run simulations with a Pro-locked vehicle.
 
 **Solutions:**
 - **Upgrade to Pro** to unlock the vehicle.
 - **Create a new vehicle** using only Jr-level inputs (peak HP, body style, etc.).
-- **Duplicate** the locked vehicle and simplify it by removing Pro-only data.
+- **Duplicate** the locked vehicle and simplify it by removing Pro-only data (requires Pro access to edit).
 
-> **Note:** Once a vehicle is marked as Pro-locked, it stays locked even if you later remove the Pro-only fields. This is by design to prevent accidental data loss.
+📖 **See also:** [Quarter Manual - Common Issues: Why is my vehicle locked?](QUARTER_JR_PRO.md#why-is-my-vehicle-locked)
 
 ### How many vehicles can I have?
 
@@ -76,7 +78,11 @@ Yes. In the Vehicle Manager, click **Import .dat** and select a `.dat` file from
 
 ### What does "Last Run" mean?
 
-After each successful Quarter simulation, the ET and MPH are automatically saved to the vehicle. This appears as "Last Run" in the vehicle list on the Home page and in the Quarter Sim vehicle selector.
+After each successful Quarter simulation, the ET, MPH, and split times (60ft, 330ft, 660ft, 1000ft) are automatically saved to the vehicle. This snapshot appears in the Vehicles table as "Last: X.XXXs @ XXX.X mph" below the vehicle name.
+
+The last run snapshot is saved to the server in the background — you don't need to click Save.
+
+📖 **See also:** [Quarter Manual - Running a Simulation: What Gets Saved](QUARTER_JR_PRO.md#what-gets-saved)
 
 ### How do I duplicate a vehicle?
 
@@ -88,43 +94,49 @@ In the Vehicle Manager, click the **Duplicate** button next to any vehicle. You'
 
 ### How do I reproduce the same result every time?
 
-To get identical results:
-1. Use the **exact same vehicle data** (all fields).
-2. Use the **exact same environment** (elevation, barometer, temperature, humidity).
-3. Use the **same race length**.
+The environment is **automatically saved** with your vehicle after each successful simulation run. When you select that vehicle again (via vehicle selector, "Run Sim" button, or navigation), the saved environment loads automatically.
 
-The simulation is fully deterministic — same inputs always produce the same outputs.
+This ensures you can reproduce the exact same run conditions:
+1. The saved environment loads automatically (elevation, temperature, barometer, humidity, traction, wind).
+2. The vehicle configuration is unchanged (unless you edit it).
+3. Running the sim again produces the same results (within floating-point precision).
 
-> **Tip:** The environment is saved with your vehicle after each run. If you select the same vehicle, the saved environment loads automatically, ensuring consistent results.
+**To verify:** On the vehicle selector page, if the vehicle has a saved environment, you'll see "✓ Will load saved environment when you start simulation" below the vehicle dropdown.
+
+📖 **See also:** [Quarter Manual - Common Issues: How do I reproduce the same run?](QUARTER_JR_PRO.md#how-do-i-reproduce-the-same-run)
 
 ### Why does Rollout show x.xxx / 0.000?
 
-This is normal and matches how real dragstrip timing works:
+In the Detailed Parameters output, the first row shows "Rollout x.xxx/0.000":
 
-- The **first number** (e.g., 0.312) is the time it takes the vehicle to move the rollout distance — the distance from the stage beam to the guard beam.
-- The **second number** (0.000) is the ET clock resetting to zero as the front tire clears the stage beam.
+- **First number (x.xxx):** Time in seconds to move the rollout distance (typically 12 inches, half the tire diameter).
+- **Second number (0.000):** The ET clock resetting to zero — just like at the track, the timing clock starts after the vehicle moves through the rollout distance.
 
-The rollout distance is set in the vehicle editor (default: 12 inches). A good rule of thumb is half the staging tire diameter.
+This matches real dragstrip timing systems. If you set Rollout to 0 inches, timing starts immediately with vehicle movement (magazine-style testing).
 
-If rollout is set to **0**, the clock starts immediately with vehicle movement. This matches magazine-style 0–60 testing.
+📖 **See also:** [Quarter Manual - Common Issues: What does Rollout x.xxx/0.00 mean?](QUARTER_JR_PRO.md#what-does-rollout-xxxx000-mean)
 
 ### Why do my numbers differ from VB6?
 
-RSA uses the same physics engine as the original VB6 software. Small differences are expected:
+RSA uses the same physics engine as the original VB6 software. Small differences (typically < 0.01s ET, < 0.5 MPH) can occur due to:
+- Floating-point precision differences between VB6 (32-bit) and modern JavaScript (64-bit).
+- Rounding at intermediate steps.
 
-- **Typical variance:** < 0.01s ET, < 0.5 MPH
-- **Cause:** VB6 used 32-bit floating point (Single precision). RSA uses 64-bit (Double precision). This causes tiny rounding differences that accumulate through thousands of calculation steps.
+If you see **larger** differences, double-check that all inputs match exactly, especially:
+- HP curve data points (Pro mode)
+- Environment settings (elevation, temperature, barometer, humidity)
+- Traction index
+- Rollout distance
 
-If you see **larger** differences:
-1. Verify all inputs match exactly — especially HP curve data points, gear ratios, and environment.
-2. Check that you're comparing the same race length.
-3. In VB6, some fields had hidden defaults that may differ from RSA defaults.
+📖 **See also:** [Quarter Manual - Common Issues: Why do results differ from VB6?](QUARTER_JR_PRO.md#why-do-results-differ-from-vb6)
 
-### What does Launch RPM do (converter)?
+### What is Stall RPM (converter)?
 
-**Launch RPM** (Pro mode) is the engine RPM when the vehicle is staged and the green light drops. For most converter cars, this equals the torque converter stall RPM. However, some vehicles stage at idle or on an RPM limiter, in which case Launch RPM would be that lower engine speed.
+**Stall RPM** is the stall or "flash" speed of the torque converter. This is the RPM at launch — the engine speed when the vehicle is staged and the green light drops.
 
-In **Jr mode**, the Launch RPM is automatically set to the Stall RPM.
+For most converter cars, this is the RPM the engine reaches when you're on the transbrake or footbrake at the starting line.
+
+📖 **See also:** [Quarter Manual - Inputs Reference: Converter](QUARTER_JR_PRO.md#45-transmission)
 
 ### What does Slip RPM do (clutch)?
 
@@ -159,15 +171,20 @@ You can toggle series on/off, switch between time and distance on the X-axis, an
 
 ### What are Detailed Parameters?
 
-The Detailed Parameters table shows the complete row-by-row breakdown of the run — the same output as the VB6 "Detailed Parameters" screen. Each row is triggered by an event:
+Click the **📊 Detail** button (below the timeslip) to see the full row-by-row breakdown. This is the same tabular output as the VB6 "Detailed Parameters" screen.
 
-- **Rollout** — initial conditions and clock start
+Each row is triggered by an event:
+- **Rollout** — initial conditions and the moment the clock starts
 - **Distance markers** — 30, 60, 330, 660, 1000, 1320 ft
 - **Speed markers** — 0–60 MPH, 0–100 MPH
 - **Gear changes** — two rows per shift (before/after)
-- **Time intervals** — regular intervals
+- **Time intervals** — regular intervals (0.5s, 1.0s, etc.)
 
-An **(s)** next to acceleration means tire slip at that point.
+**Columns:** Time, Distance, MPH, Acceleration (g), Gear, RPM.
+
+An **(s)** next to acceleration means tire slip at that point. One or two (s) marks during rollout are common. Three or more means you have a traction problem.
+
+📖 **See also:** [Quarter Manual - Reading Results: Detailed Parameters](QUARTER_JR_PRO.md#63-detailed-parameters)
 
 ### What is the throttle stop? (Pro only)
 
@@ -209,10 +226,16 @@ The simulation adjusts power for your actual conditions using the **SAE J1349** 
 
 ### How do I get my engine into the Quarter Sim?
 
-1. In the Engine Sim, save your engine to the **Engine Library** (File tab → Save to Library).
-2. Go to **Vehicles** and edit your vehicle.
-3. In the engine section, select the engine from your library dropdown.
-4. The vehicle will use the full dyno curve from the Engine Sim.
+1. In the Engine Sim, click **Save as Engine Asset** button.
+2. Enter a name for the engine asset.
+3. Go to **Vehicles** and edit your vehicle.
+4. In the engine section, click **Install from Library**.
+5. Select the engine from your library.
+6. The vehicle will use the full dyno curve from the Engine Sim instead of simple Peak HP/RPM.
+
+**Benefits:** Changes to the engine asset automatically update all vehicles using it.
+
+📖 **See also:** [Engine Manual - Saving and Loading: Engine Library](ENGINE_JR_PRO.md#engine-library-for-quarter-sim)
 
 ### What if I don't have flowbench data?
 

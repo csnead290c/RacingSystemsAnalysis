@@ -185,33 +185,43 @@ Three-column layout with component suggestions:
 
 ### Engine Documents
 
-Engine configurations are saved as "engine sim documents" in your account:
+Engine configurations are saved as "engine sim documents" in your account (cloud storage):
 
-- **Save** — updates the current document.
-- **Save As** — creates a new document with a new name.
-- **Open** — loads a previously saved document.
-- **Delete** — removes a document from your library.
+- **Save** — updates the current document (if you opened an existing document). If this is a new engine, you'll be prompted to "Save As" with a name.
+- **Save As** — creates a new document with a new name. You'll see a prompt to enter the document name.
+- **Library** — shows all your saved engine documents. Click to load, or delete documents you no longer need.
+- **New** — clears the current engine and starts fresh with default values.
+- **Export** — downloads the current engine as a `.eng` file (compatible with VB6 Engine Jr/Pro).
+- **Import** — uploads a `.eng` file from the legacy desktop software.
 
-### Engine Library
+Documents are saved to the database automatically when you click Save or Save As. No manual file management needed.
 
-Engines can also be saved to the **Engine Library**, which allows them to be installed on vehicles:
+### Engine Library (for Quarter Sim)
 
-- From the Engine Sim, use **Save to Library** to create a library entry.
-- Each save creates a new **revision** — the library keeps history.
-- In the Vehicle Manager, you can select an engine from the library to install on a vehicle.
+Engines can also be saved to the **Engine Library**, which allows them to be installed on vehicles for use in the Quarter Sim:
+
+- From the Engine Sim, use **Save as Engine Asset** button to create a library entry.
+- You'll be prompted to enter a name for the engine asset.
+- Each save creates a new **revision** — the library keeps a full history of changes.
+- In the Vehicle Manager, click **Install from Library** in the engine section to select an engine from your library.
+- The vehicle will use the full dyno curve from the Engine Sim instead of simple Peak HP/RPM.
+
+**Benefits:** Changes to the engine asset automatically update all vehicles using it. No need to re-enter engine data for multiple vehicles.
 
 ### Import / Export .eng Files
 
 **Importing:**
-1. Click the **Import** button (upload icon) in the File tab.
-2. Select a `.eng` file from the original Engine Jr or Engine Pro desktop software.
-3. The engine data loads into the simulator.
+1. Click the **Import** button in the File tab.
+2. Select a `.eng` file from the original Engine Jr or Engine Pro desktop software (versions 2.x or 3.x).
+3. The engine data loads into the simulator immediately.
+4. Click **Save As** to save it as a new engine document in your account.
 
 **Exporting:**
-1. Click the **Export** button (download icon) in the File tab.
-2. A `.eng` file is downloaded that can be opened in the legacy desktop software.
+1. Click the **Export** button in the File tab.
+2. A `.eng` file is downloaded to your computer.
+3. This file can be opened in the legacy VB6 Engine Jr or Engine Pro desktop software.
 
-> **Tip:** Import is a great way to bring your existing engine library into RSA without re-entering all the data.
+> **Tip:** Import is a great way to bring your existing engine library into RSA without re-entering all the data. The parser supports both v2 and v3 .eng file formats.
 
 ---
 

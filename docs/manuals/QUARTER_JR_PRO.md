@@ -43,7 +43,7 @@ The simulation uses the same physics engine as the original RSA desktop software
 | Aero inputs | Body style + frontal area | Drag coefficient + lift coefficient + frontal area |
 | Polar moments of inertia | Estimated internally | User-specified (engine, trans, tires) |
 | Clutch model | Slip RPM only | Launch RPM + Slip RPM + Clutch Slippage |
-| Converter model | Stall RPM + diameter | + Torque Multiplication + Converter Slippage |
+| Converter model | Stall RPM + diameter | Stall RPM + diameter + Torque Multiplication + Converter Slippage |
 | Gear efficiencies | Single value | Per-gear efficiency |
 | Final drive efficiency | — | ✓ |
 | Overhang | — | ✓ |
@@ -97,7 +97,7 @@ These inputs determine how the engine's rated power is adjusted for actual condi
 | Wind Angle | deg | 0 | 0 = headwind, 180 = tailwind (Pro only). |
 | Traction Index | 1–12 | 5 | Track surface grip. 1 = best national event prep, 5–6 = typical bracket race, 8–12 = street. |
 
-> **Important:** The environment is saved with your vehicle after each run. Next time you select that vehicle, the saved environment loads automatically.
+> **Important:** The environment is saved with your vehicle after each successful simulation run. When you select that vehicle again (via vehicle selector, "Run Sim" button, or navigation), the saved environment loads automatically. This ensures you can reproduce the exact same run conditions.
 
 ### 4.2 Vehicle
 
@@ -157,7 +157,7 @@ In Pro mode, you enter a table of **RPM vs HP** (or RPM vs Torque) with up to 11
 
 | Field | Unit | Default | Description |
 |-------|------|---------|-------------|
-| Stall RPM | RPM | — | Stall or "flash" speed of the torque converter. |
+| Stall RPM | RPM | — | Stall or "flash" speed of the torque converter. This is the RPM at launch. |
 | Converter Diameter | in | — | Physical diameter of the converter. |
 | Torque Multiplication | ratio | — | Static torque multiplication factor (Pro only). Typically 1.4–2.0. |
 | Converter Slippage | ratio | — | Slippage above stall RPM (Pro only). Typically 1.03–1.08. |
@@ -215,8 +215,8 @@ Used in bracket racing to slow the vehicle to hit a target ET.
 ### What Gets Saved
 
 After each successful run:
-- **Last sim snapshot** — ET, MPH, and split times are saved to the vehicle.
-- **Environment** — the weather conditions are saved so they load automatically next time.
+- **Last sim snapshot** — ET, MPH, and split times (60ft, 330ft, 660ft, 1000ft) are saved to the vehicle. This snapshot appears in the Vehicles table as "Last: X.XXXs @ XXX.X mph" below the vehicle name.
+- **Environment** — the weather conditions (elevation, temperature, barometer, humidity, traction index, and Pro fields like track temp/wind) are saved so they load automatically next time you select this vehicle.
 
 These are saved to the server in the background. You don't need to click Save.
 
@@ -267,10 +267,10 @@ The chart displays run data like an on-board data recorder:
 
 ### 6.3 Detailed Parameters
 
-Click the **Detailed Parameters** button to see the full row-by-row breakdown. This is the same tabular output as the VB6 "Detailed Parameters" screen.
+Click the **📊 Detail** button (below the timeslip) to see the full row-by-row breakdown. This is the same tabular output as the VB6 "Detailed Parameters" screen.
 
 Each row is triggered by an event:
-- **Rollout** — initial conditions and the moment the clock starts.
+- **Rollout** — initial conditions and the moment the clock starts. Format: "Rollout x.xxx/0.000" where the first number is time to move the rollout distance, and 0.000 is the ET clock resetting (just like at the track).
 - **Distance markers** — 30 ft, 60 ft, 330 ft, 660 ft, 1000 ft, 1320 ft.
 - **Speed markers** — 0–60 MPH, 0–100 MPH.
 - **Gear changes** — two rows per shift (before and after).
@@ -345,7 +345,49 @@ If you're coming from the original RSA desktop software, here's how things map:
 
 ---
 
-## 10. Common Mistakes and Troubleshooting
+## 10. Common Issues
+
+### "Why is my vehicle locked?"
+
+You'll see a 🔒 lock icon on a vehicle if it was created or edited by a Pro user using Pro-only features (HP curve, advanced aero, throttle stop, PMI, per-gear efficiencies, etc.).
+
+**The lock is based on a flag:** `usesQuarterProFeatures` is set to `true` when a Pro user saves a vehicle with any Pro-only fields. This flag never automatically reverts.
+
+**Solutions:**
+- **Upgrade to Pro** to unlock the vehicle and run simulations.
+- **Create a new vehicle** using only Jr-level inputs (peak HP, body style, etc.).
+- **Duplicate** the locked vehicle and simplify it by removing Pro-only data (requires Pro access to edit).
+
+### "How do I reproduce the same run?"
+
+The environment is automatically saved with your vehicle after each successful run. When you select that vehicle again:
+1. The saved environment loads automatically (elevation, temperature, barometer, humidity, traction, wind).
+2. The vehicle configuration is unchanged (unless you edit it).
+3. Running the sim again produces the same results (within floating-point precision).
+
+**To verify:** Check the vehicle selector page — if the vehicle has a saved environment, you'll see "✓ Will load saved environment when you start simulation" below the vehicle dropdown.
+
+### "What does Rollout x.xxx/0.00 mean?"
+
+In the Detailed Parameters output, the first row shows "Rollout x.xxx/0.000":
+- **First number (x.xxx):** Time in seconds to move the rollout distance (typically 12 inches, half the tire diameter).
+- **Second number (0.000):** The ET clock resetting to zero — just like at the track, the timing clock starts after the vehicle moves through the rollout distance.
+
+This matches real dragstrip timing systems. If you set Rollout to 0 inches, timing starts immediately with vehicle movement (magazine-style testing).
+
+### "Why do results differ from VB6?"
+
+RSA uses the same physics engine as the original VB6 software. Small differences (typically < 0.01s ET, < 0.5 MPH) can occur due to:
+- Floating-point precision differences between VB6 (32-bit) and modern JavaScript (64-bit).
+- Rounding at intermediate steps.
+
+If you see larger differences, double-check that all inputs match exactly, especially:
+- HP curve data points (Pro mode)
+- Environment settings (elevation, temperature, barometer, humidity)
+- Traction index
+- Rollout distance
+
+## 11. Common Mistakes and Troubleshooting
 
 ### "My ET is way off from my actual track times"
 
@@ -367,21 +409,8 @@ The **(s)** marker means tire slip. If you see it on 3+ lines after rollout, you
 - Reducing launch RPM.
 - Adding weight.
 
-### "Why does Rollout show x.xxx / 0.000?"
 
-The first time is how long it takes to move the rollout distance. The second time (0.000) is the ET clock resetting — just like at the track. This is normal.
 
-### "My vehicle has a lock icon"
-
-This means the vehicle was created or edited using Pro-only features (HP curve, advanced aero, throttle stop, PMI, etc.). If your plan doesn't include Pro access, you can't run simulations with this vehicle. Upgrade to Pro, or create a new vehicle using only Jr-level inputs.
-
-### "Numbers differ slightly from VB6"
-
-RSA uses the same physics engine as the original VB6 software. Small differences (typically < 0.01s ET, < 0.5 MPH) can occur due to:
-- Floating-point precision differences between VB6 (32-bit) and modern JavaScript (64-bit).
-- Rounding at intermediate steps.
-
-If you see larger differences, double-check that all inputs match exactly, especially the HP curve data points and environment settings.
 
 ---
 

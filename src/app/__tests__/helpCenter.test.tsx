@@ -236,4 +236,5 @@ describe('Help Center', () => {
     expect(tocLinkTexts).toContain('RSA Quick Start Guide');
     expect(tocLinkTexts).toContain('1. Create an Account / Sign In');
   });
+
 });
