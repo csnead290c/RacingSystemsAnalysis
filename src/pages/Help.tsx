@@ -416,6 +416,16 @@ export default function Help() {
         )}
         {!loading && !error && (
           <div style={{ flex: 1 }}>
+            {/* Version badge */}
+            <div style={{ 
+              fontSize: '0.75rem', 
+              color: 'var(--color-muted)', 
+              marginBottom: '1rem',
+              paddingBottom: '0.5rem',
+              borderBottom: '1px solid var(--color-border)'
+            }}>
+              Last updated: 2025-02-23
+            </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
