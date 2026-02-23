@@ -51,6 +51,7 @@ import { isInternalUser, buildVisibilityContext } from '../domain/ui/publicSurfa
 // DevPortal - available in dev mode or to owner/admin in production
 const DevPortal = lazy(() => import('../pages/DevPortal'));
 const AdminPortal = lazy(() => import('../pages/AdminPortal'));
+const ParityPortal = lazy(() => import('../pages/ParityPortal'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -651,6 +652,17 @@ function App() {
                 <InternalRoute>
                   <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
                     <DevPortal />
+                  </Suspense>
+                </InternalRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* NHRA Tech Parity - internal only (owner/admin with nhra.parity) */}
+            <Route path="/parity" element={
+              <ProtectedRoute requireRole={['owner', 'admin']}>
+                <InternalRoute>
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                    <ParityPortal />
                   </Suspense>
                 </InternalRoute>
               </ProtectedRoute>

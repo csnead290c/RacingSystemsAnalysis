@@ -460,3 +460,63 @@ describe('nhra.parity capability gating', () => {
     expect(hasCap(ctx, 'nhra.parity')).toBe(true);
   });
 });
+
+// ── 7. Cross-import Dedupe Invariant ────────────────────────────────────
+
+describe('cross-import dedupe', () => {
+  it('same DumbyID + raceLookup produces identical hash across imports', () => {
+    // Simulate two imports of the same event — same raw row should produce same hash
+    const row1 = normalizeRow(SAMPLE_ROW_NHRA_REAL, '20251030');
+    const hash1 = computeRowHash('20251030', row1);
+
+    // Second "import" — identical raw data
+    const row2 = normalizeRow({ ...SAMPLE_ROW_NHRA_REAL }, '20251030');
+    const hash2 = computeRowHash('20251030', row2);
+
+    expect(hash1).toBe(hash2);
+    // Both use source_ref path (DumbyID)
+    expect(hash1).toBe('20251030|1');
+  });
+
+  it('different DumbyID same raceLookup produces different hash', () => {
+    const row1 = normalizeRow(SAMPLE_ROW_NHRA_REAL, '20251030');
+    const row2 = normalizeRow({ ...SAMPLE_ROW_NHRA_REAL, DumbyID: '999' }, '20251030');
+    expect(computeRowHash('20251030', row1)).not.toBe(computeRowHash('20251030', row2));
+  });
+
+  it('same DumbyID different raceLookup produces different hash', () => {
+    const row1 = normalizeRow(SAMPLE_ROW_NHRA_REAL, '20251030');
+    const row2 = normalizeRow(SAMPLE_ROW_NHRA_REAL, '20251031');
+    expect(computeRowHash('20251030', row1)).not.toBe(computeRowHash('20251031', row2));
+  });
+});
+
+// ── 8. 0-row Hint Contract ──────────────────────────────────────────────
+
+describe('0-row hint contract', () => {
+  it('extractODataRows returns empty array for empty v4 response', () => {
+    const json = { value: [] };
+    expect(extractODataRows(json)).toEqual([]);
+  });
+
+  it('extractODataRows returns empty array for empty v2 response', () => {
+    const json = { d: { results: [] } };
+    expect(extractODataRows(json)).toEqual([]);
+  });
+
+  it('FIELD_ALIASES has DumbyID as first source_ref alias', () => {
+    expect(FIELD_ALIASES.source_ref[0]).toBe('DumbyID');
+  });
+
+  it('FIELD_ALIASES does NOT have IsDQ in dq_flag aliases', () => {
+    expect(FIELD_ALIASES.dq_flag).not.toContain('IsDQ');
+  });
+
+  it('FIELD_ALIASES does NOT have Place in place aliases', () => {
+    expect(FIELD_ALIASES.place).not.toContain('Place');
+  });
+
+  it('FIELD_ALIASES has QualPos as first place alias', () => {
+    expect(FIELD_ALIASES.place[0]).toBe('QualPos');
+  });
+});

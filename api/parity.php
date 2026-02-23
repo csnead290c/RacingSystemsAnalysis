@@ -3,9 +3,11 @@
  * NHRA Tech Parity API
  *
  * Endpoints:
- *   POST ?action=ingest    — Fetch & ingest NHRA run results from OData feed
- *   GET  ?action=runs      — Query normalized parity runs
- *   GET  ?action=peek      — Lightweight probe: detect JSON shape + first row keys/sample
+ *   POST ?action=ingest              — Fetch & ingest NHRA run results from OData feed
+ *   GET  ?action=runs                — Query normalized parity runs
+ *   GET  ?action=peek                — Lightweight probe: detect JSON shape + first row keys/sample
+ *   GET  ?action=suggestRaceLookups  — Scan candidate dates for a year to find valid events
+ *   GET  ?action=imports             — List import history
  *
  * Capability: nhra.parity (role-based: owner/admin only)
  * All endpoints require authentication + nhra.parity capability.
@@ -50,8 +52,20 @@ switch ($action) {
         }
         handlePeek();
         break;
+    case 'suggestRaceLookups':
+        if ($method !== 'GET') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handleSuggestRaceLookups();
+        break;
+    case 'imports':
+        if ($method !== 'GET') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handleListImports($pdo);
+        break;
     default:
-        rsa_jsonResponse(['error' => 'Invalid action. Use: ingest, runs, peek'], 400);
+        rsa_jsonResponse(['error' => 'Invalid action. Use: ingest, runs, peek, suggestRaceLookups, imports'], 400);
 }
 
 // ============================================================================
@@ -125,6 +139,8 @@ function handleIngest(PDO $pdo, int $userId): void {
             'rowsFetched' => 0,
             'rowsInserted' => 0,
             'rowsDeduped' => 0,
+            'hint' => 'OData returned 0 rows. raceLookup must be the first date of an NHRA event (YYYYMMDD). Non-first dates typically return 0 rows.',
+            'url' => $sourceUrl,
         ]);
         return;
     }
@@ -215,13 +231,31 @@ function handleIngest(PDO $pdo, int $userId): void {
     $pdo->prepare("UPDATE parity_run_imports SET row_count = ? WHERE id = ?")
         ->execute([$rowsInserted, $importId]);
 
-    rsa_jsonResponse([
+    // Compute parsed field stats from all normalized rows
+    $stats = [
+        'parsedTimestampCount' => 0,
+        'parsedClassCount' => 0,
+        'parsedDriverCount' => 0,
+        'parsedFt1320Count' => 0,
+        'parsedMph1320Count' => 0,
+    ];
+    // Re-normalize to count (we already have the rows)
+    foreach ($rows as $raw) {
+        $n = parity_normalizeRow($raw, $raceLookup);
+        if ($n['run_timestamp_utc'] !== null) $stats['parsedTimestampCount']++;
+        if ($n['class_index'] !== null) $stats['parsedClassCount']++;
+        if ($n['driver_name'] !== null) $stats['parsedDriverCount']++;
+        if ($n['ft1320'] !== null) $stats['parsedFt1320Count']++;
+        if ($n['mph1320'] !== null) $stats['parsedMph1320Count']++;
+    }
+
+    rsa_jsonResponse(array_merge([
         'raceLookup' => $raceLookup,
         'importId' => $importUuid,
         'rowsFetched' => count($rows),
         'rowsInserted' => $rowsInserted,
         'rowsDeduped' => $rowsDeduped,
-    ]);
+    ], $stats));
 }
 
 // ============================================================================
@@ -379,7 +413,7 @@ function handlePeek(): void {
         $normalizedSample = parity_normalizeRow($firstRow, $raceLookup);
     }
 
-    rsa_jsonResponse([
+    $response = [
         'url' => $url,
         'detectedShape' => $detectedShape,
         'rowCountFirstPage' => count($rows),
@@ -389,5 +423,121 @@ function handlePeek(): void {
         'firstRowKeys' => $firstRowKeys,
         'firstRowSample' => $firstRowSample,
         'normalizedSample' => $normalizedSample,
+    ];
+
+    if (count($rows) === 0) {
+        $response['hint'] = 'OData returned 0 rows. raceLookup must be the first date of an NHRA event (YYYYMMDD). Non-first dates typically return 0 rows.';
+    }
+
+    rsa_jsonResponse($response);
+}
+
+// ============================================================================
+// GET ?action=suggestRaceLookups&year=YYYY
+// Scan candidate dates (Thursdays) for a year to find valid NHRA events.
+// ============================================================================
+
+function handleSuggestRaceLookups(): void {
+    $year = (int)($_GET['year'] ?? date('Y'));
+    if ($year < 2000 || $year > 2030) {
+        rsa_jsonResponse(['error' => 'year must be between 2000 and 2030'], 400);
+    }
+
+    // NHRA national events typically start on a Thursday or Friday.
+    // Generate all Thursdays in the year as candidates.
+    $candidates = [];
+    $start = new DateTime("{$year}-01-01");
+    $end = new DateTime("{$year}-12-31");
+
+    // Find first Thursday
+    while ($start->format('N') != 4) { // 4 = Thursday
+        $start->modify('+1 day');
+    }
+
+    while ($start <= $end) {
+        $candidates[] = $start->format('Ymd');
+        // Also try the next day (Friday) since some events start Friday
+        $fri = clone $start;
+        $fri->modify('+1 day');
+        $candidates[] = $fri->format('Ymd');
+        // Also try Wednesday (some events start Wed)
+        $wed = clone $start;
+        $wed->modify('-1 day');
+        $candidates[] = $wed->format('Ymd');
+        $start->modify('+7 days');
+    }
+
+    // Dedupe and sort
+    $candidates = array_unique($candidates);
+    sort($candidates);
+
+    // Limit to prevent excessive requests
+    $maxAttempts = min((int)($_GET['maxAttempts'] ?? 60), 120);
+    $candidates = array_slice($candidates, 0, $maxAttempts);
+
+    $found = [];
+    foreach ($candidates as $date) {
+        $url = "https://odata.nhradata.com/api/oGetResults/GetResults/{$date}";
+        $raw = parity_httpGet($url);
+        if ($raw === false) continue;
+
+        $json = json_decode($raw, true);
+        if ($json === null) continue;
+
+        $rows = parity_extractRows($json);
+        $count = count($rows);
+        if ($count > 0) {
+            // Get unique categories from first few rows
+            $categories = [];
+            foreach (array_slice($rows, 0, 50) as $r) {
+                $cat = $r['Category'] ?? $r['category'] ?? null;
+                if ($cat && !in_array($cat, $categories)) {
+                    $categories[] = $cat;
+                }
+            }
+            $found[] = [
+                'raceLookup' => $date,
+                'rowCount' => $count,
+                'categories' => $categories,
+            ];
+        }
+
+        // Small delay to be rate-safe
+        usleep(100000); // 100ms
+    }
+
+    rsa_jsonResponse([
+        'year' => $year,
+        'candidatesTested' => count($candidates),
+        'eventsFound' => count($found),
+        'events' => $found,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=imports
+// List import history
+// ============================================================================
+
+function handleListImports(PDO $pdo): void {
+    $limit = min((int)($_GET['limit'] ?? 50), 200);
+    $stmt = $pdo->prepare("
+        SELECT uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count,
+               error_message, source_url, created_by_user_id, created_at
+        FROM parity_run_imports
+        ORDER BY created_at DESC
+        LIMIT ?
+    ");
+    $stmt->execute([$limit]);
+    $imports = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($imports as &$imp) {
+        $imp['row_count'] = (int)$imp['row_count'];
+        $imp['created_by_user_id'] = $imp['created_by_user_id'] ? (int)$imp['created_by_user_id'] : null;
+    }
+
+    rsa_jsonResponse([
+        'imports' => $imports,
+        'total' => count($imports),
     ]);
 }
