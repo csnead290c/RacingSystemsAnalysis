@@ -30,9 +30,18 @@ The Quarter simulator predicts dragstrip performance.
 describe('Help Center', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    // Mock fetch to return markdown content based on URL
+    // Mock fetch to return markdown content and manifest based on URL
     vi.spyOn(globalThis, 'fetch').mockImplementation((input: any) => {
       const url = typeof input === 'string' ? input : input?.url ?? '';
+      if (url.includes('manifest.json')) {
+        const manifest = {
+          lastUpdatedIso: '2025-02-23T12:00:00.000Z',
+          lastUpdatedDate: '2025-02-23',
+          source: 'docs/manuals',
+          files: ['SITE_QUICK_START.md', 'QUARTER_JR_PRO.md', 'ENGINE_JR_PRO.md', 'FAQ_TROUBLESHOOTING.md'],
+        };
+        return Promise.resolve(new Response(JSON.stringify(manifest), { status: 200 }));
+      }
       if (url.includes('SITE_QUICK_START.md')) {
         return Promise.resolve(new Response(QUICK_START_MD, { status: 200 }));
       }
@@ -235,6 +244,25 @@ describe('Help Center', () => {
     const tocLinkTexts = Array.from(tocLinks).map(link => link.textContent);
     expect(tocLinkTexts).toContain('RSA Quick Start Guide');
     expect(tocLinkTexts).toContain('1. Create an Account / Sign In');
+  });
+
+  it('displays last updated date from manifest', async () => {
+    render(
+      <MemoryRouter initialEntries={['/help']}>
+        <Help />
+      </MemoryRouter>,
+    );
+
+    // Wait for content to load
+    await waitFor(() => {
+      const headings = screen.getAllByText('RSA Quick Start Guide');
+      expect(headings.length).toBeGreaterThan(0);
+    });
+
+    // Verify version badge shows the mocked manifest date
+    await waitFor(() => {
+      expect(screen.getByText(/Last updated: 2025-02-23/)).toBeInTheDocument();
+    });
   });
 
 });

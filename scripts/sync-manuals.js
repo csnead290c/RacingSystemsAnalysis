@@ -2,9 +2,10 @@
 /**
  * Sync manuals from docs/manuals/*.md to public/manuals/*.md
  * This ensures the public runtime files match the source of truth.
+ * Also generates manifest.json with last updated timestamp.
  */
 
-import { copyFileSync, mkdirSync, readdirSync } from 'fs';
+import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,5 +30,18 @@ for (const file of files) {
   copyFileSync(src, dest);
   console.log(`  ✓ ${file}`);
 }
+
+// Generate manifest.json with timestamp
+const now = new Date();
+const manifest = {
+  lastUpdatedIso: now.toISOString(),
+  lastUpdatedDate: now.toISOString().split('T')[0], // YYYY-MM-DD
+  source: 'docs/manuals',
+  files: files,
+};
+
+const manifestPath = join(targetDir, 'manifest.json');
+writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+console.log(`  ✓ manifest.json`);
 
 console.log('✓ Manuals synced successfully.');

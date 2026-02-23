@@ -24,6 +24,13 @@ let hasError = false;
 
 console.log('Checking manual sync status...');
 
+// Check that manifest.json exists in public/manuals
+const manifestPath = join(targetDir, 'manifest.json');
+if (!existsSync(manifestPath)) {
+  console.error('  ✗ Missing manifest.json in public/manuals');
+  hasError = true;
+}
+
 // Check for missing files in public/
 for (const file of sourceFiles) {
   if (!targetFiles.includes(file)) {

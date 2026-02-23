@@ -199,10 +199,19 @@ export default function Help() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [tocOpen, setTocOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Parse TOC from markdown content
   const tocItems = useMemo(() => parseHeadings(content), [content]);
+
+  // Fetch manifest for last updated date
+  useEffect(() => {
+    fetch('/manuals/manifest.json')
+      .then(res => res.json())
+      .then(data => setLastUpdated(data.lastUpdatedDate))
+      .catch(() => setLastUpdated(null)); // Silently fail if manifest not found
+  }, []);
 
   // Parse query param to determine which manual to show
   const [searchParams] = useSearchParams();
@@ -417,15 +426,17 @@ export default function Help() {
         {!loading && !error && (
           <div style={{ flex: 1 }}>
             {/* Version badge */}
-            <div style={{ 
-              fontSize: '0.75rem', 
-              color: 'var(--color-muted)', 
-              marginBottom: '1rem',
-              paddingBottom: '0.5rem',
-              borderBottom: '1px solid var(--color-border)'
-            }}>
-              Last updated: 2025-02-23
-            </div>
+            {lastUpdated && (
+              <div style={{ 
+                fontSize: '0.75rem', 
+                color: 'var(--color-muted)', 
+                marginBottom: '1rem',
+                paddingBottom: '0.5rem',
+                borderBottom: '1px solid var(--color-border)'
+              }}>
+                Last updated: {lastUpdated}
+              </div>
+            )}
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
