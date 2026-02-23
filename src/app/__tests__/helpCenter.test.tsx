@@ -62,9 +62,10 @@ describe('Help Center', () => {
     expect(screen.getByTestId('help-nav-engine')).toBeInTheDocument();
     expect(screen.getByTestId('help-nav-faq')).toBeInTheDocument();
 
-    // Quick Start content should load
+    // Quick Start content should load (may appear in both content and TOC)
     await waitFor(() => {
-      expect(screen.getByText('RSA Quick Start Guide')).toBeInTheDocument();
+      const headings = screen.getAllByText('RSA Quick Start Guide');
+      expect(headings.length).toBeGreaterThan(0);
     });
   });
 
@@ -76,7 +77,8 @@ describe('Help Center', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Quarter Jr \/ Quarter Pro/)).toBeInTheDocument();
+      const headings = screen.getAllByText(/Quarter Jr \/ Quarter Pro/);
+      expect(headings.length).toBeGreaterThan(0);
     });
   });
 
@@ -88,7 +90,8 @@ describe('Help Center', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Engine Jr \/ Engine Pro/)).toBeInTheDocument();
+      const headings = screen.getAllByText(/Engine Jr \/ Engine Pro/);
+      expect(headings.length).toBeGreaterThan(0);
     });
   });
 
@@ -114,12 +117,13 @@ describe('Help Center', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('RSA Quick Start Guide')).toBeInTheDocument();
+      const headings = screen.getAllByText('RSA Quick Start Guide');
+      expect(headings.length).toBeGreaterThan(0);
     });
 
-    // Check for a known section heading
-    expect(screen.getByText('1. Create an Account / Sign In')).toBeInTheDocument();
-    expect(screen.getByText('2. Create Your First Vehicle')).toBeInTheDocument();
+    // Check for a known section heading (appears in content and TOC)
+    expect(screen.getAllByText('1. Create an Account / Sign In').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2. Create Your First Vehicle').length).toBeGreaterThan(0);
   });
 
   it('switches to Quarter manual when nav is clicked', async () => {
@@ -131,14 +135,16 @@ describe('Help Center', () => {
 
     // Wait for initial load
     await waitFor(() => {
-      expect(screen.getByText('RSA Quick Start Guide')).toBeInTheDocument();
+      const headings = screen.getAllByText('RSA Quick Start Guide');
+      expect(headings.length).toBeGreaterThan(0);
     });
 
     // Click Quarter nav
     fireEvent.click(screen.getByTestId('help-nav-quarter'));
 
     await waitFor(() => {
-      expect(screen.getByText(/Quarter Jr \/ Quarter Pro/)).toBeInTheDocument();
+      const headings = screen.getAllByText(/Quarter Jr \/ Quarter Pro/);
+      expect(headings.length).toBeGreaterThan(0);
     });
   });
 
@@ -187,14 +193,47 @@ describe('Help Center', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('RSA Quick Start Guide')).toBeInTheDocument();
+      const headings = screen.getAllByText('RSA Quick Start Guide');
+      expect(headings.length).toBeGreaterThan(0);
     });
 
-    // Check that headings have id attributes for anchor linking
-    const h1 = screen.getByText('RSA Quick Start Guide');
-    expect(h1.id).toBe('rsa-quick-start-guide');
+    // Check that content headings (h1/h2 elements) have id attributes for anchor linking
+    const h1Elements = screen.getAllByText('RSA Quick Start Guide');
+    const h1 = h1Elements.find(el => el.tagName === 'H1');
+    expect(h1?.id).toBe('rsa-quick-start-guide');
 
-    const h2 = screen.getByText('1. Create an Account / Sign In');
-    expect(h2.id).toBe('1-create-an-account-sign-in');
+    const h2Elements = screen.getAllByText('1. Create an Account / Sign In');
+    const h2 = h2Elements.find(el => el.tagName === 'H2');
+    expect(h2?.id).toBe('1-create-an-account-sign-in');
+  });
+
+  it('renders TOC with links to section anchors', async () => {
+    render(
+      <MemoryRouter initialEntries={['/help']}>
+        <Help />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const headings = screen.getAllByText('RSA Quick Start Guide');
+      expect(headings.length).toBeGreaterThan(0);
+    });
+
+    // TOC should be present (desktop and/or mobile version)
+    const tocHeadings = screen.getAllByText('On this page');
+    expect(tocHeadings.length).toBeGreaterThan(0);
+
+    // TOC should contain links to headings
+    const tocLinks = document.querySelectorAll('.help-toc a');
+    expect(tocLinks.length).toBeGreaterThan(0);
+
+    // Verify links point to correct hash anchors
+    const firstLink = tocLinks[0] as HTMLAnchorElement;
+    expect(firstLink.href).toContain('#');
+    
+    // Check that a known heading appears in TOC
+    const tocLinkTexts = Array.from(tocLinks).map(link => link.textContent);
+    expect(tocLinkTexts).toContain('RSA Quick Start Guide');
+    expect(tocLinkTexts).toContain('1. Create an Account / Sign In');
   });
 });

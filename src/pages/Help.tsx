@@ -3,7 +3,7 @@
  * Manuals are fetched from /manuals/*.md (public folder).
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -33,6 +33,29 @@ function slugify(text: string): string {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim();
+}
+
+/* ── TOC types and parser ─────────────────────────────────── */
+
+interface TocItem {
+  level: 1 | 2 | 3;
+  text: string;
+  id: string;
+}
+
+function parseHeadings(markdown: string): TocItem[] {
+  const headingRegex = /^(#{1,3})\s+(.+)$/gm;
+  const headings: TocItem[] = [];
+  let match;
+  
+  while ((match = headingRegex.exec(markdown)) !== null) {
+    const level = match[1].length as 1 | 2 | 3;
+    const text = match[2].trim();
+    const id = slugify(text);
+    headings.push({ level, text, id });
+  }
+  
+  return headings;
 }
 
 /* ── Custom markdown components for dark-theme styling ──── */
@@ -175,7 +198,11 @@ export default function Help() {
   const [error, setError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [tocOpen, setTocOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Parse TOC from markdown content
+  const tocItems = useMemo(() => parseHeadings(content), [content]);
 
   // Parse query param to determine which manual to show
   const [searchParams] = useSearchParams();
@@ -246,7 +273,7 @@ export default function Help() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 140px)' }}>
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 140px)', position: 'relative' }}>
       {/* Mobile tab bar */}
       <div className="help-mobile-tabs" style={{ display: 'none' }}>
         <button
@@ -460,12 +487,117 @@ export default function Help() {
         )}
       </div>
 
+      {/* Right sidebar TOC (desktop only) */}
+      {!loading && !error && tocItems.length > 0 && (
+        <aside
+          className="help-toc"
+          style={{
+            width: '220px',
+            padding: '2rem 1.5rem',
+            borderLeft: '1px solid var(--color-border)',
+            position: 'sticky',
+            top: '80px',
+            height: 'fit-content',
+            maxHeight: 'calc(100vh - 100px)',
+            overflowY: 'auto',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-muted)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            On this page
+          </div>
+          <nav>
+            {tocItems.map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                style={{
+                  display: 'block',
+                  fontSize: '0.8125rem',
+                  color: 'var(--color-text-secondary)',
+                  textDecoration: 'none',
+                  paddingLeft: item.level === 1 ? '0' : item.level === 2 ? '0.75rem' : '1.5rem',
+                  paddingTop: '0.375rem',
+                  paddingBottom: '0.375rem',
+                  borderLeft: item.level > 1 ? '1px solid var(--color-border)' : 'none',
+                  marginLeft: item.level > 1 ? '0.5rem' : '0',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-text)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-secondary)')}
+              >
+                {item.text}
+              </a>
+            ))}
+          </nav>
+        </aside>
+      )}
+
+      {/* Mobile TOC dropdown */}
+      {!loading && !error && tocItems.length > 0 && (
+        <div className="help-toc-mobile" style={{ display: 'none' }}>
+          <button
+            onClick={() => setTocOpen(!tocOpen)}
+            style={{
+              width: '100%',
+              padding: '0.75rem 1rem',
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--color-text)',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              textAlign: 'left',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              marginBottom: tocOpen ? '0.5rem' : '0',
+            }}
+          >
+            <span>On this page</span>
+            <span style={{ transform: tocOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+          </button>
+          {tocOpen && (
+            <nav
+              style={{
+                backgroundColor: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.5rem',
+                marginBottom: '1rem',
+              }}
+            >
+              {tocItems.map((item) => (
+                <a
+                  key={item.id}
+                  href={`#${item.id}`}
+                  onClick={() => setTocOpen(false)}
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8125rem',
+                    color: 'var(--color-text-secondary)',
+                    textDecoration: 'none',
+                    padding: '0.5rem',
+                    paddingLeft: item.level === 1 ? '0.5rem' : item.level === 2 ? '1.25rem' : '2rem',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  {item.text}
+                </a>
+              ))}
+            </nav>
+          )}
+        </div>
+      )}
+
       {/* Responsive styles */}
       <style>{`
         .help-mobile-tabs { display: none; }
 
         @media (max-width: 768px) {
           .help-sidebar { display: none !important; }
+          .help-toc { display: none !important; }
+          .help-toc-mobile { display: block !important; }
           .help-mobile-tabs {
             display: block !important;
             padding: 0.75rem 1rem 0;
