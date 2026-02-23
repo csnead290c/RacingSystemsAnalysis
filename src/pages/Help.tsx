@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -174,19 +174,22 @@ export default function Help() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Parse hash to determine initial manual + anchor
-  useEffect(() => {
-    const hash = location.hash.replace('#', '');
-    if (!hash) return;
+  // Parse query param to determine which manual to show
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-    // Check if hash starts with a manual id prefix (e.g. "quarter-running-a-sim")
-    const matchedManual = MANUALS.find((m) => hash === m.id || hash.startsWith(m.id + '-'));
-    if (matchedManual) {
-      setActiveId(matchedManual.id);
+  useEffect(() => {
+    const docParam = searchParams.get('doc');
+    if (docParam) {
+      const matchedManual = MANUALS.find((m) => m.id === docParam);
+      if (matchedManual) {
+        setActiveId(matchedManual.id);
+      }
     }
-  }, [location.hash]);
+  }, [searchParams]);
 
   // Fetch markdown content when activeId changes
   const fetchContent = useCallback(async (manualId: string) => {
@@ -210,6 +213,7 @@ export default function Help() {
 
   useEffect(() => {
     fetchContent(activeId);
+    setSearchQuery(''); // Clear search when switching docs
   }, [activeId, fetchContent]);
 
   // Scroll to anchor after content loads
@@ -234,6 +238,8 @@ export default function Help() {
   const handleNavClick = (id: string) => {
     setActiveId(id);
     setMobileSidebarOpen(false);
+    // Update URL with query param
+    navigate(`/help?doc=${id}`, { replace: true });
     // Scroll content to top
     if (contentRef.current?.scrollTo) contentRef.current.scrollTo(0, 0);
     if (window.scrollTo) window.scrollTo(0, 0);
@@ -349,8 +355,32 @@ export default function Help() {
           fontSize: '0.9375rem',
           color: 'var(--color-text)',
           overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
         }}
       >
+        {/* Search input */}
+        {!loading && !error && (
+          <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--color-bg)', paddingBottom: '0.5rem', zIndex: 10 }}>
+            <input
+              type="text"
+              placeholder="Search headings..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.875rem',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-surface)',
+                color: 'var(--color-text)',
+              }}
+            />
+          </div>
+        )}
+
         {loading && (
           <div style={{ color: 'var(--color-muted)', padding: '2rem 0' }}>Loading…</div>
         )}
@@ -358,13 +388,75 @@ export default function Help() {
           <div style={{ color: '#dc2626', padding: '2rem 0' }}>{error}</div>
         )}
         {!loading && !error && (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={mdComponents}
-            disallowedElements={['script', 'iframe', 'object', 'embed']}
-          >
-            {content}
-          </ReactMarkdown>
+          <div style={{ flex: 1 }}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                ...mdComponents,
+                h1: ({ children, ...props }) => {
+                  const id = slugify(String(children));
+                  const text = String(children).toLowerCase();
+                  const query = searchQuery.toLowerCase();
+                  const isVisible = !query || text.includes(query);
+                  return (
+                    <h1
+                      id={id}
+                      style={{
+                        scrollMarginTop: '5rem',
+                        display: isVisible ? 'block' : 'none',
+                      }}
+                      {...props}
+                    >
+                      {children}
+                    </h1>
+                  );
+                },
+                h2: ({ children, ...props }) => {
+                  const id = slugify(String(children));
+                  const text = String(children).toLowerCase();
+                  const query = searchQuery.toLowerCase();
+                  const isVisible = !query || text.includes(query);
+                  return (
+                    <h2
+                      id={id}
+                      style={{
+                        scrollMarginTop: '5rem',
+                        borderBottom: '1px solid var(--color-border)',
+                        paddingBottom: '0.5rem',
+                        marginTop: '2.5rem',
+                        display: isVisible ? 'block' : 'none',
+                      }}
+                      {...props}
+                    >
+                      {children}
+                    </h2>
+                  );
+                },
+                h3: ({ children, ...props }) => {
+                  const id = slugify(String(children));
+                  const text = String(children).toLowerCase();
+                  const query = searchQuery.toLowerCase();
+                  const isVisible = !query || text.includes(query);
+                  return (
+                    <h3
+                      id={id}
+                      style={{
+                        scrollMarginTop: '5rem',
+                        marginTop: '2rem',
+                        display: isVisible ? 'block' : 'none',
+                      }}
+                      {...props}
+                    >
+                      {children}
+                    </h3>
+                  );
+                },
+              }}
+              disallowedElements={['script', 'iframe', 'object', 'embed']}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
         )}
       </div>
 

@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "manuals:sync": "node scripts/sync-manuals.js",
+    "manuals:check": "node scripts/check-manuals.js"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.58.1",

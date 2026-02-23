@@ -68,6 +68,44 @@ describe('Help Center', () => {
     });
   });
 
+  it('loads Quarter manual when navigating to /help?doc=quarter', async () => {
+    render(
+      <MemoryRouter initialEntries={['/help?doc=quarter']}>
+        <Help />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Quarter Jr \/ Quarter Pro/)).toBeInTheDocument();
+    });
+  });
+
+  it('loads Engine manual when navigating to /help?doc=engine', async () => {
+    render(
+      <MemoryRouter initialEntries={['/help?doc=engine']}>
+        <Help />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Engine Jr \/ Engine Pro/)).toBeInTheDocument();
+    });
+  });
+
+  it('loads FAQ when navigating to /help?doc=faq', async () => {
+    render(
+      <MemoryRouter initialEntries={['/help?doc=faq']}>
+        <Help />
+      </MemoryRouter>,
+    );
+
+    // Wait for content to load - use partial match to avoid ampersand encoding issues
+    const heading = await screen.findByText((content, element) => {
+      return element?.tagName === 'H1' && content.includes('FAQ') && content.includes('Troubleshooting');
+    });
+    expect(heading).toBeInTheDocument();
+  });
+
   it('loads Quick Start and shows a known heading', async () => {
     render(
       <MemoryRouter initialEntries={['/help']}>

@@ -15,8 +15,10 @@ interface HelpLinkProps {
  */
 export default function HelpLink({ manual, anchor, label = 'Help' }: HelpLinkProps) {
   let to = '/help';
-  if (manual) to += `#${manual}`;
-  if (anchor) to += `-${anchor}`;
+  if (manual) {
+    to += `?doc=${manual}`;
+    if (anchor) to += `#${anchor}`;
+  }
 
   return (
     <Link
