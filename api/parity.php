@@ -5,6 +5,7 @@
  * Endpoints:
  *   POST ?action=ingest    — Fetch & ingest NHRA run results from OData feed
  *   GET  ?action=runs      — Query normalized parity runs
+ *   GET  ?action=peek      — Lightweight probe: detect JSON shape + first row keys/sample
  *
  * Capability: nhra.parity (role-based: owner/admin only)
  * All endpoints require authentication + nhra.parity capability.
@@ -43,8 +44,14 @@ switch ($action) {
         }
         handleQueryRuns($pdo);
         break;
+    case 'peek':
+        if ($method !== 'GET') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handlePeek();
+        break;
     default:
-        rsa_jsonResponse(['error' => 'Invalid action. Use: ingest, runs'], 400);
+        rsa_jsonResponse(['error' => 'Invalid action. Use: ingest, runs, peek'], 400);
 }
 
 // ============================================================================
@@ -287,14 +294,9 @@ function handleQueryRuns(PDO $pdo): void {
         }
     }
 
-    // Get total count for this query
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_runs WHERE " . implode(' AND ', array_slice($where, 0, -0)));
-    // Re-execute without limit/offset params
-    $countParams = array_slice($params, 0, -2);
-    $countWhere = implode(' AND ', array_map(fn($w) => $w, $where));
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_runs WHERE $countWhere");
-    // We need to rebuild params without limit/offset
+    // Get total count for this query (params without limit/offset)
     $countParams = array_slice($params, 0, count($params) - 2);
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_runs WHERE $whereClause");
     $countStmt->execute($countParams);
     $total = (int)$countStmt->fetchColumn();
 
@@ -304,5 +306,88 @@ function handleQueryRuns(PDO $pdo): void {
         'limit' => $limit,
         'offset' => $offset,
         'raceLookup' => $raceLookup,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=peek&raceLookup=YYYYMMDD
+// Lightweight probe: fetch first page only, report shape + keys + sample row
+// ============================================================================
+
+function handlePeek(): void {
+    $raceLookup = trim($_GET['raceLookup'] ?? '');
+    if (!preg_match('/^\d{8}$/', $raceLookup)) {
+        rsa_jsonResponse(['error' => 'raceLookup must be YYYYMMDD format (e.g. 20260223)'], 400);
+    }
+
+    $url = "https://odata.nhradata.com/api/oGetResults/GetResults/{$raceLookup}";
+
+    $raw = parity_httpGet($url);
+    if ($raw === false) {
+        rsa_jsonResponse([
+            'error' => 'Failed to fetch OData URL',
+            'url' => $url,
+        ], 502);
+    }
+
+    $json = json_decode($raw, true);
+    if ($json === null) {
+        rsa_jsonResponse([
+            'error' => 'Invalid JSON from OData',
+            'url' => $url,
+            'rawPreview' => substr($raw, 0, 500),
+        ], 502);
+    }
+
+    // Detect shape
+    $detectedShape = 'unknown';
+    $rows = [];
+    $nextLink = null;
+
+    if (isset($json['value']) && is_array($json['value'])) {
+        $detectedShape = 'v4';
+        $rows = $json['value'];
+        $nextLink = $json['@odata.nextLink'] ?? null;
+    } elseif (isset($json['d']['results']) && is_array($json['d']['results'])) {
+        $detectedShape = 'v2';
+        $rows = $json['d']['results'];
+        $nextLink = $json['d']['__next'] ?? null;
+    } elseif (isset($json['d']) && is_array($json['d'])) {
+        $detectedShape = 'v2-alt';
+        $rows = $json['d'];
+    }
+
+    $firstRow = $rows[0] ?? null;
+    $firstRowKeys = $firstRow ? array_keys($firstRow) : [];
+
+    // Truncate long string values in sample row for readability
+    $firstRowSample = null;
+    if ($firstRow) {
+        $firstRowSample = [];
+        foreach ($firstRow as $k => $v) {
+            if (is_string($v) && strlen($v) > 200) {
+                $firstRowSample[$k] = substr($v, 0, 200) . '...[truncated]';
+            } else {
+                $firstRowSample[$k] = $v;
+            }
+        }
+    }
+
+    // Also show what our mapper would produce from the first row
+    $normalizedSample = null;
+    if ($firstRow) {
+        $normalizedSample = parity_normalizeRow($firstRow, $raceLookup);
+    }
+
+    rsa_jsonResponse([
+        'url' => $url,
+        'detectedShape' => $detectedShape,
+        'rowCountFirstPage' => count($rows),
+        'hasNextLink' => $nextLink !== null,
+        'nextLink' => $nextLink,
+        'topLevelKeys' => array_keys($json),
+        'firstRowKeys' => $firstRowKeys,
+        'firstRowSample' => $firstRowSample,
+        'normalizedSample' => $normalizedSample,
     ]);
 }
