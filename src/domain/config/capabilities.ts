@@ -194,6 +194,9 @@ export const CAPABILITY_KEYS = [
   'admin.access',                // Access admin portal and read-only admin views
   'admin.devTools',              // Developer tools panel
   'admin.userManagement',        // Manage users within this account/team
+
+  // ── NHRA Tech Parity (internal tooling) ──
+  'nhra.parity',                 // Access NHRA parity data ingestion & queries
 ] as const;
 
 export type Capability = typeof CAPABILITY_KEYS[number];
@@ -257,6 +260,8 @@ export const CAPABILITY_ALIASES: Record<string, Capability> = {
   'admin_access':             'admin.access',
   'dev_tools':                'admin.devTools',
   'user_management':          'admin.userManagement',
+  // NHRA
+  'nhra_parity':              'nhra.parity',
 };
 
 /**
@@ -385,8 +390,8 @@ export const PLAN_CAPABILITIES: Record<PlanId, ReadonlySet<Capability>> = {
 
 /** Capabilities granted by role regardless of plan (owner/admin get admin tools). */
 export const ROLE_CAPABILITIES: Record<RoleId, ReadonlySet<Capability>> = {
-  owner: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement']),
-  admin: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement']),
+  owner: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity']),
+  admin: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity']),
   member: new Set<Capability>([]),
   viewer: new Set<Capability>([]),
 };

@@ -123,8 +123,8 @@ const PLAN_CAPABILITIES = [
 
 // Role-based capabilities (independent of subscription plan)
 const ROLE_CAPABILITIES = [
-    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access'],
-    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access'],
+    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity'],
+    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity'],
     'beta'  => ['admin.devTools'],
 ];
 
