@@ -345,6 +345,48 @@ export interface IngestManyParams {
   throttleMs?: number;
 }
 
+// ── Backfill Job Types ──────────────────────────────────────────────────
+
+export interface BackfillJob {
+  id: number;
+  type: 'runs' | 'weather';
+  status: 'running' | 'complete' | 'error' | 'paused' | 'cancelled';
+  createdByUserId: number | null;
+  params: Record<string, unknown>;
+  totalItems: number;
+  completedCount: number;
+  skippedCount: number;
+  noDataCount: number;
+  errorCount: number;
+  currentItemKey: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+}
+
+export interface BackfillJobItem {
+  item_key: string;
+  status: 'pending' | 'ok' | 'skipped' | 'no_data' | 'error';
+  attempts: number;
+  last_http_status: number | null;
+  last_error: string | null;
+  rows_fetched: number;
+  rows_inserted: number;
+  rows_deduped: number;
+  updated_at: string;
+}
+
+export interface BackfillStatusResponse {
+  job: BackfillJob;
+  items: BackfillJobItem[];
+}
+
+export interface BackfillJobsResponse {
+  jobs: BackfillJob[];
+  count: number;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 async function parityRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -595,5 +637,46 @@ export const parityApi = {
     });
     invalidateParityCache('imports');
     return result;
+  },
+
+  // ── Backfill Jobs ──────────────────────────────────────────────────
+
+  async startBackfillRuns(params: { yearStart: number; yearEnd: number; throttleMs?: number; force?: boolean }): Promise<{ job: BackfillJob }> {
+    return parityRequest<{ job: BackfillJob }>('/parity.php?action=startBackfillRuns', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async startBackfillWeather(params: { eventId: number; throttleMs?: number; minRowsPerDay?: number }): Promise<{ job: BackfillJob }> {
+    return parityRequest<{ job: BackfillJob }>('/parity.php?action=startBackfillWeather', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async resumeBackfill(jobId: number): Promise<{ job: BackfillJob }> {
+    return parityRequest<{ job: BackfillJob }>('/parity.php?action=resumeBackfill', {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    });
+  },
+
+  async cancelBackfill(jobId: number): Promise<{ job: BackfillJob }> {
+    return parityRequest<{ job: BackfillJob }>('/parity.php?action=cancelBackfill', {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    });
+  },
+
+  async backfillStatus(jobId: number): Promise<BackfillStatusResponse> {
+    return parityRequest<BackfillStatusResponse>(`/parity.php?action=backfillStatus&jobId=${jobId}`);
+  },
+
+  async backfillJobs(type?: string): Promise<BackfillJobsResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'backfillJobs');
+    if (type) qs.set('type', type);
+    return parityRequest<BackfillJobsResponse>(`/parity.php?${qs.toString()}`);
   },
 };

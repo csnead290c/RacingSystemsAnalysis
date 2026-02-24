@@ -21,6 +21,8 @@ import {
   type TopByEventResponse,
   type TopByEventRow,
   type IngestManyResponse,
+  type BackfillJob,
+  type BackfillStatusResponse,
 } from '../services/parityApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../domain/auth';
@@ -177,7 +179,7 @@ const S = {
   } as React.CSSProperties,
 } as const;
 
-type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'trends';
+type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'trends' | 'backfill';
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -214,11 +216,11 @@ export default function ParityPortal() {
       </div>
 
       <div style={S.tabs}>
-        {(['peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather', 'trends'] as Tab[]).map(t => {
+        {(['peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather', 'trends', 'backfill'] as Tab[]).map(t => {
           const labels: Record<Tab, string> = {
             peek: 'Peek', ingest: 'Ingest', query: 'Query Runs',
             imports: 'Imports', weather: 'Weather', runsWeather: 'Runs + Weather',
-            trends: 'Trends',
+            trends: 'Trends', backfill: 'Backfill',
           };
           return (
             <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>
@@ -235,6 +237,7 @@ export default function ParityPortal() {
       {tab === 'weather' && <WeatherPanel />}
       {tab === 'runsWeather' && <RunsWeatherPanel raceLookup={raceLookup} />}
       {tab === 'trends' && <TrendsPanel />}
+      {tab === 'backfill' && <BackfillPanel />}
     </div>
   );
 }
@@ -833,39 +836,46 @@ function RunsWeatherPanel({ raceLookup }: { raceLookup: string }) {
             <table style={S.table}>
               <thead>
                 <tr>
-                  <th style={S.th}>Driver</th><th style={S.th}>Class</th><th style={S.th}>Rnd</th>
-                  <th style={S.th}>Ln</th><th style={S.th}>RT</th><th style={S.th}>1320ft</th>
-                  <th style={S.th}>1320mph</th>
-                  <th style={{ ...S.th, background: '#eaf4ff' }}>Temp °F</th>
-                  <th style={{ ...S.th, background: '#eaf4ff' }}>RH%</th>
-                  <th style={{ ...S.th, background: '#eaf4ff' }}>Press inHg</th>
-                  <th style={{ ...S.th, background: '#eaf4ff' }}>Δs</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Driver</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Class</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Rnd</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Ln</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>RT</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>1320ft</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>1320mph</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)', borderLeft: '2px solid var(--color-primary, #3b82f6)' }}>Temp °F</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>RH%</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Press inHg</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Δs</th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map(r => (
-                  <tr key={r.uuid}>
-                    <td style={S.td}>{r.driver_name || '—'}</td>
-                    <td style={S.td}>{r.class_index || '—'}</td>
-                    <td style={S.td}>{r.round || '—'}</td>
-                    <td style={S.td}>{r.lane || '—'}</td>
-                    <td style={S.td}>{r.rt != null ? r.rt.toFixed(3) : '—'}</td>
-                    <td style={S.td}>{r.ft1320 != null ? r.ft1320.toFixed(3) : '—'}</td>
-                    <td style={S.td}>{r.mph1320 != null ? r.mph1320.toFixed(1) : '—'}</td>
-                    <td style={{ ...S.td, background: '#f0f7ff' }}>
-                      {r.weather?.temp_f != null ? r.weather.temp_f.toFixed(1) : '—'}
-                    </td>
-                    <td style={{ ...S.td, background: '#f0f7ff' }}>
-                      {r.weather?.rh_pct != null ? r.weather.rh_pct.toFixed(1) : '—'}
-                    </td>
-                    <td style={{ ...S.td, background: '#f0f7ff' }}>
-                      {r.weather?.pressure_inhg != null ? r.weather.pressure_inhg.toFixed(3) : '—'}
-                    </td>
-                    <td style={{ ...S.td, background: '#f0f7ff', fontSize: '0.7rem' }}>
-                      {r.weather ? `${r.weather.delta_seconds}s` : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {runs.map((r, i) => {
+                  const stripe = i % 2 === 1 ? 'var(--color-bg, #262636)' : undefined;
+                  return (
+                    <tr key={r.uuid} style={{ background: stripe }}>
+                      <td style={S.td}>{r.driver_name || '—'}</td>
+                      <td style={S.td}>{r.class_index || '—'}</td>
+                      <td style={S.td}>{r.round || '—'}</td>
+                      <td style={S.td}>{r.lane || '—'}</td>
+                      <td style={S.td}>{r.rt != null ? r.rt.toFixed(3) : '—'}</td>
+                      <td style={S.td}>{r.ft1320 != null ? r.ft1320.toFixed(3) : '—'}</td>
+                      <td style={S.td}>{r.mph1320 != null ? r.mph1320.toFixed(1) : '—'}</td>
+                      <td style={{ ...S.td, borderLeft: '2px solid var(--color-primary, #3b82f6)', color: 'var(--color-text)', fontWeight: 500 }}>
+                        {r.weather?.temp_f != null ? r.weather.temp_f.toFixed(1) : '—'}
+                      </td>
+                      <td style={{ ...S.td, color: 'var(--color-text)', fontWeight: 500 }}>
+                        {r.weather?.rh_pct != null ? r.weather.rh_pct.toFixed(1) : '—'}
+                      </td>
+                      <td style={{ ...S.td, color: 'var(--color-text)', fontWeight: 500 }}>
+                        {r.weather?.pressure_inhg != null ? r.weather.pressure_inhg.toFixed(3) : '—'}
+                      </td>
+                      <td style={{ ...S.td, color: 'var(--color-muted)', fontSize: '0.7rem' }}>
+                        {r.weather ? `${r.weather.delta_seconds}s` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1284,6 +1294,264 @@ function TrendsPanel() {
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Backfill Panel ──────────────────────────────────────────────────────
+
+function jobStatusColor(s: string): string {
+  if (s === 'complete') return '#16a34a';
+  if (s === 'running') return '#2563eb';
+  if (s === 'error') return '#dc2626';
+  if (s === 'cancelled' || s === 'paused') return '#6b7280';
+  return '#6b7280';
+}
+
+function itemStatusColor(s: string): string {
+  if (s === 'ok') return '#16a34a';
+  if (s === 'skipped') return '#6b7280';
+  if (s === 'no_data') return '#f59e0b';
+  if (s === 'error') return '#dc2626';
+  return '#9ca3af';
+}
+
+function BackfillPanel() {
+  const { getUserRole } = useAuth();
+  const role = getUserRole();
+  const isAdmin = role?.id === 'owner' || role?.id === 'admin';
+
+  // Job list
+  const [jobs, setJobs] = useState<BackfillJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState('');
+
+  // Selected job detail
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<BackfillStatusResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Start runs backfill
+  const [runsYearStart, setRunsYearStart] = useState(String(new Date().getFullYear()));
+  const [runsYearEnd, setRunsYearEnd] = useState(String(new Date().getFullYear()));
+  const [startingRuns, setStartingRuns] = useState(false);
+
+  // Start weather backfill
+  const [weatherEventId, setWeatherEventId] = useState('');
+  const [startingWeather, setStartingWeather] = useState(false);
+
+  // General
+  const [actionError, setActionError] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
+
+  const loadJobs = useCallback(async () => {
+    setJobsLoading(true); setJobsError('');
+    try {
+      const res = await parityApi.backfillJobs();
+      setJobs(res.jobs);
+    } catch (e: any) { setJobsError(e.message); }
+    setJobsLoading(false);
+  }, []);
+
+  const loadDetail = useCallback(async (jobId: number) => {
+    setDetailLoading(true);
+    try {
+      const res = await parityApi.backfillStatus(jobId);
+      setDetail(res);
+      setSelectedJobId(jobId);
+    } catch (e: any) { setActionError(e.message); }
+    setDetailLoading(false);
+  }, []);
+
+  useEffect(() => { loadJobs(); }, [loadJobs]);
+
+  const startRuns = useCallback(async () => {
+    setStartingRuns(true); setActionError(''); setActionMsg('');
+    try {
+      const res = await parityApi.startBackfillRuns({
+        yearStart: parseInt(runsYearStart, 10),
+        yearEnd: parseInt(runsYearEnd, 10),
+      });
+      setActionMsg(`Runs backfill job #${res.job.id} ${res.job.status} — ${res.job.completedCount}/${res.job.totalItems} complete`);
+      loadJobs();
+      loadDetail(res.job.id);
+    } catch (e: any) { setActionError(e.message); }
+    setStartingRuns(false);
+  }, [runsYearStart, runsYearEnd, loadJobs, loadDetail]);
+
+  const startWeather = useCallback(async () => {
+    const eid = parseInt(weatherEventId, 10);
+    if (!eid) { setActionError('Enter a valid event ID'); return; }
+    setStartingWeather(true); setActionError(''); setActionMsg('');
+    try {
+      const res = await parityApi.startBackfillWeather({ eventId: eid });
+      setActionMsg(`Weather backfill job #${res.job.id} ${res.job.status} — ${res.job.completedCount}/${res.job.totalItems} complete`);
+      loadJobs();
+      loadDetail(res.job.id);
+    } catch (e: any) { setActionError(e.message); }
+    setStartingWeather(false);
+  }, [weatherEventId, loadJobs, loadDetail]);
+
+  const doResume = useCallback(async (jobId: number) => {
+    setActionError(''); setActionMsg('');
+    try {
+      const res = await parityApi.resumeBackfill(jobId);
+      setActionMsg(`Job #${jobId} resumed → ${res.job.status}`);
+      loadJobs();
+      loadDetail(jobId);
+    } catch (e: any) { setActionError(e.message); }
+  }, [loadJobs, loadDetail]);
+
+  const doCancel = useCallback(async (jobId: number) => {
+    setActionError(''); setActionMsg('');
+    try {
+      await parityApi.cancelBackfill(jobId);
+      setActionMsg(`Job #${jobId} cancelled`);
+      loadJobs();
+      if (selectedJobId === jobId) loadDetail(jobId);
+    } catch (e: any) { setActionError(e.message); }
+  }, [loadJobs, loadDetail, selectedJobId]);
+
+  if (!isAdmin) {
+    return <div style={S.hint}>Backfill jobs require admin/owner role.</div>;
+  }
+
+  return (
+    <div>
+      {/* ── Start Backfill ── */}
+      <div style={{ ...S.card, borderColor: '#f59e0b', borderWidth: 2 }}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Start Backfill Job</h3>
+
+        <div style={S.row}>
+          <b style={{ fontSize: '0.8rem' }}>Runs:</b>
+          <input style={{ ...S.input, width: 55 }} placeholder="From" value={runsYearStart}
+            onChange={e => setRunsYearStart(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+          <span style={{ fontSize: '0.8rem' }}>–</span>
+          <input style={{ ...S.input, width: 55 }} placeholder="To" value={runsYearEnd}
+            onChange={e => setRunsYearEnd(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+          <button style={S.btn('primary')} onClick={startRuns} disabled={startingRuns}>
+            {startingRuns ? 'Starting...' : 'Start Runs Backfill'}
+          </button>
+        </div>
+
+        <div style={S.row}>
+          <b style={{ fontSize: '0.8rem' }}>Weather:</b>
+          <input style={{ ...S.input, width: 55 }} placeholder="Event ID" value={weatherEventId}
+            onChange={e => setWeatherEventId(e.target.value.replace(/\D/g, ''))} />
+          <button style={S.btn('primary')} onClick={startWeather} disabled={startingWeather}>
+            {startingWeather ? 'Starting...' : 'Start Weather Backfill'}
+          </button>
+        </div>
+
+        {actionMsg && <div style={{ ...S.hint, background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7' }}>{actionMsg}</div>}
+        {actionError && <div style={S.error}>{actionError}</div>}
+      </div>
+
+      {/* ── Job List ── */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>Recent Jobs</h3>
+          <button style={S.btn('secondary')} onClick={loadJobs} disabled={jobsLoading}>
+            {jobsLoading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
+        {jobsError && <div style={S.error}>{jobsError}</div>}
+        {jobs.length === 0 && !jobsLoading && <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>No backfill jobs yet.</div>}
+        {jobs.length > 0 && (
+          <div style={{ maxHeight: 250, overflow: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>ID</th><th style={S.th}>Type</th><th style={S.th}>Status</th>
+                  <th style={S.th}>Progress</th><th style={S.th}>Errors</th>
+                  <th style={S.th}>Current</th><th style={S.th}>Created</th><th style={S.th}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map(j => (
+                  <tr key={j.id} style={{ cursor: 'pointer', background: selectedJobId === j.id ? 'var(--color-bg)' : undefined }}
+                    onClick={() => loadDetail(j.id)}>
+                    <td style={S.td}>{j.id}</td>
+                    <td style={S.td}>{j.type}</td>
+                    <td style={S.td}><span style={S.badge(jobStatusColor(j.status))}>{j.status}</span></td>
+                    <td style={S.td}>{j.completedCount + j.skippedCount + j.noDataCount}/{j.totalItems}</td>
+                    <td style={S.td}>{j.errorCount > 0 ? <span style={{ color: '#dc2626', fontWeight: 600 }}>{j.errorCount}</span> : '0'}</td>
+                    <td style={{ ...S.td, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.currentItemKey || '—'}</td>
+                    <td style={{ ...S.td, fontSize: '0.7rem' }}>{j.createdAt?.slice(0, 16)}</td>
+                    <td style={S.td}>
+                      {(j.status === 'error' || j.status === 'paused' || j.status === 'cancelled') && (
+                        <button style={{ ...S.btn('primary'), fontSize: '0.65rem', padding: '0.15rem 0.4rem', marginRight: 4 }}
+                          onClick={e => { e.stopPropagation(); doResume(j.id); }}>Resume</button>
+                      )}
+                      {j.status === 'running' && (
+                        <button style={{ ...S.btn('danger'), fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}
+                          onClick={e => { e.stopPropagation(); doCancel(j.id); }}>Cancel</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Job Detail ── */}
+      {detail && (
+        <div style={S.card}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+            Job #{detail.job.id} — {detail.job.type} — <span style={S.badge(jobStatusColor(detail.job.status))}>{detail.job.status}</span>
+          </h3>
+          <div style={{ marginBottom: '0.5rem' }}>
+            <span style={S.stat}>Total: <b>{detail.job.totalItems}</b></span>
+            <span style={S.stat}>OK: <b>{detail.job.completedCount}</b></span>
+            <span style={S.stat}>Skipped: <b>{detail.job.skippedCount}</b></span>
+            <span style={S.stat}>No Data: <b>{detail.job.noDataCount}</b></span>
+            <span style={S.stat}>Errors: <b>{detail.job.errorCount}</b></span>
+          </div>
+          {detail.job.lastError && (
+            <div style={{ ...S.error, marginBottom: '0.5rem' }}>Last error: {detail.job.lastError}</div>
+          )}
+          <div style={{ display: 'flex', gap: 4, marginBottom: '0.5rem' }}>
+            <button style={S.btn('secondary')} onClick={() => loadDetail(detail.job.id)} disabled={detailLoading}>
+              {detailLoading ? '...' : 'Refresh'}
+            </button>
+            {(detail.job.status === 'error' || detail.job.status === 'paused' || detail.job.status === 'cancelled') && (
+              <button style={S.btn('primary')} onClick={() => doResume(detail.job.id)}>Resume</button>
+            )}
+            {detail.job.status === 'running' && (
+              <button style={S.btn('danger')} onClick={() => doCancel(detail.job.id)}>Cancel</button>
+            )}
+          </div>
+          <div style={{ maxHeight: 350, overflow: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Item</th><th style={S.th}>Status</th><th style={S.th}>Tries</th>
+                  <th style={S.th}>HTTP</th><th style={S.th}>Fetched</th><th style={S.th}>Inserted</th>
+                  <th style={S.th}>Deduped</th><th style={S.th}>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.items.map((it, i) => (
+                  <tr key={it.item_key} style={{ background: i % 2 === 1 ? 'var(--color-bg)' : undefined }}>
+                    <td style={S.td}>{it.item_key}</td>
+                    <td style={S.td}><span style={S.badge(itemStatusColor(it.status))}>{it.status}</span></td>
+                    <td style={S.td}>{it.attempts}</td>
+                    <td style={S.td}>{it.last_http_status || '—'}</td>
+                    <td style={S.td}>{it.rows_fetched}</td>
+                    <td style={S.td}>{it.rows_inserted}</td>
+                    <td style={S.td}>{it.rows_deduped}</td>
+                    <td style={{ ...S.td, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.7rem' }}>
+                      {it.last_error || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

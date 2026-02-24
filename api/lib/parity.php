@@ -89,9 +89,19 @@ function parity_extractNextLink(array $json): ?string {
 }
 
 /**
- * HTTP GET with cURL.
+ * Redact sensitive query params from a URL for safe logging.
  */
-function parity_httpGet(string $url): string|false {
+function parity_redactUrl(string $url): string {
+    return preg_replace('/([?&])(api_key|token|secret|key|password)=[^&]*/i', '$1$2=REDACTED', $url);
+}
+
+/**
+ * HTTP GET with cURL — returns structured result.
+ * NEVER logs raw URLs that may contain secrets; uses parity_redactUrl.
+ *
+ * @return array{body: string|false, httpCode: int, error: string}
+ */
+function parity_httpGetFull(string $url): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -102,15 +112,24 @@ function parity_httpGet(string $url): string|false {
         ],
     ]);
     $result = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
     curl_close($ch);
 
-    if ($result === false || $httpCode >= 400) {
-        error_log("parity_httpGet failed: url=$url httpCode=$httpCode error=$error");
+    return ['body' => $result, 'httpCode' => $httpCode, 'error' => $error];
+}
+
+/**
+ * HTTP GET with cURL — simple boolean interface (backwards compat for OData).
+ * Logs redacted URLs only.
+ */
+function parity_httpGet(string $url): string|false {
+    $r = parity_httpGetFull($url);
+    if ($r['body'] === false || $r['httpCode'] >= 400) {
+        error_log("parity_httpGet failed: url=" . parity_redactUrl($url) . " httpCode={$r['httpCode']} error={$r['error']}");
         return false;
     }
-    return $result;
+    return $r['body'];
 }
 
 // ============================================================================
@@ -315,32 +334,67 @@ function parity_computeRowHash(string $raceLookup, array $normalized, array $raw
 const PARITY_MB_TO_INHG = 0.02953;
 
 /**
- * Fetch Tempest observations for a time range.
+ * Fetch Tempest observations for a time range with retry/backoff.
+ *
+ * Retry policy:
+ *   - 429 (rate limit), 503, 504: retry up to 5 times with exponential backoff + jitter
+ *   - 401, 403: fail fast with "unauthorized" (no secret shown)
+ *   - 200 but empty obs: return empty array (no_data, not an error)
+ *   - Other 4xx/5xx: fail after retries
+ *
+ * SECURITY: NEVER includes api_key in exceptions or error_log.
  *
  * @param int    $startEpoch     Unix epoch seconds (UTC)
  * @param int    $endEpoch       Unix epoch seconds (UTC)
  * @param int    $bucketMinutes  Aggregation bucket (default 30)
  * @param string $stationId      Tempest station ID (from env)
  * @param string $apiKey         Tempest API key (from env)
- * @return array  List of [ 'timestamp_epoch' => int, 'temp_c' => ?float, 'rh_pct' => ?float, 'station_pressure_raw' => ?float ]
- * @throws RuntimeException on fetch/parse failure
+ * @return array{samples: array, httpCode: int, attempts: int}
+ * @throws RuntimeException on unrecoverable failure (message is safe to expose)
  */
 function parity_fetchTempest(int $startEpoch, int $endEpoch, int $bucketMinutes, string $stationId, string $apiKey): array {
     $url = "https://swd.weatherflow.com/swd/rest/observations/stn/{$stationId}"
          . "?time_start={$startEpoch}&time_end={$endEpoch}"
          . "&bucket={$bucketMinutes}&api_key={$apiKey}";
 
-    $raw = parity_httpGet($url);
-    if ($raw === false) {
-        throw new RuntimeException("Tempest fetch failed: $url");
+    $maxRetries = 5;
+    $lastHttpCode = 0;
+    $lastError = '';
+
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $r = parity_httpGetFull($url);
+        $lastHttpCode = $r['httpCode'];
+
+        // Fail fast on auth errors
+        if ($lastHttpCode === 401 || $lastHttpCode === 403) {
+            throw new RuntimeException("Tempest credentials invalid/unauthorized (HTTP $lastHttpCode)");
+        }
+
+        // Success path
+        if ($r['body'] !== false && $lastHttpCode >= 200 && $lastHttpCode < 300) {
+            $json = json_decode($r['body'], true);
+            if ($json === null) {
+                throw new RuntimeException("Tempest returned invalid JSON (HTTP $lastHttpCode)");
+            }
+            $samples = parity_parseTempestResponse($json);
+            return ['samples' => $samples, 'httpCode' => $lastHttpCode, 'attempts' => $attempt];
+        }
+
+        // Retryable status codes: 429, 503, 504
+        $retryable = in_array($lastHttpCode, [429, 503, 504], true) || $r['body'] === false;
+        if (!$retryable || $attempt === $maxRetries) {
+            $bodySnippet = is_string($r['body']) ? substr($r['body'], 0, 200) : '(no body)';
+            $lastError = "HTTP $lastHttpCode after $attempt attempt(s). Body: $bodySnippet";
+            error_log("parity_fetchTempest failed: " . parity_redactUrl($url) . " — $lastError");
+            break;
+        }
+
+        // Exponential backoff + jitter: 1s, 2s, 4s, 8s, 16s + 0-500ms random
+        $backoffMs = (int)(pow(2, $attempt - 1) * 1000) + random_int(0, 500);
+        usleep($backoffMs * 1000);
     }
 
-    $json = json_decode($raw, true);
-    if ($json === null) {
-        throw new RuntimeException("Tempest returned invalid JSON");
-    }
-
-    return parity_parseTempestResponse($json);
+    throw new RuntimeException("Tempest fetch failed (HTTP $lastHttpCode after $maxRetries retries)");
 }
 
 /**

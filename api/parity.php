@@ -136,6 +136,31 @@ switch ($action) {
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleWeatherCanonical($pdo);
         break;
+    // ── Backfill job actions ────────────────────────────────────────────
+    case 'startBackfillRuns':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleStartBackfillRuns($pdo, $userId, $auth);
+        break;
+    case 'startBackfillWeather':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleStartBackfillWeather($pdo, $userId, $auth);
+        break;
+    case 'resumeBackfill':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleResumeBackfill($pdo, $userId, $auth);
+        break;
+    case 'cancelBackfill':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleCancelBackfill($pdo, $auth);
+        break;
+    case 'backfillStatus':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleBackfillStatus($pdo);
+        break;
+    case 'backfillJobs':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleBackfillJobs($pdo);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -1071,6 +1096,7 @@ function handleWeatherBackfill(PDO $pdo): void {
     $input = rsa_getJsonInput();
     $eventId = (int)($input['eventId'] ?? 0);
     $minRowsPerDay = (int)($input['minRowsPerDay'] ?? 24);
+    $throttleMs = max(200, min(5000, (int)($input['throttleMs'] ?? 500)));
 
     if ($eventId <= 0) {
         rsa_jsonResponse(['error' => 'eventId is required'], 400);
@@ -1116,6 +1142,7 @@ function handleWeatherBackfill(PDO $pdo): void {
 
     $daysChecked = 0;
     $daysFetched = 0;
+    $daysNoData = 0;
     $rowsInserted = 0;
     $rowsDeduped = 0;
     $errors = [];
@@ -1123,6 +1150,7 @@ function handleWeatherBackfill(PDO $pdo): void {
     // Iterate each day in range
     $current = new DateTime($fromDate);
     $end = new DateTime($toDate);
+    $isFirstFetch = true;
 
     while ($current <= $end) {
         $daysChecked++;
@@ -1145,18 +1173,31 @@ function handleWeatherBackfill(PDO $pdo): void {
             continue;
         }
 
-        // Fetch from Tempest
+        // Throttle between Tempest API calls (skip delay on first fetch)
+        if (!$isFirstFetch) {
+            usleep($throttleMs * 1000);
+        }
+        $isFirstFetch = false;
+
+        // Fetch from Tempest (now returns {samples, httpCode, attempts})
         $daysFetched++;
         try {
-            $samples = parity_fetchTempest(
+            $result = parity_fetchTempest(
                 $range['start_epoch'],
                 $range['end_epoch'],
                 $config['bucket_minutes'],
                 $config['station_id'],
                 $config['api_key']
             );
+            $samples = $result['samples'];
         } catch (RuntimeException $e) {
             $errors[] = "$dateStr: " . $e->getMessage();
+            $current->modify('+1 day');
+            continue;
+        }
+
+        if (empty($samples)) {
+            $daysNoData++;
             $current->modify('+1 day');
             continue;
         }
@@ -1202,6 +1243,7 @@ function handleWeatherBackfill(PDO $pdo): void {
         'timezone' => $tz,
         'daysChecked' => $daysChecked,
         'daysFetched' => $daysFetched,
+        'daysNoData' => $daysNoData,
         'rowsInserted' => $rowsInserted,
         'rowsDeduped' => $rowsDeduped,
         'errors' => $errors,
@@ -1485,4 +1527,688 @@ function handleWeatherCanonical(PDO $pdo): void {
     }
 
     rsa_jsonResponse(['canonical' => $rows, 'count' => count($rows)]);
+}
+
+// ============================================================================
+// Backfill Job System — shared helpers
+// ============================================================================
+
+/**
+ * Require owner/admin role. Returns role string or responds 403.
+ */
+function requireAdminRole(array $auth): string {
+    $role = $auth['role'] ?? '';
+    if (!in_array($role, ['owner', 'admin'], true)) {
+        rsa_jsonResponse(['error' => 'Requires owner or admin role'], 403);
+    }
+    return $role;
+}
+
+/**
+ * Check if there is already a running job of the given type. If so, respond 409.
+ */
+function ensureNoRunningJob(PDO $pdo, string $type): void {
+    $stmt = $pdo->prepare("SELECT id FROM parity_backfill_jobs WHERE type = ? AND status = 'running' LIMIT 1");
+    $stmt->execute([$type]);
+    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($existing) {
+        rsa_jsonResponse([
+            'error' => "A $type backfill job is already running (id={$existing['id']}). Cancel or wait for it to finish.",
+            'existingJobId' => (int)$existing['id'],
+        ], 409);
+    }
+}
+
+/**
+ * Create a backfill job and its items.
+ * @return int  The new job ID.
+ */
+function createBackfillJob(PDO $pdo, string $type, int $userId, array $params, array $itemKeys): int {
+    $stmt = $pdo->prepare("
+        INSERT INTO parity_backfill_jobs (type, status, created_by_user_id, params_json, total_items)
+        VALUES (?, 'running', ?, ?, ?)
+    ");
+    $stmt->execute([$type, $userId, json_encode($params), count($itemKeys)]);
+    $jobId = (int)$pdo->lastInsertId();
+
+    $stmtItem = $pdo->prepare("
+        INSERT INTO parity_backfill_job_items (job_id, item_key, status)
+        VALUES (?, ?, 'pending')
+    ");
+    foreach ($itemKeys as $key) {
+        $stmtItem->execute([$jobId, $key]);
+    }
+
+    return $jobId;
+}
+
+/**
+ * Load a job row by ID.
+ */
+function loadBackfillJob(PDO $pdo, int $jobId): ?array {
+    $stmt = $pdo->prepare("SELECT * FROM parity_backfill_jobs WHERE id = ?");
+    $stmt->execute([$jobId]);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+/**
+ * Update job counters from items table.
+ */
+function refreshJobCounters(PDO $pdo, int $jobId): void {
+    $pdo->prepare("
+        UPDATE parity_backfill_jobs SET
+            completed_count = (SELECT COUNT(*) FROM parity_backfill_job_items WHERE job_id = ? AND status = 'ok'),
+            skipped_count   = (SELECT COUNT(*) FROM parity_backfill_job_items WHERE job_id = ? AND status = 'skipped'),
+            no_data_count   = (SELECT COUNT(*) FROM parity_backfill_job_items WHERE job_id = ? AND status = 'no_data'),
+            error_count     = (SELECT COUNT(*) FROM parity_backfill_job_items WHERE job_id = ? AND status = 'error')
+        WHERE id = ?
+    ")->execute([$jobId, $jobId, $jobId, $jobId, $jobId]);
+}
+
+/**
+ * Process pending items for a runs backfill job.
+ * Runs sequentially with throttle. Checks for cancellation between items.
+ */
+function processRunsBackfillItems(PDO $pdo, int $jobId, int $userId, array $params): void {
+    $throttleMs = max(200, min(5000, (int)($params['throttleMs'] ?? 500)));
+    $force = (bool)($params['force'] ?? false);
+
+    set_time_limit(600); // 10 min
+
+    $stmtPending = $pdo->prepare("
+        SELECT id, item_key FROM parity_backfill_job_items
+        WHERE job_id = ? AND status IN ('pending','error')
+        ORDER BY item_key ASC
+        LIMIT 1
+    ");
+    $stmtUpdateItem = $pdo->prepare("
+        UPDATE parity_backfill_job_items
+        SET status = ?, attempts = attempts + 1, last_http_status = ?, last_error = ?,
+            rows_fetched = ?, rows_inserted = ?, rows_deduped = ?
+        WHERE id = ?
+    ");
+    $stmtUpdateJob = $pdo->prepare("
+        UPDATE parity_backfill_jobs SET current_item_key = ?, last_error = ? WHERE id = ?
+    ");
+    $stmtCheckCancel = $pdo->prepare("SELECT status FROM parity_backfill_jobs WHERE id = ?");
+
+    $isFirst = true;
+    while (true) {
+        // Check if job was cancelled
+        $stmtCheckCancel->execute([$jobId]);
+        $jobStatus = $stmtCheckCancel->fetchColumn();
+        if ($jobStatus !== 'running') break;
+
+        // Get next pending item
+        $stmtPending->execute([$jobId]);
+        $item = $stmtPending->fetch(PDO::FETCH_ASSOC);
+        if (!$item) break; // All done
+
+        $raceLookup = $item['item_key'];
+        $stmtUpdateJob->execute([$raceLookup, null, $jobId]);
+
+        // Throttle between requests
+        if (!$isFirst) {
+            usleep($throttleMs * 1000);
+        }
+        $isFirst = false;
+
+        // Attempt ingest
+        try {
+            $result = parity_fetchNhraOdata($raceLookup);
+            $rows = $result['rows'];
+            $rowsFetched = count($rows);
+
+            if ($rowsFetched === 0) {
+                $stmtUpdateItem->execute(['no_data', 200, null, 0, 0, 0, $item['id']]);
+                continue;
+            }
+
+            // Check existing count
+            $existingStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_runs WHERE race_lookup = ?");
+            $existingStmt->execute([$raceLookup]);
+            $existingCount = (int)$existingStmt->fetchColumn();
+
+            if ($existingCount > 0 && !$force) {
+                $stmtUpdateItem->execute(['skipped', 200, "Already has $existingCount rows", $rowsFetched, 0, 0, $item['id']]);
+                continue;
+            }
+
+            // Create import record
+            $importUuid = parity_generateUuid();
+            $importStmt = $pdo->prepare("
+                INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, source_url, created_by_user_id)
+                VALUES (?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(), 'success', ?, ?, ?)
+            ");
+            $importStmt->execute([$importUuid, $raceLookup, $rowsFetched, $result['url'], $userId]);
+            $importId = (int)$pdo->lastInsertId();
+
+            // Insert runs
+            $inserted = 0;
+            $deduped = 0;
+            foreach ($rows as $raw) {
+                $normalized = parity_normalizeRow($raw);
+                $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
+                $runUuid = parity_generateUuid();
+
+                // Insert raw
+                $rawHash = hash('sha256', json_encode($raw));
+                try {
+                    $pdo->prepare("
+                        INSERT INTO parity_runs_raw (uuid, import_id, row_hash, raw_json)
+                        VALUES (?, ?, ?, ?)
+                    ")->execute([$parity_rawUuid = parity_generateUuid(), $importId, $rawHash, json_encode($raw)]);
+                } catch (PDOException $e) {
+                    // Duplicate raw — ok
+                }
+
+                try {
+                    $cols = ['uuid','import_id','race_lookup','row_hash'];
+                    $vals = [$runUuid, $importId, $raceLookup, $rowHash];
+                    foreach ($normalized as $col => $val) {
+                        $cols[] = $col;
+                        $vals[] = $val;
+                    }
+                    $placeholders = implode(',', array_fill(0, count($cols), '?'));
+                    $colList = implode(',', $cols);
+                    $pdo->prepare("INSERT INTO parity_runs ($colList) VALUES ($placeholders)")->execute($vals);
+                    $inserted++;
+                } catch (PDOException $e) {
+                    if (strpos($e->getMessage(), 'Duplicate') !== false) {
+                        $deduped++;
+                    } else {
+                        throw $e;
+                    }
+                }
+            }
+
+            $stmtUpdateItem->execute(['ok', 200, null, $rowsFetched, $inserted, $deduped, $item['id']]);
+
+        } catch (Exception $e) {
+            $errMsg = substr($e->getMessage(), 0, 500);
+            $stmtUpdateItem->execute(['error', 0, $errMsg, 0, 0, 0, $item['id']]);
+            $stmtUpdateJob->execute([$raceLookup, $errMsg, $jobId]);
+        }
+    }
+
+    // Refresh counters and finalize
+    refreshJobCounters($pdo, $jobId);
+
+    // Check final status
+    $stmtCheckCancel->execute([$jobId]);
+    $finalStatus = $stmtCheckCancel->fetchColumn();
+    if ($finalStatus === 'running') {
+        // Check if any items still pending
+        $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_backfill_job_items WHERE job_id = ? AND status IN ('pending','error')");
+        $pendingStmt->execute([$jobId]);
+        $pendingCount = (int)$pendingStmt->fetchColumn();
+
+        $newStatus = $pendingCount > 0 ? 'error' : 'complete';
+        $pdo->prepare("UPDATE parity_backfill_jobs SET status = ?, finished_at = NOW() WHERE id = ?")
+            ->execute([$newStatus, $jobId]);
+    }
+}
+
+/**
+ * Process pending items for a weather backfill job.
+ */
+function processWeatherBackfillItems(PDO $pdo, int $jobId, array $params): void {
+    $throttleMs = max(200, min(5000, (int)($params['throttleMs'] ?? 500)));
+    $minRowsPerDay = (int)($params['minRowsPerDay'] ?? 24);
+    $eventId = (int)$params['eventId'];
+
+    set_time_limit(600);
+
+    // Load event + track
+    $stmt = $pdo->prepare("
+        SELECT e.id, t.id AS track_id, t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.id = ?
+    ");
+    $stmt->execute([$eventId]);
+    $event = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) {
+        $pdo->prepare("UPDATE parity_backfill_jobs SET status = 'error', last_error = 'Event not found', finished_at = NOW() WHERE id = ?")
+            ->execute([$jobId]);
+        return;
+    }
+
+    $tz = $event['timezone_iana'];
+
+    // Get Tempest config
+    try {
+        $config = parity_getTempestConfig();
+    } catch (RuntimeException $e) {
+        $pdo->prepare("UPDATE parity_backfill_jobs SET status = 'error', last_error = ?, finished_at = NOW() WHERE id = ?")
+            ->execute([$e->getMessage(), $jobId]);
+        return;
+    }
+
+    $stmtInsert = $pdo->prepare("
+        INSERT INTO parity_weather_samples
+            (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tempest')
+    ");
+
+    $stmtPending = $pdo->prepare("
+        SELECT id, item_key FROM parity_backfill_job_items
+        WHERE job_id = ? AND status IN ('pending','error')
+        ORDER BY item_key ASC
+        LIMIT 1
+    ");
+    $stmtUpdateItem = $pdo->prepare("
+        UPDATE parity_backfill_job_items
+        SET status = ?, attempts = attempts + 1, last_http_status = ?, last_error = ?,
+            rows_fetched = ?, rows_inserted = ?, rows_deduped = ?
+        WHERE id = ?
+    ");
+    $stmtUpdateJob = $pdo->prepare("
+        UPDATE parity_backfill_jobs SET current_item_key = ?, last_error = ? WHERE id = ?
+    ");
+    $stmtCheckCancel = $pdo->prepare("SELECT status FROM parity_backfill_jobs WHERE id = ?");
+
+    $isFirst = true;
+    while (true) {
+        // Check cancellation
+        $stmtCheckCancel->execute([$jobId]);
+        $jobStatus = $stmtCheckCancel->fetchColumn();
+        if ($jobStatus !== 'running') break;
+
+        $stmtPending->execute([$jobId]);
+        $item = $stmtPending->fetch(PDO::FETCH_ASSOC);
+        if (!$item) break;
+
+        $dateStr = $item['item_key'];
+        $stmtUpdateJob->execute([$dateStr, null, $jobId]);
+
+        // Check existing rows
+        $range = parity_localDateToUtcRange($dateStr, $tz);
+        $utcStart = gmdate('Y-m-d H:i:s', $range['start_epoch']);
+        $utcEnd = gmdate('Y-m-d H:i:s', $range['end_epoch']);
+
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM parity_weather_samples
+            WHERE event_id = ? AND timestamp_utc BETWEEN ? AND ?
+        ");
+        $countStmt->execute([$eventId, $utcStart, $utcEnd]);
+        $existing = (int)$countStmt->fetchColumn();
+
+        if ($existing >= $minRowsPerDay) {
+            $stmtUpdateItem->execute(['skipped', 0, "Already has $existing rows", 0, 0, 0, $item['id']]);
+            continue;
+        }
+
+        // Throttle
+        if (!$isFirst) {
+            usleep($throttleMs * 1000);
+        }
+        $isFirst = false;
+
+        try {
+            $result = parity_fetchTempest(
+                $range['start_epoch'],
+                $range['end_epoch'],
+                $config['bucket_minutes'],
+                $config['station_id'],
+                $config['api_key']
+            );
+            $samples = $result['samples'];
+            $httpCode = $result['httpCode'];
+        } catch (RuntimeException $e) {
+            $stmtUpdateItem->execute(['error', 0, $e->getMessage(), 0, 0, 0, $item['id']]);
+            $stmtUpdateJob->execute([$dateStr, $e->getMessage(), $jobId]);
+            continue;
+        }
+
+        if (empty($samples)) {
+            $stmtUpdateItem->execute(['no_data', $httpCode, null, 0, 0, 0, $item['id']]);
+            continue;
+        }
+
+        $inserted = 0;
+        $deduped = 0;
+        foreach ($samples as $s) {
+            $tsUtc = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
+            $utcDt = new DateTimeImmutable("@{$s['timestamp_epoch']}");
+            $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
+            $localStr = $localDt->format('Y-m-d H:i:s');
+            $tempF = parity_cToF($s['temp_c']);
+
+            try {
+                $stmtInsert->execute([
+                    $tsUtc, $eventId, (int)$event['track_id'], $localStr,
+                    $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
+                ]);
+                $inserted++;
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'Duplicate') !== false) {
+                    $deduped++;
+                } else {
+                    throw $e;
+                }
+            }
+        }
+
+        $stmtUpdateItem->execute(['ok', $httpCode, null, count($samples), $inserted, $deduped, $item['id']]);
+    }
+
+    // Finalize
+    refreshJobCounters($pdo, $jobId);
+    $stmtCheckCancel->execute([$jobId]);
+    $finalStatus = $stmtCheckCancel->fetchColumn();
+    if ($finalStatus === 'running') {
+        $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_backfill_job_items WHERE job_id = ? AND status IN ('pending','error')");
+        $pendingStmt->execute([$jobId]);
+        $pendingCount = (int)$pendingStmt->fetchColumn();
+        $newStatus = $pendingCount > 0 ? 'error' : 'complete';
+        $pdo->prepare("UPDATE parity_backfill_jobs SET status = ?, finished_at = NOW() WHERE id = ?")->execute([$newStatus, $jobId]);
+    }
+}
+
+// ============================================================================
+// POST ?action=startBackfillRuns
+// Body: { yearStart, yearEnd, throttleMs?, force? }
+// ============================================================================
+
+function handleStartBackfillRuns(PDO $pdo, int $userId, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $yearStart = (int)($input['yearStart'] ?? 0);
+    $yearEnd = (int)($input['yearEnd'] ?? 0);
+
+    if ($yearStart < 2000 || $yearEnd < $yearStart || $yearEnd > 2100) {
+        rsa_jsonResponse(['error' => 'Invalid year range'], 400);
+    }
+
+    ensureNoRunningJob($pdo, 'runs');
+
+    // Gather raceLookups via suggestRaceLookups for each year
+    $allDates = [];
+    for ($y = $yearStart; $y <= $yearEnd; $y++) {
+        $url = "https://www.nhra.com/ODataResults/Results.svc/RoundResultsRaceLookup('{$y}0101')/?\$select=DumbyID&\$top=1&\$format=json";
+        // Use suggestRaceLookups logic — scan known event start dates
+        // For simplicity, we use the same NHRA OData probe approach
+        $wedThursFri = [];
+        $start = new DateTime("$y-01-01");
+        $end = new DateTime("$y-12-31");
+        while ($start <= $end) {
+            $dow = (int)$start->format('N');
+            if ($dow >= 3 && $dow <= 5) { // Wed=3, Thu=4, Fri=5
+                $wedThursFri[] = $start->format('Ymd');
+            }
+            $start->modify('+1 day');
+        }
+
+        // Probe in batches — check which dates have data via peek
+        // For efficiency, use the suggestRaceLookups endpoint logic:
+        // just include all Wed/Thu/Fri dates as items, let the ingest handle 0-row results
+        // But this creates too many items. Instead, let's use a simpler approach:
+        // Actually query the NHRA OData to find which dates have results.
+        $threshold = (int)($input['probeThreshold'] ?? 80);
+        foreach ($wedThursFri as $rl) {
+            $probeUrl = "https://www.nhra.com/ODataResults/Results.svc/RoundResultsRaceLookup('{$rl}')/?\$select=DumbyID&\$top=1&\$format=json&\$inlinecount=allpages";
+            $raw = parity_httpGet($probeUrl);
+            if ($raw !== false) {
+                $json = json_decode($raw, true);
+                $count = 0;
+                if (isset($json['d']['__count'])) {
+                    $count = (int)$json['d']['__count'];
+                } elseif (isset($json['@odata.count'])) {
+                    $count = (int)$json['@odata.count'];
+                }
+                if ($count >= $threshold) {
+                    $allDates[] = $rl;
+                }
+            }
+            usleep(100000); // 100ms between probes
+        }
+    }
+
+    if (empty($allDates)) {
+        rsa_jsonResponse(['error' => 'No events found in the given year range'], 404);
+    }
+
+    $jobId = createBackfillJob($pdo, 'runs', $userId, [
+        'yearStart' => $yearStart,
+        'yearEnd' => $yearEnd,
+        'throttleMs' => (int)($input['throttleMs'] ?? 500),
+        'force' => (bool)($input['force'] ?? false),
+    ], $allDates);
+
+    // Process items synchronously (with internal throttle + cancel checks)
+    processRunsBackfillItems($pdo, $jobId, $userId, json_decode(
+        json_encode(['throttleMs' => $input['throttleMs'] ?? 500, 'force' => $input['force'] ?? false]),
+        true
+    ));
+
+    // Return final status
+    $job = loadBackfillJob($pdo, $jobId);
+    rsa_jsonResponse(['job' => formatJobRow($job)]);
+}
+
+// ============================================================================
+// POST ?action=startBackfillWeather
+// Body: { eventId, throttleMs?, minRowsPerDay? }
+// ============================================================================
+
+function handleStartBackfillWeather(PDO $pdo, int $userId, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $eventId = (int)($input['eventId'] ?? 0);
+    if ($eventId <= 0) {
+        rsa_jsonResponse(['error' => 'eventId is required'], 400);
+    }
+
+    // Load event
+    $stmt = $pdo->prepare("
+        SELECT e.id, e.start_date_local, e.end_date_local, t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.id = ?
+    ");
+    $stmt->execute([$eventId]);
+    $event = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) {
+        rsa_jsonResponse(['error' => "Event $eventId not found"], 404);
+    }
+
+    ensureNoRunningJob($pdo, 'weather');
+
+    // Generate day items
+    $tz = $event['timezone_iana'];
+    $todayLocal = (new DateTime('now', new DateTimeZone($tz)))->format('Y-m-d');
+    $toDate = $event['end_date_local'];
+    if ($toDate > $todayLocal) $toDate = $todayLocal;
+
+    $days = [];
+    $current = new DateTime($event['start_date_local']);
+    $end = new DateTime($toDate);
+    while ($current <= $end) {
+        $days[] = $current->format('Y-m-d');
+        $current->modify('+1 day');
+    }
+
+    if (empty($days)) {
+        rsa_jsonResponse(['error' => 'No days in event range (event may be in the future)'], 400);
+    }
+
+    $params = [
+        'eventId' => $eventId,
+        'throttleMs' => (int)($input['throttleMs'] ?? 500),
+        'minRowsPerDay' => (int)($input['minRowsPerDay'] ?? 24),
+    ];
+
+    $jobId = createBackfillJob($pdo, 'weather', $userId, $params, $days);
+
+    processWeatherBackfillItems($pdo, $jobId, $params);
+
+    $job = loadBackfillJob($pdo, $jobId);
+    rsa_jsonResponse(['job' => formatJobRow($job)]);
+}
+
+// ============================================================================
+// POST ?action=resumeBackfill  { jobId }
+// ============================================================================
+
+function handleResumeBackfill(PDO $pdo, int $userId, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $jobId = (int)($input['jobId'] ?? 0);
+    if ($jobId <= 0) {
+        rsa_jsonResponse(['error' => 'jobId is required'], 400);
+    }
+
+    $job = loadBackfillJob($pdo, $jobId);
+    if (!$job) {
+        rsa_jsonResponse(['error' => 'Job not found'], 404);
+    }
+
+    if ($job['status'] === 'running') {
+        rsa_jsonResponse(['error' => 'Job is already running'], 409);
+    }
+
+    // Reset error items back to pending for retry
+    $pdo->prepare("
+        UPDATE parity_backfill_job_items SET status = 'pending' WHERE job_id = ? AND status = 'error'
+    ")->execute([$jobId]);
+
+    // Mark job as running
+    $pdo->prepare("UPDATE parity_backfill_jobs SET status = 'running', finished_at = NULL WHERE id = ?")
+        ->execute([$jobId]);
+
+    $params = json_decode($job['params_json'], true);
+
+    if ($job['type'] === 'runs') {
+        processRunsBackfillItems($pdo, $jobId, $userId, $params);
+    } else {
+        processWeatherBackfillItems($pdo, $jobId, $params);
+    }
+
+    $job = loadBackfillJob($pdo, $jobId);
+    rsa_jsonResponse(['job' => formatJobRow($job)]);
+}
+
+// ============================================================================
+// POST ?action=cancelBackfill  { jobId }
+// ============================================================================
+
+function handleCancelBackfill(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $jobId = (int)($input['jobId'] ?? 0);
+    if ($jobId <= 0) {
+        rsa_jsonResponse(['error' => 'jobId is required'], 400);
+    }
+
+    $job = loadBackfillJob($pdo, $jobId);
+    if (!$job) {
+        rsa_jsonResponse(['error' => 'Job not found'], 404);
+    }
+
+    $pdo->prepare("UPDATE parity_backfill_jobs SET status = 'cancelled', finished_at = NOW() WHERE id = ?")
+        ->execute([$jobId]);
+    refreshJobCounters($pdo, $jobId);
+
+    $job = loadBackfillJob($pdo, $jobId);
+    rsa_jsonResponse(['job' => formatJobRow($job)]);
+}
+
+// ============================================================================
+// GET ?action=backfillStatus&jobId=...
+// ============================================================================
+
+function handleBackfillStatus(PDO $pdo): void {
+    $jobId = (int)($_GET['jobId'] ?? 0);
+    if ($jobId <= 0) {
+        rsa_jsonResponse(['error' => 'jobId is required'], 400);
+    }
+
+    $job = loadBackfillJob($pdo, $jobId);
+    if (!$job) {
+        rsa_jsonResponse(['error' => 'Job not found'], 404);
+    }
+
+    // Load items
+    $stmt = $pdo->prepare("
+        SELECT item_key, status, attempts, last_http_status, last_error,
+               rows_fetched, rows_inserted, rows_deduped, updated_at
+        FROM parity_backfill_job_items
+        WHERE job_id = ?
+        ORDER BY item_key ASC
+    ");
+    $stmt->execute([$jobId]);
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($items as &$it) {
+        $it['attempts'] = (int)$it['attempts'];
+        $it['last_http_status'] = $it['last_http_status'] ? (int)$it['last_http_status'] : null;
+        $it['rows_fetched'] = (int)$it['rows_fetched'];
+        $it['rows_inserted'] = (int)$it['rows_inserted'];
+        $it['rows_deduped'] = (int)$it['rows_deduped'];
+    }
+
+    rsa_jsonResponse([
+        'job' => formatJobRow($job),
+        'items' => $items,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=backfillJobs
+// ============================================================================
+
+function handleBackfillJobs(PDO $pdo): void {
+    $type = $_GET['type'] ?? '';
+    $limit = min((int)($_GET['limit'] ?? 20), 100);
+
+    $where = [];
+    $params = [];
+    if ($type) {
+        $where[] = 'type = ?';
+        $params[] = $type;
+    }
+    $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    $params[] = $limit;
+
+    $stmt = $pdo->prepare("
+        SELECT * FROM parity_backfill_jobs
+        $whereClause
+        ORDER BY created_at DESC
+        LIMIT ?
+    ");
+    $stmt->execute($params);
+    $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    rsa_jsonResponse([
+        'jobs' => array_map('formatJobRow', $jobs),
+        'count' => count($jobs),
+    ]);
+}
+
+/**
+ * Format a job row for JSON response.
+ */
+function formatJobRow(array $job): array {
+    return [
+        'id' => (int)$job['id'],
+        'type' => $job['type'],
+        'status' => $job['status'],
+        'createdByUserId' => $job['created_by_user_id'] ? (int)$job['created_by_user_id'] : null,
+        'params' => json_decode($job['params_json'], true),
+        'totalItems' => (int)$job['total_items'],
+        'completedCount' => (int)$job['completed_count'],
+        'skippedCount' => (int)$job['skipped_count'],
+        'noDataCount' => (int)$job['no_data_count'],
+        'errorCount' => (int)$job['error_count'],
+        'currentItemKey' => $job['current_item_key'],
+        'lastError' => $job['last_error'],
+        'createdAt' => $job['created_at'],
+        'updatedAt' => $job['updated_at'],
+        'finishedAt' => $job['finished_at'],
+    ];
 }
