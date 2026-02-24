@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, useClerkRSA } from '../domain/auth';
+import { useAuth } from '../domain/auth';
 import { usePreferences } from '../shared/state/preferences';
 import { useSubscription } from '../domain/config/useSubscription';
 import { openCustomerPortal, getSubscriptionStatus } from '../domain/payments';
@@ -29,8 +29,6 @@ export default function Account() {
     getUserProducts,
     updateUser,
   } = useAuth();
-  const { isClerkSignedIn, rsaUser } = useClerkRSA();
-  
   // Fetch subscription status from backend API
   const [dbSubscription, setDbSubscription] = useState<{
     plan: string | null;
@@ -50,10 +48,10 @@ export default function Account() {
       }
     };
     
-    if (isAuthenticated || isClerkSignedIn) {
+    if (isAuthenticated) {
       fetchSubscription();
     }
-  }, [isAuthenticated, isClerkSignedIn]);
+  }, [isAuthenticated]);
   
   const subscription = dbSubscription ? {
     plan: dbSubscription.plan as 'racer' | 'pro' | 'team' | null,
@@ -95,10 +93,7 @@ export default function Account() {
   const isInternal = tier === 'owner' || tier === 'beta' || tier === 'team';
 
   // Redirect if not logged in
-  const isLoggedIn = isAuthenticated || isClerkSignedIn;
-  const activeUser = isClerkSignedIn ? rsaUser : user;
-  
-  if (!isLoggedIn || !activeUser) {
+  if (!isAuthenticated || !user) {
     navigate('/login', { replace: true });
     return null;
   }
@@ -162,7 +157,7 @@ export default function Account() {
               fontWeight: 600,
               flexShrink: 0,
             }}>
-              {activeUser.displayName.charAt(0).toUpperCase()}
+              {user.displayName.charAt(0).toUpperCase()}
             </div>
             
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -185,10 +180,10 @@ export default function Account() {
                   }}
                 />
               ) : (
-                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{activeUser.displayName}</h2>
+                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{user.displayName}</h2>
               )}
               <div style={{ color: 'var(--color-muted)', fontSize: '0.85rem', marginTop: '0.125rem' }}>
-                {activeUser.email}
+                {user.email}
               </div>
             </div>
             
@@ -196,7 +191,7 @@ export default function Account() {
               {isEditing ? (
                 <>
                   <button
-                    onClick={() => { setIsEditing(false); setDisplayName(activeUser.displayName); }}
+                    onClick={() => { setIsEditing(false); setDisplayName(user.displayName); }}
                     className="btn btn-secondary"
                     style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
                   >
@@ -224,7 +219,7 @@ export default function Account() {
           
           {/* Member info */}
           <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
-            Member since {new Date(activeUser.createdAt).toLocaleDateString()}
+            Member since {new Date(user.createdAt).toLocaleDateString()}
           </div>
         </div>
 
@@ -396,11 +391,6 @@ export default function Account() {
 
         {/* ── Section 5: Actions ── */}
         <div className="card" style={{ padding: '1.5rem' }}>
-          {isClerkSignedIn ? (
-            <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-              Signed in via Google/OAuth. Use the profile menu in the header to sign out.
-            </div>
-          ) : (
             <button
               onClick={handleLogout}
               style={{
@@ -416,7 +406,6 @@ export default function Account() {
             >
               Sign Out
             </button>
-          )}
         </div>
 
         {/* ── Internal debug info (owner/beta/team only) ── */}
@@ -430,7 +419,7 @@ export default function Account() {
               <div>Role: {role?.id || 'none'}</div>
               <div>Products: {products.map(p => p.id).join(', ') || 'none'}</div>
               <div>DB plan: {dbSubscription?.plan || 'none'} ({dbSubscription?.status || 'none'})</div>
-              <div>Auth status: {activeUser.status}</div>
+              <div>Auth status: {user.status}</div>
             </div>
           </details>
         )}

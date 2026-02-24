@@ -2,12 +2,11 @@
  * Protected Route Component
  * 
  * Wraps routes that require authentication or specific features/products.
- * Supports both Clerk OAuth and legacy authentication.
+ * Uses legacy RSA auth only (rsa_token + authStore).
  */
 
-import { useState, useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth, useClerkRSA } from '../../domain/auth';
+import { useAuth } from '../../domain/auth';
 import type { FeatureFlag } from '../../domain/auth/types';
 
 interface ProtectedRouteProps {
@@ -34,27 +33,28 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const location = useLocation();
   const { isAuthenticated, isLoading, hasFeature, hasProduct, user } = useAuth();
-  const { isClerkLoaded, isClerkSignedIn } = useClerkRSA();
 
-  // ── Step 1: Clerk not loaded yet → always show Loading ──
-  if (isLoading || !isClerkLoaded) {
-    return <LoadingPlaceholder />;
+  // Still loading auth state
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '200px',
+        color: 'var(--color-muted)',
+      }}>
+        Loading...
+      </div>
+    );
   }
 
-  // ── Step 2: Either auth system says signed in → allow ──
-  const isUserAuthenticated = isAuthenticated || isClerkSignedIn;
-  if (isUserAuthenticated) {
-    // fall through to role / feature / product checks below
-  } else if (requireAuth) {
-    // ── Step 3: Not authenticated — but is Clerk still restoring? ──
-    // On hard navigation Clerk can report isSignedIn=false for up to ~2 s
-    // while it re-validates the session cookie.  If we see evidence of a
-    // prior Clerk session (currentUser with clerk_ prefix, or the session
-    // flag), hold off before redirecting.
-    return <ClerkGraceGate location={location} />;
+  // Check authentication
+  if (requireAuth && !isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check role access
+  // Check role access (do NOT logout — show AccessDenied instead)
   if (requireRole) {
     const roles = Array.isArray(requireRole) ? requireRole : [requireRole];
     const userRole = user?.roleId;
@@ -80,80 +80,6 @@ export default function ProtectedRoute({
   }
 
   return <>{children}</>;
-}
-
-/**
- * Loading placeholder shown while auth state is being determined.
- */
-function LoadingPlaceholder() {
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '200px',
-      color: 'var(--color-muted)',
-    }}>
-      Loading...
-    </div>
-  );
-}
-
-/**
- * Grace gate for Clerk session restoration.
- * On hard navigation, Clerk can briefly report isSignedIn=false while restoring.
- * If we detect evidence of a prior Clerk session, wait up to 2 s before redirecting.
- */
-function ClerkGraceGate({ location }: { location: ReturnType<typeof useLocation> }) {
-  const { isAuthenticated } = useAuth();
-  const { isClerkSignedIn } = useClerkRSA();
-  const [graceExpired, setGraceExpired] = useState(false);
-  const mountTime = useRef(Date.now());
-
-  // Evidence that a Clerk session likely exists
-  const storedUser = localStorage.getItem('rsa.auth.currentUser');
-  const hadClerkUser = storedUser ? storedUser.includes('"clerk_') : false;
-  const hadClerkFlag = localStorage.getItem('rsa.auth.clerkSession') === 'true';
-  const likelyClerkSession = hadClerkUser || hadClerkFlag;
-
-  // If auth resolves while waiting, this component won't render (parent handles it).
-  // But if we get here, auth is NOT resolved yet.
-
-  useEffect(() => {
-    // No evidence of prior Clerk session → redirect immediately
-    if (!likelyClerkSession) {
-      setGraceExpired(true);
-      return;
-    }
-    const timer = setTimeout(() => setGraceExpired(true), 2000);
-    return () => clearTimeout(timer);
-  }, [likelyClerkSession]);
-
-  // Re-check on every render: if auth resolved during grace, allow through
-  const isNowAuthenticated = isAuthenticated || isClerkSignedIn;
-  if (isNowAuthenticated) {
-    // Auth resolved during grace — parent will re-render and handle normally
-    // This shouldn't normally be reached because parent checks first,
-    // but just in case, return null to avoid flash
-    return null;
-  }
-
-  if (!graceExpired) {
-    return <LoadingPlaceholder />;
-  }
-
-  // TEMP DEBUG: Log exactly why we're redirecting (remove after fix confirmed)
-  console.warn('[ProtectedRoute] Redirecting to /login', {
-    isClerkSignedIn,
-    isAuthenticated,
-    path: location.pathname,
-    hadClerkUser,
-    hadClerkFlag,
-    graceMs: Date.now() - mountTime.current,
-    currentUserSnippet: storedUser ? storedUser.slice(0, 80) : null,
-  });
-
-  return <Navigate to="/login" state={{ from: location }} replace />;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useAuth, useClerkRSA } from '../domain/auth';
+import { useAuth } from '../domain/auth';
 
 /**
  * Public landing page for non-authenticated users.
@@ -7,10 +7,9 @@ import { useAuth, useClerkRSA } from '../domain/auth';
  */
 export default function Landing() {
   const { isAuthenticated } = useAuth();
-  const { isClerkSignedIn } = useClerkRSA();
   
   // Determine where "Get Started" should link to
-  const getStartedLink = (isAuthenticated || isClerkSignedIn) ? '/account' : '/register';
+  const getStartedLink = isAuthenticated ? '/account' : '/register';
 
   return (
     <div style={{ 

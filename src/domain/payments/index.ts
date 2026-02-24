@@ -10,8 +10,6 @@ export {
   redirectToCheckout,
   openCustomerPortal,
   getSubscriptionStatus,
-  createCheckoutSession,
-  createPortalSession,
   type SubscriptionPlan,
   type SubscriptionStatus,
   type UserSubscription,

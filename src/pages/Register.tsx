@@ -1,12 +1,11 @@
 /**
  * Registration Page
  * Allows new users to create an account and select a subscription tier.
- * Supports both Clerk OAuth and legacy email/password registration.
  */
 
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { useAuth, useClerkRSA, ClerkSignUp, isClerkConfigured } from '../domain/auth';
+import { useAuth } from '../domain/auth';
 import Page from '../shared/components/Page';
 
 type SelectedTier = 'free' | 'racer' | 'pro';
@@ -60,12 +59,8 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { isClerkSignedIn } = useClerkRSA();
-  const [showLegacyForm, setShowLegacyForm] = useState(false);
-  const clerkEnabled = isClerkConfigured();
-
-  // Redirect if already logged in (via either method)
-  if (isAuthenticated || isClerkSignedIn) {
+  // Redirect if already logged in
+  if (isAuthenticated) {
     navigate('/', { replace: true });
     return null;
   }
@@ -279,36 +274,6 @@ export default function Register() {
 
           <h2 style={{ marginBottom: '24px' }}>Create Your Account</h2>
 
-          {/* Clerk OAuth Signup */}
-          {clerkEnabled && !showLegacyForm && (
-            <>
-              <ClerkSignUp afterSignUpUrl="/account" />
-              
-              <div style={{
-                marginTop: '1.5rem',
-                textAlign: 'center',
-                fontSize: '0.85rem',
-                color: 'var(--color-muted)',
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowLegacyForm(true)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-primary)',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  Sign up with email/password instead
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Legacy Email/Password Form */}
-          {(!clerkEnabled || showLegacyForm) && (
           <form onSubmit={handleSubmit}>
             {error && (
               <div style={{
@@ -435,30 +400,6 @@ export default function Register() {
               By creating an account, you agree to our Terms of Service and Privacy Policy.
             </p>
           </form>
-          )}
-
-          {/* Back to OAuth option */}
-          {clerkEnabled && showLegacyForm && (
-            <div style={{
-              marginTop: '1rem',
-              textAlign: 'center',
-              fontSize: '0.85rem',
-            }}>
-              <button
-                type="button"
-                onClick={() => setShowLegacyForm(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--color-primary)',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                }}
-              >
-                ← Back to sign up with Google/GitHub
-              </button>
-            </div>
-          )}
 
           <p style={{ textAlign: 'center', marginTop: '24px', color: 'var(--color-text-muted)' }}>
             Already have an account? <Link to="/login" style={{ color: 'var(--color-accent)' }}>Sign in</Link>

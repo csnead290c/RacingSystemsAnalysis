@@ -15,6 +15,26 @@ if (import.meta.env.DEV) {
   import(/* @vite-ignore */ mod).catch(() => {});
 }
 
+// One-time Clerk cleanup — Clerk has been removed from the app.
+// Remove stale Clerk localStorage keys so they don't confuse legacy auth.
+const CLERK_KEYS_TO_REMOVE = [
+  'rsa.auth.clerkToken',
+  'rsa.auth.clerkSession',
+];
+for (const key of CLERK_KEYS_TO_REMOVE) {
+  localStorage.removeItem(key);
+}
+// If currentUser is a Clerk user (id starts with "clerk_"), remove it
+// so authStore doesn't try to trust it.
+try {
+  const cu = localStorage.getItem('rsa.auth.currentUser');
+  if (cu && cu.includes('"clerk_')) {
+    localStorage.removeItem('rsa.auth.currentUser');
+    localStorage.removeItem('rsa.auth.apiProducts');
+    console.log('[Auth] Removed stale Clerk user from localStorage');
+  }
+} catch { /* ignore */ }
+
 // Service worker cleanup — unregister stale SWs that may serve old cached JS.
 // The CDN cached sw.js with immutable headers, so users may have a stale SW.
 // This runs on every page load to ensure stale SWs are cleaned up.

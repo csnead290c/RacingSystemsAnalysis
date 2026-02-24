@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { listEngines, type EngineListItem } from '../state/engines';
-import { useAuth, useClerkRSA } from '../domain/auth';
+import { useAuth } from '../domain/auth';
 import { canAccessEtSim } from '../domain/config/guards';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import { getQuarterProgramName, getEngineProgramName } from '../domain/ui/programDisplayNames';
@@ -12,15 +12,12 @@ import Landing from './Landing';
 
 function Home() {
   const { isAuthenticated, user, hasFeature } = useAuth();
-  const { isClerkSignedIn, rsaUser } = useClerkRSA();
   const { can } = useCapabilities();
   const [vehicles, setVehicles] = useState<VehicleLite[]>([]);
   const [engines, setEngines] = useState<EngineListItem[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Check if user is logged in (either legacy or Clerk)
-  const isLoggedIn = isAuthenticated || isClerkSignedIn;
-  const activeUser = isClerkSignedIn ? rsaUser : user;
+  const isLoggedIn = isAuthenticated;
 
   useEffect(() => {
     const loadData = async () => {
@@ -58,7 +55,7 @@ function Home() {
         {/* Welcome Header */}
         <div style={{ marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
-            Welcome back, {activeUser?.displayName || 'User'}!
+            Welcome back, {user?.displayName || 'User'}!
           </h2>
         </div>
 

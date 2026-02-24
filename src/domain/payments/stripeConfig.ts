@@ -2,7 +2,6 @@
  * Stripe Configuration
  * 
  * Stripe is used for subscription management and payments.
- * Integrates with Clerk for user identification.
  */
 
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
@@ -149,12 +148,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://racingsystemsanaly
  * Get the auth token from localStorage
  */
 function getAuthToken(): string | null {
-  // Try Clerk token first, then legacy token
-  const clerkToken = localStorage.getItem('rsa.auth.clerkToken');
-  const legacyToken = localStorage.getItem('rsa.auth.token');
-  const token = clerkToken || legacyToken || null;
-  console.log('getAuthToken:', { hasClerkToken: !!clerkToken, hasLegacyToken: !!legacyToken, tokenLength: token?.length });
-  return token;
+  return localStorage.getItem('rsa_token');
 }
 
 /**
@@ -301,34 +295,3 @@ export function hasPaymentLinks(): boolean {
   return API_BASE_URL.length > 0;
 }
 
-/**
- * Legacy function - use redirectToCheckout instead
- * @deprecated
- */
-export async function createCheckoutSession(params: {
-  planId: string;
-  billingPeriod: 'monthly' | 'yearly';
-  clerkUserId: string;
-  successUrl: string;
-  cancelUrl: string;
-}): Promise<{ sessionId: string; url: string } | null> {
-  console.warn('createCheckoutSession is deprecated. Use redirectToCheckout instead.');
-  await redirectToCheckout({
-    planId: params.planId,
-    billingPeriod: params.billingPeriod,
-  });
-  return null;
-}
-
-/**
- * Create a customer portal session for managing subscriptions
- * @deprecated Use openCustomerPortal instead
- */
-export async function createPortalSession(_params: {
-  clerkUserId: string;
-  returnUrl: string;
-}): Promise<{ url: string } | null> {
-  console.warn('createPortalSession is deprecated. Use openCustomerPortal instead.');
-  await openCustomerPortal();
-  return null;
-}

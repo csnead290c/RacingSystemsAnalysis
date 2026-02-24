@@ -72,11 +72,7 @@ type Tab = 'search' | 'details' | 'audit' | 'plans';
 // ── API helpers ─────────────────────────────────────────────────────────
 
 function getToken(): string | null {
-  return (
-    localStorage.getItem('rsa.auth.clerkToken') ||
-    localStorage.getItem('rsa_token') ||
-    null
-  );
+  return localStorage.getItem('rsa_token');
 }
 
 async function adminFetch<T>(url: string, opts?: RequestInit): Promise<T> {

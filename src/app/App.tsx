@@ -4,7 +4,7 @@ import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
 import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
-import { AuthProvider, ClerkAuthProvider, ClerkUserButton, useClerkRSA } from '../domain/auth';
+import { AuthProvider } from '../domain/auth';
 import {
   canAccessEtSim, ET_SIM_FEATURE,
   RACE_TOOLS_FEATURE,
@@ -55,29 +55,9 @@ const ParityPortal = lazy(() => import('../pages/ParityPortal'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
-  const { isClerkSignedIn } = useClerkRSA();
   const { features: menuFeatures } = useSubscription();
   const [showMenu, setShowMenu] = useState(false);
   const visCtx = buildVisibilityContext(user?.roleId);
-  
-  // If signed in via Clerk, show Clerk's user button
-  if (isClerkSignedIn) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Link
-          to="/account"
-          style={{
-            color: 'var(--color-header-text)',
-            textDecoration: 'none',
-            fontSize: '0.875rem',
-          }}
-        >
-          Account
-        </Link>
-        <ClerkUserButton />
-      </div>
-    );
-  }
   
   if (!isAuthenticated || !user) {
     return (
@@ -191,7 +171,6 @@ function UserMenu() {
 function Navigation() {
   const location = useLocation();
   const { isAuthenticated, hasFeature, user } = useAuth();
-  const { isClerkSignedIn } = useClerkRSA();
   const { can } = useCapabilities();
   const [menuOpen, setMenuOpen] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -244,8 +223,7 @@ function Navigation() {
     lineHeight: '1.4',
   });
 
-  // Check if user is logged in (either legacy or Clerk)
-  const isLoggedIn = isAuthenticated || isClerkSignedIn;
+  const isLoggedIn = isAuthenticated;
   const visCtxNav = buildVisibilityContext(user?.roleId);
   const isDevOrOwner = isInternalUser(visCtxNav);
 
@@ -439,7 +417,6 @@ function DevNavLink({ isActive, navLinkStyle }: { isActive: (path: string) => bo
 function App() {
   return (
     <ThemeProvider>
-      <ClerkAuthProvider>
       <FlagsProvider>
         <AuthProvider>
           <PreferencesProvider>
@@ -693,7 +670,6 @@ function App() {
           </PreferencesProvider>
         </AuthProvider>
       </FlagsProvider>
-    </ClerkAuthProvider>
     </ThemeProvider>
   );
 }

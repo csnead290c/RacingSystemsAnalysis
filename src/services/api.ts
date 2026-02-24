@@ -18,8 +18,7 @@ export function setAuthToken(token: string | null) {
 }
 
 export function getAuthToken() {
-  // Prefer legacy token, fall back to Clerk session token
-  return authToken || localStorage.getItem('rsa.auth.clerkToken');
+  return authToken;
 }
 
 async function apiRequest<T>(
