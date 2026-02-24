@@ -87,6 +87,18 @@ switch ($action) {
         }
         handleIngestMany($pdo, $userId, $auth);
         break;
+    case 'eventCatalog':
+        if ($method !== 'GET') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handleEventCatalog($pdo);
+        break;
+    case 'upsertEventCatalog':
+        if ($method !== 'POST') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handleUpsertEventCatalog($pdo);
+        break;
     // ── Weather actions ──────────────────────────────────────────────
     case 'createTrack':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
@@ -603,8 +615,10 @@ function handleListImports(PDO $pdo): void {
 }
 
 // ============================================================================
-// GET ?action=topByEvent&classIndex=TF&metric=mph1320&startRaceLookup=&endRaceLookup=&limit=500
+// GET ?action=topByEvent&classIndex=TF&metric=mph1320&startRaceLookup=&endRaceLookup=
+//     &includeDQ=0&minRunCount=1&limit=500
 // DB-only: aggregate best value per event for charting
+// LEFT JOINs parity_event_catalog for event names/tracks.
 // ============================================================================
 
 function handleTopByEvent(PDO $pdo): void {
@@ -621,31 +635,50 @@ function handleTopByEvent(PDO $pdo): void {
 
     $agg = $metric === 'mph1320' ? 'MAX' : 'MIN';
 
-    $where = ['class_index = ?', "$metric IS NOT NULL", "$metric > 0"];
+    // includeDQ: 0 = exclude DQ'd runs (default), 1 = include all
+    $includeDQ = (int)($_GET['includeDQ'] ?? 0);
+    // minRunCount: filter out events with fewer qualifying runs (default 1)
+    $minRunCount = max(1, (int)($_GET['minRunCount'] ?? 1));
+
+    $where = ['r.class_index = ?', "r.{$metric} IS NOT NULL", "r.{$metric} > 0"];
     $params = [$classIndex];
 
+    if (!$includeDQ) {
+        // Exclude rows where dq_flag = 1. Rows with NULL dq_flag are kept (unknown = not DQ'd).
+        $where[] = '(r.dq_flag IS NULL OR r.dq_flag = 0)';
+    }
+
     if (!empty($_GET['startRaceLookup'])) {
-        $where[] = 'race_lookup >= ?';
+        $where[] = 'r.race_lookup >= ?';
         $params[] = $_GET['startRaceLookup'];
     }
     if (!empty($_GET['endRaceLookup'])) {
-        $where[] = 'race_lookup <= ?';
+        $where[] = 'r.race_lookup <= ?';
         $params[] = $_GET['endRaceLookup'];
     }
 
     $limit = min((int)($_GET['limit'] ?? 500), 2000);
 
     $whereClause = implode(' AND ', $where);
+
+    // HAVING clause for minRunCount
+    $havingClause = $minRunCount > 1 ? "HAVING COUNT(*) >= {$minRunCount}" : '';
+
     $params[] = $limit;
 
     $sql = "
-        SELECT race_lookup AS raceLookup,
-               {$agg}({$metric}) AS value,
-               COUNT(*) AS runCount
-        FROM parity_runs
+        SELECT r.race_lookup AS raceLookup,
+               {$agg}(r.{$metric}) AS value,
+               COUNT(*) AS runCount,
+               ec.event_name AS eventName,
+               ec.track_name AS trackName,
+               ec.season_year AS seasonYear
+        FROM parity_runs r
+        LEFT JOIN parity_event_catalog ec ON ec.race_lookup = r.race_lookup
         WHERE {$whereClause}
-        GROUP BY race_lookup
-        ORDER BY race_lookup ASC
+        GROUP BY r.race_lookup, ec.event_name, ec.track_name, ec.season_year
+        {$havingClause}
+        ORDER BY r.race_lookup ASC
         LIMIT ?
     ";
 
@@ -656,13 +689,107 @@ function handleTopByEvent(PDO $pdo): void {
     foreach ($rows as &$r) {
         $r['value'] = (float)$r['value'];
         $r['runCount'] = (int)$r['runCount'];
+        $r['seasonYear'] = $r['seasonYear'] !== null ? (int)$r['seasonYear'] : null;
+        // Return null instead of empty string for missing catalog fields
+        if ($r['eventName'] === '' || $r['eventName'] === null) $r['eventName'] = null;
+        if ($r['trackName'] === '' || $r['trackName'] === null) $r['trackName'] = null;
     }
 
     rsa_jsonResponse([
         'classIndex' => $classIndex,
         'metric' => $metric,
         'aggregation' => $agg,
+        'includeDQ' => (bool)$includeDQ,
+        'minRunCount' => $minRunCount,
         'rows' => $rows,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=eventCatalog&startYear=2024&endYear=2025
+// ============================================================================
+
+function handleEventCatalog(PDO $pdo): void {
+    $where = [];
+    $params = [];
+
+    if (!empty($_GET['startYear'])) {
+        $where[] = 'season_year >= ?';
+        $params[] = (int)$_GET['startYear'];
+    }
+    if (!empty($_GET['endYear'])) {
+        $where[] = 'season_year <= ?';
+        $params[] = (int)$_GET['endYear'];
+    }
+    if (!empty($_GET['raceLookup'])) {
+        $where[] = 'race_lookup = ?';
+        $params[] = $_GET['raceLookup'];
+    }
+
+    $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+    $stmt = $pdo->prepare("
+        SELECT race_lookup AS raceLookup, event_name AS eventName, track_name AS trackName,
+               season_year AS seasonYear, start_date_local AS startDateLocal,
+               end_date_local AS endDateLocal, created_at AS createdAt, updated_at AS updatedAt
+        FROM parity_event_catalog
+        $whereClause
+        ORDER BY race_lookup ASC
+        LIMIT 500
+    ");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($rows as &$r) {
+        $r['seasonYear'] = (int)$r['seasonYear'];
+    }
+
+    rsa_jsonResponse(['events' => $rows, 'count' => count($rows)]);
+}
+
+// ============================================================================
+// POST ?action=upsertEventCatalog
+// Body: { raceLookup, eventName, trackName, seasonYear, startDateLocal?, endDateLocal? }
+// ============================================================================
+
+function handleUpsertEventCatalog(PDO $pdo): void {
+    $input = rsa_getJsonInput();
+    $raceLookup = trim($input['raceLookup'] ?? '');
+    $eventName = trim($input['eventName'] ?? '');
+    $trackName = trim($input['trackName'] ?? '');
+    $seasonYear = (int)($input['seasonYear'] ?? 0);
+    $startDateLocal = !empty($input['startDateLocal']) ? $input['startDateLocal'] : null;
+    $endDateLocal = !empty($input['endDateLocal']) ? $input['endDateLocal'] : null;
+
+    if (!preg_match('/^\d{8}$/', $raceLookup)) {
+        rsa_jsonResponse(['error' => 'raceLookup must be YYYYMMDD'], 400);
+    }
+    if (!$eventName) {
+        rsa_jsonResponse(['error' => 'eventName is required'], 400);
+    }
+    if ($seasonYear < 2000 || $seasonYear > 2100) {
+        rsa_jsonResponse(['error' => 'seasonYear must be between 2000 and 2100'], 400);
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO parity_event_catalog (race_lookup, event_name, track_name, season_year, start_date_local, end_date_local)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            event_name = VALUES(event_name),
+            track_name = VALUES(track_name),
+            season_year = VALUES(season_year),
+            start_date_local = VALUES(start_date_local),
+            end_date_local = VALUES(end_date_local)
+    ");
+    $stmt->execute([$raceLookup, $eventName, $trackName, $seasonYear, $startDateLocal, $endDateLocal]);
+
+    rsa_jsonResponse([
+        'raceLookup' => $raceLookup,
+        'eventName' => $eventName,
+        'trackName' => $trackName,
+        'seasonYear' => $seasonYear,
+        'startDateLocal' => $startDateLocal,
+        'endDateLocal' => $endDateLocal,
     ]);
 }
 

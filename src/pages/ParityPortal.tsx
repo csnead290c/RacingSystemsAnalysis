@@ -19,6 +19,7 @@ import {
   type WeatherBuildCanonicalResponse,
   type RunWithWeather,
   type TopByEventResponse,
+  type TopByEventRow,
   type IngestManyResponse,
 } from '../services/parityApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -883,6 +884,75 @@ function formatRaceLookup(rl: string): string {
   return `${rl.slice(0,4)}-${rl.slice(4,6)}-${rl.slice(6,8)}`;
 }
 
+// Custom tooltip for the chart — shows event name, track, raceLookup, value, runCount
+function TrendsTooltip({ active, payload, metric }: any) {
+  if (!active || !payload?.length) return null;
+  const row: TopByEventRow = payload[0].payload;
+  const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
+  const valStr = metric === 'mph1320' ? `${row.value.toFixed(2)} MPH` : `${row.value.toFixed(3)} sec`;
+  return (
+    <div style={{
+      background: 'var(--color-surface, #fff)', border: '1px solid var(--color-border)',
+      borderRadius: 6, padding: '0.5rem 0.75rem', fontSize: '0.75rem', lineHeight: 1.6,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.12)', maxWidth: 280,
+    }}>
+      {row.eventName && <div style={{ fontWeight: 700, fontSize: '0.8rem' }}>{row.eventName}</div>}
+      {row.trackName && <div style={{ color: 'var(--color-muted)' }}>{row.trackName}</div>}
+      <div>Date: <b>{formatRaceLookup(row.raceLookup)}</b></div>
+      <div>{metricLabel}: <b>{valStr}</b></div>
+      <div>Runs: <b>{row.runCount}</b></div>
+    </div>
+  );
+}
+
+// Inline event label editor row
+function EventLabelEditor({ row, onSaved }: { row: TopByEventRow; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(row.eventName || '');
+  const [track, setTrack] = useState(row.trackName || '');
+  const [saving, setSaving] = useState(false);
+
+  if (!editing) {
+    return (
+      <button onClick={() => setEditing(true)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+          fontSize: '0.7rem', padding: 0, textDecoration: 'underline' }}>
+        {row.eventName ? 'edit' : '+ label'}
+      </button>
+    );
+  }
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const year = parseInt(row.raceLookup.slice(0, 4), 10);
+      await parityApi.upsertEventCatalog({
+        raceLookup: row.raceLookup,
+        eventName: name.trim(),
+        trackName: track.trim(),
+        seasonYear: year,
+      });
+      setEditing(false);
+      onSaved();
+    } catch { /* swallow */ }
+    setSaving(false);
+  };
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+      <input style={{ ...S.input, width: 120, fontSize: '0.7rem', padding: '0.15rem 0.3rem' }}
+        placeholder="Event name" value={name} onChange={e => setName(e.target.value)} />
+      <input style={{ ...S.input, width: 90, fontSize: '0.7rem', padding: '0.15rem 0.3rem' }}
+        placeholder="Track" value={track} onChange={e => setTrack(e.target.value)} />
+      <button style={{ ...S.btn('primary'), fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}
+        onClick={save} disabled={saving}>{saving ? '...' : 'Save'}</button>
+      <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}
+        onClick={() => setEditing(false)}>X</button>
+    </span>
+  );
+}
+
 function TrendsPanel() {
   const { getUserRole } = useAuth();
   const role = getUserRole();
@@ -893,6 +963,8 @@ function TrendsPanel() {
   const [metric, setMetric] = useState<'mph1320' | 'ft1320'>('mph1320');
   const [startYear, setStartYear] = useState('');
   const [endYear, setEndYear] = useState('');
+  const [includeDQ, setIncludeDQ] = useState(false);
+  const [minRunCount, setMinRunCount] = useState(1);
 
   // Chart data
   const [loading, setLoading] = useState(false);
@@ -916,18 +988,20 @@ function TrendsPanel() {
       const endRaceLookup = endYear ? `${endYear}1231` : undefined;
       const res = await parityApi.topByEvent({
         classIndex, metric, startRaceLookup, endRaceLookup,
+        includeDQ, minRunCount,
       });
       setData(res);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
-  }, [classIndex, metric, startYear, endYear]);
+  }, [classIndex, metric, startYear, endYear, includeDQ, minRunCount]);
 
   const exportCsv = useCallback(() => {
     if (!data?.rows.length) return;
-    const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
-    const header = `Race Lookup,Date,${metricLabel},Run Count`;
+    const ml = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
+    const header = `Race Lookup,Date,Event Name,Track,${ml},Run Count`;
+    const esc = (s: string | null) => s ? `"${s.replace(/"/g, '""')}"` : '';
     const lines = data.rows.map(r =>
-      `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${r.value},${r.runCount}`
+      `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${esc(r.eventName)},${esc(r.trackName)},${r.value},${r.runCount}`
     );
     const csv = [header, ...lines].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -1014,6 +1088,18 @@ function TrendsPanel() {
             {loading ? 'Loading...' : 'Load Chart'}
           </button>
         </div>
+        <div style={{ ...S.row, marginBottom: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', cursor: 'pointer' }}>
+            <input type="checkbox" checked={includeDQ} onChange={e => setIncludeDQ(e.target.checked)} />
+            Include DQ
+          </label>
+          <label style={{ fontWeight: 600, fontSize: '0.8rem', marginLeft: '1rem' }}>Min runs:</label>
+          <input type="number" min={1} max={500} style={{ ...S.input, width: 55 }}
+            value={minRunCount} onChange={e => setMinRunCount(Math.max(1, parseInt(e.target.value, 10) || 1))} />
+          <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>
+            (DQ rows with null flag treated as non-DQ)
+          </span>
+        </div>
       </div>
 
       {error && <div style={S.error}>{error}</div>}
@@ -1024,6 +1110,8 @@ function TrendsPanel() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>
               {classIndex} — {metricLabel} per Event ({data.rows.length} events)
+              {data.includeDQ && <span style={{ ...S.badge('#6b7280'), marginLeft: 6 }}>+DQ</span>}
+              {data.minRunCount > 1 && <span style={{ ...S.badge('#3b82f6'), marginLeft: 4 }}>≥{data.minRunCount} runs</span>}
             </h3>
             <button style={S.btn('secondary')} onClick={exportCsv}>Export CSV</button>
           </div>
@@ -1032,22 +1120,26 @@ function TrendsPanel() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis
                 dataKey="raceLookup"
-                tickFormatter={rl => formatRaceLookup(rl).slice(0, 7)}
-                tick={{ fontSize: 10 }}
+                tickFormatter={rl => {
+                  const row = data.rows.find(r => r.raceLookup === rl);
+                  if (row?.eventName) {
+                    const short = row.eventName.length > 16 ? row.eventName.slice(0, 14) + '…' : row.eventName;
+                    return short;
+                  }
+                  return formatRaceLookup(rl).slice(0, 7);
+                }}
+                tick={{ fontSize: 9 }}
                 interval="preserveStartEnd"
+                angle={data.rows.length > 10 ? -30 : 0}
+                textAnchor={data.rows.length > 10 ? 'end' : 'middle'}
+                height={data.rows.length > 10 ? 60 : 30}
               />
               <YAxis
                 domain={['auto', 'auto']}
                 tick={{ fontSize: 10 }}
                 tickFormatter={(v: number) => metric === 'mph1320' ? v.toFixed(0) : v.toFixed(2)}
               />
-              <Tooltip
-                formatter={(value: number) => [
-                  metric === 'mph1320' ? `${value.toFixed(2)} MPH` : `${value.toFixed(3)} sec`,
-                  metricLabel,
-                ]}
-                labelFormatter={(rl: string) => `Event: ${formatRaceLookup(rl)}`}
-              />
+              <Tooltip content={<TrendsTooltip metric={metric} />} />
               <Line
                 type="monotone"
                 dataKey="value"
@@ -1062,7 +1154,7 @@ function TrendsPanel() {
       )}
 
       {data && data.rows.length === 0 && (
-        <div style={S.hint}>No data found for {classIndex} {metric}. Try ingesting more events first.</div>
+        <div style={S.hint}>No data found for {classIndex} {metric}. Try ingesting more events or lowering min run count.</div>
       )}
 
       {/* ── Data Table ── */}
@@ -1071,25 +1163,35 @@ function TrendsPanel() {
           <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>
             Data ({data.rows.length} rows)
           </h3>
-          <div style={{ maxHeight: 300, overflow: 'auto' }}>
+          <div style={{ maxHeight: 400, overflow: 'auto' }}>
             <table style={S.table}>
               <thead>
                 <tr>
                   <th style={S.th}>Race Lookup</th>
-                  <th style={S.th}>Date</th>
+                  <th style={S.th}>Event</th>
+                  <th style={S.th}>Track</th>
                   <th style={S.th}>{metricLabel}</th>
-                  <th style={S.th}>Run Count</th>
+                  <th style={S.th}>Runs</th>
+                  {isAdmin && <th style={S.th}>Label</th>}
                 </tr>
               </thead>
               <tbody>
                 {data.rows.map(r => (
                   <tr key={r.raceLookup}>
-                    <td style={S.td}>{r.raceLookup}</td>
-                    <td style={S.td}>{formatRaceLookup(r.raceLookup)}</td>
+                    <td style={S.td}>
+                      <span title={formatRaceLookup(r.raceLookup)}>{r.raceLookup}</span>
+                    </td>
+                    <td style={S.td}>{r.eventName || <span style={{ color: 'var(--color-muted)' }}>—</span>}</td>
+                    <td style={S.td}>{r.trackName || <span style={{ color: 'var(--color-muted)' }}>—</span>}</td>
                     <td style={{ ...S.td, fontWeight: 600 }}>
                       {metric === 'mph1320' ? r.value.toFixed(2) : r.value.toFixed(3)}
                     </td>
                     <td style={S.td}>{r.runCount.toLocaleString()}</td>
+                    {isAdmin && (
+                      <td style={S.td}>
+                        <EventLabelEditor row={r} onSaved={loadChart} />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -267,12 +267,17 @@ export interface TopByEventRow {
   raceLookup: string;
   value: number;
   runCount: number;
+  eventName: string | null;
+  trackName: string | null;
+  seasonYear: number | null;
 }
 
 export interface TopByEventResponse {
   classIndex: string;
   metric: string;
   aggregation: string;
+  includeDQ: boolean;
+  minRunCount: number;
   rows: TopByEventRow[];
 }
 
@@ -281,7 +286,34 @@ export interface TopByEventParams {
   metric: 'mph1320' | 'ft1320';
   startRaceLookup?: string;
   endRaceLookup?: string;
+  includeDQ?: boolean;
+  minRunCount?: number;
   limit?: number;
+}
+
+export interface EventCatalogEntry {
+  raceLookup: string;
+  eventName: string;
+  trackName: string;
+  seasonYear: number;
+  startDateLocal: string | null;
+  endDateLocal: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventCatalogResponse {
+  events: EventCatalogEntry[];
+  count: number;
+}
+
+export interface UpsertEventCatalogParams {
+  raceLookup: string;
+  eventName: string;
+  trackName?: string;
+  seasonYear: number;
+  startDateLocal?: string;
+  endDateLocal?: string;
 }
 
 export interface IngestManyResult {
@@ -535,8 +567,25 @@ export const parityApi = {
     qs.set('metric', params.metric);
     if (params.startRaceLookup) qs.set('startRaceLookup', params.startRaceLookup);
     if (params.endRaceLookup) qs.set('endRaceLookup', params.endRaceLookup);
+    if (params.includeDQ !== undefined) qs.set('includeDQ', params.includeDQ ? '1' : '0');
+    if (params.minRunCount !== undefined) qs.set('minRunCount', String(params.minRunCount));
     if (params.limit) qs.set('limit', String(params.limit));
     return parityRequest<TopByEventResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async eventCatalog(startYear?: number, endYear?: number): Promise<EventCatalogResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'eventCatalog');
+    if (startYear) qs.set('startYear', String(startYear));
+    if (endYear) qs.set('endYear', String(endYear));
+    return parityRequest<EventCatalogResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async upsertEventCatalog(params: UpsertEventCatalogParams): Promise<UpsertEventCatalogParams> {
+    return parityRequest<UpsertEventCatalogParams>('/parity.php?action=upsertEventCatalog', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 
   async ingestMany(params: IngestManyParams): Promise<IngestManyResponse> {
