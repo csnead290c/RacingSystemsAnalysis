@@ -136,6 +136,31 @@ switch ($action) {
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleWeatherCanonical($pdo);
         break;
+    // ── Schedule scraper + event-driven actions ─────────────────────────
+    case 'scrapeNhraSchedule':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleScrapeNhraSchedule($pdo, $userId, $auth);
+        break;
+    case 'ingestEventRuns':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleIngestEventRuns($pdo, $userId, $auth);
+        break;
+    case 'backfillEventWeather':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleBackfillEventWeather($pdo, $userId, $auth);
+        break;
+    case 'flagRun':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleFlagRun($pdo, $userId);
+        break;
+    case 'runFlags':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleRunFlags($pdo);
+        break;
+    case 'eventsWithStats':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleEventsWithStats($pdo);
+        break;
     // ── Backfill job actions ────────────────────────────────────────────
     case 'startBackfillRuns':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
@@ -365,32 +390,38 @@ function handleQueryRuns(PDO $pdo): void {
         rsa_jsonResponse(['error' => 'raceLookup query parameter is required'], 400);
     }
 
-    $where = ['race_lookup = ?'];
+    $where = ['r.race_lookup = ?'];
     $params = [$raceLookup];
+
+    // Exclude bad-flagged runs by default (pass includeBad=1 to include)
+    $includeBad = (int)($_GET['includeBad'] ?? 0);
+    if (!$includeBad) {
+        $where[] = 'NOT EXISTS (SELECT 1 FROM parity_run_flags f WHERE f.run_id = r.id AND f.flag_type IN ("bad","exclude"))';
+    }
 
     // Optional filters
     if (!empty($_GET['classIndex'])) {
-        $where[] = 'class_index = ?';
+        $where[] = 'r.class_index = ?';
         $params[] = $_GET['classIndex'];
     }
     if (!empty($_GET['driverName'])) {
-        $where[] = 'driver_name LIKE ?';
+        $where[] = 'r.driver_name LIKE ?';
         $params[] = '%' . $_GET['driverName'] . '%';
     }
     if (isset($_GET['lane']) && $_GET['lane'] !== '') {
-        $where[] = 'lane = ?';
+        $where[] = 'r.lane = ?';
         $params[] = $_GET['lane'];
     }
     if (isset($_GET['round']) && $_GET['round'] !== '') {
-        $where[] = 'round = ?';
+        $where[] = 'r.round = ?';
         $params[] = $_GET['round'];
     }
     if (isset($_GET['dq'])) {
         $dq = strtolower($_GET['dq']);
         if ($dq === 'exclude') {
-            $where[] = '(dq_flag IS NULL OR dq_flag = 0)';
+            $where[] = '(r.dq_flag IS NULL OR r.dq_flag = 0)';
         } elseif ($dq === 'only') {
-            $where[] = 'dq_flag = 1';
+            $where[] = 'r.dq_flag = 1';
         }
         // 'include' or anything else = no filter
     }
@@ -403,13 +434,13 @@ function handleQueryRuns(PDO $pdo): void {
     $params[] = $offset;
 
     $stmt = $pdo->prepare("
-        SELECT uuid, race_lookup, run_timestamp_utc, category, class_index, round, lane,
-               driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660,
-               ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place,
-               source_ref, created_at
-        FROM parity_runs
+        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.category, r.class_index, r.round, r.lane,
+               r.driver_name, r.car_number, r.dial_in, r.rt, r.ft60, r.ft330, r.ft660, r.mph660,
+               r.ft1000, r.mph1000, r.ft1320, r.mph1320, r.win_flag, r.dq_flag, r.mov, r.place,
+               r.source_ref, r.created_at
+        FROM parity_runs r
         WHERE $whereClause
-        ORDER BY COALESCE(run_timestamp_utc, created_at) ASC
+        ORDER BY COALESCE(r.run_timestamp_utc, r.created_at) ASC
         LIMIT ? OFFSET ?
     ");
     $stmt->execute($params);
@@ -417,6 +448,7 @@ function handleQueryRuns(PDO $pdo): void {
 
     // Cast numeric fields
     foreach ($rows as &$row) {
+        $row['id'] = (int)$row['id'];
         foreach (['dial_in','rt','ft60','ft330','ft660','mph660','ft1000','mph1000','ft1320','mph1320','mov'] as $f) {
             if ($row[$f] !== null) $row[$f] = (float)$row[$f];
         }
@@ -427,7 +459,7 @@ function handleQueryRuns(PDO $pdo): void {
 
     // Get total count for this query (params without limit/offset)
     $countParams = array_slice($params, 0, count($params) - 2);
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_runs WHERE $whereClause");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM parity_runs r WHERE $whereClause");
     $countStmt->execute($countParams);
     $total = (int)$countStmt->fetchColumn();
 
@@ -665,12 +697,18 @@ function handleTopByEvent(PDO $pdo): void {
     // minRunCount: filter out events with fewer qualifying runs (default 1)
     $minRunCount = max(1, (int)($_GET['minRunCount'] ?? 1));
 
+    // Exclude bad-flagged runs by default
+    $includeBad = (int)($_GET['includeBad'] ?? 0);
+
     $where = ['r.class_index = ?', "r.{$metric} IS NOT NULL", "r.{$metric} > 0"];
     $params = [$classIndex];
 
     if (!$includeDQ) {
         // Exclude rows where dq_flag = 1. Rows with NULL dq_flag are kept (unknown = not DQ'd).
         $where[] = '(r.dq_flag IS NULL OR r.dq_flag = 0)';
+    }
+    if (!$includeBad) {
+        $where[] = 'NOT EXISTS (SELECT 1 FROM parity_run_flags f WHERE f.run_id = r.id AND f.flag_type IN ("bad","exclude"))';
     }
 
     if (!empty($_GET['startRaceLookup'])) {
@@ -1527,6 +1565,548 @@ function handleWeatherCanonical(PDO $pdo): void {
     }
 
     rsa_jsonResponse(['canonical' => $rows, 'count' => count($rows)]);
+}
+
+// ============================================================================
+// US State → IANA Timezone mapping (for NHRA schedule scraper)
+// ============================================================================
+
+function stateToTimezone(string $state): array {
+    $map = [
+        'AL' => 'America/Chicago',     'AK' => 'America/Anchorage',   'AZ' => 'America/Phoenix',
+        'AR' => 'America/Chicago',      'CA' => 'America/Los_Angeles', 'CO' => 'America/Denver',
+        'CT' => 'America/New_York',     'DE' => 'America/New_York',    'FL' => 'America/New_York',
+        'GA' => 'America/New_York',     'HI' => 'Pacific/Honolulu',    'ID' => 'America/Boise',
+        'IL' => 'America/Chicago',      'IN' => 'America/Indiana/Indianapolis',
+        'IA' => 'America/Chicago',      'KS' => 'America/Chicago',     'KY' => 'America/New_York',
+        'LA' => 'America/Chicago',      'ME' => 'America/New_York',    'MD' => 'America/New_York',
+        'MA' => 'America/New_York',     'MI' => 'America/Detroit',     'MN' => 'America/Chicago',
+        'MS' => 'America/Chicago',      'MO' => 'America/Chicago',     'MT' => 'America/Denver',
+        'NE' => 'America/Chicago',      'NV' => 'America/Los_Angeles', 'NH' => 'America/New_York',
+        'NJ' => 'America/New_York',     'NM' => 'America/Denver',      'NY' => 'America/New_York',
+        'NC' => 'America/New_York',     'ND' => 'America/Chicago',     'OH' => 'America/New_York',
+        'OK' => 'America/Chicago',      'OR' => 'America/Los_Angeles', 'PA' => 'America/New_York',
+        'RI' => 'America/New_York',     'SC' => 'America/New_York',    'SD' => 'America/Chicago',
+        'TN' => 'America/Chicago',      'TX' => 'America/Chicago',     'UT' => 'America/Denver',
+        'VT' => 'America/New_York',     'VA' => 'America/New_York',    'WA' => 'America/Los_Angeles',
+        'WV' => 'America/New_York',     'WI' => 'America/Chicago',     'WY' => 'America/Denver',
+        'DC' => 'America/New_York',
+    ];
+    $st = strtoupper(trim($state));
+    if (isset($map[$st])) {
+        return ['tz' => $map[$st], 'tz_unknown' => false];
+    }
+    return ['tz' => 'America/New_York', 'tz_unknown' => true];
+}
+
+// ============================================================================
+// POST ?action=scrapeNhraSchedule
+// Body: { yearStart: 2021, yearEnd: 2026, throttleMs?: 1000, force?: false }
+// ============================================================================
+
+function handleScrapeNhraSchedule(PDO $pdo, int $userId, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $yearStart = (int)($input['yearStart'] ?? 0);
+    $yearEnd = (int)($input['yearEnd'] ?? 0);
+    $throttleMs = max(500, min(5000, (int)($input['throttleMs'] ?? 1000)));
+    $force = (bool)($input['force'] ?? false);
+
+    if ($yearStart < 2015 || $yearEnd > 2030 || $yearStart > $yearEnd) {
+        rsa_jsonResponse(['error' => 'yearStart/yearEnd must be 2015-2030 and yearStart <= yearEnd'], 400);
+    }
+
+    $startedAt = gmdate('Y-m-d H:i:s');
+    $years = range($yearStart, $yearEnd);
+    $totalEventsUpserted = 0;
+    $totalTracksUpserted = 0;
+    $errors = [];
+
+    // Prepare upsert statements
+    $stmtFindTrack = $pdo->prepare("SELECT id, street, city, state, zip, timezone_iana FROM parity_tracks WHERE track_name = ?");
+    $stmtInsertTrack = $pdo->prepare("
+        INSERT INTO parity_tracks (track_name, timezone_iana, street, city, state, zip)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ");
+    $stmtUpdateTrackAddr = $pdo->prepare("
+        UPDATE parity_tracks SET street = COALESCE(NULLIF(?, ''), street),
+            city = COALESCE(NULLIF(?, ''), city),
+            state = COALESCE(NULLIF(?, ''), state),
+            zip = COALESCE(NULLIF(?, ''), zip),
+            timezone_iana = CASE WHEN timezone_iana = 'America/New_York' AND ? != '' THEN ? ELSE timezone_iana END
+        WHERE id = ?
+    ");
+    $stmtFindEvent = $pdo->prepare("SELECT id FROM parity_events WHERE race_lookup = ?");
+    $stmtInsertEvent = $pdo->prepare("
+        INSERT INTO parity_events (event_name, season_year, track_id, start_date_local, end_date_local, race_lookup)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ");
+    $stmtUpdateEvent = $pdo->prepare("
+        UPDATE parity_events SET event_name = ?, season_year = ?, track_id = ?,
+            start_date_local = ?, end_date_local = ?
+        WHERE race_lookup = ?
+    ");
+
+    foreach ($years as $year) {
+        $url = "https://www.nhra.com/schedule/$year";
+        try {
+            $html = parity_httpGet($url);
+        } catch (Exception $e) {
+            $errors[] = "Year $year: fetch failed — " . $e->getMessage();
+            continue;
+        }
+
+        // Parse HTML
+        $events = parseNhraScheduleHtml($html, $year);
+
+        foreach ($events as $ev) {
+            try {
+                // Upsert track
+                $stmtFindTrack->execute([$ev['trackName']]);
+                $track = $stmtFindTrack->fetch(PDO::FETCH_ASSOC);
+
+                if (!$track) {
+                    $tzInfo = stateToTimezone($ev['state']);
+                    $stmtInsertTrack->execute([
+                        $ev['trackName'], $tzInfo['tz'],
+                        $ev['street'], $ev['city'], $ev['state'], $ev['zip']
+                    ]);
+                    $trackId = (int)$pdo->lastInsertId();
+                    $totalTracksUpserted++;
+                    if ($tzInfo['tz_unknown']) {
+                        $errors[] = "tz_unknown: '{$ev['trackName']}' state='{$ev['state']}' — defaulted to America/New_York";
+                    }
+                } else {
+                    $trackId = (int)$track['id'];
+                    // Update address if blank
+                    $tzInfo = stateToTimezone($ev['state']);
+                    $stmtUpdateTrackAddr->execute([
+                        $ev['street'], $ev['city'], $ev['state'], $ev['zip'],
+                        $tzInfo['tz'], $tzInfo['tz'],
+                        $trackId
+                    ]);
+                }
+
+                // Derive raceLookup from startDateLocal
+                $raceLookup = str_replace('-', '', $ev['startDateLocal']);
+
+                // Upsert event
+                $stmtFindEvent->execute([$raceLookup]);
+                $existing = $stmtFindEvent->fetch(PDO::FETCH_ASSOC);
+
+                if ($existing && !$force) {
+                    // Already exists — update name/dates if force
+                    $stmtUpdateEvent->execute([
+                        $ev['eventName'], $year, $trackId,
+                        $ev['startDateLocal'], $ev['endDateLocal'],
+                        $raceLookup
+                    ]);
+                } elseif (!$existing) {
+                    $stmtInsertEvent->execute([
+                        $ev['eventName'], $year, $trackId,
+                        $ev['startDateLocal'], $ev['endDateLocal'],
+                        $raceLookup
+                    ]);
+                } else {
+                    // force + exists: update
+                    $stmtUpdateEvent->execute([
+                        $ev['eventName'], $year, $trackId,
+                        $ev['startDateLocal'], $ev['endDateLocal'],
+                        $raceLookup
+                    ]);
+                }
+                $totalEventsUpserted++;
+            } catch (PDOException $e) {
+                $errors[] = "Event '{$ev['eventName']}' ($year): " . $e->getMessage();
+            }
+        }
+
+        // Throttle between years
+        if ($year < $yearEnd) {
+            usleep($throttleMs * 1000);
+        }
+    }
+
+    $endedAt = gmdate('Y-m-d H:i:s');
+
+    // Log scrape
+    $stmtLog = $pdo->prepare("
+        INSERT INTO parity_scrape_logs (started_at, ended_at, years, events_upserted, tracks_upserted, errors_json, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmtLog->execute([
+        $startedAt, $endedAt, json_encode($years),
+        $totalEventsUpserted, $totalTracksUpserted,
+        empty($errors) ? null : json_encode($errors),
+        $userId
+    ]);
+
+    rsa_jsonResponse([
+        'yearsScraped' => $years,
+        'eventsUpserted' => $totalEventsUpserted,
+        'tracksUpserted' => $totalTracksUpserted,
+        'errors' => $errors,
+        'startedAt' => $startedAt,
+        'endedAt' => $endedAt,
+    ]);
+}
+
+/**
+ * Parse NHRA schedule HTML for a given year.
+ * Extracts events with dates, tracks, and addresses from schema.org markup.
+ */
+function parseNhraScheduleHtml(string $html, int $year): array {
+    libxml_use_internal_errors(true);
+    $doc = new DOMDocument();
+    $doc->loadHTML('<?xml encoding="utf-8" ?>' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+    libxml_clear_errors();
+    $xpath = new DOMXPath($doc);
+
+    $events = [];
+
+    // Each event block is wrapped in a container with startDate/endDate and event info
+    // Strategy: find all startDate elements, then walk siblings/parents to extract event info
+    $startDateNodes = $xpath->query('//*[@property="startDate"][@content]');
+
+    for ($i = 0; $i < $startDateNodes->length; $i++) {
+        $startNode = $startDateNodes->item($i);
+        $startContent = $startNode->getAttribute('content');
+
+        // Parse start date from ISO string
+        $startDate = null;
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $startContent, $m)) {
+            $startDate = $m[1];
+        }
+        if (!$startDate) continue;
+
+        // Find the sibling/nearby endDate node
+        $endDate = null;
+        // endDate is typically a sibling div
+        $parent = $startNode->parentNode;
+        $endNodes = $xpath->query('.//*[@property="endDate"][@content]', $parent);
+        if ($endNodes->length > 0) {
+            $endContent = $endNodes->item(0)->getAttribute('content');
+            if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $endContent, $m)) {
+                $endDate = $m[1];
+            }
+        }
+        if (!$endDate) $endDate = $startDate;
+
+        // Walk up to find the event container (typically a parent with class containing "schedule")
+        // Then find name, location, address within that container
+        $container = $parent;
+        // Walk up to find a reasonably large container
+        for ($depth = 0; $depth < 5; $depth++) {
+            if ($container->parentNode) {
+                $container = $container->parentNode;
+                // Check if this container has a name property descendant
+                $nameNodes = $xpath->query('.//*[@property="name"][ancestor-or-self::h3]', $container);
+                if ($nameNodes->length > 0) break;
+            }
+        }
+
+        // Event name (h3 with property="name")
+        $eventName = '';
+        $nameNodes = $xpath->query('.//h3[@property="name"]//a | .//h3[contains(@class,"schedule__heading")]//a', $container);
+        if ($nameNodes->length > 0) {
+            $eventName = trim($nameNodes->item(0)->textContent);
+        } else {
+            $nameNodes = $xpath->query('.//h3[@property="name"] | .//h3[contains(@class,"schedule__heading")]', $container);
+            if ($nameNodes->length > 0) {
+                $eventName = trim($nameNodes->item(0)->textContent);
+            }
+        }
+
+        // Track name (h4 with property="name")
+        $trackName = '';
+        $trackNodes = $xpath->query('.//h4[@property="name"] | .//h4[contains(@class,"schedule__location--name")]', $container);
+        if ($trackNodes->length > 0) {
+            $trackName = trim($trackNodes->item(0)->textContent);
+        }
+
+        // Address parts
+        $street = '';
+        $city = '';
+        $state = '';
+        $zip = '';
+        $streetNodes = $xpath->query('.//*[@property="streetAddress"]', $container);
+        if ($streetNodes->length > 0) $street = trim($streetNodes->item(0)->textContent);
+        $cityNodes = $xpath->query('.//*[@property="addressLocality"]', $container);
+        if ($cityNodes->length > 0) $city = trim($cityNodes->item(0)->textContent);
+        $stateNodes = $xpath->query('.//*[@property="addressRegion"]', $container);
+        if ($stateNodes->length > 0) $state = trim($stateNodes->item(0)->textContent);
+        $zipNodes = $xpath->query('.//*[@property="postalCode"]', $container);
+        if ($zipNodes->length > 0) $zip = trim($zipNodes->item(0)->textContent);
+
+        if (empty($eventName) || empty($trackName)) continue;
+
+        $events[] = [
+            'eventName' => $eventName,
+            'trackName' => $trackName,
+            'street' => $street,
+            'city' => $city,
+            'state' => $state,
+            'zip' => $zip,
+            'startDateLocal' => $startDate,
+            'endDateLocal' => $endDate,
+        ];
+    }
+
+    return $events;
+}
+
+// ============================================================================
+// GET ?action=eventsWithStats&seasonYear=2025
+// Returns events with run counts and weather status
+// ============================================================================
+
+function handleEventsWithStats(PDO $pdo): void {
+    $seasonYear = (int)($_GET['seasonYear'] ?? 0);
+
+    $where = '';
+    $params = [];
+    if ($seasonYear > 0) {
+        $where = 'WHERE e.season_year = ?';
+        $params[] = $seasonYear;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT e.id, e.event_name, e.season_year, e.track_id, t.track_name, t.timezone_iana,
+               t.city, t.state,
+               e.start_date_local, e.end_date_local, e.race_lookup, e.created_at,
+               (SELECT COUNT(*) FROM parity_runs r WHERE r.race_lookup = e.race_lookup) AS run_count,
+               (SELECT COUNT(*) FROM parity_weather_samples ws WHERE ws.event_id = e.id) AS weather_sample_count
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        $where
+        ORDER BY e.start_date_local DESC
+    ");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($rows as &$r) {
+        $r['id'] = (int)$r['id'];
+        $r['season_year'] = $r['season_year'] !== null ? (int)$r['season_year'] : null;
+        $r['track_id'] = (int)$r['track_id'];
+        $r['run_count'] = (int)$r['run_count'];
+        $r['weather_sample_count'] = (int)$r['weather_sample_count'];
+    }
+
+    rsa_jsonResponse(['events' => $rows, 'count' => count($rows)]);
+}
+
+// ============================================================================
+// POST ?action=ingestEventRuns
+// Body: { eventId?: int, raceLookup?: string, force?: bool }
+// ============================================================================
+
+function handleIngestEventRuns(PDO $pdo, int $userId, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $eventId = (int)($input['eventId'] ?? 0);
+    $raceLookup = trim($input['raceLookup'] ?? '');
+    $force = (bool)($input['force'] ?? false);
+
+    // Resolve raceLookup from eventId if needed
+    if ($eventId > 0 && empty($raceLookup)) {
+        $stmt = $pdo->prepare("SELECT race_lookup FROM parity_events WHERE id = ?");
+        $stmt->execute([$eventId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || empty($row['race_lookup'])) {
+            rsa_jsonResponse(['error' => "Event $eventId not found or has no race_lookup"], 404);
+        }
+        $raceLookup = $row['race_lookup'];
+    }
+
+    if (!preg_match('/^\d{8}$/', $raceLookup)) {
+        rsa_jsonResponse(['error' => 'Could not resolve raceLookup (must be YYYYMMDD)'], 400);
+    }
+
+    // Delegate to the existing ingest logic inline (same as handleIngest but without separate endpoint call)
+    $requestedAt = gmdate('Y-m-d H:i:s');
+    $importUuid = parity_generateUUID();
+
+    // Check for existing
+    if (!$force) {
+        $stmt = $pdo->prepare("
+            SELECT uuid, row_count, fetched_at_utc
+            FROM parity_run_imports
+            WHERE race_lookup = ? AND status = 'success' AND row_count > 0
+            ORDER BY fetched_at_utc DESC LIMIT 1
+        ");
+        $stmt->execute([$raceLookup]);
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($existing) {
+            rsa_jsonResponse([
+                'skipped' => true,
+                'raceLookup' => $raceLookup,
+                'existingImportId' => $existing['uuid'],
+                'existingRowCount' => (int)$existing['row_count'],
+                'message' => 'Already imported. Use force=true to re-import.',
+            ]);
+            return;
+        }
+    }
+
+    // Fetch from OData
+    try {
+        $result = parity_fetchODataResults($raceLookup);
+        $rows = $result['rows'];
+        $sourceUrl = $result['url'];
+    } catch (Exception $e) {
+        $stmt = $pdo->prepare("
+            INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, error_message, source_url, created_by_user_id)
+            VALUES (?, ?, ?, ?, 'error', 0, ?, ?, ?)
+        ");
+        $stmt->execute([$importUuid, $raceLookup, $requestedAt, gmdate('Y-m-d H:i:s'), $e->getMessage(), "odata/$raceLookup", $userId]);
+        rsa_jsonResponse(['error' => 'OData fetch failed: ' . $e->getMessage(), 'raceLookup' => $raceLookup], 502);
+    }
+
+    if (empty($rows)) {
+        $stmt = $pdo->prepare("
+            INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, source_url, created_by_user_id)
+            VALUES (?, ?, ?, ?, 'success', 0, ?, ?)
+        ");
+        $stmt->execute([$importUuid, $raceLookup, $requestedAt, gmdate('Y-m-d H:i:s'), $sourceUrl, $userId]);
+        rsa_jsonResponse(['raceLookup' => $raceLookup, 'rowsFetched' => 0, 'rowsInserted' => 0, 'rowsDeduped' => 0]);
+        return;
+    }
+
+    $fetchedAt = gmdate('Y-m-d H:i:s');
+    $stmt = $pdo->prepare("
+        INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, source_url, created_by_user_id)
+        VALUES (?, ?, ?, ?, 'success', ?, ?, ?)
+    ");
+    $stmt->execute([$importUuid, $raceLookup, $requestedAt, $fetchedAt, count($rows), $sourceUrl, $userId]);
+    $importId = (int)$pdo->lastInsertId();
+
+    $stmtRaw = $pdo->prepare("INSERT INTO parity_runs_raw (uuid, import_id, row_hash, raw_json) VALUES (?, ?, ?, ?)");
+    $stmtRun = $pdo->prepare("
+        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+
+    $rowsInserted = 0;
+    $rowsDeduped = 0;
+
+    foreach ($rows as $raw) {
+        $normalized = parity_normalizeRow($raw, $raceLookup);
+        $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
+        try {
+            $stmtRaw->execute([parity_generateUUID(), $importId, $rowHash, json_encode($raw)]);
+        } catch (PDOException $e) {
+            if (strpos($e->getMessage(), 'Duplicate') !== false) { $rowsDeduped++; continue; }
+            throw $e;
+        }
+        try {
+            $stmtRun->execute([
+                parity_generateUUID(), $importId, $raceLookup,
+                $normalized['run_timestamp_utc'], $normalized['category'], $normalized['class_index'],
+                $normalized['round'], $normalized['lane'], $normalized['driver_name'], $normalized['car_number'],
+                $normalized['dial_in'], $normalized['rt'], $normalized['ft60'], $normalized['ft330'],
+                $normalized['ft660'], $normalized['mph660'], $normalized['ft1000'], $normalized['mph1000'],
+                $normalized['ft1320'], $normalized['mph1320'], $normalized['win_flag'], $normalized['dq_flag'],
+                $normalized['mov'], $normalized['place'], $normalized['source_ref'], $rowHash,
+            ]);
+            $rowsInserted++;
+        } catch (PDOException $e) {
+            if (strpos($e->getMessage(), 'Duplicate') !== false) { $rowsDeduped++; }
+            else { throw $e; }
+        }
+    }
+
+    $pdo->prepare("UPDATE parity_run_imports SET row_count = ? WHERE id = ?")->execute([$rowsInserted, $importId]);
+
+    rsa_jsonResponse([
+        'raceLookup' => $raceLookup,
+        'importId' => $importUuid,
+        'rowsFetched' => count($rows),
+        'rowsInserted' => $rowsInserted,
+        'rowsDeduped' => $rowsDeduped,
+    ]);
+}
+
+// ============================================================================
+// POST ?action=backfillEventWeather
+// Body: { eventId: int, throttleMs?: int, minRowsPerDay?: int }
+// Delegates to existing weatherBackfill logic
+// ============================================================================
+
+function handleBackfillEventWeather(PDO $pdo, int $userId, array $auth): void {
+    requireAdminRole($auth);
+
+    // Delegates directly to startBackfillWeather which already accepts eventId
+    handleStartBackfillWeather($pdo, $userId, $auth);
+}
+
+// ============================================================================
+// POST ?action=flagRun
+// Body: { runId: int, flagType: 'bad'|'note'|'exclude', reason?: string }
+// ============================================================================
+
+function handleFlagRun(PDO $pdo, int $userId): void {
+    $input = rsa_getJsonInput();
+    $runId = (int)($input['runId'] ?? 0);
+    $flagType = trim($input['flagType'] ?? 'bad');
+    $reason = trim($input['reason'] ?? '');
+
+    if ($runId <= 0) {
+        rsa_jsonResponse(['error' => 'runId is required'], 400);
+    }
+    if (!in_array($flagType, ['bad', 'note', 'exclude'], true)) {
+        rsa_jsonResponse(['error' => "flagType must be 'bad', 'note', or 'exclude'"], 400);
+    }
+
+    // Verify run exists
+    $stmt = $pdo->prepare("SELECT id FROM parity_runs WHERE id = ?");
+    $stmt->execute([$runId]);
+    if (!$stmt->fetch()) {
+        rsa_jsonResponse(['error' => "Run $runId not found"], 404);
+    }
+
+    // Upsert flag (unique on run_id + flag_type)
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO parity_run_flags (run_id, flag_type, reason, created_by_user_id)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE reason = VALUES(reason), created_by_user_id = VALUES(created_by_user_id)
+        ");
+        $stmt->execute([$runId, $flagType, $reason ?: null, $userId]);
+        rsa_jsonResponse(['ok' => true, 'runId' => $runId, 'flagType' => $flagType]);
+    } catch (PDOException $e) {
+        rsa_jsonResponse(['error' => 'Failed to flag run: ' . $e->getMessage()], 500);
+    }
+}
+
+// ============================================================================
+// GET ?action=runFlags&raceLookup=YYYYMMDD
+// ============================================================================
+
+function handleRunFlags(PDO $pdo): void {
+    $raceLookup = trim($_GET['raceLookup'] ?? '');
+    if (empty($raceLookup)) {
+        rsa_jsonResponse(['error' => 'raceLookup is required'], 400);
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT f.id, f.run_id, f.flag_type, f.reason, f.created_by_user_id, f.created_at
+        FROM parity_run_flags f
+        JOIN parity_runs r ON r.id = f.run_id
+        WHERE r.race_lookup = ?
+        ORDER BY f.created_at DESC
+    ");
+    $stmt->execute([$raceLookup]);
+    $flags = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($flags as &$f) {
+        $f['id'] = (int)$f['id'];
+        $f['run_id'] = (int)$f['run_id'];
+        $f['created_by_user_id'] = $f['created_by_user_id'] !== null ? (int)$f['created_by_user_id'] : null;
+    }
+
+    rsa_jsonResponse(['flags' => $flags, 'count' => count($flags)]);
 }
 
 // ============================================================================

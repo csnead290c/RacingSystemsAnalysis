@@ -23,6 +23,8 @@ import {
   type IngestManyResponse,
   type BackfillJob,
   type BackfillStatusResponse,
+  type EventWithStats,
+  type ScrapeResult,
 } from '../services/parityApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../domain/auth';
@@ -179,14 +181,43 @@ const S = {
   } as React.CSSProperties,
 } as const;
 
-type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'trends' | 'backfill';
+type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'trends' | 'backfill' | 'eventRuns';
 
 // ── Component ───────────────────────────────────────────────────────────
 
 export default function ParityPortal() {
   const { can } = useCapabilities();
-  const [tab, setTab] = useState<Tab>('peek');
+  const [tab, setTab] = useState<Tab>('eventRuns');
   const [raceLookup, setRaceLookup] = useState('');
+
+  // Event picker state (shared across tabs)
+  const [events, setEvents] = useState<EventWithStats[]>([]);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
+  const selectedEvent = events.find(e => e.id === selectedEventId) ?? null;
+
+  const loadEvents = useCallback(async (year: number) => {
+    setEventsLoading(true);
+    try {
+      const res = await parityApi.eventsWithStats(year);
+      setEvents(res.events);
+      if (res.events.length > 0 && !res.events.find(e => e.id === selectedEventId)) {
+        setSelectedEventId(res.events[0].id);
+        setRaceLookup(res.events[0].race_lookup || '');
+      }
+    } catch { /* ignore */ }
+    setEventsLoading(false);
+  }, [selectedEventId]);
+
+  useEffect(() => { loadEvents(selectedYear); }, [selectedYear, loadEvents]);
+
+  const handleEventChange = useCallback((id: number) => {
+    setSelectedEventId(id);
+    const ev = events.find(e => e.id === id);
+    if (ev) setRaceLookup(ev.race_lookup || '');
+  }, [events]);
 
   if (!can('nhra.parity' as any)) {
     return (
@@ -197,28 +228,54 @@ export default function ParityPortal() {
     );
   }
 
+  const years = Array.from({ length: 2027 - 2021 }, (_, i) => 2021 + i).reverse();
+
   return (
     <div style={S.page}>
       <h1 style={S.h1}>NHRA Tech Parity</h1>
       <p style={S.subtitle}>Internal tool — Ingest and query NHRA run results from OData feed</p>
 
-      <div style={S.row}>
-        <label style={{ fontWeight: 600 }}>Race Lookup:</label>
-        <input
-          style={S.input}
-          placeholder="YYYYMMDD"
-          value={raceLookup}
-          onChange={e => setRaceLookup(e.target.value.replace(/\D/g, '').slice(0, 8))}
-        />
-        <span style={{ color: 'var(--color-muted)', fontSize: '0.75rem' }}>
-          Must be first date of event
-        </span>
+      {/* ── Event Picker ── */}
+      <div style={{ ...S.card, borderColor: 'var(--color-primary, #3b82f6)', borderWidth: 2, marginBottom: '1rem' }}>
+        <div style={{ ...S.row, flexWrap: 'wrap' }}>
+          <label style={{ fontWeight: 600, fontSize: '0.85rem' }}>Season:</label>
+          <select style={{ ...S.input, width: 80 }} value={selectedYear}
+            onChange={e => setSelectedYear(Number(e.target.value))}>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+
+          <label style={{ fontWeight: 600, fontSize: '0.85rem', marginLeft: 8 }}>Event:</label>
+          <select style={{ ...S.input, width: 320 }} value={selectedEventId ?? ''}
+            onChange={e => handleEventChange(Number(e.target.value))}
+            disabled={eventsLoading || events.length === 0}>
+            {events.length === 0 && <option value="">—{eventsLoading ? ' Loading...' : ' No events (run scraper)'}—</option>}
+            {events.map(ev => (
+              <option key={ev.id} value={ev.id}>
+                {ev.event_name} ({ev.start_date_local})
+              </option>
+            ))}
+          </select>
+
+          <button style={S.btn('secondary')} onClick={() => loadEvents(selectedYear)}
+            disabled={eventsLoading}>{eventsLoading ? '...' : '↻'}</button>
+        </div>
+
+        {selectedEvent && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+            <b>{selectedEvent.track_name}</b>
+            {selectedEvent.city && ` · ${selectedEvent.city}, ${selectedEvent.state}`}
+            {' · '}{selectedEvent.start_date_local} to {selectedEvent.end_date_local}
+            {' · raceLookup='}<code>{selectedEvent.race_lookup}</code>
+            {' · '}<span style={{ color: selectedEvent.run_count > 0 ? '#16a34a' : '#6b7280' }}>{selectedEvent.run_count} runs</span>
+            {' · '}<span style={{ color: selectedEvent.weather_sample_count > 0 ? '#2563eb' : '#6b7280' }}>{selectedEvent.weather_sample_count} weather</span>
+          </div>
+        )}
       </div>
 
       <div style={S.tabs}>
-        {(['peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather', 'trends', 'backfill'] as Tab[]).map(t => {
+        {(['eventRuns', 'peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather', 'trends', 'backfill'] as Tab[]).map(t => {
           const labels: Record<Tab, string> = {
-            peek: 'Peek', ingest: 'Ingest', query: 'Query Runs',
+            eventRuns: '▸ Event Runs', peek: 'Peek', ingest: 'Ingest', query: 'Query Runs',
             imports: 'Imports', weather: 'Weather', runsWeather: 'Runs + Weather',
             trends: 'Trends', backfill: 'Backfill',
           };
@@ -230,6 +287,7 @@ export default function ParityPortal() {
         })}
       </div>
 
+      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} onRefreshEvents={() => loadEvents(selectedYear)} />}
       {tab === 'peek' && <PeekPanel raceLookup={raceLookup} />}
       {tab === 'ingest' && <IngestPanel raceLookup={raceLookup} />}
       {tab === 'query' && <QueryPanel raceLookup={raceLookup} />}
@@ -238,6 +296,271 @@ export default function ParityPortal() {
       {tab === 'runsWeather' && <RunsWeatherPanel raceLookup={raceLookup} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'backfill' && <BackfillPanel />}
+    </div>
+  );
+}
+
+// ── Event Runs Panel ────────────────────────────────────────────────────
+
+type SortKey = 'ft1320' | 'mph1320' | 'rt' | 'ft60' | 'round' | 'lane' | 'driver_name';
+type SortDir = 'asc' | 'desc';
+
+function EventRunsPanel({ event, onRefreshEvents }: { event: EventWithStats | null; onRefreshEvents: () => void }) {
+  const { getUserRole } = useAuth();
+  const role = getUserRole();
+  const isAdmin = role?.id === 'owner' || role?.id === 'admin';
+
+  const [runs, setRuns] = useState<ParityRun[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [classFilter, setClassFilter] = useState('TF');
+  const [includeBad, setIncludeBad] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('ft1320');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  // Action states
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestMsg, setIngestMsg] = useState('');
+  const [weathering, setWeathering] = useState(false);
+  const [weatherMsg, setWeatherMsg] = useState('');
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState('');
+  const [flaggingId, setFlaggingId] = useState<number | null>(null);
+  const [flagReason, setFlagReason] = useState('');
+
+  // Flags for current event
+  const [flaggedRunIds, setFlaggedRunIds] = useState<Set<number>>(new Set());
+
+  const loadRuns = useCallback(async () => {
+    if (!event?.race_lookup) return;
+    setLoading(true); setError('');
+    try {
+      const res = await parityApi.queryRuns({
+        raceLookup: event.race_lookup,
+        classIndex: classFilter || undefined,
+        includeBad: includeBad ? '1' : undefined,
+        limit: 5000,
+      });
+      setRuns(res.runs);
+      setTotal(res.total);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [event?.race_lookup, classFilter, includeBad]);
+
+  const loadFlags = useCallback(async () => {
+    if (!event?.race_lookup) return;
+    try {
+      const res = await parityApi.runFlags(event.race_lookup);
+      setFlaggedRunIds(new Set(res.flags.filter(f => f.flag_type === 'bad' || f.flag_type === 'exclude').map(f => f.run_id)));
+    } catch { /* ignore */ }
+  }, [event?.race_lookup]);
+
+  useEffect(() => { loadRuns(); loadFlags(); }, [loadRuns, loadFlags]);
+
+  // Sort runs client-side
+  const sortedRuns = [...runs].sort((a, b) => {
+    const av = a[sortKey as keyof ParityRun] as any;
+    const bv = b[sortKey as keyof ParityRun] as any;
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir(key === 'mph1320' ? 'desc' : 'asc'); }
+  };
+
+  const sortArrow = (key: SortKey) => sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+
+  const doIngest = useCallback(async () => {
+    if (!event) return;
+    setIngesting(true); setIngestMsg(''); setError('');
+    try {
+      const res = await parityApi.ingestEventRuns({ eventId: event.id });
+      if ((res as any).skipped) {
+        setIngestMsg(`Skipped — already ${(res as any).existingRowCount} rows imported`);
+      } else {
+        setIngestMsg(`Ingested: ${res.rowsFetched} fetched, ${res.rowsInserted} inserted, ${res.rowsDeduped} deduped`);
+      }
+      loadRuns();
+      onRefreshEvents();
+    } catch (e: any) { setError(e.message); }
+    setIngesting(false);
+  }, [event, loadRuns, onRefreshEvents]);
+
+  const doWeather = useCallback(async () => {
+    if (!event) return;
+    setWeathering(true); setWeatherMsg(''); setError('');
+    try {
+      const res = await parityApi.backfillEventWeather({ eventId: event.id, throttleMs: 600 });
+      setWeatherMsg(`Weather job #${res.job.id}: ${res.job.status} — ${res.job.completedCount}/${res.job.totalItems}`);
+      onRefreshEvents();
+    } catch (e: any) { setError(e.message); }
+    setWeathering(false);
+  }, [event, onRefreshEvents]);
+
+  const doScrape = useCallback(async () => {
+    setScraping(true); setScrapeMsg(''); setError('');
+    try {
+      const res: ScrapeResult = await parityApi.scrapeNhraSchedule({ yearStart: 2021, yearEnd: 2026, throttleMs: 1000 });
+      setScrapeMsg(`Scraped ${res.yearsScraped.length} years: ${res.eventsUpserted} events, ${res.tracksUpserted} new tracks${res.errors.length ? ` (${res.errors.length} warnings)` : ''}`);
+      onRefreshEvents();
+    } catch (e: any) { setError(e.message); }
+    setScraping(false);
+  }, [onRefreshEvents]);
+
+  const doFlag = useCallback(async (runId: number) => {
+    try {
+      await parityApi.flagRun({ runId, flagType: 'bad', reason: flagReason || 'Flagged as bad' });
+      setFlaggingId(null);
+      setFlagReason('');
+      loadFlags();
+      if (!includeBad) loadRuns();
+    } catch (e: any) { setError(e.message); }
+  }, [flagReason, includeBad, loadFlags, loadRuns]);
+
+  // Get unique classes from runs for quick buttons
+  const availableClasses = [...new Set(runs.map(r => r.class_index).filter(Boolean))].sort();
+
+  if (!event) {
+    return (
+      <div style={S.card}>
+        <p style={{ color: 'var(--color-muted)' }}>Select an event above, or run the schedule scraper to populate events.</p>
+        {isAdmin && (
+          <button style={S.btn('primary')} onClick={doScrape} disabled={scraping}>
+            {scraping ? 'Scraping 2021-2026...' : 'Scrape NHRA Schedule (2021-2026)'}
+          </button>
+        )}
+        {scrapeMsg && <div style={{ ...S.hint, background: '#d1fae5', color: '#065f46', marginTop: 8 }}>{scrapeMsg}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Action buttons */}
+      <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        {isAdmin && (
+          <>
+            <button style={S.btn('primary')} onClick={doIngest} disabled={ingesting}>
+              {ingesting ? 'Ingesting...' : 'Ingest Runs'}
+            </button>
+            <button style={S.btn('primary')} onClick={doWeather} disabled={weathering}>
+              {weathering ? 'Backfilling...' : 'Backfill Weather'}
+            </button>
+            <button style={{ ...S.btn('secondary'), fontSize: '0.7rem' }} onClick={doScrape} disabled={scraping}>
+              {scraping ? 'Scraping...' : 'Re-scrape Schedule'}
+            </button>
+          </>
+        )}
+        <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+          <input type="checkbox" checked={includeBad} onChange={e => setIncludeBad(e.target.checked)} />
+          Include flagged
+        </label>
+      </div>
+
+      {ingestMsg && <div style={{ ...S.hint, background: '#d1fae5', color: '#065f46', marginBottom: 6 }}>{ingestMsg}</div>}
+      {weatherMsg && <div style={{ ...S.hint, background: '#dbeafe', color: '#1e3a5f', marginBottom: 6 }}>{weatherMsg}</div>}
+      {scrapeMsg && <div style={{ ...S.hint, background: '#d1fae5', color: '#065f46', marginBottom: 6 }}>{scrapeMsg}</div>}
+      {error && <div style={S.error}>{error}</div>}
+
+      {/* Class filter */}
+      <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <b style={{ fontSize: '0.8rem' }}>Class:</b>
+        {['TF', 'FC', 'PS', 'PSM', 'TD', 'TS', ''].map(c => (
+          <button key={c} style={{
+            ...S.btn(classFilter === c ? 'primary' : 'secondary'),
+            fontSize: '0.7rem', padding: '0.15rem 0.4rem',
+          }} onClick={() => setClassFilter(c)}>
+            {c || 'All'}
+          </button>
+        ))}
+        {availableClasses.filter(c => !['TF', 'FC', 'PS', 'PSM', 'TD', 'TS'].includes(c!)).length > 0 && (
+          <select style={{ ...S.input, width: 80, fontSize: '0.7rem' }} value={classFilter}
+            onChange={e => setClassFilter(e.target.value)}>
+            <option value="">All</option>
+            {availableClasses.map(c => <option key={c} value={c!}>{c}</option>)}
+          </select>
+        )}
+      </div>
+
+      {loading && <div style={S.hint}>Loading runs...</div>}
+
+      {!loading && runs.length === 0 && (
+        <div style={S.hint}>No runs found{classFilter ? ` for class ${classFilter}` : ''}. Try ingesting runs first.</div>
+      )}
+
+      {runs.length > 0 && (
+        <>
+          <div style={{ marginBottom: '0.25rem', color: 'var(--color-muted)', fontSize: '0.75rem' }}>
+            {sortedRuns.length} of {total} runs{classFilter ? ` (class: ${classFilter})` : ''}
+          </div>
+          <div style={{ overflow: 'auto', maxHeight: 500 }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('driver_name')}>Driver{sortArrow('driver_name')}</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Class</th>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('round')}>Rnd{sortArrow('round')}</th>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('lane')}>Ln{sortArrow('lane')}</th>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('rt')}>RT{sortArrow('rt')}</th>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('ft60')}>60ft{sortArrow('ft60')}</th>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('ft1320')}>ET{sortArrow('ft1320')}</th>
+                  <th style={{ ...S.th, cursor: 'pointer', position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}
+                    onClick={() => handleSort('mph1320')}>MPH{sortArrow('mph1320')}</th>
+                  <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>Flag</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRuns.map((r, i) => {
+                  const isFlagged = flaggedRunIds.has(r.id);
+                  return (
+                    <tr key={r.uuid} style={{ background: i % 2 === 1 ? 'var(--color-bg, #262636)' : undefined, opacity: isFlagged ? 0.5 : 1 }}>
+                      <td style={S.td}>{r.driver_name || '—'}</td>
+                      <td style={S.td}>{r.class_index || '—'}</td>
+                      <td style={S.td}>{r.round || '—'}</td>
+                      <td style={S.td}>{r.lane || '—'}</td>
+                      <td style={S.td}>{r.rt != null ? r.rt.toFixed(3) : '—'}</td>
+                      <td style={S.td}>{r.ft60 != null ? r.ft60.toFixed(3) : '—'}</td>
+                      <td style={{ ...S.td, fontWeight: 600 }}>{r.ft1320 != null ? r.ft1320.toFixed(3) : '—'}</td>
+                      <td style={{ ...S.td, fontWeight: 600 }}>{r.mph1320 != null ? r.mph1320.toFixed(1) : '—'}</td>
+                      <td style={S.td}>
+                        {isFlagged ? (
+                          <span style={{ color: '#dc2626', fontSize: '0.7rem' }}>🚩</span>
+                        ) : flaggingId === r.id ? (
+                          <span style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                            <input style={{ ...S.input, width: 60, fontSize: '0.65rem', padding: '0.1rem' }}
+                              placeholder="reason" value={flagReason}
+                              onChange={e => setFlagReason(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && doFlag(r.id)} />
+                            <button style={{ ...S.btn('danger'), fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}
+                              onClick={() => doFlag(r.id)}>✓</button>
+                            <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}
+                              onClick={() => setFlaggingId(null)}>✗</button>
+                          </span>
+                        ) : (
+                          <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}
+                            onClick={() => setFlaggingId(r.id)}>Flag</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

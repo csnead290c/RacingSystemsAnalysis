@@ -44,6 +44,7 @@ export interface IngestResponse {
 }
 
 export interface ParityRun {
+  id: number;
   uuid: string;
   race_lookup: string;
   run_timestamp_utc: string | null;
@@ -86,6 +87,7 @@ export interface RunsQueryParams {
   lane?: string;
   round?: string;
   dq?: 'include' | 'exclude' | 'only';
+  includeBad?: string;
   limit?: number;
   offset?: number;
 }
@@ -345,6 +347,53 @@ export interface IngestManyParams {
   throttleMs?: number;
 }
 
+// ── Event/Track/Flag Types ───────────────────────────────────────────────
+
+export interface EventWithStats {
+  id: number;
+  event_name: string;
+  season_year: number | null;
+  track_id: number;
+  track_name: string;
+  timezone_iana: string;
+  city: string | null;
+  state: string | null;
+  start_date_local: string;
+  end_date_local: string;
+  race_lookup: string;
+  created_at: string;
+  run_count: number;
+  weather_sample_count: number;
+}
+
+export interface EventsWithStatsResponse {
+  events: EventWithStats[];
+  count: number;
+}
+
+export interface ScrapeResult {
+  yearsScraped: number[];
+  eventsUpserted: number;
+  tracksUpserted: number;
+  errors: string[];
+  startedAt: string;
+  endedAt: string;
+}
+
+export interface RunFlag {
+  id: number;
+  run_id: number;
+  flag_type: 'bad' | 'note' | 'exclude';
+  reason: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
+export interface RunFlagsResponse {
+  flags: RunFlag[];
+  count: number;
+}
+
 // ── Backfill Job Types ──────────────────────────────────────────────────
 
 export interface BackfillJob {
@@ -498,6 +547,7 @@ export const parityApi = {
     if (params.lane) qs.set('lane', params.lane);
     if (params.round) qs.set('round', params.round);
     if (params.dq) qs.set('dq', params.dq);
+    if (params.includeBad) qs.set('includeBad', params.includeBad);
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
     return parityRequest<RunsResponse>(`/parity.php?${qs.toString()}`);
@@ -678,5 +728,48 @@ export const parityApi = {
     qs.set('action', 'backfillJobs');
     if (type) qs.set('type', type);
     return parityRequest<BackfillJobsResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Events + Scraper ────────────────────────────────────────────────
+
+  async eventsWithStats(seasonYear?: number): Promise<EventsWithStatsResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'eventsWithStats');
+    if (seasonYear) qs.set('seasonYear', String(seasonYear));
+    return parityRequest<EventsWithStatsResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async scrapeNhraSchedule(params: { yearStart: number; yearEnd: number; throttleMs?: number; force?: boolean }): Promise<ScrapeResult> {
+    return parityRequest<ScrapeResult>('/parity.php?action=scrapeNhraSchedule', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async ingestEventRuns(params: { eventId?: number; raceLookup?: string; force?: boolean }): Promise<IngestResponse> {
+    return parityRequest<IngestResponse>('/parity.php?action=ingestEventRuns', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async backfillEventWeather(params: { eventId: number; throttleMs?: number; minRowsPerDay?: number }): Promise<{ job: BackfillJob }> {
+    return parityRequest<{ job: BackfillJob }>('/parity.php?action=backfillEventWeather', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  // ── Run Flagging ────────────────────────────────────────────────────
+
+  async flagRun(params: { runId: number; flagType: 'bad' | 'note' | 'exclude'; reason?: string }): Promise<{ ok: boolean; runId: number; flagType: string }> {
+    return parityRequest<{ ok: boolean; runId: number; flagType: string }>('/parity.php?action=flagRun', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async runFlags(raceLookup: string): Promise<RunFlagsResponse> {
+    return parityRequest<RunFlagsResponse>(`/parity.php?action=runFlags&raceLookup=${raceLookup}`);
   },
 };
