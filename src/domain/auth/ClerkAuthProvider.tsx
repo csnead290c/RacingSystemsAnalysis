@@ -121,9 +121,10 @@ function ClerkRSASync({ children }: { children: ReactNode }) {
     
     if (isSignedIn && user) {
       // Map Clerk user to RSA user format
-      // Use database subscription to determine role
+      // Use database subscription to determine role — but never downgrade owner/admin
       let roleId = mapClerkUserToRole(user);
-      if (dbSubscription.plan && dbSubscription.status === 'active') {
+      const isPrivileged = roleId === 'owner' || roleId === 'admin';
+      if (!isPrivileged && dbSubscription.plan && dbSubscription.status === 'active') {
         if (dbSubscription.plan === 'pro' || dbSubscription.plan === 'team') {
           roleId = 'subscriber_pro';
         } else if (dbSubscription.plan === 'racer') {

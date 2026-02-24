@@ -15,36 +15,23 @@ if (import.meta.env.DEV) {
   import(/* @vite-ignore */ mod).catch(() => {});
 }
 
-// Register service worker for PWA functionality (production only)
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((registration) => {
-        console.log('[SW] Service worker registered:', registration.scope);
-        
-        // Check for updates periodically
-        setInterval(() => {
-          registration.update();
-        }, 60000); // Check every minute
-        
-        // Listen for updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New service worker available, prompt user to refresh
-                console.log('[SW] New version available! Refresh to update.');
-                // Optionally show a toast/banner to user
-              }
-            });
-          }
-        });
-      })
-      .catch((error) => {
-        console.error('[SW] Service worker registration failed:', error);
+// Service worker cleanup — unregister stale SWs that may serve old cached JS.
+// The CDN cached sw.js with immutable headers, so users may have a stale SW.
+// This runs on every page load to ensure stale SWs are cleaned up.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    for (const registration of registrations) {
+      registration.unregister().then(ok => {
+        if (ok) console.log('[SW] Unregistered stale service worker:', registration.scope);
       });
+    }
+  });
+  // Clear all SW caches to remove stale precached assets
+  caches.keys().then(names => {
+    for (const name of names) {
+      caches.delete(name);
+      console.log('[SW] Deleted cache:', name);
+    }
   });
 }
 

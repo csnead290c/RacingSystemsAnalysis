@@ -34,7 +34,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // selfDestroying generates a SW that unregisters itself and clears caches.
+      // This is needed to clean up stale SWs cached by the CDN with immutable headers.
+      // Re-enable normal PWA mode once CDN cache headers are fixed.
+      selfDestroying: true,
       includeAssets: ['favicon.ico'],
       manifest: {
         name: 'Racing Systems Analysis',
@@ -54,49 +57,6 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
-        // Only cache assets with hashes (immutable), not HTML
-        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
-        // Skip waiting - immediately activate new service worker
-        skipWaiting: true,
-        clientsClaim: true,
-        // Don't precache index.html - always fetch fresh
-        navigateFallback: null,
-        runtimeCaching: [
-          {
-            // HTML pages - network first, fall back to cache
-            urlPattern: /\.html$/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'html-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 // 1 hour
-              },
-              networkTimeoutSeconds: 3
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            // API calls - network only
-            urlPattern: /\/api\//,
-            handler: 'NetworkOnly'
-          }
-        ]
-      }
     })
   ],
   test: {

@@ -5,6 +5,7 @@
  * Supports both Clerk OAuth and legacy authentication.
  */
 
+import { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth, useClerkRSA } from '../../domain/auth';
 import type { FeatureFlag } from '../../domain/auth/types';
@@ -53,6 +54,35 @@ export default function ProtectedRoute({
   // Check authentication - user is authenticated if either legacy auth OR Clerk is signed in
   const isUserAuthenticated = isAuthenticated || isClerkSignedIn;
   
+  // Guard: if Clerk was previously signed in (localStorage flag) but isClerkSignedIn is
+  // transiently false (Clerk still restoring session after navigation/refresh), don't
+  // redirect — keep showing "Loading..." until Clerk settles (max 5 seconds).
+  const hadClerkSession = localStorage.getItem('rsa.auth.clerkSession') === 'true';
+  const [clerkGraceExpired, setClerkGraceExpired] = useState(false);
+  useEffect(() => {
+    if (!requireAuth || isUserAuthenticated || !hadClerkSession) return;
+    const timer = setTimeout(() => {
+      setClerkGraceExpired(true);
+      // Clear stale flag so we don't loop
+      localStorage.removeItem('rsa.auth.clerkSession');
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [requireAuth, isUserAuthenticated, hadClerkSession]);
+
+  if (requireAuth && !isUserAuthenticated && hadClerkSession && !clerkGraceExpired) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '200px',
+        color: 'var(--color-muted)',
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
   if (requireAuth && !isUserAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
