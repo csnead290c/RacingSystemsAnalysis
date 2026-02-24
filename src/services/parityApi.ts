@@ -261,6 +261,58 @@ export interface WeatherCanonicalResponse {
   count: number;
 }
 
+// ── Top-by-Event (Trends) Types ──────────────────────────────────────────
+
+export interface TopByEventRow {
+  raceLookup: string;
+  value: number;
+  runCount: number;
+}
+
+export interface TopByEventResponse {
+  classIndex: string;
+  metric: string;
+  aggregation: string;
+  rows: TopByEventRow[];
+}
+
+export interface TopByEventParams {
+  classIndex: string;
+  metric: 'mph1320' | 'ft1320';
+  startRaceLookup?: string;
+  endRaceLookup?: string;
+  limit?: number;
+}
+
+export interface IngestManyResult {
+  raceLookup: string;
+  rowsFetched: number;
+  rowsInserted: number;
+  rowsDeduped: number;
+  status: 'success' | 'skipped' | 'empty' | 'error';
+  error?: string;
+  reason?: string;
+  existingRowCount?: number;
+}
+
+export interface IngestManyResponse {
+  summary: {
+    total: number;
+    success: number;
+    skipped: number;
+    empty: number;
+    error: number;
+    totalRowsInserted: number;
+  };
+  results: IngestManyResult[];
+}
+
+export interface IngestManyParams {
+  raceLookups: string[];
+  force?: boolean;
+  throttleMs?: number;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 async function parityRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -472,5 +524,27 @@ export const parityApi = {
     if (params.toUtc) qs.set('toUtc', params.toUtc);
     if (params.limit) qs.set('limit', String(params.limit));
     return parityRequest<WeatherCanonicalResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Trends (Top-by-Event) ─────────────────────────────────────────
+
+  async topByEvent(params: TopByEventParams): Promise<TopByEventResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'topByEvent');
+    qs.set('classIndex', params.classIndex);
+    qs.set('metric', params.metric);
+    if (params.startRaceLookup) qs.set('startRaceLookup', params.startRaceLookup);
+    if (params.endRaceLookup) qs.set('endRaceLookup', params.endRaceLookup);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<TopByEventResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async ingestMany(params: IngestManyParams): Promise<IngestManyResponse> {
+    const result = await parityRequest<IngestManyResponse>('/parity.php?action=ingestMany', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    invalidateParityCache('imports');
+    return result;
   },
 };

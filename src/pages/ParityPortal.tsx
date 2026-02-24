@@ -18,7 +18,11 @@ import {
   type WeatherBackfillResponse,
   type WeatherBuildCanonicalResponse,
   type RunWithWeather,
+  type TopByEventResponse,
+  type IngestManyResponse,
 } from '../services/parityApi';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAuth } from '../domain/auth';
 
 // ── Styles ──────────────────────────────────────────────────────────────
 
@@ -172,7 +176,7 @@ const S = {
   } as React.CSSProperties,
 } as const;
 
-type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather';
+type Tab = 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'trends';
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -209,10 +213,11 @@ export default function ParityPortal() {
       </div>
 
       <div style={S.tabs}>
-        {(['peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather'] as Tab[]).map(t => {
+        {(['peek', 'ingest', 'query', 'imports', 'weather', 'runsWeather', 'trends'] as Tab[]).map(t => {
           const labels: Record<Tab, string> = {
             peek: 'Peek', ingest: 'Ingest', query: 'Query Runs',
             imports: 'Imports', weather: 'Weather', runsWeather: 'Runs + Weather',
+            trends: 'Trends',
           };
           return (
             <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>
@@ -228,6 +233,7 @@ export default function ParityPortal() {
       {tab === 'imports' && <ImportsPanel />}
       {tab === 'weather' && <WeatherPanel />}
       {tab === 'runsWeather' && <RunsWeatherPanel raceLookup={raceLookup} />}
+      {tab === 'trends' && <TrendsPanel />}
     </div>
   );
 }
@@ -863,6 +869,320 @@ function RunsWeatherPanel({ raceLookup }: { raceLookup: string }) {
             </table>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Trends Panel ─────────────────────────────────────────────────────
+
+const NHRA_CLASSES = ['TF','FC','PS','PSM','PSC','TD','TAD','TAF','TAFC','TS','SS','COMP','SST','GT','FSS','SG'];
+
+function formatRaceLookup(rl: string): string {
+  if (rl.length !== 8) return rl;
+  return `${rl.slice(0,4)}-${rl.slice(4,6)}-${rl.slice(6,8)}`;
+}
+
+function TrendsPanel() {
+  const { getUserRole } = useAuth();
+  const role = getUserRole();
+  const isAdmin = role?.id === 'owner' || role?.id === 'admin';
+
+  // Chart controls
+  const [classIndex, setClassIndex] = useState('TF');
+  const [metric, setMetric] = useState<'mph1320' | 'ft1320'>('mph1320');
+  const [startYear, setStartYear] = useState('');
+  const [endYear, setEndYear] = useState('');
+
+  // Chart data
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [data, setData] = useState<TopByEventResponse | null>(null);
+
+  // Backfill state
+  const [bfStartYear, setBfStartYear] = useState(String(new Date().getFullYear()));
+  const [bfEndYear, setBfEndYear] = useState(String(new Date().getFullYear()));
+  const [bfSuggesting, setBfSuggesting] = useState(false);
+  const [bfSuggested, setBfSuggested] = useState<string[]>([]);
+  const [bfIngesting, setBfIngesting] = useState(false);
+  const [bfResult, setBfResult] = useState<IngestManyResponse | null>(null);
+  const [bfError, setBfError] = useState('');
+  const [bfProgress, setBfProgress] = useState('');
+
+  const loadChart = useCallback(async () => {
+    setLoading(true); setError(''); setData(null);
+    try {
+      const startRaceLookup = startYear ? `${startYear}0101` : undefined;
+      const endRaceLookup = endYear ? `${endYear}1231` : undefined;
+      const res = await parityApi.topByEvent({
+        classIndex, metric, startRaceLookup, endRaceLookup,
+      });
+      setData(res);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [classIndex, metric, startYear, endYear]);
+
+  const exportCsv = useCallback(() => {
+    if (!data?.rows.length) return;
+    const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
+    const header = `Race Lookup,Date,${metricLabel},Run Count`;
+    const lines = data.rows.map(r =>
+      `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${r.value},${r.runCount}`
+    );
+    const csv = [header, ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `parity_trends_${classIndex}_${metric}_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [data, metric, classIndex]);
+
+  // Backfill: suggest dates
+  const suggestDates = useCallback(async () => {
+    setBfSuggesting(true); setBfError(''); setBfSuggested([]); setBfResult(null);
+    try {
+      const allDates: string[] = [];
+      const sy = parseInt(bfStartYear, 10);
+      const ey = parseInt(bfEndYear, 10);
+      if (isNaN(sy) || isNaN(ey) || sy > ey) {
+        setBfError('Invalid year range');
+        setBfSuggesting(false);
+        return;
+      }
+      for (let y = sy; y <= ey; y++) {
+        setBfProgress(`Scanning ${y}...`);
+        const res = await parityApi.suggestRaceLookups(y, 80);
+        for (const ev of res.events) {
+          allDates.push(ev.raceLookup);
+        }
+      }
+      setBfSuggested(allDates);
+      setBfProgress(`Found ${allDates.length} events`);
+    } catch (e: any) { setBfError(e.message); }
+    setBfSuggesting(false);
+  }, [bfStartYear, bfEndYear]);
+
+  // Backfill: ingest all suggested
+  const ingestAll = useCallback(async () => {
+    if (!bfSuggested.length) return;
+    setBfIngesting(true); setBfError(''); setBfResult(null);
+    setBfProgress(`Ingesting ${bfSuggested.length} events (this may take a while)...`);
+    try {
+      const res = await parityApi.ingestMany({
+        raceLookups: bfSuggested,
+        force: false,
+        throttleMs: 500,
+      });
+      setBfResult(res);
+      setBfProgress(`Done — ${res.summary.success} ingested, ${res.summary.skipped} skipped`);
+    } catch (e: any) { setBfError(e.message); }
+    setBfIngesting(false);
+  }, [bfSuggested]);
+
+  const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET (sec)';
+  const chartColor = metric === 'mph1320' ? '#2563eb' : '#16a34a';
+
+  return (
+    <div>
+      {/* ── Chart Controls ── */}
+      <div style={S.card}>
+        <div style={S.row}>
+          <label style={{ fontWeight: 600, fontSize: '0.8rem' }}>Class:</label>
+          <select value={classIndex} onChange={e => setClassIndex(e.target.value)}
+            style={{ ...S.input, width: 80 }}>
+            {NHRA_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <label style={{ fontWeight: 600, fontSize: '0.8rem', marginLeft: '0.5rem' }}>Metric:</label>
+          <select value={metric} onChange={e => setMetric(e.target.value as any)}
+            style={{ ...S.input, width: 130 }}>
+            <option value="mph1320">Top MPH (1320)</option>
+            <option value="ft1320">Best ET (1320)</option>
+          </select>
+
+          <label style={{ fontWeight: 600, fontSize: '0.8rem', marginLeft: '0.5rem' }}>From Year:</label>
+          <input style={{ ...S.input, width: 60 }} placeholder="YYYY" maxLength={4}
+            value={startYear} onChange={e => setStartYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+
+          <label style={{ fontWeight: 600, fontSize: '0.8rem', marginLeft: '0.25rem' }}>To:</label>
+          <input style={{ ...S.input, width: 60 }} placeholder="YYYY" maxLength={4}
+            value={endYear} onChange={e => setEndYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+
+          <button style={S.btn('primary')} onClick={loadChart} disabled={loading}>
+            {loading ? 'Loading...' : 'Load Chart'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div style={S.error}>{error}</div>}
+
+      {/* ── Chart ── */}
+      {data && data.rows.length > 0 && (
+        <div style={S.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>
+              {classIndex} — {metricLabel} per Event ({data.rows.length} events)
+            </h3>
+            <button style={S.btn('secondary')} onClick={exportCsv}>Export CSV</button>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={data.rows} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+              <XAxis
+                dataKey="raceLookup"
+                tickFormatter={rl => formatRaceLookup(rl).slice(0, 7)}
+                tick={{ fontSize: 10 }}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                domain={['auto', 'auto']}
+                tick={{ fontSize: 10 }}
+                tickFormatter={(v: number) => metric === 'mph1320' ? v.toFixed(0) : v.toFixed(2)}
+              />
+              <Tooltip
+                formatter={(value: number) => [
+                  metric === 'mph1320' ? `${value.toFixed(2)} MPH` : `${value.toFixed(3)} sec`,
+                  metricLabel,
+                ]}
+                labelFormatter={(rl: string) => `Event: ${formatRaceLookup(rl)}`}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={chartColor}
+                strokeWidth={2}
+                dot={{ r: 3, fill: chartColor }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {data && data.rows.length === 0 && (
+        <div style={S.hint}>No data found for {classIndex} {metric}. Try ingesting more events first.</div>
+      )}
+
+      {/* ── Data Table ── */}
+      {data && data.rows.length > 0 && (
+        <div style={S.card}>
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+            Data ({data.rows.length} rows)
+          </h3>
+          <div style={{ maxHeight: 300, overflow: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Race Lookup</th>
+                  <th style={S.th}>Date</th>
+                  <th style={S.th}>{metricLabel}</th>
+                  <th style={S.th}>Run Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map(r => (
+                  <tr key={r.raceLookup}>
+                    <td style={S.td}>{r.raceLookup}</td>
+                    <td style={S.td}>{formatRaceLookup(r.raceLookup)}</td>
+                    <td style={{ ...S.td, fontWeight: 600 }}>
+                      {metric === 'mph1320' ? r.value.toFixed(2) : r.value.toFixed(3)}
+                    </td>
+                    <td style={S.td}>{r.runCount.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Backfill Panel (admin only) ── */}
+      {isAdmin && (
+        <div style={{ ...S.card, borderColor: '#f59e0b', borderWidth: 2 }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+            Backfill History (Admin)
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
+            Scans NHRA OData for event dates and batch-ingests them. This triggers external API calls.
+          </p>
+
+          <div style={S.row}>
+            <label style={{ fontWeight: 600, fontSize: '0.8rem' }}>Start Year:</label>
+            <input style={{ ...S.input, width: 60 }} value={bfStartYear}
+              onChange={e => setBfStartYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+            <label style={{ fontWeight: 600, fontSize: '0.8rem' }}>End Year:</label>
+            <input style={{ ...S.input, width: 60 }} value={bfEndYear}
+              onChange={e => setBfEndYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+
+            <button style={S.btn('secondary')} onClick={suggestDates}
+              disabled={bfSuggesting || bfIngesting}>
+              {bfSuggesting ? 'Scanning...' : 'Suggest Event Dates'}
+            </button>
+
+            {bfSuggested.length > 0 && (
+              <button style={S.btn('primary')} onClick={ingestAll}
+                disabled={bfIngesting || bfSuggesting}>
+                {bfIngesting ? 'Ingesting...' : `Ingest ${bfSuggested.length} Events`}
+              </button>
+            )}
+          </div>
+
+          {bfProgress && <div style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>{bfProgress}</div>}
+          {bfError && <div style={S.error}>{bfError}</div>}
+
+          {bfSuggested.length > 0 && !bfResult && (
+            <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              Dates: {bfSuggested.join(', ')}
+            </div>
+          )}
+
+          {bfResult && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <span style={S.stat}>Total: <b>{bfResult.summary.total}</b></span>
+                <span style={S.stat}>Ingested: <b>{bfResult.summary.success}</b></span>
+                <span style={S.stat}>Skipped: <b>{bfResult.summary.skipped}</b></span>
+                <span style={S.stat}>Empty: <b>{bfResult.summary.empty}</b></span>
+                <span style={S.stat}>Errors: <b>{bfResult.summary.error}</b></span>
+                <span style={S.stat}>Rows: <b>{bfResult.summary.totalRowsInserted.toLocaleString()}</b></span>
+              </div>
+              <div style={{ maxHeight: 200, overflow: 'auto' }}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      <th style={S.th}>Race Lookup</th>
+                      <th style={S.th}>Status</th>
+                      <th style={S.th}>Fetched</th>
+                      <th style={S.th}>Inserted</th>
+                      <th style={S.th}>Deduped</th>
+                      <th style={S.th}>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bfResult.results.map(r => (
+                      <tr key={r.raceLookup}>
+                        <td style={S.td}>{r.raceLookup}</td>
+                        <td style={S.td}>
+                          <span style={S.badge(
+                            r.status === 'success' ? '#16a34a' :
+                            r.status === 'skipped' ? '#6b7280' :
+                            r.status === 'empty' ? '#f59e0b' : '#dc2626'
+                          )}>{r.status}</span>
+                        </td>
+                        <td style={S.td}>{r.rowsFetched}</td>
+                        <td style={S.td}>{r.rowsInserted}</td>
+                        <td style={S.td}>{r.rowsDeduped}</td>
+                        <td style={S.td}>{r.error || r.reason || ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

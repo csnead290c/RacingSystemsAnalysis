@@ -75,6 +75,18 @@ switch ($action) {
         }
         handleListImports($pdo);
         break;
+    case 'topByEvent':
+        if ($method !== 'GET') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handleTopByEvent($pdo);
+        break;
+    case 'ingestMany':
+        if ($method !== 'POST') {
+            rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        }
+        handleIngestMany($pdo, $userId, $auth);
+        break;
     // ── Weather actions ──────────────────────────────────────────────
     case 'createTrack':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
@@ -587,6 +599,237 @@ function handleListImports(PDO $pdo): void {
     rsa_jsonResponse([
         'imports' => $imports,
         'total' => count($imports),
+    ]);
+}
+
+// ============================================================================
+// GET ?action=topByEvent&classIndex=TF&metric=mph1320&startRaceLookup=&endRaceLookup=&limit=500
+// DB-only: aggregate best value per event for charting
+// ============================================================================
+
+function handleTopByEvent(PDO $pdo): void {
+    $classIndex = trim($_GET['classIndex'] ?? '');
+    $metric = trim($_GET['metric'] ?? '');
+
+    if (!$classIndex) {
+        rsa_jsonResponse(['error' => 'classIndex is required (e.g. TF, FC, PS)'], 400);
+    }
+    $allowedMetrics = ['mph1320', 'ft1320'];
+    if (!in_array($metric, $allowedMetrics, true)) {
+        rsa_jsonResponse(['error' => 'metric must be one of: ' . implode(', ', $allowedMetrics)], 400);
+    }
+
+    $agg = $metric === 'mph1320' ? 'MAX' : 'MIN';
+
+    $where = ['class_index = ?', "$metric IS NOT NULL", "$metric > 0"];
+    $params = [$classIndex];
+
+    if (!empty($_GET['startRaceLookup'])) {
+        $where[] = 'race_lookup >= ?';
+        $params[] = $_GET['startRaceLookup'];
+    }
+    if (!empty($_GET['endRaceLookup'])) {
+        $where[] = 'race_lookup <= ?';
+        $params[] = $_GET['endRaceLookup'];
+    }
+
+    $limit = min((int)($_GET['limit'] ?? 500), 2000);
+
+    $whereClause = implode(' AND ', $where);
+    $params[] = $limit;
+
+    $sql = "
+        SELECT race_lookup AS raceLookup,
+               {$agg}({$metric}) AS value,
+               COUNT(*) AS runCount
+        FROM parity_runs
+        WHERE {$whereClause}
+        GROUP BY race_lookup
+        ORDER BY race_lookup ASC
+        LIMIT ?
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($rows as &$r) {
+        $r['value'] = (float)$r['value'];
+        $r['runCount'] = (int)$r['runCount'];
+    }
+
+    rsa_jsonResponse([
+        'classIndex' => $classIndex,
+        'metric' => $metric,
+        'aggregation' => $agg,
+        'rows' => $rows,
+    ]);
+}
+
+// ============================================================================
+// POST ?action=ingestMany
+// Body: { "raceLookups": ["20251030","20250320",...], "force": false, "throttleMs": 500 }
+// Owner/admin only — batch ingest with throttle
+// ============================================================================
+
+function handleIngestMany(PDO $pdo, int $userId, array $auth): void {
+    // Require owner or admin role
+    $role = $auth['role'] ?? '';
+    if (!in_array($role, ['owner', 'admin'], true)) {
+        rsa_jsonResponse(['error' => 'ingestMany requires owner or admin role'], 403);
+    }
+
+    $input = rsa_getJsonInput();
+    $raceLookups = $input['raceLookups'] ?? [];
+    $force = (bool)($input['force'] ?? false);
+    $throttleMs = max(100, min(2000, (int)($input['throttleMs'] ?? 500)));
+
+    if (!is_array($raceLookups) || empty($raceLookups)) {
+        rsa_jsonResponse(['error' => 'raceLookups must be a non-empty array of YYYYMMDD strings'], 400);
+    }
+    if (count($raceLookups) > 100) {
+        rsa_jsonResponse(['error' => 'Maximum 100 raceLookups per batch'], 400);
+    }
+
+    // Validate all formats first
+    foreach ($raceLookups as $rl) {
+        if (!preg_match('/^\d{8}$/', $rl)) {
+            rsa_jsonResponse(['error' => "Invalid raceLookup format: $rl"], 400);
+        }
+    }
+
+    // Increase time limit for batch operations
+    set_time_limit(300);
+
+    $results = [];
+    foreach ($raceLookups as $idx => $raceLookup) {
+        $entry = [
+            'raceLookup' => $raceLookup,
+            'rowsFetched' => 0,
+            'rowsInserted' => 0,
+            'rowsDeduped' => 0,
+            'status' => 'pending',
+        ];
+
+        // Check for existing import
+        if (!$force) {
+            $stmt = $pdo->prepare("
+                SELECT uuid, row_count FROM parity_run_imports
+                WHERE race_lookup = ? AND status = 'success'
+                ORDER BY fetched_at_utc DESC LIMIT 1
+            ");
+            $stmt->execute([$raceLookup]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                $entry['status'] = 'skipped';
+                $entry['reason'] = 'already imported (use force=true to reimport)';
+                $entry['existingRowCount'] = (int)$existing['row_count'];
+                $results[] = $entry;
+                continue;
+            }
+        }
+
+        $requestedAt = gmdate('Y-m-d H:i:s');
+        $importUuid = parity_generateUUID();
+
+        try {
+            $result = parity_fetchODataResults($raceLookup);
+            $rows = $result['rows'];
+            $sourceUrl = $result['url'];
+        } catch (Exception $e) {
+            $pdo->prepare("
+                INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, error_message, source_url, created_by_user_id)
+                VALUES (?, ?, ?, ?, 'error', 0, ?, ?, ?)
+            ")->execute([$importUuid, $raceLookup, $requestedAt, gmdate('Y-m-d H:i:s'), $e->getMessage(), "https://odata.nhradata.com/api/oGetResults/GetResults/{$raceLookup}", $userId]);
+
+            $entry['status'] = 'error';
+            $entry['error'] = $e->getMessage();
+            $results[] = $entry;
+            if ($idx < count($raceLookups) - 1) usleep($throttleMs * 1000);
+            continue;
+        }
+
+        $entry['rowsFetched'] = count($rows);
+
+        if (empty($rows)) {
+            $pdo->prepare("
+                INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, source_url, created_by_user_id)
+                VALUES (?, ?, ?, ?, 'success', 0, ?, ?)
+            ")->execute([$importUuid, $raceLookup, $requestedAt, gmdate('Y-m-d H:i:s'), $sourceUrl, $userId]);
+
+            $entry['status'] = 'empty';
+            $results[] = $entry;
+            if ($idx < count($raceLookups) - 1) usleep($throttleMs * 1000);
+            continue;
+        }
+
+        // Create import record
+        $fetchedAt = gmdate('Y-m-d H:i:s');
+        $pdo->prepare("
+            INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, source_url, created_by_user_id)
+            VALUES (?, ?, ?, ?, 'success', ?, ?, ?)
+        ")->execute([$importUuid, $raceLookup, $requestedAt, $fetchedAt, count($rows), $sourceUrl, $userId]);
+        $importId = (int)$pdo->lastInsertId();
+
+        $stmtRaw = $pdo->prepare("INSERT INTO parity_runs_raw (uuid, import_id, row_hash, raw_json) VALUES (?, ?, ?, ?)");
+        $stmtRun = $pdo->prepare("
+            INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+
+        $inserted = 0;
+        $deduped = 0;
+        foreach ($rows as $raw) {
+            $normalized = parity_normalizeRow($raw, $raceLookup);
+            $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
+            try {
+                $stmtRaw->execute([parity_generateUUID(), $importId, $rowHash, json_encode($raw)]);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'Duplicate') !== false) { $deduped++; continue; }
+                throw $e;
+            }
+            try {
+                $stmtRun->execute([
+                    parity_generateUUID(), $importId, $raceLookup,
+                    $normalized['run_timestamp_utc'], $normalized['category'], $normalized['class_index'],
+                    $normalized['round'], $normalized['lane'], $normalized['driver_name'],
+                    $normalized['car_number'], $normalized['dial_in'], $normalized['rt'],
+                    $normalized['ft60'], $normalized['ft330'], $normalized['ft660'], $normalized['mph660'],
+                    $normalized['ft1000'], $normalized['mph1000'], $normalized['ft1320'], $normalized['mph1320'],
+                    $normalized['win_flag'], $normalized['dq_flag'], $normalized['mov'],
+                    $normalized['place'], $normalized['source_ref'], $rowHash,
+                ]);
+                $inserted++;
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'Duplicate') !== false) { $deduped++; } else { throw $e; }
+            }
+        }
+
+        $pdo->prepare("UPDATE parity_run_imports SET row_count = ? WHERE id = ?")->execute([$inserted, $importId]);
+
+        $entry['rowsInserted'] = $inserted;
+        $entry['rowsDeduped'] = $deduped;
+        $entry['status'] = 'success';
+        $results[] = $entry;
+
+        // Throttle between requests (skip after last)
+        if ($idx < count($raceLookups) - 1) {
+            usleep($throttleMs * 1000);
+        }
+    }
+
+    $summary = [
+        'total' => count($results),
+        'success' => count(array_filter($results, fn($r) => $r['status'] === 'success')),
+        'skipped' => count(array_filter($results, fn($r) => $r['status'] === 'skipped')),
+        'empty' => count(array_filter($results, fn($r) => $r['status'] === 'empty')),
+        'error' => count(array_filter($results, fn($r) => $r['status'] === 'error')),
+        'totalRowsInserted' => array_sum(array_column($results, 'rowsInserted')),
+    ];
+
+    rsa_jsonResponse([
+        'summary' => $summary,
+        'results' => $results,
     ]);
 }
 
