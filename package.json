@@ -17,7 +17,6 @@
     "manuals:check": "node scripts/check-manuals.js"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.58.1",
     "@stripe/react-stripe-js": "^5.4.1",
     "@stripe/stripe-js": "^8.5.3",
     "lucide-react": "0.562.0",

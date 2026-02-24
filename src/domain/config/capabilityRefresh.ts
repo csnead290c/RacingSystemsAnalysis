@@ -105,7 +105,7 @@ export function isCacheStale(): boolean {
  * Fetch the user's current capabilities from the server.
  *
  * @param getToken  Async function that returns the current auth token
- *                  (e.g., Clerk's `getToken()` or the legacy JWT from localStorage).
+ *                  (e.g., the legacy JWT from localStorage).
  * @returns The server response, or null if the fetch failed.
  */
 export async function refreshCapabilities(

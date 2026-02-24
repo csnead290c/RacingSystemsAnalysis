@@ -1,0 +1,2 @@
+# Block all web access to this directory — CLI tools only
+Deny from all

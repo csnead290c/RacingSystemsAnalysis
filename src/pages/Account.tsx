@@ -1,6 +1,6 @@
 /**
  * Account / User Profile Page
- * Supports both Clerk OAuth and legacy authentication.
+ * User profile, subscription, and preferences.
  * 
  * Public surface: Quarter / Engine / Vehicles / Calcs (+ About).
  * Internal modules (Land Speed, Team, Optimizer) hidden for non-internal users.
