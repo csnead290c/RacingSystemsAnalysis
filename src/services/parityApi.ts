@@ -278,14 +278,71 @@ async function parityRequest<T>(endpoint: string, options: RequestInit = {}): Pr
     ? `${API_BASE}${endpoint}`
     : `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}_t=${Date.now()}`;
 
-  const response = await fetch(url, { ...options, headers });
-  const data = await response.json();
+  // Extract action name for diagnostics
+  const actionMatch = endpoint.match(/action=(\w+)/);
+  const actionLabel = actionMatch ? actionMatch[1] : endpoint;
+
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (err: any) {
+    throw new Error(`[${actionLabel}] Network error: ${err.message}`);
+  }
+
+  // Read body as text first so we can diagnose non-JSON responses
+  const text = await response.text();
+
+  // Detect HTML responses (dev server fallback, PHP error page, etc.)
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html') || text.trimStart().startsWith('<!') || text.trimStart().startsWith('<html')) {
+    throw new Error(
+      `[${actionLabel}] HTTP ${response.status} — received HTML instead of JSON. ` +
+      (response.status === 200
+        ? 'The /api proxy may not be configured (dev server returning index.html).'
+        : `Server returned an error page.`) +
+      ` Body: ${text.slice(0, 200)}`
+    );
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      `[${actionLabel}] HTTP ${response.status} — invalid JSON response. Body: ${text.slice(0, 200)}`
+    );
+  }
 
   if (!response.ok && response.status !== 409) {
-    throw new Error(data.error || `API request failed (${response.status})`);
+    throw new Error(data.error || `[${actionLabel}] API request failed (HTTP ${response.status})`);
   }
 
   return data;
+}
+
+// ── Cache ───────────────────────────────────────────────────────────────
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CacheEntry<T> {
+  data: T;
+  fetchedAt: number;
+}
+
+const cache: {
+  tracks?: CacheEntry<TracksResponse>;
+  events?: CacheEntry<EventsResponse>;
+  imports?: CacheEntry<ImportsResponse>;
+} = {};
+
+function isFresh<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
+  return !!entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
+}
+
+/** Invalidate one or all cache keys. Called after mutations. */
+export function invalidateParityCache(key?: 'tracks' | 'events' | 'imports') {
+  if (key) { delete cache[key]; }
+  else { delete cache.tracks; delete cache.events; delete cache.imports; }
 }
 
 // ── API ─────────────────────────────────────────────────────────────────
@@ -298,10 +355,12 @@ export const parityApi = {
   },
 
   async ingest(raceLookup: string, force = false): Promise<IngestResponse> {
-    return parityRequest<IngestResponse>('/parity.php?action=ingest', {
+    const result = await parityRequest<IngestResponse>('/parity.php?action=ingest', {
       method: 'POST',
       body: JSON.stringify({ raceLookup, force }),
     });
+    invalidateParityCache('imports');
+    return result;
   },
 
   async queryRuns(params: RunsQueryParams): Promise<RunsResponse> {
@@ -324,41 +383,55 @@ export const parityApi = {
     );
   },
 
-  async listImports(limit = 50): Promise<ImportsResponse> {
-    return parityRequest<ImportsResponse>(
+  async listImports(limit = 50, force = false): Promise<ImportsResponse> {
+    if (!force && isFresh(cache.imports)) return cache.imports.data;
+    const data = await parityRequest<ImportsResponse>(
       `/parity.php?action=imports&limit=${limit}`
     );
+    cache.imports = { data, fetchedAt: Date.now() };
+    return data;
   },
 
   // ── Weather / Track / Event ─────────────────────────────────────────
 
   async createTrack(trackName: string, timezoneIana: string): Promise<TrackResponse> {
-    return parityRequest<TrackResponse>('/parity.php?action=createTrack', {
+    const result = await parityRequest<TrackResponse>('/parity.php?action=createTrack', {
       method: 'POST',
       body: JSON.stringify({ trackName, timezoneIana }),
     });
+    invalidateParityCache('tracks');
+    return result;
   },
 
   async createEvent(params: CreateEventParams): Promise<EventResponse> {
-    return parityRequest<EventResponse>('/parity.php?action=createEvent', {
+    const result = await parityRequest<EventResponse>('/parity.php?action=createEvent', {
       method: 'POST',
       body: JSON.stringify(params),
     });
+    invalidateParityCache('events');
+    return result;
   },
 
-  async listTracks(): Promise<TracksResponse> {
-    return parityRequest<TracksResponse>('/parity.php?action=tracks');
+  async listTracks(force = false): Promise<TracksResponse> {
+    if (!force && isFresh(cache.tracks)) return cache.tracks.data;
+    const data = await parityRequest<TracksResponse>('/parity.php?action=tracks');
+    cache.tracks = { data, fetchedAt: Date.now() };
+    return data;
   },
 
-  async listEvents(): Promise<EventsResponse> {
-    return parityRequest<EventsResponse>('/parity.php?action=events');
+  async listEvents(force = false): Promise<EventsResponse> {
+    if (!force && isFresh(cache.events)) return cache.events.data;
+    const data = await parityRequest<EventsResponse>('/parity.php?action=events');
+    cache.events = { data, fetchedAt: Date.now() };
+    return data;
   },
 
   async weatherBackfill(params: WeatherBackfillParams): Promise<WeatherBackfillResponse> {
-    return parityRequest<WeatherBackfillResponse>('/parity.php?action=weatherBackfill', {
+    const result = await parityRequest<WeatherBackfillResponse>('/parity.php?action=weatherBackfill', {
       method: 'POST',
       body: JSON.stringify(params),
     });
+    return result;
   },
 
   async weatherBuildCanonical(params: WeatherBuildCanonicalParams = {}): Promise<WeatherBuildCanonicalResponse> {

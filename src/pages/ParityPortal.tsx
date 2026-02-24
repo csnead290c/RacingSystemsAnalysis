@@ -495,21 +495,26 @@ function ImportsPanel() {
   const [result, setResult] = useState<ImportsResponse | null>(null);
   const [error, setError] = useState('');
 
-  const doLoad = useCallback(async () => {
+  const doLoad = useCallback(async (force = false) => {
     setLoading(true); setError('');
     try {
-      const r = await parityApi.listImports();
+      const r = await parityApi.listImports(50, force);
       setResult(r);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
   }, []);
 
+  useEffect(() => { doLoad(); }, [doLoad]);
+
   return (
     <div style={S.card}>
       <div style={S.row}>
-        <button style={S.btn('primary')} onClick={doLoad} disabled={loading}>
-          {loading ? 'Loading...' : 'Load Import History'}
+        <button style={S.btn('secondary')} onClick={() => doLoad(true)} disabled={loading}>
+          {loading ? 'Loading...' : '↻ Refresh'}
         </button>
+        <span style={{ color: 'var(--color-muted)', fontSize: '0.75rem' }}>
+          {result ? `${result.total} imports` : 'Loading...'}
+        </span>
       </div>
 
       {error && <div style={S.error}>{error}</div>}
@@ -576,10 +581,10 @@ function WeatherPanel() {
   const [cnResult, setCnResult] = useState<WeatherBuildCanonicalResponse | null>(null);
   const [cnLoading, setCnLoading] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force = false) => {
     setError('');
     try {
-      const [t, e] = await Promise.all([parityApi.listTracks(), parityApi.listEvents()]);
+      const [t, e] = await Promise.all([parityApi.listTracks(force), parityApi.listEvents(force)]);
       setTracks(t.tracks);
       setEvents(e.events);
     } catch (e: any) { setError(e.message); }
@@ -594,7 +599,7 @@ function WeatherPanel() {
       await parityApi.createTrack(newTrackName.trim(), newTrackTz);
       setMsg(`Track "${newTrackName}" created`);
       setNewTrackName('');
-      loadData();
+      loadData(true);
     } catch (e: any) { setError(e.message); }
   }, [newTrackName, newTrackTz, loadData]);
 
@@ -611,7 +616,7 @@ function WeatherPanel() {
       });
       setMsg(`Event "${newEventName}" created`);
       setNewEventName('');
-      loadData();
+      loadData(true);
     } catch (e: any) { setError(e.message); }
   }, [newEventName, newEventTrackId, newEventStart, newEventEnd, newEventRaceLookup, loadData]);
 
@@ -641,7 +646,10 @@ function WeatherPanel() {
 
       {/* Tracks */}
       <div style={S.card}>
-        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Tracks ({tracks.length})</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>Tracks ({tracks.length})</h3>
+          <button style={{ ...S.btn('secondary'), fontSize: '0.7rem', padding: '0.15rem 0.5rem' }} onClick={() => loadData(true)}>↻ Refresh</button>
+        </div>
         {tracks.length > 0 && (
           <div style={{ marginBottom: '0.75rem' }}>
             {tracks.map(t => (

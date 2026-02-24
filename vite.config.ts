@@ -5,6 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   server: { 
     hmr: { overlay: false }, // Disable noisy overlay, errors still in console
+    proxy: {
+      '/api': {
+        target: 'https://racingsystemsanalysis.com',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
   build: { 
     sourcemap: true,
