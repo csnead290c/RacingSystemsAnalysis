@@ -1,7 +1,7 @@
 <?php
 /**
  * Authentication API
- * Endpoints: login, register, me
+ * Endpoints: login, register, me, update, preferences, request_password_reset, reset_password
  */
 
 require_once 'config.php';
@@ -28,6 +28,12 @@ switch ($action) {
     case 'preferences':
         handlePreferences($pdo);
         break;
+    case 'request_password_reset':
+        handleRequestPasswordReset($pdo);
+        break;
+    case 'reset_password':
+        handleResetPassword($pdo);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -39,6 +45,16 @@ function handleLogin($pdo) {
     
     if (!$email || !$password) {
         rsa_jsonResponse(['error' => 'Email and password required'], 400);
+    }
+    
+    // Rate limit: 10 attempts per IP per 15 minutes
+    $ip = rsa_getClientIp();
+    if (!rsa_checkRateLimit($pdo, "login:ip:{$ip}", 10, 900)) {
+        rsa_jsonResponse(['error' => 'Too many login attempts. Please wait 15 minutes.'], 429);
+    }
+    // Rate limit: 5 attempts per email per 15 minutes
+    if (!rsa_checkRateLimit($pdo, "login:email:{$email}", 5, 900)) {
+        rsa_jsonResponse(['error' => 'Too many login attempts for this email. Please wait 15 minutes.'], 429);
     }
     
     $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
@@ -196,4 +212,124 @@ function handlePreferences($pdo) {
     } else {
         rsa_jsonResponse(['error' => 'Method not allowed'], 405);
     }
+}
+
+/**
+ * Request a password reset — sends email with one-time token.
+ * Always returns generic success to prevent email enumeration.
+ */
+function handleRequestPasswordReset($pdo) {
+    $input = rsa_getJsonInput();
+    $email = trim($input['email'] ?? '');
+
+    if (!$email) {
+        rsa_jsonResponse(['error' => 'Email is required'], 400);
+    }
+
+    // Rate limit: 3 reset requests per email per 15 minutes
+    $ip = rsa_getClientIp();
+    if (!rsa_checkRateLimit($pdo, "reset:email:{$email}", 3, 900)) {
+        // Return success anyway to not leak whether the email exists
+        rsa_jsonResponse(['success' => true, 'message' => 'If that email is registered, a reset link has been sent.']);
+    }
+    // Rate limit: 10 reset requests per IP per 15 minutes
+    if (!rsa_checkRateLimit($pdo, "reset:ip:{$ip}", 10, 900)) {
+        rsa_jsonResponse(['success' => true, 'message' => 'If that email is registered, a reset link has been sent.']);
+    }
+
+    // Look up user (don't reveal if not found)
+    $stmt = $pdo->prepare("SELECT id, name, email FROM users WHERE email = ?");
+    $stmt->execute([$email]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($user) {
+        // Invalidate any existing unused tokens for this user
+        $pdo->prepare("UPDATE password_resets SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL")
+            ->execute([$user['id']]);
+
+        // Generate a secure random token
+        $rawToken = bin2hex(random_bytes(32)); // 64 hex chars
+        $tokenHash = hash('sha256', $rawToken);
+        $expiresAt = date('Y-m-d H:i:s', time() + 3600); // 60 minutes
+
+        // Store hashed token in DB
+        $stmt = $pdo->prepare("
+            INSERT INTO password_resets (user_id, token_hash, expires_at, request_ip, created_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([$user['id'], $tokenHash, $expiresAt, $ip]);
+
+        // Send email with the raw (unhashed) token
+        rsa_sendPasswordResetEmail($user['email'], $user['name'] ?: 'User', $rawToken);
+    }
+
+    // Always return success
+    rsa_jsonResponse(['success' => true, 'message' => 'If that email is registered, a reset link has been sent.']);
+}
+
+/**
+ * Reset password using a valid one-time token.
+ */
+function handleResetPassword($pdo) {
+    $input = rsa_getJsonInput();
+    $rawToken = $input['token'] ?? '';
+    $newPassword = $input['newPassword'] ?? '';
+
+    if (!$rawToken || !$newPassword) {
+        rsa_jsonResponse(['error' => 'Token and new password are required'], 400);
+    }
+
+    if (strlen($newPassword) < 6) {
+        rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+    }
+
+    // Rate limit redemption attempts by IP
+    $ip = rsa_getClientIp();
+    if (!rsa_checkRateLimit($pdo, "redeem:ip:{$ip}", 10, 900)) {
+        rsa_jsonResponse(['error' => 'Too many attempts. Please wait 15 minutes.'], 429);
+    }
+
+    // Hash the incoming token and look it up
+    $tokenHash = hash('sha256', $rawToken);
+    $stmt = $pdo->prepare("
+        SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at, u.email, u.role
+        FROM password_resets pr
+        JOIN users u ON u.id = pr.user_id
+        WHERE pr.token_hash = ?
+    ");
+    $stmt->execute([$tokenHash]);
+    $reset = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$reset) {
+        rsa_jsonResponse(['error' => 'Invalid or expired reset link'], 400);
+    }
+
+    if ($reset['used_at'] !== null) {
+        rsa_jsonResponse(['error' => 'This reset link has already been used'], 400);
+    }
+
+    if (strtotime($reset['expires_at']) < time()) {
+        rsa_jsonResponse(['error' => 'This reset link has expired. Please request a new one.'], 400);
+    }
+
+    // All good — update password and mark token as used
+    $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+    $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+        ->execute([$hash, $reset['user_id']]);
+    $pdo->prepare("UPDATE password_resets SET used_at = NOW() WHERE id = ?")
+        ->execute([$reset['id']]);
+
+    // Generate a fresh login token so the user is immediately signed in
+    $loginToken = rsa_generateToken($reset['user_id'], $reset['email'], $reset['role']);
+
+    rsa_jsonResponse([
+        'success' => true,
+        'message' => 'Password has been reset successfully.',
+        'token' => $loginToken,
+        'user' => [
+            'id' => $reset['user_id'],
+            'email' => $reset['email'],
+            'role' => $reset['role'],
+        ],
+    ]);
 }

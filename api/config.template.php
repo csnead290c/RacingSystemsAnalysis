@@ -39,10 +39,11 @@ define('STRIPE_SUCCESS_URL', FRONTEND_URL . '/account?checkout=success');
 define('STRIPE_CANCEL_URL', FRONTEND_URL . '/account?checkout=canceled');
 
 // =============================================================================
-// Clerk Configuration (optional - for syncing subscription to Clerk metadata)
-// Get from https://dashboard.clerk.com
+// Bootstrap Tools (CLI-only recovery tool)
+// Enable only when needed, disable after use.
 // =============================================================================
-define('CLERK_SECRET_KEY', 'sk_test_xxx'); // Clerk secret key
+// define('BOOTSTRAP_TOOLS_ENABLED', true);
+// define('BOOTSTRAP_SECRET', '');  // Optional: require a secret argument to run
 
 // Error reporting (disable in production)
 error_reporting(E_ALL);

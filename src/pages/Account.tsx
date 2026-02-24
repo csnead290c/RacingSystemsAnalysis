@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../domain/auth';
+import { authApi } from '../services/api';
 import { usePreferences } from '../shared/state/preferences';
 import { useSubscription } from '../domain/config/useSubscription';
 import { openCustomerPortal, getSubscriptionStatus } from '../domain/payments';
@@ -61,6 +62,40 @@ export default function Account() {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [theme, setTheme] = useState(user?.preferences?.theme || 'system');
+  
+  // Change password state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordMessage(null);
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters');
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      await authApi.updateProfile({ password: newPassword });
+      setPasswordMessage('Password updated successfully.');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setTimeout(() => { setShowChangePassword(false); setPasswordMessage(null); }, 2000);
+    } catch (err: any) {
+      setPasswordError(err.message || 'Failed to update password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
   
   const authRole = getUserRole();
   const authProducts = getUserProducts();
@@ -389,7 +424,58 @@ export default function Account() {
           {/* Units selector hidden — not yet wired. See TODO at top of file. */}
         </div>
 
-        {/* ── Section 5: Actions ── */}
+        {/* ── Section 5: Security ── */}
+        <div className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Security</h3>
+          
+          {!showChangePassword ? (
+            <button
+              onClick={() => setShowChangePassword(true)}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'transparent',
+                color: 'var(--color-text)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+              }}
+            >
+              Change Password
+            </button>
+          ) : (
+            <form onSubmit={handleChangePassword} style={{ maxWidth: '320px' }}>
+              {passwordMessage && (
+                <div style={{ padding: '0.5rem', marginBottom: '0.75rem', backgroundColor: '#dcfce7', color: '#166534', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
+                  {passwordMessage}
+                </div>
+              )}
+              {passwordError && (
+                <div style={{ padding: '0.5rem', marginBottom: '0.75rem', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
+                  {passwordError}
+                </div>
+              )}
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>New Password</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6} placeholder="At least 6 characters" style={{ width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text)', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>Confirm Password</label>
+                <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} required minLength={6} placeholder="Re-enter password" style={{ width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text)', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="submit" disabled={passwordLoading} className="btn" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}>
+                  {passwordLoading ? 'Saving...' : 'Update Password'}
+                </button>
+                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(null); setNewPassword(''); setConfirmNewPassword(''); }} className="btn btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* ── Section 6: Actions ── */}
         <div className="card" style={{ padding: '1.5rem' }}>
             <button
               onClick={handleLogout}

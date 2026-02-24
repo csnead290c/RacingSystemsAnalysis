@@ -96,6 +96,27 @@ export const authApi = {
     });
   },
 
+  async requestPasswordReset(email: string) {
+    return apiRequest<{ success: boolean; message: string }>('/auth.php?action=request_password_reset', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const data = await apiRequest<{
+      success: boolean;
+      message: string;
+      token: string;
+      user: { id: number; email: string; role: string };
+    }>('/auth.php?action=reset_password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    });
+    setAuthToken(data.token);
+    return data;
+  },
+
   logout() {
     setAuthToken(null);
   },

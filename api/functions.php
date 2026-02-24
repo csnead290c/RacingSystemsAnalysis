@@ -97,6 +97,82 @@ function rsa_requireAuth() {
     return $auth;
 }
 
+// ── Rate Limiting ─────────────────────────────────────────────────────
+
+/**
+ * Check and enforce a rate limit.
+ * @param PDO    $pdo        Database handle
+ * @param string $key        Rate limit key (e.g., "login:ip:1.2.3.4" or "reset:email:foo@bar.com")
+ * @param int    $maxAttempts Maximum attempts allowed within the window
+ * @param int    $windowSec  Window size in seconds
+ * @return bool  true if within limit, false if exceeded
+ */
+function rsa_checkRateLimit(PDO $pdo, string $key, int $maxAttempts, int $windowSec): bool {
+    $windowStart = date('Y-m-d H:i:s', time() - $windowSec);
+
+    // Clean old entries
+    $pdo->prepare("DELETE FROM rate_limits WHERE window_start < ?")->execute([$windowStart]);
+
+    // Count attempts in window
+    $stmt = $pdo->prepare("SELECT SUM(attempts) as total FROM rate_limits WHERE rate_key = ? AND window_start >= ?");
+    $stmt->execute([$key, $windowStart]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $total = (int)($row['total'] ?? 0);
+
+    if ($total >= $maxAttempts) {
+        return false; // Rate limited
+    }
+
+    // Record this attempt
+    $stmt = $pdo->prepare("INSERT INTO rate_limits (rate_key, attempts, window_start) VALUES (?, 1, NOW())");
+    $stmt->execute([$key]);
+
+    return true; // Within limit
+}
+
+/**
+ * Get the client IP address.
+ */
+function rsa_getClientIp(): string {
+    return $_SERVER['HTTP_X_FORWARDED_FOR']
+        ?? $_SERVER['HTTP_X_REAL_IP']
+        ?? $_SERVER['REMOTE_ADDR']
+        ?? '0.0.0.0';
+}
+
+/**
+ * Send a password reset email using PHP mail().
+ * @return bool Whether the email was sent successfully
+ */
+function rsa_sendPasswordResetEmail(string $toEmail, string $userName, string $resetToken): bool {
+    $frontendUrl = defined('FRONTEND_URL') ? FRONTEND_URL : 'https://racingsystemsanalysis.com';
+    $resetLink = $frontendUrl . '/reset-password?token=' . urlencode($resetToken);
+
+    $subject = 'Password Reset — Racing Systems Analysis';
+    $body = <<<EMAIL
+Hi {$userName},
+
+We received a request to reset your password for Racing Systems Analysis.
+
+Click the link below to set a new password (expires in 60 minutes):
+
+{$resetLink}
+
+If you didn't request this, you can safely ignore this email.
+
+— Racing Systems Analysis
+EMAIL;
+
+    $headers = implode("\r\n", [
+        'From: Racing Systems Analysis <noreply@racingsystemsanalysis.com>',
+        'Reply-To: noreply@racingsystemsanalysis.com',
+        'Content-Type: text/plain; charset=UTF-8',
+        'X-Mailer: RSA-Auth/1.0',
+    ]);
+
+    return mail($toEmail, $subject, $body, $headers);
+}
+
 // Wrapper functions that use our rsa_ versions
 // These will be defined if config.php doesn't define them
 if (!function_exists('setCorsHeaders')) {

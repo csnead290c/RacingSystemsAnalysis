@@ -3,20 +3,25 @@
 /**
  * Bootstrap Owner — CLI-only tool for production recovery.
  * 
- * This script is NOT web-accessible. It must be run via SSH/CLI only.
- * It can:
- *   1. Promote an existing user to 'owner' role
- *   2. Set/reset a user's password
- *   3. Create a new owner account
- *   4. List all users (for diagnostics)
+ * SECURITY:
+ *   - Refuses to run via web (checks PHP_SAPI)
+ *   - Requires BOOTSTRAP_TOOLS_ENABLED=true in config.php
+ *   - Optionally requires BOOTSTRAP_SECRET as first argument
+ *   - Logs every invocation to api/tools/bootstrap.log
  *
  * Usage (from web root):
- *   php api/tools/bootstrap-owner.php list
- *   php api/tools/bootstrap-owner.php promote <email>
- *   php api/tools/bootstrap-owner.php set-password <email> <new-password>
- *   php api/tools/bootstrap-owner.php create <email> <name> <password>
+ *   php api/tools/bootstrap-owner.php [secret] <command> [args...]
  *
- * Security: Refuses to run if accessed via web (checks PHP_SAPI).
+ * Commands:
+ *   list                                   List all users
+ *   promote <email>                        Promote user to 'owner' role
+ *   set-password <email> <new-password>    Set/reset a user's password
+ *   create <email> <name> <password>       Create a new owner account
+ *
+ * Examples:
+ *   php api/tools/bootstrap-owner.php list
+ *   php api/tools/bootstrap-owner.php promote csnead@sneadracing.com
+ *   php api/tools/bootstrap-owner.php mySecret set-password user@example.com Pass123
  */
 
 // ── Safety: CLI only ──────────────────────────────────────────────────
@@ -26,9 +31,44 @@ if (php_sapi_name() !== 'cli') {
     exit(1);
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────
+// ── Bootstrap config ──────────────────────────────────────────────────
 require_once __DIR__ . '/../config.php';
 
+// ── Feature flag gate ─────────────────────────────────────────────────
+if (!defined('BOOTSTRAP_TOOLS_ENABLED') || BOOTSTRAP_TOOLS_ENABLED !== true) {
+    fwrite(STDERR, "ERROR: Bootstrap tools are disabled.\n");
+    fwrite(STDERR, "Add  define('BOOTSTRAP_TOOLS_ENABLED', true);  to config.php to enable.\n");
+    exit(1);
+}
+
+// ── Logging helper ────────────────────────────────────────────────────
+$LOG_FILE = __DIR__ . '/bootstrap.log';
+
+function logAction(string $action, string $detail = '') {
+    global $LOG_FILE;
+    $ts = date('Y-m-d H:i:s');
+    $who = get_current_user() . '@' . gethostname();
+    $line = "[{$ts}] [{$who}] {$action}";
+    if ($detail) $line .= " — {$detail}";
+    file_put_contents($LOG_FILE, $line . "\n", FILE_APPEND | LOCK_EX);
+}
+
+// ── Parse args (optional secret check) ────────────────────────────────
+$args = array_slice($argv, 1); // drop script name
+
+// If BOOTSTRAP_SECRET is defined, the first argument must match it
+if (defined('BOOTSTRAP_SECRET') && BOOTSTRAP_SECRET !== '') {
+    $secret = array_shift($args) ?? '';
+    if ($secret !== BOOTSTRAP_SECRET) {
+        logAction('DENIED', 'invalid secret');
+        fwrite(STDERR, "ERROR: Invalid bootstrap secret.\n");
+        exit(1);
+    }
+}
+
+$command = $args[0] ?? '';
+
+// ── DB connection ─────────────────────────────────────────────────────
 try {
     $pdo = new PDO(
         'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
@@ -41,34 +81,39 @@ try {
     exit(1);
 }
 
-// ── Parse command ─────────────────────────────────────────────────────
-$command = $argv[1] ?? '';
-
+// ── Dispatch ──────────────────────────────────────────────────────────
 switch ($command) {
     case 'list':
+        logAction('list');
         cmdList($pdo);
         break;
     case 'promote':
-        $email = $argv[2] ?? '';
-        if (!$email) die("Usage: php bootstrap-owner.php promote <email>\n");
+        $email = $args[1] ?? '';
+        if (!$email) die("Usage: bootstrap-owner.php [secret] promote <email>\n");
+        logAction('promote', $email);
         cmdPromote($pdo, $email);
         break;
     case 'set-password':
-        $email = $argv[2] ?? '';
-        $password = $argv[3] ?? '';
-        if (!$email || !$password) die("Usage: php bootstrap-owner.php set-password <email> <new-password>\n");
+        $email = $args[1] ?? '';
+        $password = $args[2] ?? '';
+        if (!$email || !$password) die("Usage: bootstrap-owner.php [secret] set-password <email> <new-password>\n");
+        logAction('set-password', $email);
         cmdSetPassword($pdo, $email, $password);
         break;
     case 'create':
-        $email = $argv[2] ?? '';
-        $name = $argv[3] ?? '';
-        $password = $argv[4] ?? '';
-        if (!$email || !$name || !$password) die("Usage: php bootstrap-owner.php create <email> <name> <password>\n");
+        $email = $args[1] ?? '';
+        $name = $args[2] ?? '';
+        $password = $args[3] ?? '';
+        if (!$email || !$name || !$password) die("Usage: bootstrap-owner.php [secret] create <email> <name> <password>\n");
+        logAction('create', $email);
         cmdCreate($pdo, $email, $name, $password);
         break;
     default:
         echo <<<HELP
 Bootstrap Owner — CLI-only production recovery tool.
+
+Requires:  define('BOOTSTRAP_TOOLS_ENABLED', true);  in config.php
+Optional:  define('BOOTSTRAP_SECRET', 'yourSecret');  — if set, pass as first arg.
 
 Commands:
   list                                   List all users
@@ -79,8 +124,7 @@ Commands:
 Examples:
   php api/tools/bootstrap-owner.php list
   php api/tools/bootstrap-owner.php promote csnead@sneadracing.com
-  php api/tools/bootstrap-owner.php set-password owner@racingsystemsanalysis.com MyNewPass123
-  php api/tools/bootstrap-owner.php create admin@example.com "Admin User" SecurePass456
+  php api/tools/bootstrap-owner.php mySecret set-password user@example.com Pass123
 
 HELP;
         exit(0);
@@ -146,7 +190,7 @@ function cmdSetPassword(PDO $pdo, string $email, string $password) {
         exit(1);
     }
     
-    $hash = password_hash($password, PASSWORD_BCRYPT);
+    $hash = password_hash($password, PASSWORD_DEFAULT);
     $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
     $stmt->execute([$hash, $user['id']]);
     
@@ -156,7 +200,6 @@ function cmdSetPassword(PDO $pdo, string $email, string $password) {
 }
 
 function cmdCreate(PDO $pdo, string $email, string $name, string $password) {
-    // Check if email already exists
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->execute([$email]);
     if ($stmt->fetch()) {
@@ -169,7 +212,7 @@ function cmdCreate(PDO $pdo, string $email, string $name, string $password) {
         exit(1);
     }
     
-    $hash = password_hash($password, PASSWORD_BCRYPT);
+    $hash = password_hash($password, PASSWORD_DEFAULT);
     $products = json_encode(['quarter_pro', 'bonneville_pro', 'engine_pro']);
     
     $stmt = $pdo->prepare("INSERT INTO users (email, name, password_hash, role, products, created_at) VALUES (?, ?, ?, 'owner', ?, NOW())");

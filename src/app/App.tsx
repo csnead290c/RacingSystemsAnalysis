@@ -36,6 +36,7 @@ import TechCard from '../pages/TechCard';
 import Ladder from '../pages/Ladder';
 import Pricing from '../pages/Pricing';
 import Register from '../pages/Register';
+import ResetPassword from '../pages/ResetPassword';
 import TeamHub from '../pages/TeamHub';
 import NotFound from '../pages/NotFound';
 import Help from '../pages/Help';
@@ -467,6 +468,7 @@ function App() {
             <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/calculators" element={<Calculators />} />
             <Route path="/calcs" element={<Calculators />} />
