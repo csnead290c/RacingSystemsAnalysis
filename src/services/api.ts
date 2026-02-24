@@ -18,7 +18,8 @@ export function setAuthToken(token: string | null) {
 }
 
 export function getAuthToken() {
-  return authToken;
+  // Prefer legacy token, fall back to Clerk session token
+  return authToken || localStorage.getItem('rsa.auth.clerkToken');
 }
 
 async function apiRequest<T>(
@@ -32,8 +33,9 @@ async function apiRequest<T>(
     ...(options.headers as Record<string, string>),
   };
 
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   // Add cache-busting query param for GET requests
