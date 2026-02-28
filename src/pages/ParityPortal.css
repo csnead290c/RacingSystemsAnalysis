@@ -1,0 +1,396 @@
+/* ── Parity Portal Responsive Styles ──────────────────────────────────── */
+
+/* ── Navigation ── */
+.parity-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.parity-tab {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px 4px 0 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.parity-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Mobile nav dropdown (shown <768px) */
+.parity-nav-mobile {
+  display: none;
+}
+
+/* ── Event Picker ── */
+.parity-event-picker {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.parity-event-picker select {
+  max-width: 100%;
+}
+
+/* ── Table Scroll Container ── */
+.parity-table-wrap {
+  position: relative;
+  overflow: auto;
+  max-height: 500px;
+  -webkit-overflow-scrolling: touch;
+}
+/* Scroll shadow cues */
+.parity-table-wrap::after {
+  content: '';
+  position: sticky;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  pointer-events: none;
+  background: linear-gradient(to left, var(--color-surface, #1e1e2e) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.parity-table-wrap.has-scroll-right::after {
+  opacity: 0.6;
+}
+
+/* ── Card View (mobile alternative to wide tables) ── */
+.parity-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.parity-run-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.75rem;
+  font-size: 0.8rem;
+}
+.parity-run-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+.parity-run-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+}
+.parity-run-card-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+.parity-run-card-label {
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.parity-run-card-value {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+/* ── Column Toggle Panel ── */
+.parity-col-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  margin-bottom: 0.5rem;
+}
+.parity-col-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.parity-col-chip.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* ── Form Consistency ── */
+.parity-form-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.parity-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.parity-form-field label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+.parity-form-field input,
+.parity-form-field select,
+.parity-form-field textarea {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.parity-form-field input:focus,
+.parity-form-field select:focus,
+.parity-form-field textarea:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+/* ── Buttons ── */
+.parity-btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.parity-btn:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+.parity-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.parity-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+/* ── Badges ── */
+.parity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Tooltip (tap-to-toggle on mobile) ── */
+.parity-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  cursor: help;
+}
+.parity-tooltip-content {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  z-index: 20;
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+}
+.parity-tooltip-wrap:hover .parity-tooltip-content,
+.parity-tooltip-wrap:focus-within .parity-tooltip-content,
+.parity-tooltip-wrap.open .parity-tooltip-content {
+  display: block;
+}
+
+/* ── View Mode Toggle ── */
+.parity-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  overflow: hidden;
+}
+.parity-view-toggle button {
+  padding: 0.25rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.7rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+.parity-view-toggle button.active {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.parity-view-toggle button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* ── Accessibility ── */
+
+/* Global focus-visible for all interactive elements */
+.parity-form-field input:focus-visible,
+.parity-form-field select:focus-visible,
+.parity-form-field textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Screen-reader only utility */
+.parity-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .parity-tab,
+  .parity-col-chip,
+  .parity-btn,
+  .parity-view-toggle button,
+  .parity-table-wrap::after {
+    transition: none !important;
+  }
+}
+
+/* High contrast mode: ensure borders are visible */
+@media (forced-colors: active) {
+  .parity-col-chip.active {
+    border: 2px solid ButtonText;
+  }
+  .parity-view-toggle button.active {
+    border: 2px solid ButtonText;
+  }
+  .parity-badge {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* ── Responsive Breakpoints ── */
+
+/* Tablet: <= 1024px */
+@media (max-width: 1024px) {
+  .parity-event-picker select {
+    min-width: 0;
+  }
+}
+
+/* Mobile: <= 768px */
+@media (max-width: 768px) {
+  /* Hide desktop tabs, show dropdown */
+  .parity-tabs {
+    display: none !important;
+  }
+  .parity-nav-mobile {
+    display: block;
+    margin-bottom: 1rem;
+  }
+  .parity-nav-mobile select {
+    width: 100%;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .parity-nav-mobile select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+  }
+
+  /* Event picker stacks vertically */
+  .parity-event-picker {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .parity-event-picker select,
+  .parity-event-picker input {
+    width: 100% !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Forms stack */
+  .parity-form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .parity-form-row input,
+  .parity-form-row select {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+  .parity-form-row .parity-btn {
+    width: 100%;
+  }
+
+  /* Cards view shown by default on mobile for wide tables */
+  .parity-run-card-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Table font shrink */
+  .parity-table-wrap table {
+    font-size: 0.7rem;
+  }
+  .parity-table-wrap th,
+  .parity-table-wrap td {
+    padding: 0.2rem 0.35rem;
+  }
+}
+
+/* Small mobile: <= 480px */
+@media (max-width: 480px) {
+  .parity-run-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
