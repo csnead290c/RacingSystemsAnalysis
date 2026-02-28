@@ -22,8 +22,8 @@ ARCHIVE_DEAD_FILES.sh
 # local archive workspace
 src/domain/physics/_legacy/archive/
 
-# node artifacts (never commit)
-package-lock.json
+# node artifacts
+# package-lock.json is tracked for CI (npm ci requires it)
 
 # reference artifacts (local only)
 Reference Files/**/*.log
