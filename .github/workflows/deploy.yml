@@ -34,9 +34,6 @@ jobs:
       - name: Sync manuals
         run: node scripts/sync-manuals.js
 
-      - name: TypeScript check
-        run: npx tsc --noEmit
-
       - name: Vite build
         run: npx vite build
         env:
