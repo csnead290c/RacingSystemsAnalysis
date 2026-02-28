@@ -31,15 +31,21 @@ jobs:
           echo "Checking lucide-react package.json..."
           cat node_modules/lucide-react/package.json | grep -E '"name"|"version"|"typings"'
 
-      - name: Build
-        run: |
-          echo "Starting build..."
-          npm run build
-          echo "Build completed successfully"
+      - name: Sync manuals
+        run: node scripts/sync-manuals.js
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Vite build
+        run: npx vite build
         env:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
           VITE_API_URL: https://racingsystemsanalysis.com/api
+
+      - name: Post-build cleanup
+        run: node -e "const fs=require('fs');const f='dist/index.html';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/<script id=\"vite-plugin-pwa:register-sw\" src=\"\/registerSW.js\"><\/script>/g,''))"
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
