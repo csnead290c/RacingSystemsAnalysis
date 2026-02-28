@@ -193,6 +193,10 @@ export interface RunWithWeather extends ParityRun {
     rh_pct: number | null;
     pressure_inhg: number | null;
     delta_seconds: number;
+    canonical_source_kind: string;
+    canonical_source_detail: string | null;
+    sample_count: number;
+    sample_sources_json: string | null;
   } | null;
 }
 
@@ -267,8 +271,10 @@ export interface WeatherCanonicalResponse {
 
 export interface TopByEventRow {
   raceLookup: string;
-  value: number;
+  value: number | null;
+  actualValue?: number;
   runCount: number;
+  correctedCount?: number;
   eventName: string | null;
   trackName: string | null;
   seasonYear: number | null;
@@ -285,7 +291,7 @@ export interface TopByEventResponse {
 
 export interface TopByEventParams {
   classIndex: string;
-  metric: 'mph1320' | 'ft1320';
+  metric: 'mph1320' | 'ft1320' | 'corrected_ft1320';
   startRaceLookup?: string;
   endRaceLookup?: string;
   includeDQ?: boolean;
@@ -392,6 +398,809 @@ export interface RunFlag {
 export interface RunFlagsResponse {
   flags: RunFlag[];
   count: number;
+}
+
+// ── Parity Analysis Types ────────────────────────────────────────────────
+
+export interface CorrectedRun {
+  id: number;
+  uuid: string;
+  race_lookup: string;
+  run_timestamp_utc: string | null;
+  class_index: string | null;
+  round: string | null;
+  lane: string | null;
+  driver_name: string | null;
+  car_number: string | null;
+  dial_in: number | null;
+  rt: number | null;
+  ft60: number | null;
+  ft330: number | null;
+  ft660: number | null;
+  mph660: number | null;
+  ft1000: number | null;
+  mph1000: number | null;
+  ft1320: number | null;
+  mph1320: number | null;
+  win_flag: boolean | null;
+  dq_flag: boolean | null;
+  place: string | null;
+  weather_timestamp_utc: string | null;
+  weather_delta_seconds: number | null;
+  temp_f: number | null;
+  rh_pct: number | null;
+  pressure_inhg: number | null;
+  correction_factor: number | null;
+  corrected_ft1320: number | null;
+  corrected_ft660: number | null;
+  corrected_ft60: number | null;
+}
+
+export interface ParityMetrics {
+  best: number | null;
+  top3_median: number | null;
+  top5_median: number | null;
+  all_median: number | null;
+}
+
+export interface EventParitySummaryResponse {
+  eventId: number;
+  classIndex: string;
+  event: { event_name: string; start_date_local: string; end_date_local: string; track_name: string; city: string | null; state: string | null } | null;
+  correction_model_version: string;
+  standard_day: { temp_f: number; pressure_inhg: number; rh_pct: number };
+  run_count: number;
+  weather_joined_count: number;
+  corrected_count: number;
+  actual: ParityMetrics;
+  corrected: ParityMetrics;
+  runs: CorrectedRun[];
+}
+
+export interface QualSheetRow {
+  qual_pos: number | null;
+  driver: string;
+  car_number: string | null;
+  best_et: number | null;
+  best_mph: number | null;
+  best_rt: number | null;
+  best_ft60: number | null;
+  best_ft660: number | null;
+  best_timestamp: string | null;
+  corrected_best_et: number | null;
+  correction_factor: number | null;
+  temp_f: number | null;
+  pressure_inhg: number | null;
+  rh_pct: number | null;
+  run_count: number;
+  is_valid: boolean;
+}
+
+export interface QualSheetResponse {
+  eventId: number;
+  classIndex: string;
+  event: { event_name: string; start_date_local: string; end_date_local: string; season_year: number | null; track_name: string; city: string | null; state: string | null } | null;
+  correction_model_version: string;
+  qualifier_count: number;
+  total_drivers: number;
+  sheet: QualSheetRow[];
+}
+
+export interface LadderSeed {
+  seed: number;
+  driver: string;
+  car_number: string | null;
+  best_et: number | null;
+  best_mph: number | null;
+}
+
+export interface LadderPairing {
+  match: number;
+  top_seed: LadderSeed;
+  bottom_seed: LadderSeed;
+}
+
+export interface LadderResponse {
+  eventId: number;
+  classIndex: string;
+  ladderSize: number;
+  actualQualifiers: number;
+  event: { event_name: string; start_date_local: string; end_date_local: string; season_year: number | null; track_name: string; city: string | null; state: string | null } | null;
+  pairings: LadderPairing[];
+}
+
+// ── Admin CRUD Types ────────────────────────────────────────────────────
+
+export interface TrackWithStats {
+  id: number;
+  track_name: string;
+  timezone_iana: string;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  created_at: string;
+  event_count: number;
+  total_run_count: number;
+  total_weather_samples: number;
+}
+
+export interface TracksWithStatsResponse {
+  tracks: TrackWithStats[];
+  count: number;
+}
+
+// ── Event Summary + Driver Drilldown Types ──────────────────────────────
+
+export interface EventSummaryResponse {
+  eventId: number;
+  classIndex: string;
+  event: {
+    event_name: string;
+    track_name: string;
+    city: string | null;
+    state: string | null;
+    start_date_local: string;
+    end_date_local: string;
+    season_year: number | null;
+  };
+  runCount: number;
+  lowEt_actual: number | null;
+  lowEt_corrected: number | null;
+  topMph: number | null;
+  winner: {
+    driver: string;
+    round: string;
+    et: number | null;
+    mph: number | null;
+  } | null;
+  weatherJoinPct: number;
+  flaggedCount: number;
+  correction_model_version: string;
+}
+
+export interface DriverEntry {
+  driver: string;
+  run_count: number;
+  best_et: number | null;
+  best_mph: number | null;
+  event_count: number;
+}
+
+export interface DriversResponse {
+  drivers: DriverEntry[];
+}
+
+export interface DriverRun {
+  id: number;
+  uuid: string;
+  race_lookup: string;
+  run_timestamp_utc: string | null;
+  class_index: string | null;
+  round: string | null;
+  lane: string | null;
+  driver_name: string | null;
+  car_number: string | null;
+  rt: number | null;
+  ft60: number | null;
+  ft330: number | null;
+  ft660: number | null;
+  mph660: number | null;
+  ft1000: number | null;
+  mph1000: number | null;
+  ft1320: number | null;
+  mph1320: number | null;
+  win_flag: boolean;
+  dq_flag: boolean;
+  place: string | null;
+  event_name: string | null;
+  track_name: string | null;
+  inc_0_60: number | null;
+  inc_60_330: number | null;
+  inc_330_660: number | null;
+  inc_660_1000: number | null;
+  inc_1000_1320: number | null;
+  // Weather fields (when includeWeather=1)
+  weather?: {
+    timestamp_utc: string;
+    temp_f: number | null;
+    rh_pct: number | null;
+    pressure_inhg: number | null;
+    delta_seconds: number;
+    canonical_source_kind: string | null;
+    canonical_source_detail: string | null;
+    sample_count: number;
+  } | null;
+  correction_factor?: number | null;
+  corrected_ft1320?: number | null;
+  corrected_ft660?: number | null;
+  corrected_ft60?: number | null;
+}
+
+export interface RunsByDriverResponse {
+  driverName: string;
+  runs: DriverRun[];
+  total: number;
+}
+
+// ── Class Alias Types ───────────────────────────────────────────────────
+
+export interface ClassAlias {
+  id: number;
+  canonical: string;
+  alias: string;
+  created_at: string;
+}
+
+export interface ClassAliasListResponse {
+  aliases: ClassAlias[];
+  knownClasses: string[];
+}
+
+// ── Engine Combo Types ──────────────────────────────────────────────────
+
+export interface EngineComboRow {
+  id: number;
+  name: string;
+  t_power: number;
+  d_power: number;
+  friction_factor: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EngineComboListResponse {
+  combos: EngineComboRow[];
+}
+
+// ── Driver Combo Types ─────────────────────────────────────────────────
+
+export interface DriverComboRow {
+  id: number;
+  driver_name: string;
+  class_index: string;
+  engine_combo_id: number;
+  engine_combo_name: string;
+  t_power: number;
+  d_power: number;
+  friction_factor: number;
+  effective_from_utc: string;
+  effective_to_utc: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriverComboListResponse {
+  combos: DriverComboRow[];
+}
+
+// ── Class Default Combo Types ───────────────────────────────────────────
+
+export interface ClassDefaultRow {
+  id: number;
+  class_index: string;
+  engine_combo_id: number;
+  engine_combo_name: string;
+  t_power: number;
+  d_power: number;
+  friction_factor: number;
+  effective_from_utc: string | null;
+  effective_to_utc: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClassDefaultListResponse {
+  classDefaults: ClassDefaultRow[];
+}
+
+// ── Assign Combos Helper Types ──────────────────────────────────────────
+
+export interface DriverAtEvent {
+  driver_name: string;
+  class_index: string;
+  run_count: number;
+  first_run_utc: string | null;
+  last_run_utc: string | null;
+  best_et: number | null;
+  best_mph: number | null;
+}
+
+export interface DriversAtEventResponse {
+  drivers: DriverAtEvent[];
+  eventClasses: string[];
+  raceLookup: string;
+  startDate: string | null;
+  endDate: string | null;
+  weatherSampleCount: number;
+}
+
+export interface BulkUpsertDriverCombosResponse {
+  ok: boolean;
+  created: number;
+  closed: number;
+  skipped: number;
+  errors: string[];
+}
+
+// ── CSV Weather Backfill Types ──────────────────────────────────────────
+
+export interface BackfillWeatherCsvResponse {
+  ok: boolean;
+  eventId: number;
+  trackId: number;
+  totalRows: number;
+  inserted: number;
+  deduped: number;
+  errorCount: number;
+  errors: string[];
+}
+
+export interface BackfillWeatherProviderResponse {
+  ok: boolean;
+  eventId: number;
+  trackId: number;
+  provider: string;
+  totalRows: number;
+  inserted: number;
+  deduped: number;
+  errorCount: number;
+  errors: string[];
+  preview: Array<{
+    timestampUtc: string;
+    tempF: number;
+    humidityPct: number;
+    baroInHg: number;
+  }>;
+}
+
+// ── Weather Reliability Types ────────────────────────────────────────────
+
+export interface WeatherCoverageResponse {
+  eventId: number;
+  eventName: string;
+  trackName: string;
+  startLocal: string;
+  endLocal: string;
+  startUtc: string;
+  endUtc: string;
+  hasTrackCoords: boolean;
+  trackLat: number | null;
+  trackLon: number | null;
+  canonicalCount: number;
+  canonicalBySource: Record<string, number>;
+  totalSamples: number;
+  samplesBySource: Record<string, number>;
+  runCount: number;
+  runsCovered: number;
+  runsUncovered: number;
+  coveragePct: number | null;
+  windowMinutes: number;
+  largestGapMinutes: number;
+  largestGapAt: string | null;
+}
+
+export interface WeatherHealthBackfillResponse {
+  ok: boolean;
+  inserted: number;
+  deduped: number;
+  totalFetched?: number;
+  errors?: string[];
+  canonicalRebuilt?: number;
+  skipped?: boolean;
+  message?: string;
+  existingBackupSamples?: number;
+}
+
+export interface WeatherHealthRebuildResponse {
+  ok: boolean;
+  startUtc: string;
+  endUtc: string;
+  bucketMinutes: number;
+  bucketsProcessed: number;
+  stationUsed: number;
+  backupUsed: number;
+  suspectCount: number;
+  sanityFailed: number;
+  error?: string;
+}
+
+export interface StationCsvImportRow {
+  timestampUtc: string;
+  tempF: number;
+  humidityPct: number;
+  pressureHpa: number;
+}
+
+export interface StationCsvMappedRow {
+  row: number;
+  timestampUtc: string;
+  tempF: number;
+  humidityPct: number;
+  pressureHpa: number;
+  eventId: number;
+  eventName: string;
+  trackId: number;
+  timezone: string;
+}
+
+export interface StationCsvImportResponse {
+  ok: boolean;
+  previewOnly?: boolean;
+  source?: string;
+  bufferHours?: number;
+  rowsParsed: number;
+  rowsMapped: number;
+  rowsUnmapped: number;
+  parseErrors: number;
+  inserted?: number;
+  deduped?: number;
+  insertErrors?: number;
+  eventsAffected: string[];
+  affectedEventIds?: number[];
+  preview: StationCsvMappedRow[];
+  unmappedExamples: Array<{ row: number; timestampUtc: string; tempF: number; humidityPct: number; pressureHpa: number }>;
+  parseErrorExamples: Array<{ row: number; reason: string; ts: string }>;
+  insertErrorExamples?: string[];
+  rebuildResults?: Record<number, { ok?: boolean; bucketsProcessed?: number; error?: string }>;
+}
+
+// ── Track Coord Coverage + Batch Backfill Types ─────────────────────────
+
+export interface TrackCoordCoverageRow {
+  track_id: number;
+  track_name: string;
+  timezone_iana: string;
+  latitude: number | null;
+  longitude: number | null;
+  city: string | null;
+  state: string | null;
+  event_count: number;
+  seasons: string;
+  events_zero_weather: number;
+  coordsMissing: boolean;
+}
+
+export interface TrackCoordCoverageResponse {
+  ok: boolean;
+  yearRange: [number, number];
+  totalTracks: number;
+  missingCoords: number;
+  tracks: TrackCoordCoverageRow[];
+}
+
+export interface BulkUpdateTrackCoordsResponse {
+  ok: boolean;
+  submitted: number;
+  updated: number;
+  errors: string[];
+}
+
+export interface BatchWeatherBackfillEvent {
+  eventId: number;
+  event: string;
+  status: 'ok' | 'skipped' | 'error' | 'would_backfill';
+  reason?: string;
+  track?: string;
+  error?: string;
+  fetched?: number;
+  inserted?: number;
+  deduped?: number;
+  canonicalBuckets?: number;
+  previousCoverage?: number;
+  currentCoverage?: number;
+  runs?: number;
+}
+
+export interface BatchWeatherBackfillResponse {
+  ok: boolean;
+  dryRun: boolean;
+  yearRange: [number, number];
+  maxCoveragePct: number;
+  totals: {
+    processed: number;
+    backfilled: number;
+    rebuilt: number;
+    skipped_high_coverage: number;
+    skipped_missing_coords: number;
+    skipped_no_runs: number;
+    errors: number;
+  };
+  events: BatchWeatherBackfillEvent[];
+}
+
+// ── Weather Timeseries Types ────────────────────────────────────────────
+
+export interface WeatherTimeseriesPoint {
+  timestamp_utc: string;
+  canonical_temp_f: number | null;
+  canonical_rh_pct: number | null;
+  canonical_pressure_inhg: number | null;
+  station_temp_f: number | null;
+  station_rh_pct: number | null;
+  station_pressure_inhg: number | null;
+  backup_temp_f: number | null;
+  backup_rh_pct: number | null;
+  backup_pressure_inhg: number | null;
+  station_temp_delta: number | null;
+  station_humidity_delta: number | null;
+  station_pressure_delta: number | null;
+  canonical_source_kind: string;
+  sample_count: number;
+}
+
+export interface WeatherSeriesStat {
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  count: number;
+}
+
+export interface WeatherTimeseriesStats {
+  pointsCount: number;
+  expectedPoints: number;
+  coveragePct: number;
+  stationPointsCount: number;
+  backupPointsCount: number;
+  largestGapMinutes: number;
+  largestGapAt: string | null;
+  sourceBreakdown: Record<string, number>;
+  temp: { canonical: WeatherSeriesStat; station: WeatherSeriesStat; backup: WeatherSeriesStat };
+  rh: { canonical: WeatherSeriesStat; station: WeatherSeriesStat; backup: WeatherSeriesStat };
+  pressure: { canonical: WeatherSeriesStat; station: WeatherSeriesStat; backup: WeatherSeriesStat };
+}
+
+export interface WeatherTimeseriesResponse {
+  eventId: number;
+  event: {
+    event_name: string;
+    track_name: string;
+    city: string | null;
+    state: string | null;
+    start_date_local: string;
+    end_date_local: string;
+    timezone: string;
+  };
+  startUtc: string;
+  endUtc: string;
+  points: WeatherTimeseriesPoint[];
+  stats: WeatherTimeseriesStats;
+}
+
+// ── Parity By Combo Types ──────────────────────────────────────────────
+
+export interface ParityComboRunWeather {
+  temp_f: number;
+  rh_pct: number;
+  pressure_inhg: number;
+  source: string;
+  timestamp_utc: string;
+}
+
+export interface ParityComboRun {
+  runId: number;
+  uuid: string;
+  driver: string;
+  round: string | null;
+  lane: string | null;
+  carNumber: string | null;
+  timestamp: string | null;
+  rawValue: number;
+  value: number;
+  correctionFactor: number | null;
+  excluded: boolean;
+  flagged: boolean;
+  dqFlag: number;
+  weather: ParityComboRunWeather | null;
+  engineCombo: string;
+  engineComboId: number | null;
+  et: number | null;
+  mph: number | null;
+  qualPosition?: number;
+}
+
+export interface ParityComboEntry {
+  engineCombo: string;
+  engineComboId: number | null;
+  bestValue: number | null;
+  avgTopN: number | null;
+  totalAvg: number | null;
+  spread: number | null;
+  countTopN: number;
+  countTotal: number;
+  countActive: number;
+  countExcluded: number;
+  weatherCoveragePct: number | null;
+  topRuns: ParityComboRun[];
+}
+
+export interface ParityDeltaRow {
+  comboA: string;
+  comboB: string;
+  valueA: number | null;
+  valueB: number | null;
+  delta: number | null;
+}
+
+export interface ParityDeltaMatrices {
+  quickest: ParityDeltaRow[];
+  avgTopN: ParityDeltaRow[];
+  totalAvg: ParityDeltaRow[];
+}
+
+export interface ParityMappingReadiness {
+  mappedPct: number | null;
+  mappedRunCount: number;
+  unknownRunCount: number;
+  topMissingDrivers: { driver: string; runCount: number }[];
+}
+
+export interface ParityByComboTrust {
+  weatherCoveragePct: number | null;
+  correctedCoveragePct: number | null;
+  totalRunsInScope: number;
+  runsWithWeather: number;
+  runsWithCorrected: number;
+  hasTrackCoords: boolean;
+}
+
+export interface ParityByComboResponse {
+  eventId: number;
+  classIndex: string;
+  metric: string;
+  mode: 'raw' | 'corrected';
+  topN: number;
+  sessionScope: 'qual' | 'elim' | 'both';
+  includeFlagged: boolean;
+  includeUnknown: boolean;
+  isLowerBetter: boolean;
+  event: {
+    event_name: string;
+    track_name: string;
+    city: string | null;
+    state: string | null;
+    start_date_local: string;
+    end_date_local: string;
+  };
+  trust: ParityByComboTrust;
+  mapping: ParityMappingReadiness;
+  combos: ParityComboEntry[];
+  deltaMatrices: ParityDeltaMatrices;
+  allRuns: ParityComboRun[];
+  qualOrder: ParityComboRun[];
+  totalRunsInClass: number;
+}
+
+// ── Split Parity Endpoint Types (fast initial load) ─────────────────────
+
+/** paritySummary: fast initial load — combos + trust + mapping, no allRuns/deltas/qualOrder */
+export interface ParitySummaryResponse {
+  eventId: number;
+  classIndex: string;
+  metric: string;
+  mode: 'raw' | 'corrected';
+  topN: number;
+  sessionScope: 'qual' | 'elim' | 'both';
+  includeFlagged: boolean;
+  includeUnknown: boolean;
+  isLowerBetter: boolean;
+  event: {
+    event_name: string;
+    track_name: string;
+    city: string | null;
+    state: string | null;
+    start_date_local: string;
+    end_date_local: string;
+  };
+  trust: ParityByComboTrust;
+  mapping: ParityMappingReadiness;
+  combos: ParityComboEntry[];
+  totalRunsInClass: number;
+}
+
+/** parityDeltas: on-demand delta matrices */
+export interface ParityDeltasResponse {
+  eventId: number;
+  classIndex: string;
+  metric: string;
+  mode: 'raw' | 'corrected';
+  topN: number;
+  sessionScope: 'qual' | 'elim' | 'both';
+  isLowerBetter: boolean;
+  deltaMatrices: ParityDeltaMatrices;
+}
+
+/** parityAllRuns: paginated truth table with server-side driver search */
+export interface ParityAllRunsResponse {
+  eventId: number;
+  classIndex: string;
+  metric: string;
+  mode: 'raw' | 'corrected';
+  sessionScope: 'qual' | 'elim' | 'both';
+  isLowerBetter: boolean;
+  page: number;
+  pageSize: number;
+  totalRuns: number;
+  totalPages: number;
+  driverSearch: string;
+  runs: ParityComboRun[];
+}
+
+/** parityQualOrder: lean qualifying order */
+export interface ParityQualOrderResponse {
+  eventId: number;
+  classIndex: string;
+  metric: string;
+  mode: 'raw' | 'corrected';
+  sessionScope: 'qual' | 'elim' | 'both';
+  isLowerBetter: boolean;
+  qualOrder: ParityComboRun[];
+}
+
+/** parityIncrementals: optimal-run incrementals per combo */
+export interface ParityIncrementalRow {
+  label: string;
+  key: string;
+  isLowerBetter: boolean;
+  values: Record<string, number | null>;
+}
+
+export interface ParityIncrementalsResponse {
+  eventId: number;
+  classIndex: string;
+  sessionScope: 'qual' | 'elim' | 'both';
+  combos: string[];
+  rows: ParityIncrementalRow[];
+}
+
+/** paritySessionWeather: per-session weather aggregation */
+export interface ParitySessionWeatherRow {
+  session: string;
+  runCount: number;
+  temp_f: number;
+  rh_pct: number;
+  pressure_inhg: number;
+  density_alt_ft: number;
+  hpc: number;
+}
+
+export interface ParitySessionWeatherResponse {
+  eventId: number;
+  classIndex: string;
+  sessions: ParitySessionWeatherRow[];
+}
+
+// ── Range Parity Matrix Types ────────────────────────────────────────────
+
+export interface RangeMatrixCell {
+  best: number;
+  avgTopN: number;
+  totalAvg: number;
+  count: number;
+}
+
+export interface RangeParityEvent {
+  eventId: number;
+  event_name: string;
+  track_name: string;
+  city: string | null;
+  state: string | null;
+  start_date_local: string;
+}
+
+export interface RangeParityMatrixResponse {
+  classIndex: string;
+  metric: string;
+  mode: 'raw' | 'corrected';
+  topN: number;
+  sessionScope: 'qual' | 'elim' | 'both';
+  isLowerBetter: boolean;
+  startDate: string;
+  endDate: string;
+  events: RangeParityEvent[];
+  combos: string[];
+  matrix: Record<number, Record<string, RangeMatrixCell>>;
 }
 
 // ── Backfill Job Types ──────────────────────────────────────────────────
@@ -771,5 +1580,483 @@ export const parityApi = {
 
   async runFlags(raceLookup: string): Promise<RunFlagsResponse> {
     return parityRequest<RunFlagsResponse>(`/parity.php?action=runFlags&raceLookup=${raceLookup}`);
+  },
+
+  // ── Parity Analysis ─────────────────────────────────────────────────
+
+  async eventParitySummary(params: { eventId: number; classIndex: string; includeBad?: boolean }): Promise<EventParitySummaryResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'eventParitySummary');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.includeBad) qs.set('includeBad', '1');
+    return parityRequest<EventParitySummaryResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async qualSheet(params: { eventId: number; classIndex: string; includeCorrected?: boolean; includeBad?: boolean }): Promise<QualSheetResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'qualSheet');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.includeCorrected) qs.set('includeCorrected', '1');
+    if (params.includeBad) qs.set('includeBad', '1');
+    return parityRequest<QualSheetResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async ladder(params: { eventId: number; classIndex: string; ladderSize?: number; includeBad?: boolean }): Promise<LadderResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'ladder');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.ladderSize) qs.set('ladderSize', String(params.ladderSize));
+    if (params.includeBad) qs.set('includeBad', '1');
+    return parityRequest<LadderResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Admin CRUD ─────────────────────────────────────────────────────────
+
+  async listTracksWithStats(): Promise<TracksWithStatsResponse> {
+    return parityRequest<TracksWithStatsResponse>('/parity.php?action=listTracksWithStats');
+  },
+
+  async updateTrack(params: { trackId: number; track_name?: string; timezone_iana?: string; street?: string; city?: string; state?: string; zip?: string }): Promise<{ ok: boolean; trackId: number }> {
+    return parityRequest<{ ok: boolean; trackId: number }>('/parity.php?action=updateTrack', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async updateEvent(params: { eventId: number; event_name?: string; season_year?: number | null; track_id?: number; start_date_local?: string; end_date_local?: string; race_lookup?: string }): Promise<{ ok: boolean; eventId: number }> {
+    return parityRequest<{ ok: boolean; eventId: number }>('/parity.php?action=updateEvent', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  // ── Dashboard endpoints ───────────────────────────────────────────────
+
+  async eventSummary(params: { eventId: number; classIndex?: string }): Promise<EventSummaryResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'eventSummary');
+    qs.set('eventId', String(params.eventId));
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    return parityRequest<EventSummaryResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async drivers(params: { classIndex?: string; search?: string; limit?: number }): Promise<DriversResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'drivers');
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    if (params.search) qs.set('search', params.search);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<DriversResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async runsByDriver(params: {
+    driverName: string;
+    classIndex?: string;
+    startDate?: string;
+    endDate?: string;
+    eventId?: number;
+    round?: string;
+    session?: 'qual' | 'elim' | '';
+    includeFlagged?: boolean;
+    includeWeather?: boolean;
+    limit?: number;
+  }): Promise<RunsByDriverResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'runsByDriver');
+    qs.set('driverName', params.driverName);
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.eventId) qs.set('eventId', String(params.eventId));
+    if (params.round) qs.set('round', params.round);
+    if (params.session) qs.set('session', params.session);
+    if (params.includeFlagged) qs.set('includeFlagged', '1');
+    if (params.includeWeather) qs.set('includeWeather', '1');
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<RunsByDriverResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Class Alias endpoints ──────────────────────────────────────────────
+
+  async listClassAliases(): Promise<ClassAliasListResponse> {
+    return parityRequest<ClassAliasListResponse>('/parity.php?action=listClassAliases');
+  },
+
+  async addClassAlias(params: { canonical: string; alias: string }): Promise<{ ok: boolean; id: number }> {
+    return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=addClassAlias', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async deleteClassAlias(id: number): Promise<{ ok: boolean; deleted: number }> {
+    return parityRequest<{ ok: boolean; deleted: number }>('/parity.php?action=deleteClassAlias', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // ── Engine Combo endpoints ─────────────────────────────────────────────
+
+  async listEngineCombos(): Promise<EngineComboListResponse> {
+    return parityRequest<EngineComboListResponse>('/parity.php?action=listEngineCombos');
+  },
+
+  async upsertEngineCombo(params: { id?: number; name: string; tPower: number; dPower: number; FF: number }): Promise<{ ok: boolean; id: number }> {
+    return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertEngineCombo', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async deleteEngineCombo(id: number): Promise<{ ok: boolean }> {
+    return parityRequest<{ ok: boolean }>('/parity.php?action=deleteEngineCombo', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // ── Driver Combo endpoints ─────────────────────────────────────────────
+
+  async listDriverCombos(params?: { driverName?: string; classIndex?: string }): Promise<DriverComboListResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'listDriverCombos');
+    if (params?.driverName) qs.set('driverName', params.driverName);
+    if (params?.classIndex) qs.set('classIndex', params.classIndex);
+    return parityRequest<DriverComboListResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async upsertDriverCombo(params: { id?: number; driverName: string; classIndex: string; engineComboId: number; effectiveFromUtc: string; effectiveToUtc?: string | null }): Promise<{ ok: boolean; id: number }> {
+    return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertDriverCombo', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async deleteDriverCombo(id: number): Promise<{ ok: boolean }> {
+    return parityRequest<{ ok: boolean }>('/parity.php?action=deleteDriverCombo', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // ── Class Default Combo endpoints ──────────────────────────────────────
+
+  async listClassDefaults(params?: { classIndex?: string }): Promise<ClassDefaultListResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'listClassDefaults');
+    if (params?.classIndex) qs.set('classIndex', params.classIndex);
+    return parityRequest<ClassDefaultListResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async upsertClassDefault(params: { id?: number; classIndex: string; engineComboId: number; effectiveFromUtc?: string | null; effectiveToUtc?: string | null; notes?: string | null }): Promise<{ ok: boolean; id: number }> {
+    return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertClassDefault', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async deleteClassDefault(id: number): Promise<{ ok: boolean }> {
+    return parityRequest<{ ok: boolean }>('/parity.php?action=deleteClassDefault', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // ── Assign Combos helper endpoints ────────────────────────────────────
+
+  async driversAtEvent(params: { eventId: number; classIndex?: string }): Promise<DriversAtEventResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'driversAtEvent');
+    qs.set('eventId', String(params.eventId));
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    return parityRequest<DriversAtEventResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async bulkUpsertDriverCombos(items: { driverName: string; classIndex: string; engineComboId: number; effectiveFromUtc: string; effectiveToUtc?: string | null }[]): Promise<BulkUpsertDriverCombosResponse> {
+    return parityRequest<BulkUpsertDriverCombosResponse>('/parity.php?action=bulkUpsertDriverCombos', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  },
+
+  // ── CSV Weather Backfill ────────────────────────────────────────────────
+
+  async backfillWeatherCsv(params: {
+    eventId: number;
+    trackId: number;
+    rows: { timestampUtc: string; tempF: number; humidityPct: number; baroInHg: number }[];
+  }): Promise<BackfillWeatherCsvResponse> {
+    return parityRequest<BackfillWeatherCsvResponse>('/parity.php?action=backfillWeatherCsv', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async backfillWeatherProvider(params: {
+    eventId: number;
+    trackId: number;
+    provider: string;
+    startUtc: string;
+    endUtc: string;
+    lat?: number;
+    lon?: number;
+  }): Promise<BackfillWeatherProviderResponse> {
+    return parityRequest<BackfillWeatherProviderResponse>('/parity.php?action=backfillWeatherProvider', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  // ── Weather Reliability ─────────────────────────────────────────────
+
+  async weatherCoverage(eventId: number): Promise<WeatherCoverageResponse> {
+    return parityRequest<WeatherCoverageResponse>(
+      `/parity.php?action=weatherCoverage&eventId=${eventId}`,
+    );
+  },
+
+  async weatherHealthBackfill(params: {
+    eventId: number;
+    missingOnly?: boolean;
+  }): Promise<WeatherHealthBackfillResponse> {
+    return parityRequest<WeatherHealthBackfillResponse>('/parity.php?action=weatherHealthBackfill', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async weatherHealthRebuild(eventId: number): Promise<WeatherHealthRebuildResponse> {
+    return parityRequest<WeatherHealthRebuildResponse>('/parity.php?action=weatherHealthRebuild', {
+      method: 'POST',
+      body: JSON.stringify({ eventId }),
+    });
+  },
+
+  async updateTrackCoords(params: {
+    trackId: number;
+    latitude: number;
+    longitude: number;
+  }): Promise<{ ok: boolean; trackId: number; latitude: number; longitude: number }> {
+    return parityRequest<{ ok: boolean; trackId: number; latitude: number; longitude: number }>(
+      '/parity.php?action=updateTrackCoords',
+      { method: 'POST', body: JSON.stringify(params) },
+    );
+  },
+
+  // ── Weather Timeseries ──────────────────────────────────────────────
+
+  async weatherTimeseries(params: { eventId: number; startUtc?: string; endUtc?: string }): Promise<WeatherTimeseriesResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'weatherTimeseries');
+    qs.set('eventId', String(params.eventId));
+    if (params.startUtc) qs.set('startUtc', params.startUtc);
+    if (params.endUtc) qs.set('endUtc', params.endUtc);
+    return parityRequest<WeatherTimeseriesResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Parity By Combo ────────────────────────────────────────────────
+
+  async parityByCombo(params: {
+    eventId: number;
+    classIndex: string;
+    metric?: string;
+    mode?: 'raw' | 'corrected';
+    topN?: number;
+    sessionScope?: 'qual' | 'elim' | 'both';
+    includeFlagged?: boolean;
+    includeUnknown?: boolean;
+  }): Promise<ParityByComboResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'parityByCombo');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.mode) qs.set('mode', params.mode);
+    if (params.topN) qs.set('topN', String(params.topN));
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.includeFlagged) qs.set('includeFlagged', '1');
+    if (params.includeUnknown) qs.set('includeUnknown', '1');
+    return parityRequest<ParityByComboResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Split Parity Endpoints (fast load) ─────────────────────────────
+
+  async paritySummary(params: {
+    eventId: number;
+    classIndex: string;
+    metric?: string;
+    mode?: 'raw' | 'corrected';
+    topN?: number;
+    sessionScope?: 'qual' | 'elim' | 'both';
+    includeFlagged?: boolean;
+    includeUnknown?: boolean;
+  }): Promise<ParitySummaryResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'paritySummary');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.mode) qs.set('mode', params.mode);
+    if (params.topN) qs.set('topN', String(params.topN));
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.includeFlagged) qs.set('includeFlagged', '1');
+    if (params.includeUnknown) qs.set('includeUnknown', '1');
+    return parityRequest<ParitySummaryResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async parityDeltas(params: {
+    eventId: number;
+    classIndex: string;
+    metric?: string;
+    mode?: 'raw' | 'corrected';
+    topN?: number;
+    sessionScope?: 'qual' | 'elim' | 'both';
+    includeUnknown?: boolean;
+  }): Promise<ParityDeltasResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'parityDeltas');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.mode) qs.set('mode', params.mode);
+    if (params.topN) qs.set('topN', String(params.topN));
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.includeUnknown) qs.set('includeUnknown', '1');
+    return parityRequest<ParityDeltasResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async parityAllRuns(params: {
+    eventId: number;
+    classIndex: string;
+    metric?: string;
+    mode?: 'raw' | 'corrected';
+    sessionScope?: 'qual' | 'elim' | 'both';
+    page?: number;
+    pageSize?: number;
+    driverSearch?: string;
+  }): Promise<ParityAllRunsResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'parityAllRuns');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.mode) qs.set('mode', params.mode);
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.driverSearch) qs.set('driverSearch', params.driverSearch);
+    return parityRequest<ParityAllRunsResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async parityQualOrder(params: {
+    eventId: number;
+    classIndex: string;
+    metric?: string;
+    mode?: 'raw' | 'corrected';
+    sessionScope?: 'qual' | 'elim' | 'both';
+  }): Promise<ParityQualOrderResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'parityQualOrder');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.mode) qs.set('mode', params.mode);
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    return parityRequest<ParityQualOrderResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async parityIncrementals(params: {
+    eventId: number;
+    classIndex: string;
+    sessionScope?: 'qual' | 'elim' | 'both';
+    includeFlagged?: boolean;
+    includeUnknown?: boolean;
+  }): Promise<ParityIncrementalsResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'parityIncrementals');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.includeFlagged) qs.set('includeFlagged', '1');
+    if (params.includeUnknown) qs.set('includeUnknown', '1');
+    return parityRequest<ParityIncrementalsResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async paritySessionWeather(params: {
+    eventId: number;
+    classIndex: string;
+  }): Promise<ParitySessionWeatherResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'paritySessionWeather');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    return parityRequest<ParitySessionWeatherResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async rangeParityMatrix(params: {
+    classIndex: string;
+    metric?: string;
+    mode?: 'raw' | 'corrected';
+    topN?: number;
+    sessionScope?: 'qual' | 'elim' | 'both';
+    year?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<RangeParityMatrixResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'rangeParityMatrix');
+    qs.set('classIndex', params.classIndex);
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.mode) qs.set('mode', params.mode);
+    if (params.topN) qs.set('topN', String(params.topN));
+    if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.year) qs.set('year', String(params.year));
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    return parityRequest<RangeParityMatrixResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async importStationCsv(params: {
+    rows: StationCsvImportRow[];
+    bufferHours?: number;
+    source?: string;
+    rebuildCanonical?: boolean;
+    previewOnly?: boolean;
+  }): Promise<StationCsvImportResponse> {
+    return parityRequest<StationCsvImportResponse>('/parity.php?action=importStationCsv', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  // ── Track Coord Coverage + Batch Backfill ──────────────────────────
+
+  async trackCoordCoverage(yearFrom = 2021, yearTo = 2024): Promise<TrackCoordCoverageResponse> {
+    return parityRequest<TrackCoordCoverageResponse>(
+      `/parity.php?action=trackCoordCoverage&yearFrom=${yearFrom}&yearTo=${yearTo}`,
+    );
+  },
+
+  async bulkUpdateTrackCoords(tracks: { trackId: number; latitude: number; longitude: number }[]): Promise<BulkUpdateTrackCoordsResponse> {
+    return parityRequest<BulkUpdateTrackCoordsResponse>('/parity.php?action=bulkUpdateTrackCoords', {
+      method: 'POST',
+      body: JSON.stringify({ tracks }),
+    });
+  },
+
+  async batchWeatherBackfill(params: {
+    yearFrom: number;
+    yearTo: number;
+    maxCoveragePct?: number;
+    dryRun?: boolean;
+  }): Promise<BatchWeatherBackfillResponse> {
+    return parityRequest<BatchWeatherBackfillResponse>('/parity.php?action=batchWeatherBackfill', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 };
