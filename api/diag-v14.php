@@ -7,7 +7,9 @@ echo "Starting diag-v14...\n";
 
 try {
     require_once __DIR__ . '/config.php';
-    echo "Config loaded OK. PDO class: " . get_class($pdo) . "\n";
+    require_once __DIR__ . '/functions.php';
+    $pdo = getDB();
+    echo "Config loaded OK. PDO connected.\n";
 } catch (Throwable $e) {
     echo "Config error: " . $e->getMessage() . "\n";
     exit(1);

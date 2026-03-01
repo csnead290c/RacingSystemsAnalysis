@@ -19,6 +19,8 @@ error_reporting(E_ALL);
 header('Content-Type: text/plain');
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/functions.php';
+$pdo = getDB();
 
 echo "=== Migration v14: run_time_local ===\n\n";
 flush();
