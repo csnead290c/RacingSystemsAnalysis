@@ -376,6 +376,10 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleBatchWeatherBackfill($pdo, $auth);
         break;
+    case 'backfillRunUtcFromLocal':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleBackfillRunUtcFromLocal($pdo, $auth);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -471,12 +475,28 @@ function handleIngest(PDO $pdo, int $userId): void {
     $stmt->execute([$importUuid, $raceLookup, $requestedAt, $fetchedAt, count($rows), $sourceUrl, $userId]);
     $importId = (int)$pdo->lastInsertId();
 
+    // Look up track timezone for this raceLookup so we can convert local→UTC.
+    // If no event is linked yet, fall back to America/New_York.
+    $trackTz = 'America/New_York';
+    $tzStmt = $pdo->prepare("
+        SELECT t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.race_lookup = ?
+        LIMIT 1
+    ");
+    $tzStmt->execute([$raceLookup]);
+    $tzRow = $tzStmt->fetch(PDO::FETCH_ASSOC);
+    if ($tzRow && !empty($tzRow['timezone_iana'])) {
+        $trackTz = $tzRow['timezone_iana'];
+    }
+
     // Prepare statements
     // NOTE: parity_runs_raw INSERT removed in v7 optimization — raw JSON was redundant
     // Dedup handled by parity_runs unique index uk_pr_race_hash(race_lookup, row_hash)
     $stmtRun = $pdo->prepare("
-        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $rowsInserted = 0;
@@ -486,13 +506,19 @@ function handleIngest(PDO $pdo, int $userId): void {
         $normalized = parity_normalizeRow($raw, $raceLookup);
         $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
 
+        // The normalizer returns local wall-clock time in 'run_timestamp_utc' (legacy key).
+        // We now store it correctly in run_time_local and compute true UTC.
+        $localTime = $normalized['run_timestamp_utc']; // This is actually local time
+        $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
+
         // Insert normalized row (skip if duplicate race_lookup + row_hash)
         try {
             $stmtRun->execute([
                 parity_generateUUID(),
                 $importId,
                 $raceLookup,
-                $normalized['run_timestamp_utc'],
+                $utcTime,
+                $localTime,
                 $normalized['category'],
                 $normalized['class_index'],
                 $normalized['round'],
@@ -6906,9 +6932,9 @@ function handleParitySessionWeather(PDO $pdo): void {
     if ($eventId <= 0) rsa_jsonResponse(['error' => 'eventId is required'], 400);
     if ($classIndex === '') rsa_jsonResponse(['error' => 'classIndex is required'], 400);
 
-    // Load event
+    // Load event + track timezone
     $evStmt = $pdo->prepare("
-        SELECT e.id, e.event_name, e.race_lookup, t.latitude, t.longitude
+        SELECT e.id, e.event_name, e.race_lookup, t.latitude, t.longitude, t.timezone_iana
         FROM parity_events e
         JOIN parity_tracks t ON t.id = e.track_id
         WHERE e.id = ?
@@ -6918,14 +6944,15 @@ function handleParitySessionWeather(PDO $pdo): void {
     if (!$event) rsa_jsonResponse(['error' => 'Event not found'], 404);
     $raceLookup = $event['race_lookup'];
     if (!$raceLookup) rsa_jsonResponse(['error' => 'Event has no race_lookup'], 400);
+    $trackTz = $event['timezone_iana'] ?? 'America/New_York';
 
     $classIndices = parity_expandClassIndex($pdo, $classIndex);
     $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
 
-    // Fetch runs with timestamps and rounds
+    // Fetch runs with timestamps, rounds, and local time
     $params = array_merge([$raceLookup], $classIndices);
     $runStmt = $pdo->prepare("
-        SELECT r.run_timestamp_utc, r.round
+        SELECT r.run_timestamp_utc, r.run_time_local, r.round
         FROM parity_runs r
         WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
           AND COALESCE(r.dq_flag, 0) = 0
@@ -6936,29 +6963,48 @@ function handleParitySessionWeather(PDO $pdo): void {
     $runStmt->execute($params);
     $runs = $runStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Weather lookup
+    // Weather lookup — returns offset_seconds for diagnostics
     $weatherWindow = 30;
     $stmtWeather = $pdo->prepare("
-        SELECT wc.temp_f, wc.rh_pct, wc.pressure_inhg
+        SELECT wc.temp_f, wc.rh_pct, wc.pressure_inhg,
+               ABS(TIMESTAMPDIFF(SECOND, wc.timestamp_utc, ?)) AS offset_seconds
         FROM parity_weather_canonical wc
         WHERE wc.timestamp_utc BETWEEN DATE_SUB(?, INTERVAL ? MINUTE) AND DATE_ADD(?, INTERVAL ? MINUTE)
         ORDER BY ABS(TIMESTAMPDIFF(SECOND, wc.timestamp_utc, ?)) ASC LIMIT 1
     ");
 
-    // Group weather by session (round)
-    $sessionData = []; // round => [{temp, rh, press}]
+    // Group weather by session (round), track offsets and local times
+    $sessionData = []; // round => [{temp, rh, press, offset_s}]
+    $sessionLocalTimes = []; // round => [local_time strings]
+    $totalRuns = count($runs);
+    $matchedRuns = 0;
+    $allOffsets = [];
+
     foreach ($runs as $run) {
         $round = $run['round'];
         $ts = $run['run_timestamp_utc'];
-        $stmtWeather->execute([$ts, $weatherWindow, $ts, $weatherWindow, $ts]);
+        $stmtWeather->execute([$ts, $ts, $weatherWindow, $ts, $weatherWindow, $ts]);
         $wx = $stmtWeather->fetch(PDO::FETCH_ASSOC);
+
+        // Track local time for session label hints
+        $localTime = $run['run_time_local'] ?? parity_utcToLocal($ts, $trackTz);
+        if ($localTime) {
+            if (!isset($sessionLocalTimes[$round])) $sessionLocalTimes[$round] = [];
+            $sessionLocalTimes[$round][] = $localTime;
+        }
+
         if (!$wx || $wx['temp_f'] === null || $wx['rh_pct'] === null || $wx['pressure_inhg'] === null) continue;
+
+        $matchedRuns++;
+        $offsetS = (int)$wx['offset_seconds'];
+        $allOffsets[] = $offsetS;
 
         if (!isset($sessionData[$round])) $sessionData[$round] = [];
         $sessionData[$round][] = [
             'temp_f' => (float)$wx['temp_f'],
             'rh_pct' => (float)$wx['rh_pct'],
             'pressure_inhg' => (float)$wx['pressure_inhg'],
+            'offset_s' => $offsetS,
         ];
     }
 
@@ -6980,10 +7026,9 @@ function handleParitySessionWeather(PDO $pdo): void {
         $avgTemp = array_sum(array_column($samples, 'temp_f')) / $n;
         $avgRH = array_sum(array_column($samples, 'rh_pct')) / $n;
         $avgPress = array_sum(array_column($samples, 'pressure_inhg')) / $n;
+        $avgOffset = array_sum(array_column($samples, 'offset_s')) / $n;
 
         // Density altitude calculation (ft)
-        // Standard: DA = 145442 * (1 - (17.326 * P / (459.67 + T))^0.235)
-        // Using simplified formula with vapor pressure correction
         $T = $avgTemp;
         $H = $avgRH / 100;
         $BP = $avgPress;
@@ -6992,13 +7037,21 @@ function handleParitySessionWeather(PDO $pdo): void {
         $delta = $dap / 29.92;
         $theta = ($T + 459.67) / 519.67;
 
-        // DA from station pressure and temp: DA ≈ 145442 * (1 − (delta/theta)^0.235) simplified
-        // More practical: use standard atmosphere formula
         $stationPressAlt = (1 - pow($BP / 29.921, 0.190284)) * 145442;
         $densityAlt = round($stationPressAlt + (120 * ($T - (59 - 0.00356 * $stationPressAlt))), 0);
 
-        // HPC (horsepower correction factor) — use standard TF params as reference
+        // HPC (horsepower correction factor)
         $hpc = (1 + 0 / 100) * (pow($theta, 1.8) / pow($delta, 0.95)) - 0 / 100;
+
+        // Local time window for this session
+        $localTimeHint = null;
+        if (!empty($sessionLocalTimes[$round])) {
+            $times = $sessionLocalTimes[$round];
+            sort($times);
+            $first = substr($times[0], 11, 5); // HH:MM
+            $last = substr(end($times), 11, 5);
+            $localTimeHint = ($first === $last) ? $first : "$first–$last";
+        }
 
         $rows[] = [
             'session' => $round,
@@ -7008,13 +7061,28 @@ function handleParitySessionWeather(PDO $pdo): void {
             'pressure_inhg' => round($avgPress, 3),
             'density_alt_ft' => (int)$densityAlt,
             'hpc' => round($hpc, 4),
+            'avgOffsetMin' => round($avgOffset / 60, 1),
+            'localTimeHint' => $localTimeHint,
         ];
     }
+
+    // Weather match confidence stats
+    $pctMatched = $totalRuns > 0 ? round(100 * $matchedRuns / $totalRuns, 1) : null;
+    $avgOffsetMin = count($allOffsets) > 0 ? round((array_sum($allOffsets) / count($allOffsets)) / 60, 1) : null;
+    $maxOffsetMin = count($allOffsets) > 0 ? round(max($allOffsets) / 60, 1) : null;
 
     rsa_jsonResponse([
         'eventId' => $eventId,
         'classIndex' => $classIndex,
+        'trackTimezone' => $trackTz,
         'sessions' => $rows,
+        'weatherConfidence' => [
+            'totalRuns' => $totalRuns,
+            'matchedRuns' => $matchedRuns,
+            'pctMatched' => $pctMatched,
+            'avgOffsetMin' => $avgOffsetMin,
+            'maxOffsetMin' => $maxOffsetMin,
+        ],
     ]);
 }
 
@@ -8019,5 +8087,139 @@ function handleBatchWeatherBackfill(PDO $pdo, array $auth): void {
         'maxCoveragePct' => $maxCoveragePct,
         'totals' => $totals,
         'events' => $results,
+    ]);
+}
+
+// ============================================================================
+// POST ?action=backfillRunUtcFromLocal
+// Body: { "eventId": N } or { "yearFrom": 2024, "yearTo": 2025 } or { "all": true }
+//
+// Fixes historical runs where run_timestamp_utc actually contains local time.
+// For each run:
+//   1. If run_time_local is NULL, copy current run_timestamp_utc → run_time_local
+//      (since it was really local time all along).
+//   2. Recompute run_timestamp_utc = parity_localToUtc(run_time_local, track_tz).
+//
+// Admin-only. Returns counts of updated, skipped, errors.
+// ============================================================================
+
+function handleBackfillRunUtcFromLocal(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+    $input = rsa_getJsonInput();
+
+    $eventId = isset($input['eventId']) ? (int)$input['eventId'] : null;
+    $yearFrom = isset($input['yearFrom']) ? (int)$input['yearFrom'] : null;
+    $yearTo = isset($input['yearTo']) ? (int)$input['yearTo'] : null;
+    $all = (bool)($input['all'] ?? false);
+    $dryRun = (bool)($input['dryRun'] ?? false);
+
+    if (!$eventId && !$yearFrom && !$all) {
+        rsa_jsonResponse(['error' => 'Provide eventId, yearFrom/yearTo, or all=true'], 400);
+    }
+
+    // Build list of events with their track timezone
+    $where = '';
+    $params = [];
+    if ($eventId) {
+        $where = 'WHERE e.id = ?';
+        $params = [$eventId];
+    } elseif ($yearFrom) {
+        $yTo = $yearTo ?? $yearFrom;
+        $where = 'WHERE YEAR(e.start_date_local) BETWEEN ? AND ?';
+        $params = [$yearFrom, $yTo];
+    }
+
+    $evStmt = $pdo->prepare("
+        SELECT e.id, e.event_name, e.race_lookup, t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        $where
+        ORDER BY e.start_date_local ASC
+    ");
+    $evStmt->execute($params);
+    $events = $evStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($events)) {
+        rsa_jsonResponse(['ok' => true, 'message' => 'No events found for criteria', 'updated' => 0]);
+        return;
+    }
+
+    $stmtFetchRuns = $pdo->prepare("
+        SELECT id, run_timestamp_utc, run_time_local
+        FROM parity_runs
+        WHERE race_lookup = ? AND run_timestamp_utc IS NOT NULL
+    ");
+
+    $stmtUpdate = $pdo->prepare("
+        UPDATE parity_runs SET run_time_local = ?, run_timestamp_utc = ? WHERE id = ?
+    ");
+
+    $totals = ['events' => 0, 'runs_scanned' => 0, 'updated' => 0, 'skipped_no_ts' => 0, 'errors' => 0];
+    $eventResults = [];
+
+    foreach ($events as $ev) {
+        $tz = $ev['timezone_iana'] ?? 'America/New_York';
+        $stmtFetchRuns->execute([$ev['race_lookup']]);
+        $runs = $stmtFetchRuns->fetchAll(PDO::FETCH_ASSOC);
+
+        $evUpdated = 0;
+        $evSkipped = 0;
+        $evErrors = 0;
+        $sampleBefore = null;
+        $sampleAfter = null;
+
+        foreach ($runs as $run) {
+            $totals['runs_scanned']++;
+
+            // If run_time_local is already populated, use it as the source of truth.
+            // Otherwise, the current run_timestamp_utc IS the local time (historical bug).
+            $localTime = $run['run_time_local'] ?? $run['run_timestamp_utc'];
+
+            if ($localTime === null) {
+                $evSkipped++;
+                $totals['skipped_no_ts']++;
+                continue;
+            }
+
+            $utcTime = parity_localToUtc($localTime, $tz);
+            if ($utcTime === null) {
+                $evErrors++;
+                $totals['errors']++;
+                continue;
+            }
+
+            // Capture a sample for diagnostics
+            if ($sampleBefore === null) {
+                $sampleBefore = $run['run_timestamp_utc'];
+                $sampleAfter = $utcTime;
+            }
+
+            if (!$dryRun) {
+                $stmtUpdate->execute([$localTime, $utcTime, $run['id']]);
+            }
+            $evUpdated++;
+        }
+
+        $totals['events']++;
+        $totals['updated'] += $evUpdated;
+
+        $eventResults[] = [
+            'eventId' => (int)$ev['id'],
+            'event' => $ev['event_name'],
+            'tz' => $tz,
+            'runsScanned' => count($runs),
+            'updated' => $evUpdated,
+            'skipped' => $evSkipped,
+            'errors' => $evErrors,
+            'sampleBefore' => $sampleBefore,
+            'sampleAfter' => $sampleAfter,
+        ];
+    }
+
+    rsa_jsonResponse([
+        'ok' => true,
+        'dryRun' => $dryRun,
+        'totals' => $totals,
+        'events' => $eventResults,
     ]);
 }

@@ -910,6 +910,31 @@ export interface BatchWeatherBackfillResponse {
   events: BatchWeatherBackfillEvent[];
 }
 
+export interface BackfillRunUtcEventResult {
+  eventId: number;
+  event: string;
+  tz: string;
+  runsScanned: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  sampleBefore: string | null;
+  sampleAfter: string | null;
+}
+
+export interface BackfillRunUtcResponse {
+  ok: boolean;
+  dryRun: boolean;
+  totals: {
+    events: number;
+    runs_scanned: number;
+    updated: number;
+    skipped_no_ts: number;
+    errors: number;
+  };
+  events: BackfillRunUtcEventResult[];
+}
+
 // ── Weather Timeseries Types ────────────────────────────────────────────
 
 export interface WeatherTimeseriesPoint {
@@ -1163,12 +1188,24 @@ export interface ParitySessionWeatherRow {
   pressure_inhg: number;
   density_alt_ft: number;
   hpc: number;
+  avgOffsetMin?: number | null;
+  localTimeHint?: string | null;
+}
+
+export interface WeatherConfidence {
+  totalRuns: number;
+  matchedRuns: number;
+  pctMatched: number | null;
+  avgOffsetMin: number | null;
+  maxOffsetMin: number | null;
 }
 
 export interface ParitySessionWeatherResponse {
   eventId: number;
   classIndex: string;
+  trackTimezone?: string;
   sessions: ParitySessionWeatherRow[];
+  weatherConfidence?: WeatherConfidence;
 }
 
 // ── Range Parity Matrix Types ────────────────────────────────────────────
@@ -2055,6 +2092,19 @@ export const parityApi = {
     dryRun?: boolean;
   }): Promise<BatchWeatherBackfillResponse> {
     return parityRequest<BatchWeatherBackfillResponse>('/parity.php?action=batchWeatherBackfill', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async backfillRunUtcFromLocal(params: {
+    eventId?: number;
+    yearFrom?: number;
+    yearTo?: number;
+    all?: boolean;
+    dryRun?: boolean;
+  }): Promise<BackfillRunUtcResponse> {
+    return parityRequest<BackfillRunUtcResponse>('/parity.php?action=backfillRunUtcFromLocal', {
       method: 'POST',
       body: JSON.stringify(params),
     });

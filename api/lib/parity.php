@@ -271,24 +271,86 @@ function parity_parseBool(mixed $value): ?int {
 }
 
 /**
- * Parse a timestamp string into MySQL DATETIME format, or null.
+ * Parse a raw NHRA OData timestamp into EVENT-LOCAL wall-clock datetime.
+ *
+ * NHRA timing system timestamps represent local time at the track, NOT UTC.
+ * The /Date(epoch_ms)/ format from NHRA OData is non-standard: the epoch
+ * value encodes local wall-clock time (as if the track were in GMT).
+ *
+ * We use gmdate() to extract the datetime digits without any server-timezone
+ * interference, since the epoch value itself represents local time.
+ *
+ * @param mixed $value  Raw OData timestamp value
+ * @return string|null  "Y-m-d H:i:s" in event-local time, or null
  */
-function parity_parseTimestamp(mixed $value): ?string {
+function parity_parseTimestampLocal(mixed $value): ?string {
     if ($value === null || $value === '') return null;
     $s = (string)$value;
 
     // OData v2 date format: /Date(1234567890000)/
-    if (preg_match('#/Date\((\d+)\)/#', $s, $m)) {
-        return date('Y-m-d H:i:s', (int)($m[1] / 1000));
+    // NHRA encodes local wall-clock time as epoch ms (non-standard).
+    // Use gmdate to extract digits without server-tz interference.
+    if (preg_match('#/Date\((-?\d+)\)/#', $s, $m)) {
+        return gmdate('Y-m-d H:i:s', (int)($m[1] / 1000));
     }
 
-    // Try standard parsing
-    $ts = strtotime($s);
+    // ISO 8601 with explicit offset — strip offset, keep wall-clock digits.
+    // e.g. "2025-10-30T14:30:00-04:00" → "2025-10-30 14:30:00"
+    if (preg_match('/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/', $s, $m)) {
+        return $m[1] . ' ' . $m[2];
+    }
+
+    // Bare datetime string — take as-is (already local).
+    // Use strtotime with UTC anchor to avoid server-tz interference.
+    $ts = strtotime($s . ' UTC');
     if ($ts !== false) {
-        return date('Y-m-d H:i:s', $ts);
+        return gmdate('Y-m-d H:i:s', $ts);
     }
 
     return null;
+}
+
+/**
+ * Backward-compat wrapper. Returns local time (same as parity_parseTimestampLocal).
+ * @deprecated Use parity_parseTimestampLocal() instead.
+ */
+function parity_parseTimestamp(mixed $value): ?string {
+    return parity_parseTimestampLocal($value);
+}
+
+/**
+ * Convert a UTC datetime string to track-local time using an IANA timezone.
+ *
+ * @param string|null $utcDatetime  MySQL DATETIME in UTC (e.g. "2025-10-30 18:30:00")
+ * @param string      $tzIana       IANA timezone (e.g. "America/New_York")
+ * @return string|null  Local datetime string "Y-m-d H:i:s" or null
+ */
+function parity_utcToLocal(?string $utcDatetime, string $tzIana): ?string {
+    if ($utcDatetime === null || $utcDatetime === '') return null;
+    try {
+        $dt = new DateTimeImmutable($utcDatetime, new DateTimeZone('UTC'));
+        return $dt->setTimezone(new DateTimeZone($tzIana))->format('Y-m-d H:i:s');
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+/**
+ * Convert a local datetime string to UTC using an IANA timezone.
+ * Handles DST transitions correctly via PHP's DateTimeImmutable.
+ *
+ * @param string|null $localDatetime  MySQL DATETIME in local time
+ * @param string      $tzIana         IANA timezone (e.g. "America/Los_Angeles")
+ * @return string|null  UTC datetime string "Y-m-d H:i:s" or null
+ */
+function parity_localToUtc(?string $localDatetime, string $tzIana): ?string {
+    if ($localDatetime === null || $localDatetime === '') return null;
+    try {
+        $dt = new DateTimeImmutable($localDatetime, new DateTimeZone($tzIana));
+        return $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    } catch (Exception $e) {
+        return null;
+    }
 }
 
 // ============================================================================

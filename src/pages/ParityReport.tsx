@@ -357,30 +357,53 @@ function IncrementalsTable({ data }: { data: ParityIncrementalsResponse }) {
   );
 }
 
+function WeatherConfidenceBanner({ data }: { data: ParitySessionWeatherResponse }) {
+  const wc = data.weatherConfidence;
+  if (!wc) return null;
+  const warn = (wc.avgOffsetMin != null && wc.avgOffsetMin > 20) || (wc.maxOffsetMin != null && wc.maxOffsetMin > 60);
+  return (
+    <div style={{ fontSize: '0.65rem', padding: '0.3rem 0.5rem', marginBottom: '0.35rem', borderRadius: 4,
+      background: warn ? '#fef2f2' : 'var(--color-bg)', border: warn ? '1px solid #fca5a5' : '1px solid var(--color-border)',
+      color: warn ? '#991b1b' : 'var(--color-muted)' }}>
+      <strong>Weather Match:</strong>{' '}
+      {wc.pctMatched != null ? `${wc.pctMatched}% runs matched` : 'N/A'}{' · '}
+      avg offset {wc.avgOffsetMin != null ? `${wc.avgOffsetMin} min` : '—'}{' · '}
+      max offset {wc.maxOffsetMin != null ? `${wc.maxOffsetMin} min` : '—'}
+      {warn && <span style={{ fontWeight: 700, marginLeft: 6 }}>⚠ Timezone mismatch likely — run backfillRunUtcFromLocal</span>}
+    </div>
+  );
+}
+
 function WeatherTable({ data }: { data: ParitySessionWeatherResponse }) {
   if (data.sessions.length === 0) return <p style={S.hint}>No weather data.</p>;
   return (
-    <table style={S.tbl}>
-      <thead><tr>
-        <th style={S.th}>Session</th><th style={{ ...S.th, textAlign: 'right' }}>Temp °F</th>
-        <th style={{ ...S.th, textAlign: 'right' }}>RH %</th><th style={{ ...S.th, textAlign: 'right' }}>Baro inHg</th>
-        <th style={{ ...S.th, textAlign: 'right' }}>DA ft</th><th style={{ ...S.th, textAlign: 'right' }}>HPC</th>
-        <th style={{ ...S.th, textAlign: 'right' }}>Runs</th>
-      </tr></thead>
-      <tbody>
-        {data.sessions.map(s => (
-          <tr key={s.session}>
-            <td style={{ ...S.td, fontWeight: 600 }}>{s.session}</td>
-            <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.temp_f.toFixed(1)}</td>
-            <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.rh_pct.toFixed(1)}</td>
-            <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.pressure_inhg.toFixed(3)}</td>
-            <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.density_alt_ft}</td>
-            <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.hpc.toFixed(4)}</td>
-            <td style={{ ...S.td, textAlign: 'right' }}>{s.runCount}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <WeatherConfidenceBanner data={data} />
+      <table style={S.tbl}>
+        <thead><tr>
+          <th style={S.th}>Session</th><th style={{ ...S.th, textAlign: 'right' }}>Temp °F</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>RH %</th><th style={{ ...S.th, textAlign: 'right' }}>Baro inHg</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>DA ft</th><th style={{ ...S.th, textAlign: 'right' }}>HPC</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>Runs</th>
+        </tr></thead>
+        <tbody>
+          {data.sessions.map(s => (
+            <tr key={s.session}>
+              <td style={{ ...S.td, fontWeight: 600 }}>
+                {s.session}
+                {s.localTimeHint && <span style={{ fontWeight: 400, fontSize: '0.58rem', color: '#888', marginLeft: 4 }}>({s.localTimeHint})</span>}
+              </td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.temp_f.toFixed(1)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.rh_pct.toFixed(1)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.pressure_inhg.toFixed(3)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.density_alt_ft}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.hpc.toFixed(4)}</td>
+              <td style={{ ...S.td, textAlign: 'right' }}>{s.runCount}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }
 
