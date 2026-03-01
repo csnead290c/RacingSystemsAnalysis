@@ -380,6 +380,14 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleBackfillRunUtcFromLocal($pdo, $auth);
         break;
+    case 'listOrphanRuns':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleListOrphanRuns($pdo, $auth);
+        break;
+    case 'timeSmokeTest':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleTimeSmokeTest($pdo, $auth);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -639,13 +647,13 @@ function handleQueryRuns(PDO $pdo): void {
     $params[] = $offset;
 
     $stmt = $pdo->prepare("
-        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.category, r.class_index, r.round, r.lane,
+        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local, r.category, r.class_index, r.round, r.lane,
                r.driver_name, r.car_number, r.dial_in, r.rt, r.ft60, r.ft330, r.ft660, r.mph660,
                r.ft1000, r.mph1000, r.ft1320, r.mph1320, r.win_flag, r.dq_flag, r.mov, r.place,
                r.source_ref, r.created_at
         FROM parity_runs r
         WHERE $whereClause
-        ORDER BY COALESCE(r.run_timestamp_utc, r.created_at) ASC
+        ORDER BY COALESCE(r.run_time_local, r.run_timestamp_utc, r.created_at) ASC
         LIMIT ? OFFSET ?
     ");
     $stmt->execute($params);
@@ -1256,9 +1264,23 @@ function handleIngestMany(PDO $pdo, int $userId, array $auth): void {
         ")->execute([$importUuid, $raceLookup, $requestedAt, $fetchedAt, count($rows), $sourceUrl, $userId]);
         $importId = (int)$pdo->lastInsertId();
 
+        // ── Timezone: NHRA timestamps are event-local wall-clock time. ──
+        // Look up track timezone so we can compute true UTC for weather joins.
+        $trackTz = 'America/New_York'; // fallback
+        $tzStmt = $pdo->prepare("
+            SELECT t.timezone_iana FROM parity_events e
+            JOIN parity_tracks t ON t.id = e.track_id
+            WHERE e.race_lookup = ? LIMIT 1
+        ");
+        $tzStmt->execute([$raceLookup]);
+        $tzRow = $tzStmt->fetch(PDO::FETCH_ASSOC);
+        if ($tzRow && !empty($tzRow['timezone_iana'])) {
+            $trackTz = $tzRow['timezone_iana'];
+        }
+
         $stmtRun = $pdo->prepare("
-            INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $inserted = 0;
@@ -1266,10 +1288,15 @@ function handleIngestMany(PDO $pdo, int $userId, array $auth): void {
         foreach ($rows as $raw) {
             $normalized = parity_normalizeRow($raw, $raceLookup);
             $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
+            // normalizer returns local wall-clock time in 'run_timestamp_utc' (legacy key name).
+            // Store local in run_time_local; compute true UTC for weather joins.
+            $localTime = $normalized['run_timestamp_utc'];
+            $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
             try {
                 $stmtRun->execute([
                     parity_generateUUID(), $importId, $raceLookup,
-                    $normalized['run_timestamp_utc'], $normalized['category'], $normalized['class_index'],
+                    $utcTime, $localTime,
+                    $normalized['category'], $normalized['class_index'],
                     $normalized['round'], $normalized['lane'], $normalized['driver_name'],
                     $normalized['car_number'], $normalized['dial_in'], $normalized['rt'],
                     $normalized['ft60'], $normalized['ft330'], $normalized['ft660'], $normalized['mph660'],
@@ -1766,15 +1793,15 @@ function handleRunsWithWeather(PDO $pdo): void {
 
     $whereClause = implode(' AND ', $where);
 
-    // Query runs
+    // Query runs — include run_time_local for UI display
     $stmt = $pdo->prepare("
-        SELECT r.uuid, r.race_lookup, r.run_timestamp_utc, r.category, r.class_index,
+        SELECT r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local, r.category, r.class_index,
                r.round, r.lane, r.driver_name, r.car_number, r.dial_in, r.rt,
                r.ft60, r.ft330, r.ft660, r.mph660, r.ft1000, r.mph1000,
                r.ft1320, r.mph1320, r.win_flag, r.dq_flag, r.mov, r.place, r.source_ref
         FROM parity_runs r
         WHERE $whereClause
-        ORDER BY COALESCE(r.run_timestamp_utc, r.created_at) ASC
+        ORDER BY COALESCE(r.run_time_local, r.run_timestamp_utc, r.created_at) ASC
         LIMIT $limit OFFSET $offset
     ");
     $stmt->execute($params);
@@ -2378,9 +2405,23 @@ function handleIngestEventRuns(PDO $pdo, int $userId, array $auth): void {
     $stmt->execute([$importUuid, $raceLookup, $requestedAt, $fetchedAt, count($rows), $sourceUrl, $userId]);
     $importId = (int)$pdo->lastInsertId();
 
+    // ── Timezone: NHRA timestamps are event-local wall-clock time. ──
+    // Look up track timezone so we can compute true UTC for weather joins.
+    $trackTz = 'America/New_York'; // fallback
+    $tzStmt = $pdo->prepare("
+        SELECT t.timezone_iana FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.race_lookup = ? LIMIT 1
+    ");
+    $tzStmt->execute([$raceLookup]);
+    $tzRow = $tzStmt->fetch(PDO::FETCH_ASSOC);
+    if ($tzRow && !empty($tzRow['timezone_iana'])) {
+        $trackTz = $tzRow['timezone_iana'];
+    }
+
     $stmtRun = $pdo->prepare("
-        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $rowsInserted = 0;
@@ -2389,10 +2430,15 @@ function handleIngestEventRuns(PDO $pdo, int $userId, array $auth): void {
     foreach ($rows as $raw) {
         $normalized = parity_normalizeRow($raw, $raceLookup);
         $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
+        // normalizer returns local wall-clock time in 'run_timestamp_utc' (legacy key name).
+        // Store local in run_time_local; compute true UTC for weather joins.
+        $localTime = $normalized['run_timestamp_utc'];
+        $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
         try {
             $stmtRun->execute([
                 parity_generateUUID(), $importId, $raceLookup,
-                $normalized['run_timestamp_utc'], $normalized['category'], $normalized['class_index'],
+                $utcTime, $localTime,
+                $normalized['category'], $normalized['class_index'],
                 $normalized['round'], $normalized['lane'], $normalized['driver_name'], $normalized['car_number'],
                 $normalized['dial_in'], $normalized['rt'], $normalized['ft60'], $normalized['ft330'],
                 $normalized['ft660'], $normalized['mph660'], $normalized['ft1000'], $normalized['mph1000'],
@@ -2614,7 +2660,7 @@ function parity_fetchCorrectedRuns(PDO $pdo, int $eventId, string $classIndex, b
     $whereClause = implode(' AND ', $where);
 
     $sql = "
-        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.class_index,
+        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local, r.class_index,
                r.round, r.lane, r.driver_name, r.car_number, r.dial_in, r.rt,
                r.ft60, r.ft330, r.ft660, r.mph660, r.ft1000, r.mph1000,
                r.ft1320, r.mph1320, r.win_flag, r.dq_flag, r.place
@@ -2626,7 +2672,7 @@ function parity_fetchCorrectedRuns(PDO $pdo, int $eventId, string $classIndex, b
     $stmt->execute($params);
     $runs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Weather join
+    // Weather join — uses run_timestamp_utc (true UTC) to match canonical weather (UTC)
     $stmtW = $pdo->prepare("
         SELECT timestamp_utc, temp_f, rh_pct, pressure_inhg,
                TIMESTAMPDIFF(SECOND, timestamp_utc, ?) AS delta_seconds
@@ -2813,13 +2859,13 @@ function handleQualSheet(PDO $pdo): void {
     $whereClause = implode(' AND ', $where);
 
     $sql = "
-        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.class_index,
+        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local, r.class_index,
                r.round, r.lane, r.driver_name, r.car_number, r.rt,
                r.ft60, r.ft330, r.ft660, r.mph660, r.ft1000, r.mph1000,
                r.ft1320, r.mph1320, r.win_flag, r.dq_flag, r.place
         FROM parity_runs r
         WHERE $whereClause
-        ORDER BY r.run_timestamp_utc ASC
+        ORDER BY COALESCE(r.run_time_local, r.run_timestamp_utc) ASC
     ";
     $stmtRuns = $pdo->prepare($sql);
     $stmtRuns->execute($params);
@@ -2907,7 +2953,10 @@ function handleQualSheet(PDO $pdo): void {
             continue;
         }
 
-        // Sort qualifying runs: ET asc, MPH desc, timestamp asc
+        // Sort qualifying runs: ET asc, MPH desc, local timestamp asc.
+        // Tie-break uses run_time_local (event wall-clock time) — this is the
+        // correct chronological order at the track. UTC ordering would be wrong
+        // if comparing across events in different timezones.
         usort($qualRuns, function ($a, $b) {
             // (1) Lowest ET first
             $etCmp = $a['ft1320'] <=> $b['ft1320'];
@@ -2917,8 +2966,8 @@ function handleQualSheet(PDO $pdo): void {
             $mphB = $b['mph1320'] ?? 0;
             $mphCmp = $mphB <=> $mphA;
             if ($mphCmp !== 0) return $mphCmp;
-            // (3) Earliest timestamp
-            return ($a['run_timestamp_utc'] ?? '') <=> ($b['run_timestamp_utc'] ?? '');
+            // (3) Earliest local timestamp (who ran first at the track)
+            return ($a['run_time_local'] ?? $a['run_timestamp_utc'] ?? '') <=> ($b['run_time_local'] ?? $b['run_timestamp_utc'] ?? '');
         });
 
         $best = $qualRuns[0];
@@ -2951,7 +3000,9 @@ function handleQualSheet(PDO $pdo): void {
             'best_rt' => $best['rt'],
             'best_ft60' => $best['ft60'],
             'best_ft660' => $best['ft660'],
-            'best_timestamp' => $best['run_timestamp_utc'],
+            // Display local time to the user; keep UTC for internal reference
+            'best_timestamp' => $best['run_time_local'] ?? $best['run_timestamp_utc'],
+            'best_timestamp_utc' => $best['run_timestamp_utc'],
             'corrected_best_et' => $correctedET,
             'correction_factor' => $corrFactor !== null ? round($corrFactor, 6) : null,
             'temp_f' => $tempF,
@@ -6949,7 +7000,9 @@ function handleParitySessionWeather(PDO $pdo): void {
     $classIndices = parity_expandClassIndex($pdo, $classIndex);
     $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
 
-    // Fetch runs with timestamps, rounds, and local time
+    // Fetch runs with timestamps, rounds, and local time.
+    // Exclude orphan runs (missing run_time_local) from confidence denominators
+    // — these have unverified UTC timestamps and would poison weather matching.
     $params = array_merge([$raceLookup], $classIndices);
     $runStmt = $pdo->prepare("
         SELECT r.run_timestamp_utc, r.run_time_local, r.round
@@ -6957,8 +7010,9 @@ function handleParitySessionWeather(PDO $pdo): void {
         WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
           AND COALESCE(r.dq_flag, 0) = 0
           AND r.run_timestamp_utc IS NOT NULL
+          AND r.run_time_local IS NOT NULL
           AND r.round IS NOT NULL AND r.round != ''
-        ORDER BY r.round, r.run_timestamp_utc
+        ORDER BY r.round, r.run_time_local
     ");
     $runStmt->execute($params);
     $runs = $runStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -8221,5 +8275,174 @@ function handleBackfillRunUtcFromLocal(PDO $pdo, array $auth): void {
         'dryRun' => $dryRun,
         'totals' => $totals,
         'events' => $eventResults,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=listOrphanRuns
+// Returns runs that lack a valid event→track→timezone path, which means
+// they can't have correct run_timestamp_utc and are excluded from
+// weather confidence calculations.
+// ============================================================================
+function handleListOrphanRuns(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+
+    $limit = min((int)($_GET['limit'] ?? 200), 1000);
+    $offset = max((int)($_GET['offset'] ?? 0), 0);
+
+    // Orphan = no matching event with a track that has timezone_iana,
+    // OR run_time_local IS NULL despite having run_timestamp_utc.
+    $stmt = $pdo->prepare("
+        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local,
+               r.class_index, r.round, r.driver_name,
+               CASE
+                   WHEN e.id IS NULL THEN 'no_event'
+                   WHEN t.id IS NULL THEN 'no_track'
+                   WHEN t.timezone_iana IS NULL OR t.timezone_iana = '' THEN 'no_timezone'
+                   WHEN r.run_time_local IS NULL AND r.run_timestamp_utc IS NOT NULL THEN 'missing_local'
+                   ELSE 'unknown'
+               END AS orphan_reason
+        FROM parity_runs r
+        LEFT JOIN parity_events e ON e.race_lookup = r.race_lookup
+        LEFT JOIN parity_tracks t ON t.id = e.track_id
+        WHERE (
+            e.id IS NULL
+            OR t.id IS NULL
+            OR t.timezone_iana IS NULL OR t.timezone_iana = ''
+            OR (r.run_time_local IS NULL AND r.run_timestamp_utc IS NOT NULL)
+        )
+        ORDER BY r.id DESC
+        LIMIT ? OFFSET ?
+    ");
+    $stmt->execute([$limit, $offset]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Count total orphans
+    $countStmt = $pdo->query("
+        SELECT COUNT(*) FROM parity_runs r
+        LEFT JOIN parity_events e ON e.race_lookup = r.race_lookup
+        LEFT JOIN parity_tracks t ON t.id = e.track_id
+        WHERE (
+            e.id IS NULL
+            OR t.id IS NULL
+            OR t.timezone_iana IS NULL OR t.timezone_iana = ''
+            OR (r.run_time_local IS NULL AND r.run_timestamp_utc IS NOT NULL)
+        )
+    ");
+    $total = (int)$countStmt->fetchColumn();
+
+    rsa_jsonResponse([
+        'total' => $total,
+        'limit' => $limit,
+        'offset' => $offset,
+        'runs' => $rows,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=timeSmokeTest
+// Automated verification: picks events with known weather and reports
+// avg/max offset minutes. Fails loudly if thresholds exceeded.
+// ============================================================================
+function handleTimeSmokeTest(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+
+    $windowMinutes = 30;
+
+    // Pick events that have both runs with timestamps and canonical weather
+    $evStmt = $pdo->query("
+        SELECT e.id, e.event_name, e.race_lookup, t.timezone_iana,
+               (SELECT COUNT(*) FROM parity_runs r WHERE r.race_lookup = e.race_lookup AND r.run_timestamp_utc IS NOT NULL) AS run_count,
+               (SELECT COUNT(*) FROM parity_weather_canonical wc
+                JOIN parity_runs r2 ON r2.race_lookup = e.race_lookup AND r2.run_timestamp_utc IS NOT NULL
+                WHERE ABS(TIMESTAMPDIFF(MINUTE, wc.timestamp_utc, r2.run_timestamp_utc)) <= $windowMinutes
+                LIMIT 1) AS has_weather_match
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE t.timezone_iana IS NOT NULL AND t.timezone_iana != ''
+        HAVING run_count > 50
+        ORDER BY e.start_date_local DESC
+        LIMIT 5
+    ");
+    $events = $evStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmtW = $pdo->prepare("
+        SELECT ABS(TIMESTAMPDIFF(SECOND, wc.timestamp_utc, ?)) AS offset_sec
+        FROM parity_weather_canonical wc
+        WHERE wc.timestamp_utc BETWEEN DATE_SUB(?, INTERVAL ? MINUTE) AND DATE_ADD(?, INTERVAL ? MINUTE)
+        ORDER BY ABS(TIMESTAMPDIFF(SECOND, wc.timestamp_utc, ?)) ASC
+        LIMIT 1
+    ");
+
+    $results = [];
+    $overallPass = true;
+
+    foreach ($events as $ev) {
+        $tz = $ev['timezone_iana'];
+
+        // Get a sample of runs with timestamps
+        $runStmt = $pdo->prepare("
+            SELECT r.id, r.run_timestamp_utc, r.run_time_local
+            FROM parity_runs r
+            WHERE r.race_lookup = ? AND r.run_timestamp_utc IS NOT NULL
+            LIMIT 200
+        ");
+        $runStmt->execute([$ev['race_lookup']]);
+        $runs = $runStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $offsets = [];
+        $matched = 0;
+        $samples = [];
+
+        foreach ($runs as $run) {
+            $ts = $run['run_timestamp_utc'];
+            $stmtW->execute([$ts, $ts, $windowMinutes, $ts, $windowMinutes, $ts]);
+            $w = $stmtW->fetch(PDO::FETCH_ASSOC);
+            if ($w) {
+                $offsetMin = round($w['offset_sec'] / 60.0, 1);
+                $offsets[] = $offsetMin;
+                $matched++;
+            }
+
+            // Collect first 3 samples for diagnostics
+            if (count($samples) < 3) {
+                $derivedUtc = ($run['run_time_local'] !== null) ? parity_localToUtc($run['run_time_local'], $tz) : null;
+                $samples[] = [
+                    'run_id' => (int)$run['id'],
+                    'run_time_local' => $run['run_time_local'],
+                    'run_timestamp_utc' => $run['run_timestamp_utc'],
+                    'derived_utc_from_local' => $derivedUtc,
+                    'utc_matches' => ($derivedUtc === $run['run_timestamp_utc']),
+                ];
+            }
+        }
+
+        $avgOffset = !empty($offsets) ? round(array_sum($offsets) / count($offsets), 1) : null;
+        $maxOffset = !empty($offsets) ? round(max($offsets), 1) : null;
+        $pctMatched = count($runs) > 0 ? round($matched / count($runs) * 100, 1) : null;
+
+        $pass = ($avgOffset === null || $avgOffset <= 20) && ($maxOffset === null || $maxOffset <= 60);
+        if (!$pass) $overallPass = false;
+
+        $results[] = [
+            'eventId' => (int)$ev['id'],
+            'event' => $ev['event_name'],
+            'tz' => $tz,
+            'runsChecked' => count($runs),
+            'matched' => $matched,
+            'pctMatched' => $pctMatched,
+            'avgOffsetMin' => $avgOffset,
+            'maxOffsetMin' => $maxOffset,
+            'pass' => $pass,
+            'samples' => $samples,
+        ];
+    }
+
+    rsa_jsonResponse([
+        'ok' => $overallPass,
+        'testedEvents' => count($results),
+        'allPass' => $overallPass,
+        'thresholds' => ['avgOffsetMaxMin' => 20, 'maxOffsetMaxMin' => 60],
+        'events' => $results,
     ]);
 }

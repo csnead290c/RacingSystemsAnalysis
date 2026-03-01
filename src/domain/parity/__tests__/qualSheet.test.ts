@@ -31,7 +31,8 @@ function makeRun(overrides: Partial<QualRun> & { driver_name: string }): QualRun
     rt: null,
     ft60: null,
     ft660: null,
-    run_timestamp_utc: '2025-10-30T10:00:00Z',
+    run_time_local: '2025-10-30 10:00:00',
+    run_timestamp_utc: '2025-10-30T14:00:00Z',
     dq_flag: false,
     car_number: null,
     ...overrides,
@@ -170,58 +171,59 @@ describe('selectBestRun — NHRA tie-breaking', () => {
   it('ET tie → higher MPH from SAME RUN wins', () => {
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: '2025-10-30 10:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 3.800, mph1320: 328.0,
-        run_timestamp_utc: '2025-10-30T11:00:00Z' }),
+        run_time_local: '2025-10-30 11:00:00' }),
     ];
     const best = selectBestRun(runs);
     expect(best!.mph1320).toBe(328.0);
   });
 
-  it('ET + MPH tie → earliest timestamp wins', () => {
+  it('ET + MPH tie → earliest local timestamp wins', () => {
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T14:00:00Z' }),
+        run_time_local: '2025-10-30 14:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: '2025-10-30 10:00:00' }),
     ];
     const best = selectBestRun(runs);
-    expect(best!.run_timestamp_utc).toBe('2025-10-30T10:00:00Z');
+    expect(best!.run_time_local).toBe('2025-10-30 10:00:00');
   });
 
-  it('three-way tie with different timestamps', () => {
+  it('three-way tie with different local timestamps', () => {
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 4.000, mph1320: 300.0,
-        run_timestamp_utc: '2025-10-30T15:00:00Z' }),
+        run_time_local: '2025-10-30 15:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 4.000, mph1320: 300.0,
-        run_timestamp_utc: '2025-10-30T12:00:00Z' }),
+        run_time_local: '2025-10-30 12:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q3', ft1320: 4.000, mph1320: 300.0,
-        run_timestamp_utc: '2025-10-30T09:00:00Z' }),
+        run_time_local: '2025-10-30 09:00:00' }),
     ];
     const best = selectBestRun(runs);
-    expect(best!.run_timestamp_utc).toBe('2025-10-30T09:00:00Z');
+    expect(best!.run_time_local).toBe('2025-10-30 09:00:00');
   });
 
   it('null MPH treated as 0 in tiebreak', () => {
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.800, mph1320: null,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: '2025-10-30 10:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T11:00:00Z' }),
+        run_time_local: '2025-10-30 11:00:00' }),
     ];
     const best = selectBestRun(runs);
     expect(best!.mph1320).toBe(325.0);
   });
 
-  it('null timestamp treated as empty string in tiebreak', () => {
+  it('null local timestamp falls back to run_timestamp_utc for tiebreak', () => {
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: null }),
+        run_time_local: null, run_timestamp_utc: null }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: null, run_timestamp_utc: '2025-10-30T10:00:00Z' }),
     ];
     const best = selectBestRun(runs);
-    // Empty string sorts before any date
+    // null/null sorts as '' which is before any date string
+    expect(best!.run_time_local).toBeNull();
     expect(best!.run_timestamp_utc).toBeNull();
   });
 });
@@ -250,12 +252,12 @@ describe('buildQualSheet — final ordering', () => {
     expect(sheet[1].driver).toBe('LowMPH');
   });
 
-  it('ET + MPH tie → timestamp asc', () => {
+  it('ET + MPH tie → local timestamp asc', () => {
     const runs = [
       makeRun({ driver_name: 'Late', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T14:00:00Z' }),
+        run_time_local: '2025-10-30 14:00:00' }),
       makeRun({ driver_name: 'Early', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: '2025-10-30 10:00:00' }),
     ];
     const sheet = buildQualSheet(runs);
     expect(sheet[0].driver).toBe('Early');
@@ -302,9 +304,9 @@ describe('buildQualSheet — display correctness', () => {
     // Driver has two runs: Q1 with great MPH but worse ET, Q2 with best ET but lower MPH
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.900, mph1320: 340.0,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: '2025-10-30 10:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T11:00:00Z' }),
+        run_time_local: '2025-10-30 11:00:00' }),
     ];
     const sheet = buildQualSheet(runs);
     expect(sheet[0].best_et).toBe(3.800);
@@ -324,15 +326,15 @@ describe('buildQualSheet — display correctness', () => {
     expect(sheet[0].best_ft60).toBe(0.830);
   });
 
-  it('best_timestamp is from the best run', () => {
+  it('best_timestamp is local time from the best run', () => {
     const runs = [
       makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.900, mph1320: 320.0,
-        run_timestamp_utc: '2025-10-30T10:00:00Z' }),
+        run_time_local: '2025-10-30 10:00:00' }),
       makeRun({ driver_name: 'A', round: 'Q2', ft1320: 3.800, mph1320: 325.0,
-        run_timestamp_utc: '2025-10-30T14:00:00Z' }),
+        run_time_local: '2025-10-30 14:00:00' }),
     ];
     const sheet = buildQualSheet(runs);
-    expect(sheet[0].best_timestamp).toBe('2025-10-30T14:00:00Z');
+    expect(sheet[0].best_timestamp).toBe('2025-10-30 14:00:00');
   });
 
   it('invalid driver has null for all performance fields', () => {
@@ -424,7 +426,7 @@ describe('buildQualSheet — edge cases', () => {
         round: 'Q1',
         ft1320: 3.500 + i * 0.02,
         mph1320: 340 - i,
-        run_timestamp_utc: `2025-10-30T${String(10 + i).padStart(2, '0')}:00:00Z`,
+        run_time_local: `2025-10-30 ${String(10 + i).padStart(2, '0')}:00:00`,
       }));
     }
     const sheet = buildQualSheet(runs);
@@ -457,5 +459,60 @@ describe('buildQualSheet — edge cases', () => {
     expect(sheet[0].best_et).toBe(3.800);
     expect(sheet[0].best_mph).toBe(325.0);
     expect(sheet[0].run_count).toBe(4);
+  });
+});
+
+// ── 7. Regression: Local-time tie-break correctness ───────────────────
+
+describe('regression — local time tie-break', () => {
+  it('local time ordering differs from UTC ordering across timezones', () => {
+    // Scenario: Driver A ran at 10:00 local (NY, EDT = UTC-4 → 14:00 UTC)
+    //           Driver B ran at 11:00 local (Vegas, PDT = UTC-7 → 18:00 UTC)
+    // Local order: A first. UTC order: A first too in this case.
+    // But if we pick local times that would reverse UTC order:
+    // Driver A: 14:00 local (NY EDT) = 18:00 UTC
+    // Driver B: 11:00 local (Vegas PDT) = 18:00 UTC (tie in UTC!)
+    // Local order: B(11:00) before A(14:00) — which is correct for "who ran first"
+    const runs = [
+      makeRun({ driver_name: 'NYdriver', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
+        run_time_local: '2025-06-15 14:00:00', run_timestamp_utc: '2025-06-15T18:00:00Z' }),
+      makeRun({ driver_name: 'VegasDriver', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
+        run_time_local: '2025-06-15 11:00:00', run_timestamp_utc: '2025-06-15T18:00:00Z' }),
+    ];
+    const sheet = buildQualSheet(runs);
+    // Vegas driver ran earlier by local clock → should be first
+    expect(sheet[0].driver).toBe('VegasDriver');
+    expect(sheet[1].driver).toBe('NYdriver');
+  });
+
+  it('orphan run (no run_time_local) falls back to run_timestamp_utc for tie-break', () => {
+    const runs = [
+      makeRun({ driver_name: 'Orphan', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
+        run_time_local: null, run_timestamp_utc: '2025-06-15T20:00:00Z' }),
+      makeRun({ driver_name: 'Normal', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
+        run_time_local: '2025-06-15 14:00:00', run_timestamp_utc: '2025-06-15T18:00:00Z' }),
+    ];
+    const sheet = buildQualSheet(runs);
+    // Normal driver's local time '2025-06-15 14:00:00' < Orphan's fallback UTC '2025-06-15T20:00:00Z'
+    expect(sheet[0].driver).toBe('Normal');
+    expect(sheet[1].driver).toBe('Orphan');
+  });
+
+  it('best_timestamp uses run_time_local when available', () => {
+    const runs = [
+      makeRun({ driver_name: 'A', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
+        run_time_local: '2025-06-15 14:00:00', run_timestamp_utc: '2025-06-15T18:00:00Z' }),
+    ];
+    const sheet = buildQualSheet(runs);
+    expect(sheet[0].best_timestamp).toBe('2025-06-15 14:00:00');
+  });
+
+  it('best_timestamp falls back to UTC for orphan runs', () => {
+    const runs = [
+      makeRun({ driver_name: 'Orphan', round: 'Q1', ft1320: 3.800, mph1320: 325.0,
+        run_time_local: null, run_timestamp_utc: '2025-06-15T18:00:00Z' }),
+    ];
+    const sheet = buildQualSheet(runs);
+    expect(sheet[0].best_timestamp).toBe('2025-06-15T18:00:00Z');
   });
 });

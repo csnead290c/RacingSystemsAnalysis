@@ -48,6 +48,8 @@ export interface ParityRun {
   uuid: string;
   race_lookup: string;
   run_timestamp_utc: string | null;
+  /** Event-local wall-clock time (track timezone). Prefer this for display. */
+  run_time_local: string | null;
   category: string | null;
   class_index: string | null;
   round: string | null;
@@ -466,7 +468,10 @@ export interface QualSheetRow {
   best_rt: number | null;
   best_ft60: number | null;
   best_ft660: number | null;
+  /** Local time at the track (for display). */
   best_timestamp: string | null;
+  /** UTC time (for internal/weather reference). */
+  best_timestamp_utc: string | null;
   corrected_best_et: number | null;
   correction_factor: number | null;
   temp_f: number | null;
@@ -933,6 +938,48 @@ export interface BackfillRunUtcResponse {
     errors: number;
   };
   events: BackfillRunUtcEventResult[];
+}
+
+export interface OrphanRunsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  runs: {
+    id: number;
+    uuid: string;
+    race_lookup: string;
+    run_timestamp_utc: string | null;
+    run_time_local: string | null;
+    class_index: string | null;
+    round: string | null;
+    driver_name: string | null;
+    orphan_reason: 'no_event' | 'no_track' | 'no_timezone' | 'missing_local' | 'unknown';
+  }[];
+}
+
+export interface TimeSmokeTestResponse {
+  ok: boolean;
+  testedEvents: number;
+  allPass: boolean;
+  thresholds: { avgOffsetMaxMin: number; maxOffsetMaxMin: number };
+  events: {
+    eventId: number;
+    event: string;
+    tz: string;
+    runsChecked: number;
+    matched: number;
+    pctMatched: number | null;
+    avgOffsetMin: number | null;
+    maxOffsetMin: number | null;
+    pass: boolean;
+    samples: {
+      run_id: number;
+      run_time_local: string | null;
+      run_timestamp_utc: string | null;
+      derived_utc_from_local: string | null;
+      utc_matches: boolean;
+    }[];
+  }[];
 }
 
 // ── Weather Timeseries Types ────────────────────────────────────────────
@@ -2108,5 +2155,17 @@ export const parityApi = {
       method: 'POST',
       body: JSON.stringify(params),
     });
+  },
+
+  async listOrphanRuns(limit = 200, offset = 0): Promise<OrphanRunsResponse> {
+    return parityRequest<OrphanRunsResponse>(
+      `/parity.php?action=listOrphanRuns&limit=${limit}&offset=${offset}`,
+    );
+  },
+
+  async timeSmokeTest(): Promise<TimeSmokeTestResponse> {
+    return parityRequest<TimeSmokeTestResponse>(
+      `/parity.php?action=timeSmokeTest`,
+    );
   },
 };

@@ -16,11 +16,24 @@
 
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
-header('Content-Type: text/plain');
+header('Content-Type: text/plain; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
+
+// Admin gate: require Bearer token with admin role
+$auth = rsa_getAuthUser();
+if (!$auth || !in_array($auth['role'] ?? '', ['admin', 'owner'])) {
+    http_response_code(403);
+    echo "Forbidden: admin role required.\n";
+    exit(1);
+}
+
 $pdo = getDB();
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 echo "=== Migration v14: run_time_local ===\n\n";
 flush();

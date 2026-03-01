@@ -5,10 +5,14 @@
  * Rules:
  *  1. Only qualifying rounds (round starts with "Q") are considered.
  *  2. DQ invalidates the entire run — never used for best-run selection.
- *  3. Per-driver best run: lowest ET → higher MPH (same run) → earliest timestamp.
+ *  3. Per-driver best run: lowest ET → higher MPH (same run) → earliest local timestamp.
  *  4. Drivers with no valid qualifying run appear at bottom as invalid.
- *  5. Final sort: ET asc → MPH desc → timestamp asc.
+ *  5. Final sort: ET asc → MPH desc → local timestamp asc.
  *  6. MPH displayed is always from the selected best run.
+ *
+ * TIMESTAMP MODEL: NHRA timing system reports event-local wall-clock time.
+ * run_time_local is the canonical chronological ordering field.
+ * run_timestamp_utc is derived (local→UTC via track timezone) for weather joins only.
  */
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -22,6 +26,9 @@ export interface QualRun {
   rt: number | null;
   ft60: number | null;
   ft660: number | null;
+  /** Event-local wall-clock time. Preferred for tie-breaking and display. */
+  run_time_local: string | null;
+  /** Derived UTC (for weather joins). Legacy: may equal local if not yet backfilled. */
   run_timestamp_utc: string | null;
   dq_flag: boolean;
   car_number?: string | null;
@@ -56,7 +63,7 @@ export function filterQualifyingRuns(runs: QualRun[]): QualRun[] {
  * NHRA tiebreakers:
  *  1. Lowest ET (ft1320)
  *  2. Higher MPH from the same run (mph1320 desc)
- *  3. Earliest timestamp (run_timestamp_utc asc)
+ *  3. Earliest local timestamp (run_time_local asc)
  */
 export function selectBestRun(qualRuns: QualRun[]): QualRun | null {
   // Filter out DQ and runs with no valid ET
@@ -73,8 +80,10 @@ export function selectBestRun(qualRuns: QualRun[]): QualRun | null {
     const mphB = b.mph1320 ?? 0;
     const mphCmp = mphB - mphA;
     if (mphCmp !== 0) return mphCmp;
-    // (3) Earliest timestamp
-    return (a.run_timestamp_utc ?? '').localeCompare(b.run_timestamp_utc ?? '');
+    // (3) Earliest LOCAL timestamp (who ran first at the track)
+    const tsA = a.run_time_local ?? a.run_timestamp_utc ?? '';
+    const tsB = b.run_time_local ?? b.run_timestamp_utc ?? '';
+    return tsA.localeCompare(tsB);
   });
 
   return valid[0];
@@ -115,7 +124,7 @@ export function buildQualSheet(allRuns: QualRun[]): QualSheetEntry[] {
         best_rt: best.rt,
         best_ft60: best.ft60,
         best_ft660: best.ft660,
-        best_timestamp: best.run_timestamp_utc,
+        best_timestamp: best.run_time_local ?? best.run_timestamp_utc,
         run_count: data.totalRuns,
         is_valid: true,
         qual_pos: null, // set below
