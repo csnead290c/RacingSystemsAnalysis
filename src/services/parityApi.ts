@@ -982,6 +982,33 @@ export interface TimeSmokeTestResponse {
   }[];
 }
 
+export interface TimeDiagnosticsSampleRow {
+  run_id: number;
+  driver: string | null;
+  round: string | null;
+  class_index: string | null;
+  run_time_local: string | null;
+  run_timestamp_utc: string | null;
+  matched_weather_utc: string | null;
+  offset_minutes: number | null;
+  wx_temp_f: number | null;
+  wx_rh_pct: number | null;
+  wx_press_inhg: number | null;
+}
+
+export interface TimeDiagnosticsSampleResponse {
+  eventId: number;
+  eventName: string;
+  classIndex: string;
+  trackTimezone: string;
+  totalRuns: number;
+  matchedRuns: number;
+  pctMatched: number | null;
+  avgOffsetMin: number | null;
+  maxOffsetMin: number | null;
+  samples: TimeDiagnosticsSampleRow[];
+}
+
 // ── Weather Timeseries Types ────────────────────────────────────────────
 
 export interface WeatherTimeseriesPoint {
@@ -2167,5 +2194,18 @@ export const parityApi = {
     return parityRequest<TimeSmokeTestResponse>(
       `/parity.php?action=timeSmokeTest`,
     );
+  },
+
+  async timeDiagnosticsSample(params: {
+    eventId: number;
+    classIndex: string;
+    limit?: number;
+  }): Promise<TimeDiagnosticsSampleResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'timeDiagnosticsSample');
+    qs.set('eventId', String(params.eventId));
+    qs.set('classIndex', params.classIndex);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<TimeDiagnosticsSampleResponse>(`/parity.php?${qs.toString()}`);
   },
 };

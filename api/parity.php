@@ -388,6 +388,10 @@ switch ($action) {
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleTimeSmokeTest($pdo, $auth);
         break;
+    case 'timeDiagnosticsSample':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleTimeDiagnosticsSample($pdo, $auth);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -3360,6 +3364,20 @@ function processRunsBackfillItems(PDO $pdo, int $jobId, int $userId, array $para
             $importStmt->execute([$importUuid, $raceLookup, $rowsFetched, $result['url'], $userId]);
             $importId = (int)$pdo->lastInsertId();
 
+            // ── Timezone: NHRA timestamps are event-local wall-clock time. ──
+            // Look up track timezone so we can compute true UTC for weather joins.
+            $trackTz = 'America/New_York'; // fallback
+            $tzStmt2 = $pdo->prepare("
+                SELECT t.timezone_iana FROM parity_events e
+                JOIN parity_tracks t ON t.id = e.track_id
+                WHERE e.race_lookup = ? LIMIT 1
+            ");
+            $tzStmt2->execute([$raceLookup]);
+            $tzRow2 = $tzStmt2->fetch(PDO::FETCH_ASSOC);
+            if ($tzRow2 && !empty($tzRow2['timezone_iana'])) {
+                $trackTz = $tzRow2['timezone_iana'];
+            }
+
             // Insert runs
             $inserted = 0;
             $deduped = 0;
@@ -3367,6 +3385,14 @@ function processRunsBackfillItems(PDO $pdo, int $jobId, int $userId, array $para
                 $normalized = parity_normalizeRow($raw);
                 $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
                 $runUuid = parity_generateUuid();
+
+                // normalizer returns local wall-clock time in 'run_timestamp_utc' (legacy key name).
+                // Store local in run_time_local; compute true UTC via parity_localToUtc().
+                // NEVER write run_timestamp_utc directly from timing system data.
+                $localTime = $normalized['run_timestamp_utc'] ?? null;
+                $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
+                $normalized['run_timestamp_utc'] = $utcTime;
+                $normalized['run_time_local'] = $localTime;
 
                 try {
                     $cols = ['uuid','import_id','race_lookup','row_hash'];
@@ -8404,8 +8430,8 @@ function handleTimeSmokeTest(PDO $pdo, array $auth): void {
                 $matched++;
             }
 
-            // Collect first 3 samples for diagnostics
-            if (count($samples) < 3) {
+            // Collect samples for diagnostics — more when thresholds may be exceeded
+            if (count($samples) < 10) {
                 $derivedUtc = ($run['run_time_local'] !== null) ? parity_localToUtc($run['run_time_local'], $tz) : null;
                 $samples[] = [
                     'run_id' => (int)$run['id'],
@@ -8423,6 +8449,11 @@ function handleTimeSmokeTest(PDO $pdo, array $auth): void {
 
         $pass = ($avgOffset === null || $avgOffset <= 20) && ($maxOffset === null || $maxOffset <= 60);
         if (!$pass) $overallPass = false;
+
+        // Trim samples: keep all 10 for failing events, only 3 for passing
+        if ($pass && count($samples) > 3) {
+            $samples = array_slice($samples, 0, 3);
+        }
 
         $results[] = [
             'eventId' => (int)$ev['id'],
@@ -8444,5 +8475,115 @@ function handleTimeSmokeTest(PDO $pdo, array $auth): void {
         'allPass' => $overallPass,
         'thresholds' => ['avgOffsetMaxMin' => 20, 'maxOffsetMaxMin' => 60],
         'events' => $results,
+    ]);
+}
+
+// ============================================================================
+// Time/Weather Diagnostics Sample — admin-only
+// Returns per-run rows with matched weather timestamp and offset for a given
+// event + class. Powers the "Time/Weather Diagnostics" admin panel.
+// ============================================================================
+function handleTimeDiagnosticsSample(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+
+    $eventId = (int)($_GET['eventId'] ?? 0);
+    $classIndex = trim($_GET['classIndex'] ?? '');
+    $limit = min((int)($_GET['limit'] ?? 10), 100);
+
+    if ($eventId <= 0) rsa_jsonResponse(['error' => 'eventId is required'], 400);
+    if ($classIndex === '') rsa_jsonResponse(['error' => 'classIndex is required'], 400);
+
+    // Load event + track timezone
+    $evStmt = $pdo->prepare("
+        SELECT e.id, e.event_name, e.race_lookup, t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.id = ?
+    ");
+    $evStmt->execute([$eventId]);
+    $event = $evStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) rsa_jsonResponse(['error' => 'Event not found'], 404);
+
+    $raceLookup = $event['race_lookup'];
+    $trackTz = $event['timezone_iana'] ?? 'America/New_York';
+
+    $classIndices = parity_expandClassIndex($pdo, $classIndex);
+    $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+
+    // Fetch runs — ordered by local time for natural chronological display
+    $params = array_merge([$raceLookup], $classIndices);
+    $runStmt = $pdo->prepare("
+        SELECT r.id, r.driver_name, r.round, r.class_index,
+               r.run_time_local, r.run_timestamp_utc
+        FROM parity_runs r
+        WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
+          AND COALESCE(r.dq_flag, 0) = 0
+          AND r.run_timestamp_utc IS NOT NULL
+        ORDER BY COALESCE(r.run_time_local, r.run_timestamp_utc) ASC
+    ");
+    $runStmt->execute($params);
+    $runs = $runStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Weather lookup — closest canonical observation within 30 min
+    $weatherWindow = 30;
+    $stmtW = $pdo->prepare("
+        SELECT wc.timestamp_utc,
+               wc.temp_f, wc.rh_pct, wc.pressure_inhg,
+               ABS(TIMESTAMPDIFF(SECOND, wc.timestamp_utc, ?)) AS offset_seconds
+        FROM parity_weather_canonical wc
+        WHERE wc.timestamp_utc BETWEEN DATE_SUB(?, INTERVAL ? MINUTE) AND DATE_ADD(?, INTERVAL ? MINUTE)
+        ORDER BY ABS(TIMESTAMPDIFF(SECOND, wc.timestamp_utc, ?)) ASC LIMIT 1
+    ");
+
+    $totalRuns = count($runs);
+    $matchedRuns = 0;
+    $allOffsets = [];
+    $sampleRows = [];
+
+    foreach ($runs as $run) {
+        $ts = $run['run_timestamp_utc'];
+        $stmtW->execute([$ts, $ts, $weatherWindow, $ts, $weatherWindow, $ts]);
+        $wx = $stmtW->fetch(PDO::FETCH_ASSOC);
+
+        $matched = $wx && $wx['temp_f'] !== null;
+        if ($matched) {
+            $matchedRuns++;
+            $offsetMin = round($wx['offset_seconds'] / 60.0, 1);
+            $allOffsets[] = $offsetMin;
+        }
+
+        // Always collect up to $limit sample rows
+        if (count($sampleRows) < $limit) {
+            $sampleRows[] = [
+                'run_id' => (int)$run['id'],
+                'driver' => $run['driver_name'],
+                'round' => $run['round'],
+                'class_index' => $run['class_index'],
+                'run_time_local' => $run['run_time_local'],
+                'run_timestamp_utc' => $run['run_timestamp_utc'],
+                'matched_weather_utc' => $matched ? $wx['timestamp_utc'] : null,
+                'offset_minutes' => $matched ? round($wx['offset_seconds'] / 60.0, 1) : null,
+                'wx_temp_f' => $matched ? (float)$wx['temp_f'] : null,
+                'wx_rh_pct' => $matched ? (float)$wx['rh_pct'] : null,
+                'wx_press_inhg' => $matched ? (float)$wx['pressure_inhg'] : null,
+            ];
+        }
+    }
+
+    $pctMatched = $totalRuns > 0 ? round(100 * $matchedRuns / $totalRuns, 1) : null;
+    $avgOffsetMin = count($allOffsets) > 0 ? round(array_sum($allOffsets) / count($allOffsets), 1) : null;
+    $maxOffsetMin = count($allOffsets) > 0 ? round(max($allOffsets), 1) : null;
+
+    rsa_jsonResponse([
+        'eventId' => $eventId,
+        'eventName' => $event['event_name'],
+        'classIndex' => $classIndex,
+        'trackTimezone' => $trackTz,
+        'totalRuns' => $totalRuns,
+        'matchedRuns' => $matchedRuns,
+        'pctMatched' => $pctMatched,
+        'avgOffsetMin' => $avgOffsetMin,
+        'maxOffsetMin' => $maxOffsetMin,
+        'samples' => $sampleRows,
     ]);
 }

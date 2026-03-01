@@ -112,6 +112,7 @@ try {
             uuid VARCHAR(36) UNIQUE NOT NULL,
             import_id INT NOT NULL,
             race_lookup VARCHAR(8) NOT NULL,
+            -- Derived via parity_localToUtc(). Do NOT write directly from timing system data.
             run_timestamp_utc DATETIME NULL,
             category VARCHAR(100) NULL,
             class_index VARCHAR(100) NULL,

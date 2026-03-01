@@ -41,6 +41,7 @@ import {
   type StationCsvImportResponse,
   type StationCsvMappedRow,
   type WeatherTimeseriesResponse,
+  type TimeDiagnosticsSampleResponse,
 } from '../services/parityApi';
 import TrackCoordCoveragePanel from './TrackCoordCoveragePanel';
 import BatchBackfillPanel from './BatchBackfillPanel';
@@ -217,7 +218,7 @@ type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash
   | 'parity' | 'ladder' | 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'backfill'
   | 'adminTracks' | 'adminEvents' | 'classAliases' | 'engineCombos' | 'driverCombos' | 'assignCombos'
   | 'weatherCorrection' | 'backfillWeather' | 'weatherHealth' | 'importStationCsv'
-  | 'trackCoords' | 'batchBackfill';
+  | 'trackCoords' | 'batchBackfill' | 'timeDiagnostics';
 
 // Classes in scope for dashboard pickers (used by Phase 1 tab filters)
 const PARITY_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'] as const;
@@ -270,6 +271,7 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'backfillWeather', label: 'Backfill Weather' },
   { key: 'backfill', label: 'Backfill' },
   { key: 'weatherHealth', label: 'Weather Health' },
+  { key: 'timeDiagnostics', label: 'Time Diagnostics' },
   { key: 'importStationCsv', label: 'Import Station CSV' },
   { key: 'ladder', label: 'Ladder (exp.)' },
 ];
@@ -498,6 +500,7 @@ export default function ParityPortal() {
       {tab === 'backfillWeather' && <BackfillWeatherPanel />}
       {tab === 'backfill' && <BackfillPanel />}
       {tab === 'weatherHealth' && <WeatherHealthPanel events={events} selectedEvent={selectedEvent} />}
+      {tab === 'timeDiagnostics' && <TimeDiagnosticsPanel event={selectedEvent} />}
       {tab === 'importStationCsv' && <StationCsvImportPanel />}
       {tab === 'trackCoords' && <TrackCoordCoveragePanel />}
       {tab === 'batchBackfill' && <BatchBackfillPanel />}
@@ -4948,6 +4951,121 @@ function BackfillPanel() {
             </table>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Time / Weather Diagnostics Panel (Admin) ────────────────────────────
+
+const DIAG_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'];
+
+function TimeDiagnosticsPanel({ event }: { event: EventWithStats | null }) {
+  const [classFilter, setClassFilter] = useState(DIAG_CLASSES[0]);
+  const [data, setData] = useState<TimeDiagnosticsSampleResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showUtc, setShowUtc] = useState(false);
+
+  const load = useCallback(() => {
+    if (!event) return;
+    setLoading(true); setError('');
+    parityApi.timeDiagnosticsSample({ eventId: event.id, classIndex: classFilter, limit: 20 })
+      .then(setData)
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed'))
+      .finally(() => setLoading(false));
+  }, [event, classFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!event) return <p style={S.hint}>Select an event above.</p>;
+
+  const warn = data && ((data.avgOffsetMin != null && data.avgOffsetMin > 20) || (data.maxOffsetMin != null && data.maxOffsetMin > 60));
+
+  return (
+    <div style={S.card}>
+      <h3 style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' }}>Time / Weather Diagnostics</h3>
+      <p style={{ fontSize: '0.7rem', color: 'var(--color-muted)', margin: '0 0 0.5rem' }}>
+        Shows per-run timestamp vs. matched weather observation. Large offsets indicate a timezone bug.
+      </p>
+
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Class:</label>
+        {DIAG_CLASSES.map(c => (
+          <button key={c} onClick={() => setClassFilter(c)}
+            style={{ ...S.btn(classFilter === c ? 'primary' : 'secondary'), fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>
+            {c}
+          </button>
+        ))}
+        <label style={{ fontSize: '0.65rem', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: 'var(--color-muted)' }}>
+          <input type="checkbox" checked={showUtc} onChange={e => setShowUtc(e.target.checked)} />
+          Show UTC columns
+        </label>
+      </div>
+
+      {loading && <p style={S.hint}>Loading...</p>}
+      {error && <p style={{ color: '#dc2626', fontSize: '0.75rem' }}>{error}</p>}
+
+      {data && !loading && (
+        <>
+          {/* Confidence summary */}
+          <div style={{
+            display: 'flex', gap: '1.5rem', flexWrap: 'wrap', padding: '0.4rem 0.6rem', marginBottom: '0.5rem',
+            borderRadius: 4, fontSize: '0.7rem',
+            background: warn ? '#fef2f2' : 'var(--color-bg)',
+            border: warn ? '1px solid #fca5a5' : '1px solid var(--color-border)',
+            color: warn ? '#991b1b' : 'var(--color-text)',
+          }}>
+            <span><b>Track TZ:</b> {data.trackTimezone}</span>
+            <span><b>Runs:</b> {data.totalRuns}</span>
+            <span><b>Matched:</b> {data.pctMatched != null ? `${data.pctMatched}%` : '—'} ({data.matchedRuns}/{data.totalRuns})</span>
+            <span><b>Avg Offset:</b> {data.avgOffsetMin != null ? `${data.avgOffsetMin} min` : '—'}</span>
+            <span><b>Max Offset:</b> {data.maxOffsetMin != null ? `${data.maxOffsetMin} min` : '—'}</span>
+            {warn && <span style={{ fontWeight: 700, color: '#dc2626' }}>⚠ Timezone mismatch likely</span>}
+          </div>
+
+          {/* Sample rows */}
+          {data.samples.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Driver</th>
+                  <th style={S.th}>Rnd</th>
+                  <th style={S.th}>Local Time</th>
+                  {showUtc && <th style={S.th}>UTC</th>}
+                  {showUtc && <th style={S.th}>Matched Wx UTC</th>}
+                  <th style={{ ...S.th, textAlign: 'right' }}>Offset (min)</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>Temp °F</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>RH %</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>Baro</th>
+                </tr></thead>
+                <tbody>
+                  {data.samples.map((s, i) => {
+                    const offsetBad = s.offset_minutes != null && s.offset_minutes > 30;
+                    return (
+                      <tr key={i} style={{ background: s.matched_weather_utc == null ? '#fef2f218' : offsetBad ? '#fef2f230' : 'transparent' }}>
+                        <td style={{ ...S.td, fontWeight: 600, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.driver ?? '—'}</td>
+                        <td style={S.td}>{s.round ?? '—'}</td>
+                        <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.65rem' }}>{s.run_time_local ?? <span style={{ color: '#dc2626' }}>MISSING</span>}</td>
+                        {showUtc && <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.65rem', color: 'var(--color-muted)' }}>{s.run_timestamp_utc ?? '—'}</td>}
+                        {showUtc && <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.65rem', color: 'var(--color-muted)' }}>{s.matched_weather_utc ?? '—'}</td>}
+                        <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: offsetBad ? '#dc2626' : undefined, fontWeight: offsetBad ? 700 : 400 }}>
+                          {s.offset_minutes != null ? s.offset_minutes.toFixed(1) : '—'}
+                        </td>
+                        <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.wx_temp_f != null ? s.wx_temp_f.toFixed(1) : '—'}</td>
+                        <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.wx_rh_pct != null ? s.wx_rh_pct.toFixed(1) : '—'}</td>
+                        <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.wx_press_inhg != null ? s.wx_press_inhg.toFixed(3) : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={S.hint}>No runs found for {classFilter} at this event.</p>
+          )}
+        </>
       )}
     </div>
   );
