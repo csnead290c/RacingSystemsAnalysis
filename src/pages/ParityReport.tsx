@@ -153,7 +153,21 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
   if (!summary) return null;
 
   const ml = PARITY_METRICS.find(m => m.value === metric)?.label ?? metric;
-  const barData = summary.combos.filter(c => c.avgTopN != null).map(c => ({ name: c.engineCombo, avgTopN: c.avgTopN, fill: comboColor(c.engineCombo) }));
+
+  // Build grouped bar data: one row per combo, run1..runN as separate keys
+  const groupedBarData = summary.combos
+    .filter(c => c.topRuns && c.topRuns.length > 0)
+    .map(c => {
+      const row: Record<string, any> = { name: c.engineCombo, fill: comboColor(c.engineCombo) };
+      c.topRuns.slice(0, topN).forEach((r, i) => {
+        row[`run${i + 1}`] = r.value;
+        row[`driver${i + 1}`] = r.driver;
+        row[`round${i + 1}`] = r.round;
+      });
+      return row;
+    });
+  const runKeys = Array.from({ length: topN }, (_, i) => `run${i + 1}`);
+  const RUN_SHADES = ['#000', '#444', '#777', '#aaa'];
 
   return (
     <div className="parity-event-report" style={{ pageBreakAfter: 'always' }}>
@@ -183,21 +197,34 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
         </div>
       </div>
 
-      {/* Bar Chart */}
+      {/* Bar Chart — Quickest 4 individual runs per combo */}
       <h2 style={S.h2}>Quickest {topN} Per Combo — {ml}</h2>
-      {barData.length > 0 ? (
+      {groupedBarData.length > 0 ? (
         <div style={{ ...S.card, padding: '0.5rem' }}>
-          <ResponsiveContainer width="100%" height={Math.max(180, barData.length * 36)}>
-            <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 4 }}>
+          <ResponsiveContainer width="100%" height={Math.max(200, groupedBarData.length * 60)}>
+            <BarChart data={groupedBarData} layout="vertical" margin={{ top: 4, right: 30, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-              <XAxis type="number" tick={{ fontSize: 10 }} domain={['dataMin - 0.1', 'dataMax + 0.1']} />
+              <XAxis type="number" tick={{ fontSize: 10 }} domain={['dataMin - 0.05', 'dataMax + 0.05']} />
               <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v: number) => v.toFixed(4)} />
-              <Bar dataKey="avgTopN" name={`Avg Top ${topN}`}>
-                {barData.map((d, i) => <Cell key={i} fill={d.fill} />)}
-              </Bar>
+              <Tooltip
+                formatter={(v: number, _name: string, props: any) => {
+                  const idx = parseInt((_name as string).replace('run', '')) - 1;
+                  const driver = props.payload?.[`driver${idx + 1}`] ?? '';
+                  const round = props.payload?.[`round${idx + 1}`] ?? '';
+                  return [`${v.toFixed(4)} — ${driver} (${round})`, `Run ${idx + 1}`];
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '0.65rem' }} />
+              {runKeys.map((k, i) => (
+                <Bar key={k} dataKey={k} name={`#${i + 1} Quickest`} fill={RUN_SHADES[i] ?? '#999'} barSize={10}>
+                  {groupedBarData.map((d, j) => <Cell key={j} fill={d.fill + (i === 0 ? 'ff' : i === 1 ? 'cc' : i === 2 ? '99' : '66')} />)}
+                </Bar>
+              ))}
             </BarChart>
           </ResponsiveContainer>
+          <div style={{ fontSize: '0.6rem', color: '#888', marginTop: 4, textAlign: 'center' }}>
+            Bars = individual runs (darkest → quickest). Hover for driver + round.
+          </div>
         </div>
       ) : <p style={S.hint}>No combo data for chart.</p>}
 
