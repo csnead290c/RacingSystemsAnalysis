@@ -1,65 +1,65 @@
 <?php
+/**
+ * diag-v14.php — Diagnose and run migration v14 (add run_time_local).
+ * Uses the exact same require pattern as parity.php.
+ */
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
-header('Content-Type: text/plain');
+header('Content-Type: text/plain; charset=utf-8');
 
-echo "Starting diag-v14...\n";
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/lib/parity.php';
 
-try {
-    require_once __DIR__ . '/config.php';
-    require_once __DIR__ . '/functions.php';
-    $pdo = getDB();
-    echo "Config loaded OK. PDO connected.\n";
-} catch (Throwable $e) {
-    echo "Config error: " . $e->getMessage() . "\n";
-    exit(1);
-}
+$pdo = getDB();
+echo "DB connected.\n";
 
-// Check if column exists
-try {
-    $stmt = $pdo->query("SHOW COLUMNS FROM parity_runs LIKE 'run_time_local'");
-    $exists = $stmt->rowCount() > 0;
-    echo "run_time_local column exists: " . ($exists ? 'YES' : 'NO') . "\n";
-} catch (Throwable $e) {
-    echo "Column check error: " . $e->getMessage() . "\n";
-}
-
-// If not, add it
-if (!$exists) {
-    try {
-        $pdo->exec("ALTER TABLE parity_runs ADD COLUMN run_time_local DATETIME NULL AFTER run_timestamp_utc");
-        echo "Column added successfully.\n";
-    } catch (Throwable $e) {
-        echo "Add column error: " . $e->getMessage() . "\n";
-    }
+// 1. Check/add column
+$stmt = $pdo->query("SHOW COLUMNS FROM parity_runs LIKE 'run_time_local'");
+if ($stmt->rowCount() > 0) {
+    echo "Column run_time_local: EXISTS\n";
 } else {
-    echo "Column already exists, skipping add.\n";
+    $pdo->exec("ALTER TABLE parity_runs ADD COLUMN run_time_local DATETIME NULL AFTER run_timestamp_utc");
+    echo "Column run_time_local: ADDED\n";
 }
 
-// Check indexes
-try {
-    $stmt = $pdo->query("SHOW INDEX FROM parity_runs WHERE Key_name = 'idx_pr_time_local'");
-    $idxExists = $stmt->rowCount() > 0;
-    echo "idx_pr_time_local index exists: " . ($idxExists ? 'YES' : 'NO') . "\n";
-    if (!$idxExists) {
-        $pdo->exec("ALTER TABLE parity_runs ADD INDEX idx_pr_time_local (run_time_local)");
-        echo "Index added.\n";
-    }
-} catch (Throwable $e) {
-    echo "Index check/add error: " . $e->getMessage() . "\n";
+// 2. Check/add index on run_timestamp_utc
+$stmt = $pdo->query("SHOW INDEX FROM parity_runs WHERE Key_name = 'idx_pr_timestamp'");
+if ($stmt->rowCount() > 0) {
+    echo "Index idx_pr_timestamp: EXISTS\n";
+} else {
+    $pdo->exec("ALTER TABLE parity_runs ADD INDEX idx_pr_timestamp (run_timestamp_utc)");
+    echo "Index idx_pr_timestamp: ADDED\n";
 }
 
-// Count runs with/without run_time_local
-try {
-    $stmt = $pdo->query("SELECT COUNT(*) AS total, SUM(CASE WHEN run_time_local IS NOT NULL THEN 1 ELSE 0 END) AS has_local, SUM(CASE WHEN run_timestamp_utc IS NOT NULL THEN 1 ELSE 0 END) AS has_utc FROM parity_runs");
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    echo "\nRun stats:\n";
-    echo "  Total runs: " . $row['total'] . "\n";
-    echo "  With run_time_local: " . $row['has_local'] . "\n";
-    echo "  With run_timestamp_utc: " . $row['has_utc'] . "\n";
-    echo "  Missing run_time_local: " . ($row['has_utc'] - $row['has_local']) . "\n";
-} catch (Throwable $e) {
-    echo "Stats error: " . $e->getMessage() . "\n";
+// 3. Check/add index on run_time_local
+$stmt = $pdo->query("SHOW INDEX FROM parity_runs WHERE Key_name = 'idx_pr_time_local'");
+if ($stmt->rowCount() > 0) {
+    echo "Index idx_pr_time_local: EXISTS\n";
+} else {
+    $pdo->exec("ALTER TABLE parity_runs ADD INDEX idx_pr_time_local (run_time_local)");
+    echo "Index idx_pr_time_local: ADDED\n";
 }
+
+// 4. Stats
+$stmt = $pdo->query("
+    SELECT COUNT(*) AS total,
+           SUM(CASE WHEN run_time_local IS NOT NULL THEN 1 ELSE 0 END) AS has_local,
+           SUM(CASE WHEN run_timestamp_utc IS NOT NULL THEN 1 ELSE 0 END) AS has_utc
+    FROM parity_runs
+");
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
+echo "\nRun stats:\n";
+echo "  Total: {$row['total']}\n";
+echo "  Has run_time_local: {$row['has_local']}\n";
+echo "  Has run_timestamp_utc: {$row['has_utc']}\n";
+echo "  Needs backfill: " . ($row['has_utc'] - $row['has_local']) . "\n";
+
+// 5. Quick timezone function test
+$local = parity_parseTimestampLocal('/Date(1730312400000)/');
+echo "\nTimezone function test:\n";
+echo "  parseTimestampLocal('/Date(1730312400000)/') = $local\n";
+$utc = parity_localToUtc($local, 'America/New_York');
+echo "  localToUtc('$local', 'America/New_York') = $utc\n";
 
 echo "\nDone.\n";
