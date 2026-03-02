@@ -5,13 +5,20 @@ import {
   type ParityDeltasResponse,
   type ParityAllRunsResponse,
   type ParityQualOrderResponse,
+  type ParityIncrementalsResponse,
+  type ParitySessionWeatherResponse,
   type ParityComboRun,
   type ParityDeltaRow,
   type RangeParityMatrixResponse,
   type EventWithStats,
 } from '../services/parityApi';
 import { useCapabilities } from '../domain/config/useCapabilities';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import {
+  formatET, formatMPH, formatBaro, formatHPC,
+  formatTemp, formatRH, formatDA,
+  formatMetric, formatDelta, isIncrementalMph,
+} from '../domain/parity/format';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -123,10 +130,6 @@ function trustColor(pct: number | null): string {
   return '#ef4444';
 }
 
-function fmt(v: number | null, decimals = 4): string {
-  return v != null ? v.toFixed(decimals) : '—';
-}
-
 function downloadCsv(filename: string, content: string) {
   const blob = new Blob([content], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
@@ -135,14 +138,20 @@ function downloadCsv(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+function fmtCsv(v: number | null | undefined, metric: string): string {
+  if (v == null) return '';
+  return isMphMetric(metric) ? v.toFixed(2) : v.toFixed(3);
+}
+
 function exportComboCsv(data: ParitySummaryResponse) {
+  const m = data.metric;
   const L: string[] = [];
   L.push(`Event,${data.event.event_name}`);
   L.push(`Class,${data.classIndex},Metric,${data.metric},Mode,${data.mode},Session,${data.sessionScope},TopN,${data.topN}`);
   L.push('');
   L.push('Engine Combo,Best,Avg Top N,Total Avg,Spread,Top N Used,Active,Total,Excluded,Wx%');
   for (const c of data.combos) {
-    L.push([c.engineCombo, fmt(c.bestValue), fmt(c.avgTopN), fmt(c.totalAvg), fmt(c.spread), c.countTopN,
+    L.push([c.engineCombo, fmtCsv(c.bestValue, m), fmtCsv(c.avgTopN, m), fmtCsv(c.totalAvg, m), fmtCsv(c.spread, m), c.countTopN,
       c.countActive, c.countTotal, c.countExcluded, c.weatherCoveragePct ?? ''].join(','));
   }
   downloadCsv(`parity_${data.classIndex}_${data.metric}_${data.mode}_${data.eventId}.csv`, L.join('\n'));
@@ -203,9 +212,10 @@ export default function ParityDashPanel({ event }: { event: EventWithStats | nul
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EVENT PARITY VIEW  (lazy-load architecture, legacy sheet layout)
-// Layout order: truth table (collapsed) → summary tiles → bar chart →
-//               delta tables → combo summary → qual order (collapsed) → audit
+// EVENT PARITY VIEW  (legacy-sheet layout)
+// Template order: 1) Mapping banner → 2) Combo summary → 3) Grouped chart →
+//   4) Incrementals → 5) Weather → 6) Delta tables → 7) Qual order (collapsible)
+// Admin sections (truth table, audit drilldown) stay but move below main content.
 // ══════════════════════════════════════════════════════════════════════════════
 
 function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }: {
@@ -222,6 +232,7 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
   // Trigger presets — user-editable
   const [triggers, setTriggers] = useState<TriggerSet>(defaultTriggers(metric));
 
+  // Lazy sections
   const [showDeltas, setShowDeltas] = useState(false);
   const [deltasData, setDeltasData] = useState<ParityDeltasResponse | null>(null);
   const [deltasLoading, setDeltasLoading] = useState(false);
@@ -237,13 +248,17 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
   const [driverSearch, setDriverSearch] = useState('');
   const driverSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Incrementals + weather (loaded with summary)
+  const [incData, setIncData] = useState<ParityIncrementalsResponse | null>(null);
+  const [wxData, setWxData] = useState<ParitySessionWeatherResponse | null>(null);
+
   const { role } = useCapabilities();
   const isAdmin = role === 'owner' || role === 'admin';
 
   // Reset triggers when metric type changes (ET ↔ MPH)
   useEffect(() => { setTriggers(defaultTriggers(metric)); }, [metric]);
 
-  // ── Fetch summary on param change ──
+  // ── Fetch summary + incrementals + weather on param change ──
   const fetchSummary = useCallback(() => {
     if (!event) return;
     const params = { eventId: event.id, classIndex, metric, mode, topN, sessionScope, includeUnknown };
@@ -252,8 +267,15 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
     setShowDeltas(false); setDeltasData(null);
     setShowQualOrder(false); setQualData(null);
     setShowTruthTable(false); setRunsData(null); setRunsPage(1); setDriverSearch('');
-    cachedFetch(key, () => parityApi.paritySummary(params))
-      .then(setSummary)
+    setIncData(null); setWxData(null);
+    Promise.all([
+      cachedFetch(key, () => parityApi.paritySummary(params)),
+      cachedFetch(cacheKey('parityIncrementals', { eventId: event.id, classIndex, sessionScope }),
+        () => parityApi.parityIncrementals({ eventId: event.id, classIndex, sessionScope })),
+      cachedFetch(cacheKey('paritySessionWeather', { eventId: event.id, classIndex }),
+        () => parityApi.paritySessionWeather({ eventId: event.id, classIndex })),
+    ])
+      .then(([s, i, w]) => { setSummary(s); setIncData(i); setWxData(w); })
       .catch((e: unknown) => { setError(e instanceof Error ? e.message : 'Failed'); setSummary(null); })
       .finally(() => setLoading(false));
   }, [event?.id, classIndex, metric, mode, topN, sessionScope, includeUnknown]);
@@ -305,19 +327,24 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
   const readinessLevel: 'low' | 'partial' | 'full' = mappedPct < MAPPED_LOW ? 'low' : mappedPct < MAPPED_HIGH ? 'partial' : 'full';
   const metricLabel = PARITY_METRICS.find(m => m.value === metric)?.label ?? metric;
 
-  const bestComboValue = summary?.combos.length
-    ? (summary.isLowerBetter
-      ? Math.min(...summary.combos.filter(c => c.bestValue != null).map(c => c.bestValue!))
-      : Math.max(...summary.combos.filter(c => c.bestValue != null).map(c => c.bestValue!)))
-    : null;
-
-  const barData = summary?.combos
-    .filter(c => c.avgTopN != null)
-    .map(c => ({ name: c.engineCombo, avgTopN: c.avgTopN, best: c.bestValue, fill: comboColor(c.engineCombo) })) ?? [];
+  // Build grouped bar data: one row per combo, run1..runN as separate keys
+  const groupedBarData = (summary?.combos ?? [])
+    .filter(c => c.topRuns && c.topRuns.length > 0)
+    .map(c => {
+      const row: Record<string, any> = { name: c.engineCombo, fill: comboColor(c.engineCombo) };
+      c.topRuns.slice(0, topN).forEach((r, i) => {
+        row[`run${i + 1}`] = r.value;
+        row[`driver${i + 1}`] = r.driver;
+        row[`round${i + 1}`] = r.round;
+      });
+      return row;
+    });
+  const runKeys = Array.from({ length: topN }, (_, i) => `run${i + 1}`);
 
   return (
-    <div>
-      <h2 style={{ ...S.h1, fontSize: '1.1rem' }}>Event Parity{summary ? ` — ${summary.event.event_name}` : ''}</h2>
+    <div data-testid="parity-dash-event">
+      {/* ── Header ── */}
+      <h2 style={{ ...S.h1, fontSize: '1.1rem' }} data-testid="dash-header">Event Parity{summary ? ` — ${summary.event.event_name}` : ''}</h2>
       {summary && (
         <p style={{ fontSize: '0.8rem', color: '#888', margin: '0 0 0.75rem' }}>
           {summary.event.track_name} &nbsp;|&nbsp; {summary.event.start_date_local} → {summary.event.end_date_local}
@@ -334,46 +361,13 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
         {summary && <button style={S.btn('secondary')} onClick={() => exportComboCsv(summary)}>Export CSV</button>}
       </div>
 
-      {/* ══════ READINESS GATES ══════ */}
-      {mapping && readinessLevel === 'low' && (
-        <div style={{ ...S.card, background: '#2d1b1b', border: '1px solid #ef4444', padding: '0.75rem', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <span style={{ ...S.badge('#ef4444'), fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>Low Mapping Coverage: {mappedPct}%</span>
-          </div>
-          <p style={{ color: '#ef9a9a', fontSize: '0.8rem', margin: '0 0 0.5rem' }}>
-            Combo mapping coverage is only <strong>{mappedPct}%</strong>. Configure Assign Combos to use parity-by-combo.
-          </p>
-          {mapping.topMissingDrivers.length > 0 && (
-            <div style={{ fontSize: '0.75rem', color: '#ef9a9a', marginBottom: '0.5rem' }}>
-              <strong>Top unmapped drivers:</strong>{' '}
-              {mapping.topMissingDrivers.slice(0, 5).map(d => `${d.driver} (${d.runCount})`).join(', ')}
-            </div>
-          )}
-          <div style={S.row}>
-            {isAdmin && <button style={S.btn('primary')}>Assign Combos →</button>}
-            <button style={S.sectionToggle} onClick={() => setShowFallback(!showFallback)}>
-              {showFallback ? 'Hide' : 'Show'} Fallback (Group by Driver)
-            </button>
-          </div>
-        </div>
-      )}
+      {loading && <p style={S.hint}>Loading parity summary...</p>}
+      {error && <div style={S.error}>{error}</div>}
 
-      {mapping && readinessLevel === 'partial' && (
-        <div style={{ ...S.card, background: '#332b00', border: '1px solid #eab308', padding: '0.6rem 0.75rem', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={S.badge('#eab308')}>Partial Mapping: {mappedPct}%</span>
-            <span style={{ color: '#eab308', fontSize: '0.75rem' }}>
-              Results are partial — {mapping.unknownRunCount} unmapped run{mapping.unknownRunCount !== 1 ? 's' : ''} excluded.
-            </span>
-            {isAdmin && <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}>Assign Combos →</button>}
-          </div>
-        </div>
-      )}
-
-      {mapping && readinessLevel === 'full' && (
-        <div style={{ ...S.row, marginBottom: '0.5rem', fontSize: '0.75rem' }}>
-          <span style={S.badge('#22c55e')}>Mapped: {mappedPct}% ({mapping.mappedRunCount}/{mapping.mappedRunCount + mapping.unknownRunCount})</span>
-        </div>
+      {/* ══════ 1) MAPPING READINESS BANNER ══════ */}
+      {mapping && (
+        <MappingBanner mappedPct={mappedPct} mapping={mapping} readinessLevel={readinessLevel}
+          isAdmin={isAdmin} onShowFallback={() => setShowFallback(!showFallback)} showFallback={showFallback} />
       )}
 
       {/* ── Trust indicators ── */}
@@ -397,9 +391,6 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
         </div>
       )}
 
-      {loading && <p style={S.hint}>Loading parity summary...</p>}
-      {error && <div style={S.error}>{error}</div>}
-
       {/* ── Fallback: group by driver (low readiness) ── */}
       {readinessLevel === 'low' && showFallback && summary && summary.totalRunsInClass > 0 && (
         <FallbackDriverView eventId={event.id} classIndex={classIndex} metric={metric} mode={mode} sessionScope={sessionScope} />
@@ -411,9 +402,98 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
 
       {summary && summary.combos.length > 0 && readinessLevel !== 'low' && (
         <>
-          {/* ══════ LAYOUT ORDER (matches legacy sheets) ══════ */}
+          {/* ══════ 2) COMBO SUMMARY TABLE ══════ */}
+          <div style={{ ...S.card, padding: '0.5rem', overflowX: 'auto' }} data-testid="dash-combo-summary">
+            <h3 style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>Combo Summary</h3>
+            <ComboSummaryTable combos={summary.combos} metric={metric} topN={topN} isLB={summary.isLowerBetter}
+              expandedCombo={expandedCombo} setExpandedCombo={setExpandedCombo} mode={mode} />
+          </div>
 
-          {/* 1) Truth table (collapsed by default) */}
+          {/* ══════ 3) GROUPED BAR CHART — Quickest N individual runs per combo ══════ */}
+          <div data-testid="dash-grouped-chart">
+          {groupedBarData.length > 0 && (
+            <div style={{ ...S.card, padding: '0.5rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>Quickest {topN} Per Combo — {metricLabel}</h3>
+              <ResponsiveContainer width="100%" height={Math.max(200, groupedBarData.length * 60)}>
+                <BarChart data={groupedBarData} layout="vertical" margin={{ top: 4, right: 30, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.15} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} domain={['dataMin - 0.05', 'dataMax + 0.05']} />
+                  <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    formatter={(v: number, _name: string, props: any) => {
+                      const idx = parseInt((_name as string).replace('run', '')) - 1;
+                      const driver = props.payload?.[`driver${idx + 1}`] ?? '';
+                      const round = props.payload?.[`round${idx + 1}`] ?? '';
+                      return [`${formatMetric(v, metric)} — ${driver} (${round})`, `Run ${idx + 1}`];
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '0.65rem' }} />
+                  {runKeys.map((k, i) => (
+                    <Bar key={k} dataKey={k} name={`#${i + 1} Quickest`} barSize={10}>
+                      {groupedBarData.map((d, j) => <Cell key={j} fill={d.fill + (i === 0 ? 'ff' : i === 1 ? 'cc' : i === 2 ? '99' : '66')} />)}
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+              <div style={{ fontSize: '0.6rem', color: '#888', marginTop: 4, textAlign: 'center' }}>
+                Bars = individual runs (darkest → quickest). Hover for driver + round.
+              </div>
+            </div>
+          )}
+          </div>
+
+          {/* ══════ 4) INCREMENTALS BY COMBO (Optimal Run) ══════ */}
+          <div data-testid="dash-incrementals">
+            <div style={{ ...S.card, padding: '0.5rem' }}>
+              <h3 style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>Incrementals by Combo (Optimal Run)</h3>
+              <p style={{ fontSize: '0.6rem', color: '#888', margin: '0 0 0.3rem', fontStyle: 'italic' }}>
+                Best-of-each incremental — ET: MIN per segment, MPH: MAX per segment. Not a real run.
+              </p>
+              {incData ? <IncrementalsTable data={incData} /> : <p style={S.hint}>Loading incrementals...</p>}
+            </div>
+          </div>
+
+          {/* ══════ 5) WEATHER BY SESSION ══════ */}
+          <div data-testid="dash-weather">
+            <div style={{ ...S.card, padding: '0.5rem' }}>
+              <h3 style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>Weather by Session</h3>
+              {wxData ? <WeatherSessionTable data={wxData} /> : <p style={S.hint}>Loading weather...</p>}
+            </div>
+          </div>
+
+          {/* ══════ 6) DELTA COMPARISON TABLES ══════ */}
+          <div style={{ ...S.card, padding: '0.5rem' }} data-testid="dash-delta-tables">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h3 style={{ fontSize: '0.85rem' }}>Delta Comparisons</h3>
+              <button style={S.sectionToggle} onClick={() => setShowDeltas(!showDeltas)}>
+                {showDeltas ? 'Hide' : 'Show Delta Tables'}
+              </button>
+            </div>
+            {showDeltas && (
+              <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <TriggerInput label="Quickest" value={triggers.quickest} onChange={v => setTriggers(t => ({ ...t, quickest: v }))} isMph={isMphMetric(metric)} />
+                <TriggerInput label="Avg Top N" value={triggers.avgTopN} onChange={v => setTriggers(t => ({ ...t, avgTopN: v }))} isMph={isMphMetric(metric)} />
+                <TriggerInput label="Total Avg" value={triggers.totalAvg} onChange={v => setTriggers(t => ({ ...t, totalAvg: v }))} isMph={isMphMetric(metric)} />
+                <button style={{ ...S.sectionToggle, fontSize: '0.6rem' }} onClick={() => setTriggers(defaultTriggers(metric))}>Reset</button>
+              </div>
+            )}
+            {showDeltas && deltasLoading && <p style={S.hint}>Loading deltas...</p>}
+            {showDeltas && deltasData && <DeltaMatrixSection matrices={deltasData.deltaMatrices} topN={topN} triggers={triggers} metric={metric} />}
+          </div>
+
+          {/* ══════ 7) QUALIFYING ORDER (collapsible) ══════ */}
+          <div style={{ ...S.card, padding: '0.5rem' }} data-testid="dash-qual-order">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+              <h3 style={{ fontSize: '0.85rem' }}>Qualifying Order</h3>
+              <button style={S.sectionToggle} onClick={() => setShowQualOrder(!showQualOrder)}>
+                {showQualOrder ? 'Hide' : 'Show Qual Order'}
+              </button>
+            </div>
+            {showQualOrder && qualLoading && <p style={S.hint}>Loading qualifying order...</p>}
+            {showQualOrder && qualData && <QualOrderTable qualOrder={qualData.qualOrder} />}
+          </div>
+
+          {/* ── Admin: Truth table (collapsed) ── */}
           <div style={{ ...S.card, padding: '0.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <h3 style={{ fontSize: '0.85rem' }}>All Runs{runsData ? ` (${runsData.totalRuns})` : ''}</h3>
@@ -441,113 +521,6 @@ function EventParityView({ event, classIndex, metric, mode, topN, sessionScope }
               </>
             )}
           </div>
-
-          {/* 2) Summary tiles */}
-          <SummaryTiles data={summary} metricLabel={metricLabel} mode={mode} topN={topN} />
-
-          {/* 3) Bar chart */}
-          {barData.length > 0 && (
-            <div style={{ ...S.card, padding: '0.5rem', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>{classIndex} Avg Top {topN} Per Combo — {metricLabel}</h3>
-              <ResponsiveContainer width="100%" height={Math.max(200, barData.length * 40)}>
-                <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={95} />
-                  <Tooltip contentStyle={{ fontSize: '0.75rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }} />
-                  <Bar dataKey="avgTopN" name={`Avg Top ${topN}`}>
-                    {barData.map((entry: { fill: string }, idx: number) => <Cell key={idx} fill={entry.fill} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* 4) Delta comparisons (lazy, with trigger inputs) */}
-          <div style={{ ...S.card, padding: '0.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h3 style={{ fontSize: '0.85rem' }}>Delta Comparisons</h3>
-              <button style={S.sectionToggle} onClick={() => setShowDeltas(!showDeltas)}>
-                {showDeltas ? 'Hide' : 'Show Delta Tables'}
-              </button>
-            </div>
-            {showDeltas && (
-              <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <TriggerInput label="Quickest" value={triggers.quickest} onChange={v => setTriggers(t => ({ ...t, quickest: v }))} isMph={isMphMetric(metric)} />
-                <TriggerInput label="Avg Top N" value={triggers.avgTopN} onChange={v => setTriggers(t => ({ ...t, avgTopN: v }))} isMph={isMphMetric(metric)} />
-                <TriggerInput label="Total Avg" value={triggers.totalAvg} onChange={v => setTriggers(t => ({ ...t, totalAvg: v }))} isMph={isMphMetric(metric)} />
-                <button style={{ ...S.sectionToggle, fontSize: '0.6rem' }} onClick={() => setTriggers(defaultTriggers(metric))}>Reset</button>
-              </div>
-            )}
-            {showDeltas && deltasLoading && <p style={S.hint}>Loading deltas...</p>}
-            {showDeltas && deltasData && <DeltaMatrixSection matrices={deltasData.deltaMatrices} topN={topN} triggers={triggers} />}
-          </div>
-
-          {/* 5) Combo summary table (with audit drilldown) */}
-          <div style={{ ...S.card, padding: '0.5rem', overflowX: 'auto' }}>
-            <h3 style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>Combo Summary</h3>
-            <table style={S.table}>
-              <thead>
-                <tr>
-                  <th style={S.th}>Engine Combo</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Best</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Avg Top {topN}</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Total Avg</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Spread</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Active</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Excl</th>
-                  <th style={{ ...S.th, textAlign: 'center' }}>Wx%</th>
-                  <th style={S.th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.combos.map(c => {
-                  const isBest = c.bestValue != null && c.bestValue === bestComboValue;
-                  const expanded = expandedCombo === c.engineCombo;
-                  return (
-                    <React.Fragment key={c.engineCombo}>
-                      <tr style={{ background: isBest ? 'rgba(34,197,94,0.08)' : undefined }}>
-                        <td style={S.td}>
-                          <span style={{ borderLeft: `3px solid ${comboColor(c.engineCombo)}`, paddingLeft: 6, fontWeight: isBest ? 700 : 400 }}>{c.engineCombo}</span>
-                          {isBest && <span style={{ ...S.badge('#22c55e'), marginLeft: 6, fontSize: '0.55rem' }}>BEST</span>}
-                        </td>
-                        <td style={{ ...S.td, textAlign: 'right', fontWeight: 600 }}>{c.bestValue != null ? fmt(c.bestValue) : <span style={S.noData}>No Data</span>}</td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{c.avgTopN != null ? fmt(c.avgTopN) : <span style={S.noData}>No Data</span>}</td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{c.totalAvg != null ? fmt(c.totalAvg) : <span style={S.noData}>No Data</span>}</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: '#888' }}>{c.spread != null ? fmt(c.spread) : '—'}</td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{c.countActive}</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: c.countExcluded > 0 ? '#ef4444' : '#888' }}>{c.countExcluded}</td>
-                        <td style={{ ...S.td, textAlign: 'center' }}>
-                          {c.weatherCoveragePct != null && <span style={{ ...S.badge(trustColor(c.weatherCoveragePct)), fontSize: '0.55rem' }}>{c.weatherCoveragePct}%</span>}
-                        </td>
-                        <td style={S.td}>
-                          {c.topRuns.length > 0 && (
-                            <button onClick={() => setExpandedCombo(expanded ? null : c.engineCombo)}
-                              style={{ ...S.btn('secondary'), padding: '0.15rem 0.4rem', fontSize: '0.65rem' }}>
-                              {expanded ? 'Hide' : `Audit (${c.topRuns.length})`}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                      {expanded && <AuditDrilldown runs={c.topRuns} mode={mode} />}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 6) Qualifying order (collapsed by default) */}
-          <div style={{ ...S.card, padding: '0.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-              <h3 style={{ fontSize: '0.85rem' }}>Qualifying Order</h3>
-              <button style={S.sectionToggle} onClick={() => setShowQualOrder(!showQualOrder)}>
-                {showQualOrder ? 'Hide' : 'Show Qual Order'}
-              </button>
-            </div>
-            {showQualOrder && qualLoading && <p style={S.hint}>Loading qualifying order...</p>}
-            {showQualOrder && qualData && <QualOrderTable qualOrder={qualData.qualOrder} />}
-          </div>
         </>
       )}
     </div>
@@ -569,6 +542,404 @@ function TriggerInput({ label, value, onChange, isMph }: {
         onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0) onChange(v); }}
         style={{ ...S.input, width: 60, fontSize: '0.65rem', textAlign: 'right' }} />
     </label>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1) MAPPING READINESS BANNER
+// ══════════════════════════════════════════════════════════════════════════════
+
+function MappingBanner({ mappedPct, mapping, readinessLevel, isAdmin, onShowFallback, showFallback }: {
+  mappedPct: number; mapping: ParitySummaryResponse['mapping']; readinessLevel: 'low' | 'partial' | 'full';
+  isAdmin: boolean; onShowFallback: () => void; showFallback: boolean;
+}) {
+  if (!mapping) return null;
+
+  if (readinessLevel === 'low') return (
+    <div data-testid="dash-mapping-banner" style={{ ...S.card, background: '#2d1b1b', border: '1px solid #ef4444', padding: '0.75rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <span style={{ ...S.badge('#ef4444'), fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>Low Mapping Coverage: {mappedPct}%</span>
+      </div>
+      <p style={{ color: '#ef9a9a', fontSize: '0.8rem', margin: '0 0 0.5rem' }}>
+        Combo mapping coverage is only <strong>{mappedPct}%</strong>. Configure Assign Combos to use parity-by-combo.
+      </p>
+      {mapping.topMissingDrivers.length > 0 && (
+        <div style={{ fontSize: '0.75rem', color: '#ef9a9a', marginBottom: '0.5rem' }}>
+          <strong>Top unmapped drivers:</strong>{' '}
+          {mapping.topMissingDrivers.slice(0, 5).map(d => `${d.driver} (${d.runCount})`).join(', ')}
+        </div>
+      )}
+      <div style={S.row}>
+        {isAdmin && <button style={S.btn('primary')}>Assign Combos →</button>}
+        <button style={S.sectionToggle} onClick={onShowFallback}>
+          {showFallback ? 'Hide' : 'Show'} Fallback (Group by Driver)
+        </button>
+      </div>
+    </div>
+  );
+
+  if (readinessLevel === 'partial') return (
+    <div data-testid="dash-mapping-banner" style={{ ...S.card, background: '#332b00', border: '1px solid #eab308', padding: '0.6rem 0.75rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <span style={S.badge('#eab308')}>Partial Mapping: {mappedPct}%</span>
+        <span style={{ color: '#eab308', fontSize: '0.75rem' }}>
+          Results are partial — {mapping.unknownRunCount} unmapped run{mapping.unknownRunCount !== 1 ? 's' : ''} excluded.
+        </span>
+        {mapping.topMissingDrivers.length > 0 && (
+          <span style={{ color: '#eab308', fontSize: '0.65rem' }}>
+            Top: {mapping.topMissingDrivers.slice(0, 3).map(d => `${d.driver} (${d.runCount})`).join(', ')}
+          </span>
+        )}
+        {isAdmin && <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}>Assign Combos →</button>}
+      </div>
+    </div>
+  );
+
+  // full
+  return (
+    <div data-testid="dash-mapping-banner" style={{ ...S.row, marginBottom: '0.5rem', fontSize: '0.75rem' }}>
+      <span style={S.badge('#22c55e')}>Mapped: {mappedPct}% ({mapping.mappedRunCount}/{mapping.mappedRunCount + mapping.unknownRunCount})</span>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 2) COMBO SUMMARY TABLE  (Quickest / Avg Top N / Total Avg / Runs active/total)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function ComboSummaryTable({ combos, metric, topN, isLB, expandedCombo, setExpandedCombo, mode }: {
+  combos: ParitySummaryResponse['combos']; metric: string; topN: number; isLB: boolean;
+  expandedCombo: string | null; setExpandedCombo: (c: string | null) => void; mode: string;
+}) {
+  const bestComboValue = combos.length
+    ? (isLB
+      ? Math.min(...combos.filter(c => c.bestValue != null).map(c => c.bestValue!))
+      : Math.max(...combos.filter(c => c.bestValue != null).map(c => c.bestValue!)))
+    : null;
+
+  return (
+    <table style={S.table}>
+      <thead>
+        <tr>
+          <th style={S.th}>Engine Combo</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>Quickest</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>Avg Top {topN}</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>Total Avg</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>Runs</th>
+          <th style={{ ...S.th, textAlign: 'center' }}>Wx%</th>
+          <th style={S.th}></th>
+        </tr>
+      </thead>
+      <tbody>
+        {combos.map(c => {
+          const isBest = c.bestValue != null && c.bestValue === bestComboValue;
+          const expanded = expandedCombo === c.engineCombo;
+          return (
+            <React.Fragment key={c.engineCombo}>
+              <tr style={{ background: isBest ? 'rgba(34,197,94,0.08)' : undefined }}>
+                <td style={S.td}>
+                  <span style={S.badge(comboColor(c.engineCombo))}>{c.engineCombo}</span>
+                  {isBest && <span style={{ ...S.badge('#22c55e'), marginLeft: 6, fontSize: '0.55rem' }}>BEST</span>}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
+                  {c.bestValue != null ? formatMetric(c.bestValue, metric) : <span style={S.noData}>No Data</span>}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                  {c.avgTopN != null ? formatMetric(c.avgTopN, metric) : <span style={S.noData}>No Data</span>}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                  {c.totalAvg != null ? formatMetric(c.totalAvg, metric) : <span style={S.noData}>No Data</span>}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right' }}>
+                  {c.countActive}{c.countTotal !== c.countActive ? ` / ${c.countTotal}` : ''}
+                </td>
+                <td style={{ ...S.td, textAlign: 'center' }}>
+                  {c.weatherCoveragePct != null && <span style={{ ...S.badge(trustColor(c.weatherCoveragePct)), fontSize: '0.55rem' }}>{c.weatherCoveragePct}%</span>}
+                </td>
+                <td style={S.td}>
+                  {c.topRuns.length > 0 && (
+                    <button onClick={() => setExpandedCombo(expanded ? null : c.engineCombo)}
+                      style={{ ...S.btn('secondary'), padding: '0.15rem 0.4rem', fontSize: '0.65rem' }}>
+                      {expanded ? 'Hide' : `Audit (${c.topRuns.length})`}
+                    </button>
+                  )}
+                </td>
+              </tr>
+              {expanded && <AuditDrilldown runs={c.topRuns} mode={mode} metric={metric} />}
+            </React.Fragment>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 4) INCREMENTALS TABLE (Optimal Run: MIN ET / MAX MPH)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function IncrementalsTable({ data }: { data: ParityIncrementalsResponse }) {
+  if (data.rows.length === 0) return <p style={S.hint}>No incremental data.</p>;
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ ...S.table, fontSize: '0.7rem' }}>
+        <thead>
+          <tr>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Incremental</th>
+            {data.combos.map(c => (
+              <th key={c} style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>
+                <span style={S.badge(comboColor(c))}>{c}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map(row => {
+            const isMph = isIncrementalMph(row.key);
+            return (
+              <tr key={row.key}>
+                <td style={{ ...S.td, fontWeight: 600 }}>
+                  {row.label}
+                  <span style={{ fontSize: '0.5rem', color: '#888', marginLeft: 4 }}>
+                    ({row.isLowerBetter ? 'MIN' : 'MAX'})
+                  </span>
+                </td>
+                {data.combos.map(c => {
+                  const v = row.values[c];
+                  return (
+                    <td key={c} style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                      {v != null ? (isMph ? formatMPH(v) : formatET(v)) : '—'}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 5) WEATHER BY SESSION TABLE
+// ══════════════════════════════════════════════════════════════════════════════
+
+function WeatherSessionTable({ data }: { data: ParitySessionWeatherResponse }) {
+  if (!data.sessions || data.sessions.length === 0) return <p style={S.hint}>No weather data.</p>;
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ ...S.table, fontSize: '0.7rem' }}>
+        <thead>
+          <tr>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Session</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Time Range</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Runs</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Temp °F</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>RH %</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Baro inHg</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>DA ft</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>HPC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.sessions.map((s: any) => (
+            <tr key={s.session}>
+              <td style={{ ...S.td, fontWeight: 600 }}>{s.session}</td>
+              <td style={{ ...S.td, fontSize: '0.6rem' }}>{s.localTimeHint ?? '—'}</td>
+              <td style={{ ...S.td, textAlign: 'right' }}>{s.runCount}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatTemp(s.temp_f)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatRH(s.rh_pct)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatBaro(s.pressure_inhg)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatDA(s.density_alt_ft)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatHPC(s.hpc)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 6) DELTA MATRIX SECTION  (uses user-editable triggers, "No Data" for nulls)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function DeltaMatrixSection({ matrices, topN, triggers, metric }: {
+  matrices: ParityDeltasResponse['deltaMatrices']; topN: number; triggers: TriggerSet; metric: string;
+}) {
+  const sections: { label: string; rows: ParityDeltaRow[]; trigger: number }[] = [
+    { label: 'Quickest Delta', rows: matrices.quickest, trigger: triggers.quickest },
+    { label: `Avg Top ${topN} Delta`, rows: matrices.avgTopN, trigger: triggers.avgTopN },
+    { label: 'Total Avg Delta', rows: matrices.totalAvg, trigger: triggers.totalAvg },
+  ];
+  if (sections.every(s => s.rows.length === 0)) return <p style={S.hint}>Need 2+ combos for delta comparisons.</p>;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.75rem' }}>
+      {sections.map(s => (
+        <div key={s.label} style={{ ...S.card, padding: '0.5rem', overflowX: 'auto', marginBottom: 0 }}>
+          <h4 style={{ fontSize: '0.8rem', marginBottom: '0.3rem' }}>{s.label} <span style={{ color: '#888', fontWeight: 400 }}>(±{s.trigger})</span></h4>
+          {s.rows.length === 0 ? <p style={S.hint}>Need 2+ combos</p> : (
+            <table style={{ ...S.table, fontSize: '0.7rem' }}>
+              <thead><tr>
+                <th style={{ ...S.th, fontSize: '0.65rem' }}>Combo A</th>
+                <th style={{ ...S.th, fontSize: '0.65rem' }}>Combo B</th>
+                <th style={{ ...S.th, fontSize: '0.65rem', textAlign: 'right' }}>A</th>
+                <th style={{ ...S.th, fontSize: '0.65rem', textAlign: 'right' }}>B</th>
+                <th style={{ ...S.th, fontSize: '0.65rem', textAlign: 'right' }}>Delta</th>
+              </tr></thead>
+              <tbody>
+                {s.rows.map((r, i) => {
+                  const hasNoData = r.valueA === null || r.valueB === null;
+                  let bg = 'transparent';
+                  if (!hasNoData && r.delta !== null) {
+                    if (r.delta < -s.trigger) bg = 'rgba(239,68,68,0.15)';
+                    else if (r.delta > s.trigger) bg = 'rgba(234,179,8,0.15)';
+                  }
+                  return (
+                    <tr key={i} style={{ background: bg }}>
+                      <td style={S.td}><span style={{ borderLeft: `3px solid ${comboColor(r.comboA)}`, paddingLeft: 4 }}>{r.comboA}</span></td>
+                      <td style={S.td}><span style={{ borderLeft: `3px solid ${comboColor(r.comboB)}`, paddingLeft: 4 }}>{r.comboB}</span></td>
+                      <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.valueA !== null ? formatMetric(r.valueA, metric) : <span style={S.noData}>No Data</span>}</td>
+                      <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.valueB !== null ? formatMetric(r.valueB, metric) : <span style={S.noData}>No Data</span>}</td>
+                      <td style={{ ...S.td, textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>
+                        {hasNoData
+                          ? <span style={S.noData}>No Data</span>
+                          : r.delta !== null ? formatDelta(r.delta, metric) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 7) QUALIFYING ORDER TABLE
+// ══════════════════════════════════════════════════════════════════════════════
+
+function QualOrderTable({ qualOrder }: { qualOrder: ParityComboRun[] }) {
+  if (qualOrder.length === 0) return <p style={S.hint}>No qualifying runs found.</p>;
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ ...S.table, fontSize: '0.7rem' }}>
+        <thead><tr>
+          <th style={{ ...S.th, fontSize: '0.6rem' }}>#</th>
+          <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
+          <th style={{ ...S.th, fontSize: '0.6rem' }}>Combo</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>ET</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>MPH</th>
+          <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
+        </tr></thead>
+        <tbody>
+          {qualOrder.map(r => (
+            <tr key={r.runId}>
+              <td style={{ ...S.td, fontWeight: 600 }}>{r.qualPosition}</td>
+              <td style={S.td}>{r.driver}</td>
+              <td style={S.td}><span style={S.badge(comboColor(r.engineCombo))}>{r.engineCombo}</span></td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
+              <td style={S.td}>{r.round ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TRUTH TABLE (admin drilldown)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function TruthTable({ runs }: { runs: ParityComboRun[] }) {
+  return (
+    <div style={{ overflowX: 'auto', maxHeight: 400, overflowY: 'auto' }}>
+      <table style={{ ...S.table, fontSize: '0.7rem' }}>
+        <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface)' }}>
+          <tr>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Combo</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>ET</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>MPH</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody>
+          {runs.map(r => (
+            <tr key={r.runId}>
+              <td style={S.td}><span style={{ ...S.badge(comboColor(r.engineCombo)), fontSize: '0.6rem' }}>{r.engineCombo}</span></td>
+              <td style={S.td}>{r.driver}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
+              <td style={S.td}>{r.round ?? '—'}</td>
+              <td style={{ ...S.td, fontSize: '0.6rem' }}>{r.timestamp?.slice(0, 16) ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIT DRILLDOWN (expanded run detail for a combo)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function AuditDrilldown({ runs, mode, metric }: { runs: ParityComboRun[]; mode: string; metric: string }) {
+  return (
+    <tr>
+      <td colSpan={9} style={{ padding: '0.5rem', background: 'var(--color-bg)' }}>
+        <table style={{ ...S.table, fontSize: '0.65rem' }}>
+          <thead><tr>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>#</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Lane</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Raw</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>{mode === 'corrected' ? 'Corrected' : 'Value'}</th>
+            {mode === 'corrected' && <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>CF</th>}
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Timestamp</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Temp</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>RH</th>
+            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Baro</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Wx</th>
+            <th style={{ ...S.th, fontSize: '0.6rem' }}>Status</th>
+          </tr></thead>
+          <tbody>
+            {runs.map((r, i) => {
+              const w = r.weather;
+              return (
+                <tr key={r.runId}>
+                  <td style={S.td}>{i + 1}</td>
+                  <td style={S.td}>{r.driver}</td>
+                  <td style={S.td}>{r.round ?? '—'}</td>
+                  <td style={S.td}>{r.lane ?? '—'}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMetric(r.rawValue, metric)}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>{formatMetric(r.value, metric)}</td>
+                  {mode === 'corrected' && <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.correctionFactor?.toFixed(4) ?? '—'}</td>}
+                  <td style={{ ...S.td, fontSize: '0.55rem' }}>{r.timestamp?.slice(0, 16) ?? '—'}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{w ? formatTemp(w.temp_f) : '—'}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{w ? formatRH(w.rh_pct) : '—'}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{w ? formatBaro(w.pressure_inhg) : '—'}</td>
+                  <td style={{ ...S.td, fontSize: '0.55rem' }}>{w?.source ?? '—'}</td>
+                  <td style={S.td}>
+                    {r.flagged && <span style={{ ...S.badge('#ef4444'), fontSize: '0.5rem' }}>FLAG</span>}
+                    {r.dqFlag !== 0 && <span style={{ ...S.badge('#ef4444'), fontSize: '0.5rem', marginLeft: 2 }}>DQ</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </td>
+    </tr>
   );
 }
 
@@ -621,8 +992,8 @@ function FallbackDriverView({ eventId, classIndex, metric, mode, sessionScope }:
             <tr key={d.driver}>
               <td style={{ ...S.td, fontWeight: 600 }}>{i + 1}</td>
               <td style={S.td}>{d.driver}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{d.best.et?.toFixed(4) ?? '—'}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{d.best.mph?.toFixed(2) ?? '—'}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{formatET(d.best.et)}</td>
+              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(d.best.mph)}</td>
               <td style={S.td}>{d.best.round ?? '—'}</td>
               <td style={{ ...S.td, textAlign: 'right' }}>{d.count}</td>
             </tr>
@@ -630,219 +1001,6 @@ function FallbackDriverView({ eventId, classIndex, metric, mode, sessionScope }:
         </tbody>
       </table>
     </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SUMMARY TILES  (shows "No Data" when null)
-// ══════════════════════════════════════════════════════════════════════════════
-
-function SummaryTiles({ data, metricLabel, mode, topN }: {
-  data: ParitySummaryResponse; metricLabel: string; mode: string; topN: number;
-}) {
-  const tiles: { label: string; field: 'bestValue' | 'avgTopN' | 'totalAvg' }[] = [
-    { label: 'Quickest', field: 'bestValue' },
-    { label: `Avg Top ${topN}`, field: 'avgTopN' },
-    { label: 'Total Avg', field: 'totalAvg' },
-  ];
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tiles.length}, 1fr)`, gap: '0.75rem', marginBottom: '1rem' }}>
-      {tiles.map(t => (
-        <div key={t.label} style={{ ...S.card, padding: '0.6rem' }}>
-          <div style={{ fontSize: '0.7rem', color: '#888', fontWeight: 600, marginBottom: '0.3rem' }}>{t.label} — {metricLabel} ({mode})</div>
-          {data.combos.map(c => (
-            <div key={c.engineCombo} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.15rem 0', fontSize: '0.75rem' }}>
-              <span style={{ borderLeft: `3px solid ${comboColor(c.engineCombo)}`, paddingLeft: 6 }}>{c.engineCombo}</span>
-              <span style={{ fontWeight: 600 }}>
-                {c[t.field] != null ? fmt(c[t.field]) : <span style={S.noData}>No Data</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// DELTA MATRIX SECTION  (uses user-editable triggers, "No Data" for nulls)
-// ══════════════════════════════════════════════════════════════════════════════
-
-function DeltaMatrixSection({ matrices, topN, triggers }: {
-  matrices: ParityDeltasResponse['deltaMatrices']; topN: number; triggers: TriggerSet;
-}) {
-  const sections: { label: string; rows: ParityDeltaRow[]; trigger: number }[] = [
-    { label: 'Quickest Delta', rows: matrices.quickest, trigger: triggers.quickest },
-    { label: `Avg Top ${topN} Delta`, rows: matrices.avgTopN, trigger: triggers.avgTopN },
-    { label: 'Total Avg Delta', rows: matrices.totalAvg, trigger: triggers.totalAvg },
-  ];
-  if (sections.every(s => s.rows.length === 0)) return <p style={S.hint}>Need 2+ combos for delta comparisons.</p>;
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.75rem' }}>
-      {sections.map(s => (
-        <div key={s.label} style={{ ...S.card, padding: '0.5rem', overflowX: 'auto', marginBottom: 0 }}>
-          <h4 style={{ fontSize: '0.8rem', marginBottom: '0.3rem' }}>{s.label} <span style={{ color: '#888', fontWeight: 400 }}>(±{s.trigger})</span></h4>
-          {s.rows.length === 0 ? <p style={S.hint}>Need 2+ combos</p> : (
-            <table style={{ ...S.table, fontSize: '0.7rem' }}>
-              <thead><tr>
-                <th style={{ ...S.th, fontSize: '0.65rem' }}>Combo A</th>
-                <th style={{ ...S.th, fontSize: '0.65rem' }}>Combo B</th>
-                <th style={{ ...S.th, fontSize: '0.65rem', textAlign: 'right' }}>A</th>
-                <th style={{ ...S.th, fontSize: '0.65rem', textAlign: 'right' }}>B</th>
-                <th style={{ ...S.th, fontSize: '0.65rem', textAlign: 'right' }}>Delta</th>
-              </tr></thead>
-              <tbody>
-                {s.rows.map((r, i) => {
-                  const hasNoData = r.valueA === null || r.valueB === null;
-                  let bg = 'transparent';
-                  if (!hasNoData && r.delta !== null) {
-                    if (r.delta < -s.trigger) bg = 'rgba(239,68,68,0.15)';
-                    else if (r.delta > s.trigger) bg = 'rgba(234,179,8,0.15)';
-                  }
-                  return (
-                    <tr key={i} style={{ background: bg }}>
-                      <td style={S.td}><span style={{ borderLeft: `3px solid ${comboColor(r.comboA)}`, paddingLeft: 4 }}>{r.comboA}</span></td>
-                      <td style={S.td}><span style={{ borderLeft: `3px solid ${comboColor(r.comboB)}`, paddingLeft: 4 }}>{r.comboB}</span></td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>{r.valueA !== null ? fmt(r.valueA) : <span style={S.noData}>No Data</span>}</td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>{r.valueB !== null ? fmt(r.valueB) : <span style={S.noData}>No Data</span>}</td>
-                      <td style={{ ...S.td, textAlign: 'right', fontWeight: 600 }}>
-                        {hasNoData
-                          ? <span style={S.noData}>No Data</span>
-                          : r.delta !== null ? (r.delta > 0 ? '+' : '') + r.delta.toFixed(4) : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// TRUTH TABLE
-// ══════════════════════════════════════════════════════════════════════════════
-
-function TruthTable({ runs }: { runs: ParityComboRun[] }) {
-  return (
-    <div style={{ overflowX: 'auto', maxHeight: 400, overflowY: 'auto' }}>
-      <table style={{ ...S.table, fontSize: '0.7rem' }}>
-        <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface)' }}>
-          <tr>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Combo</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>ET</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>MPH</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Timestamp</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map(r => (
-            <tr key={r.runId}>
-              <td style={S.td}><span style={{ borderLeft: `3px solid ${comboColor(r.engineCombo)}`, paddingLeft: 4, fontSize: '0.65rem' }}>{r.engineCombo}</span></td>
-              <td style={S.td}>{r.driver}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.et?.toFixed(4) ?? '—'}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.mph?.toFixed(2) ?? '—'}</td>
-              <td style={S.td}>{r.round ?? '—'}</td>
-              <td style={{ ...S.td, fontSize: '0.6rem' }}>{r.timestamp?.slice(0, 16) ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// QUALIFYING ORDER TABLE
-// ══════════════════════════════════════════════════════════════════════════════
-
-function QualOrderTable({ qualOrder }: { qualOrder: ParityComboRun[] }) {
-  if (qualOrder.length === 0) return <p style={S.hint}>No qualifying runs found.</p>;
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ ...S.table, fontSize: '0.7rem' }}>
-        <thead><tr>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>#</th>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>Combo</th>
-          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>ET</th>
-          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>MPH</th>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
-        </tr></thead>
-        <tbody>
-          {qualOrder.map(r => (
-            <tr key={r.runId}>
-              <td style={{ ...S.td, fontWeight: 600 }}>{r.qualPosition}</td>
-              <td style={S.td}>{r.driver}</td>
-              <td style={S.td}><span style={{ borderLeft: `3px solid ${comboColor(r.engineCombo)}`, paddingLeft: 4 }}>{r.engineCombo}</span></td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.et?.toFixed(4) ?? '—'}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.mph?.toFixed(2) ?? '—'}</td>
-              <td style={S.td}>{r.round ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// AUDIT DRILLDOWN
-// ══════════════════════════════════════════════════════════════════════════════
-
-function AuditDrilldown({ runs, mode }: { runs: ParityComboRun[]; mode: string }) {
-  return (
-    <tr>
-      <td colSpan={9} style={{ padding: '0.5rem', background: 'var(--color-bg)' }}>
-        <table style={{ ...S.table, fontSize: '0.65rem' }}>
-          <thead><tr>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>#</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Lane</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Raw</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>{mode === 'corrected' ? 'Corrected' : 'Value'}</th>
-            {mode === 'corrected' && <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>CF</th>}
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Timestamp</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Temp</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>RH</th>
-            <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>Press</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Wx</th>
-            <th style={{ ...S.th, fontSize: '0.6rem' }}>Status</th>
-          </tr></thead>
-          <tbody>
-            {runs.map((r, i) => {
-              const w = r.weather;
-              return (
-                <tr key={r.runId}>
-                  <td style={S.td}>{i + 1}</td>
-                  <td style={S.td}>{r.driver}</td>
-                  <td style={S.td}>{r.round ?? '—'}</td>
-                  <td style={S.td}>{r.lane ?? '—'}</td>
-                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.rawValue.toFixed(4)}</td>
-                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>{r.value.toFixed(4)}</td>
-                  {mode === 'corrected' && <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{r.correctionFactor?.toFixed(4) ?? '—'}</td>}
-                  <td style={{ ...S.td, fontSize: '0.55rem' }}>{r.timestamp?.slice(0, 16) ?? '—'}</td>
-                  <td style={{ ...S.td, textAlign: 'right' }}>{w ? w.temp_f.toFixed(1) : '—'}</td>
-                  <td style={{ ...S.td, textAlign: 'right' }}>{w ? w.rh_pct.toFixed(1) : '—'}</td>
-                  <td style={{ ...S.td, textAlign: 'right' }}>{w ? w.pressure_inhg.toFixed(3) : '—'}</td>
-                  <td style={{ ...S.td, fontSize: '0.55rem' }}>{w?.source ?? '—'}</td>
-                  <td style={S.td}>
-                    {r.flagged && <span style={{ ...S.badge('#ef4444'), fontSize: '0.5rem' }}>FLAG</span>}
-                    {r.dqFlag !== 0 && <span style={{ ...S.badge('#ef4444'), fontSize: '0.5rem', marginLeft: 2 }}>DQ</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </td>
-    </tr>
   );
 }
 
@@ -901,7 +1059,7 @@ function RangeParityView({ classIndex, metric, mode, topN, sessionScope }: {
               <th style={{ ...S.th, fontSize: '0.6rem' }}>Date</th>
               {data.combos.map(cn => (
                 <th key={cn} style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>
-                  <span style={{ borderLeft: `3px solid ${comboColor(cn)}`, paddingLeft: 4 }}>{cn}</span>
+                  <span style={S.badge(comboColor(cn))}>{cn}</span>
                 </th>
               ))}
             </tr></thead>
@@ -922,7 +1080,7 @@ function RangeParityView({ classIndex, metric, mode, topN, sessionScope }: {
                       const isBest = v !== null && v === bestVal;
                       return (
                         <td key={cn} style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontWeight: isBest ? 700 : 400, color: isBest ? '#22c55e' : 'var(--color-text)', background: isBest ? 'rgba(34,197,94,0.08)' : undefined }}>
-                          {v !== null ? v.toFixed(4) : '—'}
+                          {v !== null ? formatMetric(v, metric) : '—'}
                           {cell && <span style={{ fontSize: '0.5rem', color: '#888', marginLeft: 2 }}>({cell.count})</span>}
                         </td>
                       );

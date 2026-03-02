@@ -355,6 +355,37 @@ export interface IngestManyParams {
   throttleMs?: number;
 }
 
+// ── Bulk Create Events Types ─────────────────────────────────────────────
+
+export interface BulkCreateEventRow {
+  event_name: string;
+  track_id: number;
+  start_date_local: string;
+  end_date_local: string;
+  race_lookup?: string;
+  season_year?: number;
+}
+
+export interface BulkCreateEventsResult {
+  row: number;
+  status: 'created' | 'duplicate_skipped' | 'duplicate_updated' | 'error';
+  eventId?: number;
+  existingEventId?: number;
+  raceLookup?: string;
+  error?: string;
+}
+
+export interface BulkCreateEventsResponse {
+  ok: boolean;
+  summary: {
+    created: number;
+    duplicate_skipped: number;
+    duplicate_updated: number;
+    error: number;
+  };
+  results: BulkCreateEventsResult[];
+}
+
 // ── Event/Track/Flag Types ───────────────────────────────────────────────
 
 export interface EventWithStats {
@@ -1742,6 +1773,19 @@ export const parityApi = {
       method: 'POST',
       body: JSON.stringify(params),
     });
+  },
+
+  async bulkCreateEvents(params: {
+    events: BulkCreateEventRow[];
+    skipDuplicates?: boolean;
+    updateExisting?: boolean;
+  }): Promise<BulkCreateEventsResponse> {
+    const result = await parityRequest<BulkCreateEventsResponse>('/parity.php?action=bulkCreateEvents', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    invalidateParityCache('events');
+    return result;
   },
 
   // ── Dashboard endpoints ───────────────────────────────────────────────

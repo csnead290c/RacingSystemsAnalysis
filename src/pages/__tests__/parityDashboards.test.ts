@@ -30,8 +30,8 @@ describe('Dashboard tabs are wired into portal', () => {
     expect(portalSource).toContain("key: 'weatherDash'");
   });
 
-  it('DASHBOARD_TABS includes parityDash', () => {
-    expect(portalSource).toContain("key: 'parityDash'");
+  it('parityDash tab removed from DASHBOARD_TABS (superseded by parityReport)', () => {
+    expect(portalSource).not.toContain("key: 'parityDash'");
   });
 
   it('tab rendering dispatches to WeatherDashPanel', () => {
@@ -39,9 +39,8 @@ describe('Dashboard tabs are wired into portal', () => {
     expect(portalSource).toContain('<WeatherDashPanel');
   });
 
-  it('tab rendering dispatches to ParityDashPanel', () => {
-    expect(portalSource).toContain("tab === 'parityDash'");
-    expect(portalSource).toContain('<ParityDashPanel');
+  it('ParityDashPanel import kept but tab removed from dashboard', () => {
+    expect(portalSource).toContain('ParityDashPanel');
   });
 });
 
@@ -56,81 +55,57 @@ describe('WeatherDashPanel component structure', () => {
     expect(portalSource).toContain('parityApi.weatherTimeseries');
   });
 
-  it('renders coverage summary card', () => {
-    expect(portalSource).toContain('Coverage');
-    expect(portalSource).toContain('coveragePct');
+  it('does not render admin stats rows (coverage/sources/station counts removed)', () => {
+    expect(portalSource).not.toContain('Sources:');
+    expect(portalSource).not.toContain('stationPointsCount');
+    expect(portalSource).not.toContain('backupPointsCount');
+    expect(portalSource).not.toContain('stat.canonical');
   });
 
-  it('renders station and backup point counts', () => {
-    expect(portalSource).toContain('stationPointsCount');
-    expect(portalSource).toContain('backupPointsCount');
+  it('renders 6-panel chart grid for temp/rh/baro/da/cf/dewPt', () => {
+    expect(portalSource).toContain('Temperature');
+    expect(portalSource).toContain('Humidity');
+    expect(portalSource).toContain('Barometer');
+    expect(portalSource).toContain('Density Alt');
+    expect(portalSource).toContain('Corr Factor');
+    expect(portalSource).toContain('Dew Point');
   });
 
-  it('renders largest gap card', () => {
-    expect(portalSource).toContain('largestGapMinutes');
-    expect(portalSource).toContain('largestGapAt');
+  it('supports time-range selector buttons', () => {
+    expect(portalSource).toContain("type WxRange");
+    expect(portalSource).toContain("WX_RANGES");
+    expect(portalSource).toContain("'1h'");
+    expect(portalSource).toContain("'12h'");
+    expect(portalSource).toContain("'event'");
   });
 
-  it('supports chart metric selector for temp/rh/pressure', () => {
-    expect(portalSource).toContain("'temp' | 'rh' | 'pressure'");
-    expect(portalSource).toContain('Temperature (°F)');
-    expect(portalSource).toContain('Relative Humidity (%)');
-    expect(portalSource).toContain('Pressure (inHg)');
-  });
-
-  it('supports toggling canonical/station/backup series', () => {
-    expect(portalSource).toContain('visibleSeries');
-    expect(portalSource).toContain('toggleSeries');
-    expect(portalSource).toContain("canonical: true, station: true, backup: true");
-  });
-
-  it('renders Recharts LineChart for main timeseries', () => {
-    // Should have LineChart with canonical/station/backup data keys
+  it('renders Recharts LineChart for multi-panel grid', () => {
     const lineChartMatches = portalSource.match(/<LineChart/g);
     expect(lineChartMatches).not.toBeNull();
-    expect(lineChartMatches!.length).toBeGreaterThanOrEqual(2); // main + delta
+    expect(lineChartMatches!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('renders delta chart for station-backup differences', () => {
-    expect(portalSource).toContain('Station − Backup Deltas');
-    expect(portalSource).toContain('tempDelta');
-    expect(portalSource).toContain('rhDelta');
-    expect(portalSource).toContain('pressDelta');
+  it('computes derived metrics per timeseries point', () => {
+    expect(portalSource).toContain('interface DerivedPoint');
+    expect(portalSource).toContain('allDerived');
+    expect(portalSource).toContain('filteredDerived');
   });
 
-  it('renders source breakdown badges', () => {
-    expect(portalSource).toContain('sourceBreakdown');
-    expect(portalSource).toContain('Sources:');
-  });
 
-  it('shows warnings for low coverage and large gaps', () => {
-    expect(portalSource).toContain('Low coverage');
-    expect(portalSource).toContain('Large gap');
-    expect(portalSource).toContain('No station data');
-  });
-
-  it('computes derived metrics from latest canonical point', () => {
+  it('computes derived weather using computeWeather and pct_to_frac', () => {
     expect(portalSource).toContain('computeWeather');
     expect(portalSource).toContain('pct_to_frac');
-    expect(portalSource).toContain('Derived Metrics');
   });
 
-  it('displays all key derived metric values', () => {
-    expect(portalSource).toContain('Theta (θ)');
-    expect(portalSource).toContain('Delta (δ)');
+  it('renders current conditions cards with key values', () => {
     expect(portalSource).toContain('Density Alt');
     expect(portalSource).toContain('Air Density');
     expect(portalSource).toContain('Water Grains');
-    expect(portalSource).toContain('Correction Factor');
+    expect(portalSource).toContain('Corr Factor');
     expect(portalSource).toContain('Dew Point');
-    expect(portalSource).toContain('Vapor Pressure');
+    expect(portalSource).toContain('CondCard');
   });
 
-  it('renders stats summary grid for temp/rh/pressure with min/max/avg', () => {
-    expect(portalSource).toContain('stats.temp.canonical');
-    expect(portalSource).toContain('stats.rh.canonical');
-    expect(portalSource).toContain('stats.pressure.canonical');
-  });
 });
 
 // ── ParityDashPanel Structure ───────────────────────────────────────────
@@ -256,18 +231,15 @@ describe('ParityDashPanel component structure', () => {
     expect(parityDashSource).toContain('noData');
   });
 
-  it('orders sections: truth table, tiles, chart, deltas, combo summary, qual order', () => {
-    const truthIdx = parityDashSource.indexOf('Show Truth Table');
-    const tilesIdx = parityDashSource.indexOf('SummaryTiles');
+  it('orders sections: combo summary, chart, deltas, qual order', () => {
+    const comboIdx = parityDashSource.indexOf('Combo Summary');
     const chartIdx = parityDashSource.indexOf('<BarChart');
     const deltasIdx = parityDashSource.indexOf('Delta Comparisons');
-    const comboIdx = parityDashSource.indexOf('Combo Summary');
     const qualIdx = parityDashSource.indexOf('Qualifying Order');
-    expect(truthIdx).toBeLessThan(tilesIdx);
-    expect(tilesIdx).toBeLessThan(chartIdx);
+    expect(comboIdx).toBeGreaterThan(-1);
+    expect(comboIdx).toBeLessThan(chartIdx);
     expect(chartIdx).toBeLessThan(deltasIdx);
-    expect(deltasIdx).toBeLessThan(comboIdx);
-    expect(comboIdx).toBeLessThan(qualIdx);
+    expect(deltasIdx).toBeLessThan(qualIdx);
   });
 });
 
@@ -329,8 +301,8 @@ describe('ParityReport tab is wired into portal', () => {
 
 describe('ParityReport component structure', () => {
   it('has Event and Long-Term report mode tabs', () => {
-    expect(parityReportSource).toContain('Event Parity Report');
-    expect(parityReportSource).toContain('Long-Term Parity Report');
+    expect(parityReportSource).toContain('Event Parity');
+    expect(parityReportSource).toContain('Long-Term Parity');
   });
 
   it('uses deterministic combo colors via FNV-1a hash', () => {
@@ -339,7 +311,7 @@ describe('ParityReport component structure', () => {
     expect(parityReportSource).toContain('comboColor');
   });
 
-  it('has class and session scope selectors', () => {
+  it('has class selector and locked metric/session', () => {
     expect(parityReportSource).toContain('PARITY_CLASSES');
     expect(parityReportSource).toContain('sessionScope');
     expect(parityReportSource).toContain('PARITY_METRICS');
@@ -353,9 +325,9 @@ describe('ParityReport component structure', () => {
     expect(parityReportSource).toContain('parityApi.paritySessionWeather');
   });
 
-  it('has incrementals table with optimal-run labels', () => {
+  it('has incrementals table', () => {
     expect(parityReportSource).toContain('IncrementalsTable');
-    expect(parityReportSource).toContain('Incrementals by Combo (Optimal Run)');
+    expect(parityReportSource).toContain('Incrementals');
   });
 
   it('has weather by session table', () => {
@@ -368,10 +340,9 @@ describe('ParityReport component structure', () => {
     expect(parityReportSource).toContain('Raw Qualifying Results');
   });
 
-  it('has delta comparison tables with trigger thresholds', () => {
+  it('has delta tables with default trigger thresholds', () => {
     expect(parityReportSource).toContain('DeltaTable');
-    expect(parityReportSource).toContain('Delta Comparison Tables');
-    expect(parityReportSource).toContain('TriggerInput');
+    expect(parityReportSource).toContain('defaultTriggers');
   });
 
   it('has bar chart for quickest per combo', () => {

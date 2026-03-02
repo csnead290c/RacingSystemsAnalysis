@@ -222,6 +222,10 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleUpdateEvent($pdo, $auth);
         break;
+    case 'bulkCreateEvents':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleBulkCreateEvents($pdo, $auth);
+        break;
     case 'listClassAliases':
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleListClassAliases($pdo);
@@ -2509,43 +2513,25 @@ function handleBackfillEventWeather(PDO $pdo, int $userId, array $auth): void {
  */
 function parity_correctionFactor(?float $tempF, ?float $pressInhg, ?float $rhPct): ?float {
     if ($tempF === null || $pressInhg === null) return null;
-    $rh = ($rhPct !== null) ? $rhPct : 0.0;
+    $rh = ($rhPct !== null) ? $rhPct / 100.0 : 0.0; // fraction
 
-    // Convert to Celsius for Magnus formula
-    $tempC = ($tempF - 32.0) * 5.0 / 9.0;
-    // Absolute temperature in Rankine (for density ratio)
-    $tAbsActual = $tempF + 459.67;
-    $tAbsStd = PARITY_STD_TEMP_F + 459.67;
+    $T = $tempF;
+    $BP = $pressInhg;
+    $H = $rh;
 
-    // Station pressure in mb
-    $pActualMb = $pressInhg * PARITY_INHG_TO_MB;
-    $pStdMb = PARITY_STD_PRESS_INHG * PARITY_INHG_TO_MB;
+    // Exact match to weatherCorrection.ts correctionFactor()
+    // SVP via NHRA formula
+    $svp = 29.98 / exp(35.83 * (212 - $T) / pow($T + 459.67, 1.152));
+    $vp = $H * $svp;
+    $dap = $BP - $vp;
 
-    // Saturation vapor pressure (Magnus formula) in mb
-    $esActual = 6.1078 * pow(10.0, (7.5 * $tempC) / (237.3 + $tempC));
-    $stdTempC = (PARITY_STD_TEMP_F - 32.0) * 5.0 / 9.0;
-    $esStd = 6.1078 * pow(10.0, (7.5 * $stdTempC) / (237.3 + $stdTempC));
+    if ($dap <= 0) return null;
 
-    // Vapor pressure
-    $vpActual = ($rh / 100.0) * $esActual;
-    $vpStd = (PARITY_STD_RH_PCT / 100.0) * $esStd; // 0 for std
+    $tempC = ($T - 32) * (5.0 / 9.0);
+    $tempK = $tempC + 273.15;
 
-    // Dry air pressure
-    $pDryActual = $pActualMb - $vpActual;
-    $pDryStd = $pStdMb - $vpStd;
-
-    if ($pDryActual <= 0 || $tAbsActual <= 0) return null;
-
-    // Density ∝ P_dry / T_abs
-    $densityActual = $pDryActual / $tAbsActual;
-    $densityStd = $pDryStd / $tAbsStd;
-
-    if ($densityActual <= 0) return null;
-
-    // correction_factor = std / actual
-    // > 1 means actual air is thinner → car ran slower → corrected ET goes DOWN
-    // < 1 means actual air is denser → car ran faster → corrected ET goes UP
-    return $densityStd / $densityActual;
+    // CF = 1.176 * (1013.207 / (dap / 0.02953)) * sqrt(tempK / 288.706) - 0.176
+    return 1.176 * (1013.20690822892 / ($dap / 0.02953)) * pow($tempK / 288.705555555556, 0.5) - 0.176;
 }
 
 /**
@@ -4405,6 +4391,138 @@ function handleUpdateEvent(PDO $pdo, array $auth): void {
     $pdo->prepare("UPDATE parity_events SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
 
     rsa_jsonResponse(['ok' => true, 'eventId' => $eventId]);
+}
+
+// ============================================================================
+// POST ?action=bulkCreateEvents
+// Body: { events: [ { event_name, track_id, start_date_local, end_date_local, race_lookup?, season_year? }, ... ], skipDuplicates?: true, updateExisting?: false }
+// Returns per-row results with status: created | duplicate_skipped | duplicate_updated | error
+// ============================================================================
+
+function handleBulkCreateEvents(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $rows = $input['events'] ?? [];
+    $skipDuplicates = (bool)($input['skipDuplicates'] ?? true);
+    $updateExisting = (bool)($input['updateExisting'] ?? false);
+
+    if (!is_array($rows) || count($rows) === 0) {
+        rsa_jsonResponse(['error' => 'events array is required and must not be empty'], 400);
+    }
+    if (count($rows) > 200) {
+        rsa_jsonResponse(['error' => 'Maximum 200 events per batch'], 400);
+    }
+
+    // Pre-load all tracks for validation
+    $trackStmt = $pdo->query("SELECT id FROM parity_tracks");
+    $validTrackIds = [];
+    foreach ($trackStmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
+        $validTrackIds[(int)$t['id']] = true;
+    }
+
+    // Pre-load existing events for duplicate detection (start_date + track_id)
+    $existingStmt = $pdo->query("SELECT id, start_date_local, track_id, race_lookup FROM parity_events");
+    $existingMap = []; // key: "YYYY-MM-DD|track_id"
+    foreach ($existingStmt->fetchAll(PDO::FETCH_ASSOC) as $e) {
+        $key = $e['start_date_local'] . '|' . (int)$e['track_id'];
+        $existingMap[$key] = [
+            'id' => (int)$e['id'],
+            'race_lookup' => $e['race_lookup'],
+        ];
+    }
+
+    $insertStmt = $pdo->prepare("
+        INSERT INTO parity_events (event_name, track_id, start_date_local, end_date_local, race_lookup, season_year)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ");
+    $updateStmt = $pdo->prepare("
+        UPDATE parity_events SET event_name = ?, end_date_local = ?, race_lookup = ?, season_year = ?
+        WHERE id = ?
+    ");
+
+    $results = [];
+    $summary = ['created' => 0, 'duplicate_skipped' => 0, 'duplicate_updated' => 0, 'error' => 0];
+
+    foreach ($rows as $i => $row) {
+        $eventName = trim($row['event_name'] ?? '');
+        $trackId = (int)($row['track_id'] ?? 0);
+        $startDate = trim($row['start_date_local'] ?? '');
+        $endDate = trim($row['end_date_local'] ?? '');
+        $raceLookup = trim($row['race_lookup'] ?? '');
+        $seasonYear = isset($row['season_year']) ? (int)$row['season_year'] : null;
+
+        // Validation
+        if (empty($eventName)) {
+            $results[] = ['row' => $i, 'status' => 'error', 'error' => 'event_name is required'];
+            $summary['error']++;
+            continue;
+        }
+        if ($trackId <= 0 || !isset($validTrackIds[$trackId])) {
+            $results[] = ['row' => $i, 'status' => 'error', 'error' => "Invalid track_id: $trackId"];
+            $summary['error']++;
+            continue;
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) {
+            $results[] = ['row' => $i, 'status' => 'error', 'error' => "Invalid start_date_local: $startDate"];
+            $summary['error']++;
+            continue;
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate)) {
+            $results[] = ['row' => $i, 'status' => 'error', 'error' => "Invalid end_date_local: $endDate"];
+            $summary['error']++;
+            continue;
+        }
+
+        // Auto-generate race_lookup if empty
+        if (empty($raceLookup)) {
+            $raceLookup = str_replace('-', '', $startDate); // YYYYMMDD
+        }
+
+        // Auto-generate season_year if null
+        if ($seasonYear === null || $seasonYear === 0) {
+            $seasonYear = (int)substr($startDate, 0, 4);
+        }
+
+        // Duplicate check
+        $dupKey = $startDate . '|' . $trackId;
+        if (isset($existingMap[$dupKey])) {
+            $existingId = $existingMap[$dupKey]['id'];
+            if ($updateExisting) {
+                try {
+                    $updateStmt->execute([$eventName, $endDate, $raceLookup, $seasonYear, $existingId]);
+                    $results[] = ['row' => $i, 'status' => 'duplicate_updated', 'eventId' => $existingId, 'raceLookup' => $raceLookup];
+                    $summary['duplicate_updated']++;
+                } catch (PDOException $e) {
+                    $results[] = ['row' => $i, 'status' => 'error', 'error' => 'Update failed: ' . $e->getMessage()];
+                    $summary['error']++;
+                }
+            } else {
+                $results[] = ['row' => $i, 'status' => 'duplicate_skipped', 'existingEventId' => $existingId];
+                $summary['duplicate_skipped']++;
+            }
+            continue;
+        }
+
+        // Insert
+        try {
+            $insertStmt->execute([$eventName, $trackId, $startDate, $endDate, $raceLookup, $seasonYear]);
+            $newId = (int)$pdo->lastInsertId();
+            $results[] = ['row' => $i, 'status' => 'created', 'eventId' => $newId, 'raceLookup' => $raceLookup];
+            $summary['created']++;
+            // Add to existing map to catch intra-batch duplicates
+            $existingMap[$dupKey] = ['id' => $newId, 'race_lookup' => $raceLookup];
+        } catch (PDOException $e) {
+            $results[] = ['row' => $i, 'status' => 'error', 'error' => 'Insert failed: ' . $e->getMessage()];
+            $summary['error']++;
+        }
+    }
+
+    rsa_jsonResponse([
+        'ok' => true,
+        'summary' => $summary,
+        'results' => $results,
+    ]);
 }
 
 // ============================================================================
@@ -7108,20 +7226,22 @@ function handleParitySessionWeather(PDO $pdo): void {
         $avgPress = array_sum(array_column($samples, 'pressure_inhg')) / $n;
         $avgOffset = array_sum(array_column($samples, 'offset_s')) / $n;
 
-        // Density altitude calculation (ft)
+        // Density altitude + correction factor — exact match to weatherCorrection.ts
         $T = $avgTemp;
-        $H = $avgRH / 100;
+        $H = $avgRH / 100;  // fraction
         $BP = $avgPress;
-        $vp = $H * (29.98 / exp(35.83 * (212 - $T) / pow($T + 459.67, 1.152)));
+        // SVP via NHRA formula (matches weatherCorrection.ts saturatedVaporPressure)
+        $svp = 29.98 / exp(35.83 * (212 - $T) / pow($T + 459.67, 1.152));
+        $vp = $H * $svp;
         $dap = $BP - $vp;
-        $delta = $dap / 29.92;
-        $theta = ($T + 459.67) / 519.67;
-
-        $stationPressAlt = (1 - pow($BP / 29.921, 0.190284)) * 145442;
-        $densityAlt = round($stationPressAlt + (120 * ($T - (59 - 0.00356 * $stationPressAlt))), 0);
-
-        // HPC (horsepower correction factor)
-        $hpc = (1 + 0 / 100) * (pow($theta, 1.8) / pow($delta, 0.95)) - 0 / 100;
+        // Air density (matches weatherCorrection.ts airDensity)
+        $ad = 1736.86 * ($BP - $vp) / ($T + 459.67);
+        // DA (matches weatherCorrection.ts densityAltitude)
+        $densityAlt = round(145723 * (1 - pow($ad / 100, 0.234944)), 0);
+        // Correction factor (matches weatherCorrection.ts correctionFactor)
+        $tempC = ($T - 32) * (5.0 / 9.0);
+        $tempK = $tempC + 273.15;
+        $hpc = round(1.176 * (1013.20690822892 / ($dap / 0.02953)) * pow($tempK / 288.705555555556, 0.5) - 0.176, 4);
 
         // Local time window for this session
         $localTimeHint = null;
