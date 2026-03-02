@@ -347,47 +347,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Register new user
   const register = useCallback(async (email: string, password: string, displayName: string, tier?: string): Promise<boolean> => {
-    // Check if email already exists
-    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existingUser) {
-      setState(prev => ({ ...prev, error: 'Email already registered' }));
+    // Try backend API first (creates user in database)
+    try {
+      const apiRes = await authApi.register(email, password, displayName);
+      if (apiRes.success && apiRes.token && apiRes.user) {
+        const apiUser = apiRes.user;
+
+        // Map API role to local roleId (new users get 'user' role = guest/free)
+        let roleId = 'guest';
+        if (apiUser.role === 'owner') roleId = 'owner';
+        else if (apiUser.role === 'admin') roleId = 'admin';
+
+        const localUser: User = {
+          id: `api_${apiUser.id}`,
+          email: apiUser.email,
+          displayName: apiUser.name,
+          roleId,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+
+        saveToStorage(STORAGE_KEYS.CURRENT_USER, localUser);
+        saveToStorage('rsa.auth.apiProducts', apiUser.products || []);
+
+        console.log('API Registration successful:', { email, displayName, tier, role: apiUser.role });
+
+        setState({
+          isAuthenticated: true,
+          isLoading: false,
+          user: localUser,
+          error: null,
+        });
+
+        return true;
+      }
+    } catch (apiError: any) {
+      console.log('API register failed:', apiError.message);
+      setState(prev => ({ ...prev, error: apiError.message || 'Registration failed' }));
       return false;
     }
 
-    // Map tier to role
-    let roleId = 'beta_tester'; // Default role
-    if (tier === 'racer') roleId = 'beta_tester';
-    if (tier === 'pro') roleId = 'beta_tester';
-    if (tier === 'team') roleId = 'beta_tester';
-    // In production, this would create a subscription and assign proper role
-
-    // Create new user
-    const newUser: User = {
-      id: generateId('user'),
-      email,
-      displayName,
-      roleId,
-      status: 'active',
-      passwordHash: simpleHash(password),
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    saveToStorage(STORAGE_KEYS.USERS_DB, updatedUsers);
-    saveToStorage(STORAGE_KEYS.CURRENT_USER, newUser);
-
-    // Auto-login after registration
-    setState({
-      isAuthenticated: true,
-      isLoading: false,
-      user: newUser,
-      error: null,
-    });
-
-    console.log('User registered:', { email, displayName, tier, roleId });
-    return true;
-  }, [users]);
+    setState(prev => ({ ...prev, error: 'Registration failed. Please try again.' }));
+    return false;
+  }, []);
 
   // User CRUD
   const getAllUsers = useCallback(() => users, [users]);

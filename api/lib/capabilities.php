@@ -119,12 +119,18 @@ const PLAN_CAPABILITIES = [
         'team.vehicles.share',
         'team.runs.share',
     ],
+    'nhra' => [
+        'nhra.parity',
+        'sim.basic',
+        'charts.basic',
+        'weather.manual',
+    ],
 ];
 
 // Role-based capabilities (independent of subscription plan)
 const ROLE_CAPABILITIES = [
-    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity'],
-    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity'],
+    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin'],
+    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin'],
     'beta'  => ['admin.devTools'],
 ];
 
@@ -135,6 +141,7 @@ const PLAN_ALIASES = [
     'basic' => 'basic',
     'pro'   => 'pro',
     'team'  => 'team',
+    'nhra'  => 'nhra',
 ];
 
 // Payment failure grace period (seconds). After this window, past_due degrades to free.

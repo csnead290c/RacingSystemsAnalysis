@@ -66,7 +66,6 @@ import {
 import { parseCsvWeatherData, WEATHER_PROVIDERS, type WeatherSampleRow } from '../domain/parity/weatherBackfill';
 import { parseBulkCsv, normalizeTrackName } from '../domain/parity/eventImport';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useAuth } from '../domain/auth';
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 
 // ── Styles ──────────────────────────────────────────────────────────────
@@ -285,9 +284,7 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
 
 export default function ParityPortal() {
   const { can } = useCapabilities();
-  const { getUserRole } = useAuth();
-  const role = getUserRole();
-  const isAdmin = role?.id === 'owner' || role?.id === 'admin';
+  const isParityAdmin = can('nhra.parity.admin' as any);
   const [tab, setTab] = useState<Tab>('eventRuns');
   const [showAdminTools, setShowAdminTools] = useState(false);
   const [raceLookup, setRaceLookup] = useState('');
@@ -353,7 +350,7 @@ export default function ParityPortal() {
     <div style={S.page}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
         <h1 style={{ ...S.h1, marginBottom: 0 }}>NHRA Tech Parity</h1>
-        {isAdmin && !showAdminTools && (
+        {isParityAdmin && !showAdminTools && (
           <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', opacity: 0.7, padding: '0.25rem 0.5rem' }}
             onClick={() => { setShowAdminTools(true); setTab('adminTracks'); }}>
             Admin Tools
@@ -1822,9 +1819,8 @@ function AssignCombosPanel({ events, selectedEvent, onGoToRunsWeather }: {
   selectedEvent: EventWithStats | null;
   onGoToRunsWeather: () => void;
 }) {
-  const { getUserRole } = useAuth();
-  const role = getUserRole();
-  const isAdmin = role?.id === 'owner' || role?.id === 'admin';
+  const { can: canCap } = useCapabilities();
+  const isAdmin = canCap('nhra.parity.admin' as any);
 
   const [eventId, setEventId] = useState<number | null>(selectedEvent?.id ?? null);
   const [classFilter, setClassFilter] = useState('');
@@ -4954,9 +4950,8 @@ function BackfillWeatherPanel() {
 // ── Backfill Panel ──────────────────────────────────────────────────────
 
 function BackfillPanel() {
-  const { getUserRole } = useAuth();
-  const role = getUserRole();
-  const isAdmin = role?.id === 'owner' || role?.id === 'admin';
+  const { can: canCap } = useCapabilities();
+  const isAdmin = canCap('nhra.parity.admin' as any);
 
   // Job list
   const [jobs, setJobs] = useState<BackfillJob[]>([]);

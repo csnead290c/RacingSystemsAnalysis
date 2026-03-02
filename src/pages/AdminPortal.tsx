@@ -218,6 +218,7 @@ function PlanBadge({ plan }: { plan: string | null }) {
     basic: '#22c55e',
     pro: '#3b82f6',
     team: '#8b5cf6',
+    nhra: '#dc2626',
   };
   return <span style={s.badge(colors[plan] || '#6b7280')}>{plan}</span>;
 }
@@ -610,7 +611,7 @@ interface PlanCapsData {
 const RESERVED_CAPS = ['admin.access', 'admin.devTools', 'admin.userManagement'];
 
 const PLAN_COLORS: Record<string, string> = {
-  free: '#6b7280', basic: '#22c55e', pro: '#3b82f6', team: '#8b5cf6',
+  free: '#6b7280', basic: '#22c55e', pro: '#3b82f6', team: '#8b5cf6', nhra: '#dc2626',
 };
 
 function PlanCapabilitiesTab({ canMutate }: { canMutate: boolean }) {
@@ -731,7 +732,7 @@ function PlanCapabilitiesTab({ canMutate }: { canMutate: boolean }) {
 
       {/* Plan selector */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        {['free', 'basic', 'pro', 'team'].map((pid) => (
+        {['free', 'basic', 'pro', 'team', 'nhra'].map((pid) => (
           <button
             key={pid}
             onClick={() => setSelectedPlan(pid)}

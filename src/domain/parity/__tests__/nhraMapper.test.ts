@@ -439,15 +439,34 @@ describe('nhra.parity capability gating', () => {
     expect(hasCap(ctx, 'nhra.parity')).toBe(true);
   });
 
-  it('nhra.parity is NOT in any plan capabilities', () => {
-    for (const [_plan, caps] of Object.entries(PLAN_CAPABILITIES)) {
-      expect(caps.has('nhra.parity' as any)).toBe(false);
+  it('nhra.parity is NOT in free/basic/pro/team plan capabilities', () => {
+    for (const planId of ['free', 'basic', 'pro', 'team'] as const) {
+      expect(PLAN_CAPABILITIES[planId].has('nhra.parity' as any)).toBe(false);
     }
+  });
+
+  it('nhra.parity IS in the nhra plan', () => {
+    expect(PLAN_CAPABILITIES.nhra.has('nhra.parity' as any)).toBe(true);
+  });
+
+  it('nhra plan user HAS nhra.parity', () => {
+    const ctx: UserCapabilityContext = { plan: 'nhra', role: 'member' };
+    expect(hasCap(ctx, 'nhra.parity')).toBe(true);
+  });
+
+  it('nhra plan user does NOT have nhra.parity.admin', () => {
+    const ctx: UserCapabilityContext = { plan: 'nhra', role: 'member' };
+    expect(hasCap(ctx, 'nhra.parity.admin')).toBe(false);
   });
 
   it('nhra.parity IS in owner and admin role capabilities', () => {
     expect(ROLE_CAPABILITIES.owner.has('nhra.parity' as any)).toBe(true);
     expect(ROLE_CAPABILITIES.admin.has('nhra.parity' as any)).toBe(true);
+  });
+
+  it('nhra.parity.admin IS in owner and admin role capabilities', () => {
+    expect(ROLE_CAPABILITIES.owner.has('nhra.parity.admin' as any)).toBe(true);
+    expect(ROLE_CAPABILITIES.admin.has('nhra.parity.admin' as any)).toBe(true);
   });
 
   it('nhra.parity is NOT in member or viewer role capabilities', () => {

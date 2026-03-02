@@ -80,6 +80,7 @@ const PLAN_PRODUCTS: Record<PlanId, string[]> = {
   basic: ['quarter_jr'],
   pro:   ['quarter_jr', 'quarter_pro', 'bonneville_pro', 'engine_pro'],
   team:  ['quarter_jr', 'quarter_pro', 'bonneville_pro', 'engine_pro', 'fourlink', 'cam_analyzer'],
+  nhra:  [],
 };
 
 /** Additional feature flags per role (beyond product features) */
@@ -107,6 +108,7 @@ const PLAN_TO_TIER: Record<PlanId, SubscriptionTier> = {
   basic: 'racer',
   pro:   'pro',
   team:  'team',
+  nhra:  'free',
 };
 
 const ROLE_TIER_UPGRADE: Partial<Record<RoleId, SubscriptionTier>> = {

@@ -20,7 +20,7 @@
 // Plans (subscription tiers) — trial is NOT a plan, it's an overlay
 // ============================================================================
 
-export const PLAN_IDS = ['free', 'basic', 'pro', 'team'] as const;
+export const PLAN_IDS = ['free', 'basic', 'pro', 'team', 'nhra'] as const;
 export type PlanId = typeof PLAN_IDS[number];
 
 export interface PlanInfo {
@@ -59,6 +59,13 @@ export const PLANS: Record<PlanId, PlanInfo> = {
     price: '$49.99/mo',
     color: '#8b5cf6',
     description: 'Pro features for your entire race team',
+  },
+  nhra: {
+    id: 'nhra',
+    name: 'NHRA',
+    price: 'Assigned',
+    color: '#dc2626',
+    description: 'NHRA parity data access',
   },
 };
 
@@ -196,7 +203,8 @@ export const CAPABILITY_KEYS = [
   'admin.userManagement',        // Manage users within this account/team
 
   // ── NHRA Tech Parity (internal tooling) ──
-  'nhra.parity',                 // Access NHRA parity data ingestion & queries
+  'nhra.parity',                 // Access NHRA parity dashboards (view-only)
+  'nhra.parity.admin',           // Parity admin: ingest, backfill, manage data
 ] as const;
 
 export type Capability = typeof CAPABILITY_KEYS[number];
@@ -262,6 +270,7 @@ export const CAPABILITY_ALIASES: Record<string, Capability> = {
   'user_management':          'admin.userManagement',
   // NHRA
   'nhra_parity':              'nhra.parity',
+  'nhra_parity_admin':        'nhra.parity.admin',
 };
 
 /**
@@ -382,6 +391,13 @@ export const PLAN_CAPABILITIES: Record<PlanId, ReadonlySet<Capability>> = {
     'team.vehicles.share',
     'team.runs.share',
   ]),
+
+  nhra: new Set<Capability>([
+    'nhra.parity',
+    'sim.basic',
+    'charts.basic',
+    'weather.manual',
+  ]),
 };
 
 // ============================================================================
@@ -390,8 +406,8 @@ export const PLAN_CAPABILITIES: Record<PlanId, ReadonlySet<Capability>> = {
 
 /** Capabilities granted by role regardless of plan (owner/admin get admin tools). */
 export const ROLE_CAPABILITIES: Record<RoleId, ReadonlySet<Capability>> = {
-  owner: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity']),
-  admin: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity']),
+  owner: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity', 'nhra.parity.admin']),
+  admin: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity', 'nhra.parity.admin']),
   member: new Set<Capability>([]),
   viewer: new Set<Capability>([]),
 };
@@ -482,6 +498,7 @@ export function isInstallCapability(cap: Capability | string): boolean {
 export function planFromLegacyTier(tier: string | null | undefined): PlanId {
   if (!tier) return 'free';
   const t = tier.toLowerCase();
+  if (t === 'nhra') return 'nhra';
   if (t === 'team' || t === 'nitro') return 'team';
   if (t === 'pro') return 'pro';
   if (t === 'racer' || t === 'junior' || t === 'basic') return 'basic';

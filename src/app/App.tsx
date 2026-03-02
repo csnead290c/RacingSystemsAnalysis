@@ -636,9 +636,9 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* NHRA Tech Parity - internal only (owner/admin with nhra.parity) */}
+            {/* NHRA Tech Parity - capability-gated by nhra.parity inside ParityPortal */}
             <Route path="/parity" element={
-              <ProtectedRoute requireRole={['owner', 'admin']}>
+              <ProtectedRoute>
                 <InternalRoute>
                   <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
                     <ParityPortal />
