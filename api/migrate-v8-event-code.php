@@ -4,9 +4,14 @@
  * Safe to re-run — uses IF NOT EXISTS logic.
  */
 
-require_once __DIR__ . '/db.php';
-
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 header('Content-Type: text/plain');
+
+echo "=== RSA Database Migration v8 — Event Code ===\n\n";
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/functions.php';
 
 try {
     $pdo = getDbConnection();
