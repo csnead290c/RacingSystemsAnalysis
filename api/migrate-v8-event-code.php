@@ -14,8 +14,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
 
 try {
-    $pdo = getDbConnection();
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDB();
 
     // Check if column already exists
     $cols = $pdo->query("SHOW COLUMNS FROM parity_events LIKE 'event_code'")->fetchAll();
