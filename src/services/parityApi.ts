@@ -1768,6 +1768,13 @@ export const parityApi = {
     });
   },
 
+  async mergeTracks(params: { sourceTrackId: number; targetTrackId: number }): Promise<{ ok: boolean; sourceTrackId: number; targetTrackId: number; eventsMoved: number }> {
+    return parityRequest<{ ok: boolean; sourceTrackId: number; targetTrackId: number; eventsMoved: number }>('/parity.php?action=mergeTracks', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
   async updateEvent(params: { eventId: number; event_name?: string; season_year?: number | null; track_id?: number; start_date_local?: string; end_date_local?: string; race_lookup?: string }): Promise<{ ok: boolean; eventId: number }> {
     return parityRequest<{ ok: boolean; eventId: number }>('/parity.php?action=updateEvent', {
       method: 'POST',

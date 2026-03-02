@@ -218,6 +218,10 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleUpdateTrack($pdo, $auth);
         break;
+    case 'mergeTracks':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleMergeTracks($pdo, $auth);
+        break;
     case 'updateEvent':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleUpdateEvent($pdo, $auth);
@@ -1803,7 +1807,7 @@ function handleRunsWithWeather(PDO $pdo): void {
 
     // Query runs — include run_time_local for UI display
     $stmt = $pdo->prepare("
-        SELECT r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local, r.category, r.class_index,
+        SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc, r.run_time_local, r.category, r.class_index,
                r.round, r.lane, r.driver_name, r.car_number, r.dial_in, r.rt,
                r.ft60, r.ft330, r.ft660, r.mph660, r.ft1000, r.mph1000,
                r.ft1320, r.mph1320, r.win_flag, r.dq_flag, r.mov, r.place, r.source_ref
@@ -4353,6 +4357,50 @@ function handleUpdateTrack(PDO $pdo, array $auth): void {
 }
 
 // ============================================================================
+// POST ?action=mergeTracks
+// Body: { sourceTrackId: int, targetTrackId: int }
+// Moves all events from source track to target track, then deletes source track.
+// ============================================================================
+
+function handleMergeTracks(PDO $pdo, array $auth): void {
+    requireAdminRole($auth);
+
+    $input = rsa_getJsonInput();
+    $sourceId = (int)($input['sourceTrackId'] ?? 0);
+    $targetId = (int)($input['targetTrackId'] ?? 0);
+
+    if (!$sourceId || !$targetId) rsa_jsonResponse(['error' => 'sourceTrackId and targetTrackId required'], 400);
+    if ($sourceId === $targetId) rsa_jsonResponse(['error' => 'Source and target must be different'], 400);
+
+    // Verify both tracks exist
+    $stmt = $pdo->prepare("SELECT id, track_name FROM parity_tracks WHERE id IN (?, ?)");
+    $stmt->execute([$sourceId, $targetId]);
+    $found = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    if (!isset($found[$sourceId])) rsa_jsonResponse(['error' => "Source track $sourceId not found"], 404);
+    if (!isset($found[$targetId])) rsa_jsonResponse(['error' => "Target track $targetId not found"], 404);
+
+    // Count events being moved
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM parity_events WHERE track_id = ?");
+    $stmt->execute([$sourceId]);
+    $eventsMoved = (int)$stmt->fetchColumn();
+
+    // Reassign events
+    $pdo->prepare("UPDATE parity_events SET track_id = ? WHERE track_id = ?")->execute([$targetId, $sourceId]);
+
+    // Delete source track
+    $pdo->prepare("DELETE FROM parity_tracks WHERE id = ?")->execute([$sourceId]);
+
+    rsa_jsonResponse([
+        'ok' => true,
+        'sourceTrackId' => $sourceId,
+        'targetTrackId' => $targetId,
+        'eventsMoved' => $eventsMoved,
+        'sourceTrackName' => $found[$sourceId],
+        'targetTrackName' => $found[$targetId],
+    ]);
+}
+
+// ============================================================================
 // POST ?action=updateEvent
 // Body: { eventId, event_name?, season_year?, track_id?, start_date_local?, end_date_local?, race_lookup? }
 // ============================================================================
@@ -6834,7 +6882,12 @@ function handleRangeParityMatrix(PDO $pdo): void {
     $events = $evStmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (empty($events)) {
-        rsa_jsonResponse(['events' => [], 'combos' => [], 'matrix' => [], 'classIndex' => $classIndex, 'metric' => $metric, 'isLowerBetter' => $isLowerBetter]);
+        rsa_jsonResponse([
+            'events' => [], 'combos' => [], 'matrix' => (object)[],
+            'classIndex' => $classIndex, 'metric' => $metric, 'mode' => $mode,
+            'topN' => $topN, 'sessionScope' => $sessionScope,
+            'isLowerBetter' => $isLowerBetter, 'startDate' => $startDate, 'endDate' => $endDate,
+        ]);
     }
 
     // Expand class

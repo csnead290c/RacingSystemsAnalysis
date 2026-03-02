@@ -41,12 +41,20 @@ const COMBO_PALETTE = [
   '#a855f7', '#84cc16', '#f59e0b', '#0ea5e9', '#d946ef',
 ];
 
+// Sequential color assignment — guarantees no collisions
+const _comboColorMap = new Map<string, string>();
+function comboColor(name: string): string {
+  let c = _comboColorMap.get(name);
+  if (!c) { c = COMBO_PALETTE[_comboColorMap.size % COMBO_PALETTE.length]; _comboColorMap.set(name, c); }
+  return c;
+}
+// Keep fnv1aHash export for tests that reference it
 function fnv1aHash(str: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return h >>> 0;
 }
-function comboColor(name: string): string { return COMBO_PALETTE[fnv1aHash(name) % COMBO_PALETTE.length]; }
+void fnv1aHash;
 
 type TriggerSet = { quickest: number; avgTopN: number; totalAvg: number };
 const ET_TRIGGERS: TriggerSet = { quickest: 0.050, avgTopN: 0.030, totalAvg: 0.070 };
@@ -203,20 +211,18 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
 
   return (
     <div className="parity-event-report" data-testid="parity-event-report" style={{ pageBreakAfter: 'always' }}>
-      {/* ── Title ── */}
-      <div style={{ textAlign: 'center', padding: '0.5rem 0', marginBottom: '0.5rem' }} data-testid="parity-header">
-        <h1 style={{ ...S.h1, margin: 0, fontSize: '1.1rem' }}>
+      {/* ── Compact Title ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.3rem' }} data-testid="parity-header">
+        <h2 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
           {evYear} {evCode} NHRA {classIndex} {modeLabel} Event Parity
-        </h1>
-        <div style={{ fontSize: '0.7rem', color: '#888', marginTop: 2 }}>
-          {summary.event.event_name} — {summary.event.track_name}{summary.event.city ? `, ${summary.event.city}` : ''}
-          {summary.event.state ? `, ${summary.event.state}` : ''} — {summary.event.start_date_local} to {summary.event.end_date_local} | {sessionScope.toUpperCase()} | {summary.totalRunsInClass} runs
-        </div>
+        </h2>
+        <span style={{ fontSize: '0.6rem', color: '#888' }}>
+          {summary.event.track_name}{summary.event.city ? ` · ${summary.event.city}` : ''} | {sessionScope.toUpperCase()} | {summary.totalRunsInClass} runs
+        </span>
       </div>
 
-
-      {/* ── Row 1: 5 summary tables ── */}
-      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr', gap: '0.4rem', marginBottom: '0.5rem' }}>
+      {/* ── Row 1: 4 summary tables ── */}
+      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr', gap: '0.3rem', marginBottom: '0.3rem' }}>
         {/* Col 1: Quickest 4 Runs Per Combo */}
         <div>
           <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
@@ -324,40 +330,41 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
           </table>
         </div>
 
-        {/* Col 5: Raw Qualifying Results */}
+      </div>
+
+      {/* ── Row 2: Bar Chart + Qual Results side-by-side ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.3rem', marginBottom: '0.3rem' }}>
+        <div data-testid="parity-grouped-chart" style={{ pageBreakInside: 'avoid' }}>
+          <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
+          {interleavedBars.length > 0 ? (
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '0.25rem' }}>
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={interleavedBars} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                  <XAxis dataKey="label" tick={{ fontSize: 7 }} interval={0} height={16} />
+                  <YAxis tick={{ fontSize: 8 }} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(2)} width={42} />
+                  <Tooltip
+                    formatter={(v: number, _name: string, props: any) => {
+                      const p = props.payload;
+                      return [`${formatMetric(v, metric)} — ${p.driver || ''} (${p.round || ''})`, p.combo || ''];
+                    }}
+                  />
+                  <Bar dataKey="value" barSize={12}>
+                    {interleavedBars.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : <p style={S.hint}>No combo data for chart.</p>}
+        </div>
         <div data-testid="parity-qual-results">
           <div style={SS.secHead}>Raw Qualifying Results</div>
           {qualOrder ? <QualTable rows={qualOrder.qualOrder} /> : <p style={S.hint}>Loading...</p>}
         </div>
       </div>
 
-      {/* ── Bar Chart: Quickest 4 Runs Per Combo (vertical, intermingled) ── */}
-      <div data-testid="parity-grouped-chart" style={{ pageBreakInside: 'avoid' }}>
-        <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
-        {interleavedBars.length > 0 ? (
-          <div style={{ ...S.card, padding: '0.5rem' }}>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={interleavedBars} margin={{ top: 4, right: 10, left: 0, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis dataKey="label" tick={{ fontSize: 8 }} interval={0} angle={-30} textAnchor="end" height={40} />
-                <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(2)} />
-                <Tooltip
-                  formatter={(v: number, _name: string, props: any) => {
-                    const p = props.payload;
-                    return [`${formatMetric(v, metric)} — ${p.driver || ''} (${p.round || ''})`, p.combo || ''];
-                  }}
-                />
-                <Bar dataKey="value" barSize={14}>
-                  {interleavedBars.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : <p style={S.hint}>No combo data for chart.</p>}
-      </div>
-
-      {/* ── Row 2: Incrementals + Weather side-by-side ── */}
-      <div style={S.grid2}>
+      {/* ── Row 3: Incrementals + Weather + Deltas ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.3rem', marginBottom: '0.3rem' }}>
         <div data-testid="parity-incrementals">
           <div style={SS.secHead}>Incrementals</div>
           {inc ? <IncrementalsTable data={inc} /> : <p style={S.hint}>Loading...</p>}
@@ -366,17 +373,16 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
           <div style={SS.secHead}>Weather by Session</div>
           {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
         </div>
-      </div>
-
-      {/* ── Delta Tables (with default triggers, no edit UI) ── */}
-      <div data-testid="parity-delta-tables" style={{ pageBreakInside: 'avoid', marginTop: '0.5rem' }}>
-        {deltas ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-            <DeltaTable label="Quickest" rows={deltas.deltaMatrices.quickest} trigger={triggers.quickest} metric={metric} />
-            <DeltaTable label={`Avg Top ${topN}`} rows={deltas.deltaMatrices.avgTopN} trigger={triggers.avgTopN} metric={metric} />
-            <DeltaTable label="Total Avg" rows={deltas.deltaMatrices.totalAvg} trigger={triggers.totalAvg} metric={metric} />
-          </div>
-        ) : <p style={S.hint}>Loading deltas...</p>}
+        <div data-testid="parity-delta-tables" style={{ pageBreakInside: 'avoid' }}>
+          <div style={SS.secHead}>Delta Comparisons</div>
+          {deltas ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              <DeltaTable label="Quickest" rows={deltas.deltaMatrices.quickest} trigger={triggers.quickest} metric={metric} />
+              <DeltaTable label={`Avg Top ${topN}`} rows={deltas.deltaMatrices.avgTopN} trigger={triggers.avgTopN} metric={metric} />
+              <DeltaTable label="Total Avg" rows={deltas.deltaMatrices.totalAvg} trigger={triggers.totalAvg} metric={metric} />
+            </div>
+          ) : <p style={S.hint}>Loading deltas...</p>}
+        </div>
       </div>
 
       {/* ── Footer (print only — hidden on screen) ── */}
@@ -559,22 +565,29 @@ function LongTermReport({ classIndex, metric, corrMode, sessionScope, onEventCli
       // Fetch multiple years to find last N events this class competed at
       const curYear = new Date().getFullYear();
       const yearsToFetch = Array.from({ length: 5 }, (_, i) => curYear - i);
-      Promise.all(yearsToFetch.map(y =>
+      Promise.allSettled(yearsToFetch.map(y =>
         cf(ck('range', { classIndex, metric, mode: corrMode, topN, sessionScope, year: y }),
           () => parityApi.rangeParityMatrix({ classIndex, metric, mode: corrMode, topN, sessionScope, year: y }))
-      )).then(results => {
+      )).then(settled => {
+        const results = settled
+          .filter((r): r is PromiseFulfilledResult<RangeParityMatrixResponse> => r.status === 'fulfilled')
+          .map(r => r.value);
+        if (results.length === 0) { setErr('No data found'); setLoading(false); return; }
         // Merge all years, filter to events where this class had data
         const allEvents: RangeParityMatrixResponse['events'] = [];
         const allMatrix: RangeParityMatrixResponse['matrix'] = {};
         const allCombos = new Set<string>();
+        const seenEvIds = new Set<number>();
         let isLB = true;
         for (const d of results) {
           isLB = d.isLowerBetter;
           for (const c of d.combos) allCombos.add(c);
           for (const ev of d.events) {
+            if (seenEvIds.has(ev.eventId)) continue;
             const evData = d.matrix[ev.eventId];
             // Only include events where the class actually competed (has combo data)
             if (evData && Object.keys(evData).length > 0) {
+              seenEvIds.add(ev.eventId);
               allEvents.push(ev);
               allMatrix[ev.eventId] = evData;
             }

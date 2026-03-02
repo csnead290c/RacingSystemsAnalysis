@@ -349,14 +349,6 @@ export default function ParityPortal() {
     setTab('driverHistory');
   };
 
-  // Data Status: computed from selected event
-  const dataStatus = useMemo(() => {
-    if (!selectedEvent) return null;
-    const runOk = selectedEvent.run_count > 0;
-    const wxOk = selectedEvent.weather_sample_count > 0;
-    return { runOk, wxOk };
-  }, [selectedEvent]);
-
   return (
     <div style={S.page}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
@@ -378,67 +370,28 @@ export default function ParityPortal() {
         {showAdminTools ? 'Admin — Ingest, backfill, and manage parity data' : 'Event results, qualifying, driver analysis, and trends'}
       </p>
 
-      {/* ── Data Status Banner ── */}
-      {!showAdminTools && selectedEvent && dataStatus && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap',
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 6, padding: '0.4rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.75rem',
-        }}>
-          <span><b>{selectedEvent.event_name}</b></span>
-          <span style={{ color: dataStatus.runOk ? '#16a34a' : '#dc2626' }}>
-            {selectedEvent.run_count} runs
-          </span>
-          <span style={{ color: dataStatus.wxOk ? '#2563eb' : '#dc2626' }}>
-            {selectedEvent.weather_sample_count} weather samples
-          </span>
-          {(!dataStatus.runOk || !dataStatus.wxOk) && (
-            <span style={{ color: '#dc2626', fontWeight: 600 }}>
-              {!dataStatus.runOk && !dataStatus.wxOk ? 'No data' : !dataStatus.runOk ? 'Missing runs' : 'Missing weather'}
-            </span>
-          )}
-          {isAdmin && (
-            <button style={{ marginLeft: 'auto', fontSize: '0.65rem', cursor: 'pointer', background: 'none', border: '1px solid var(--color-border)', borderRadius: 3, padding: '0.15rem 0.4rem', color: 'var(--color-muted)' }}
-              onClick={() => { setShowAdminTools(true); setTab('adminEvents'); }}>
-              Fix Data
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Event Picker ── */}
-      <div style={{ ...S.card, borderColor: 'var(--color-primary, #3b82f6)', borderWidth: 2, marginBottom: '1rem' }}>
-        <div className="parity-event-picker">
-          <label style={{ fontWeight: 600, fontSize: '0.85rem' }}>Season:</label>
-          <select style={{ ...S.input, width: 80 }} value={selectedYear}
-            onChange={e => setSelectedYear(Number(e.target.value))}>
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-
-          <label style={{ fontWeight: 600, fontSize: '0.85rem' }}>Event:</label>
-          <select style={{ ...S.input, width: 320, minWidth: 0, flex: '1 1 200px' }} value={selectedEventId ?? ''}
-            onChange={e => handleEventChange(Number(e.target.value))}
-            disabled={eventsLoading || events.length === 0}>
-            {events.length === 0 && <option value="">—{eventsLoading ? ' Loading...' : ' No events'}—</option>}
-            {events.map(ev => (
-              <option key={ev.id} value={ev.id}>
-                {ev.event_name} ({ev.start_date_local})
-              </option>
-            ))}
-          </select>
-
-          <button style={S.btn('secondary')} onClick={() => loadEvents(selectedYear)}
-            disabled={eventsLoading}>{eventsLoading ? '...' : '↻'}</button>
-        </div>
-
+      {/* ── Event Picker (compact single row) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <select style={{ ...S.input, width: 72, fontSize: '0.8rem' }} value={selectedYear}
+          onChange={e => setSelectedYear(Number(e.target.value))}>
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <select style={{ ...S.input, flex: '1 1 250px', minWidth: 0, fontSize: '0.8rem' }} value={selectedEventId ?? ''}
+          onChange={e => handleEventChange(Number(e.target.value))}
+          disabled={eventsLoading || events.length === 0}>
+          {events.length === 0 && <option value="">—{eventsLoading ? ' Loading...' : ' No events'}—</option>}
+          {events.map(ev => (
+            <option key={ev.id} value={ev.id}>
+              {ev.event_name} ({ev.start_date_local})
+            </option>
+          ))}
+        </select>
+        <button style={{ ...S.btn('secondary'), padding: '0.2rem 0.4rem', fontSize: '0.75rem' }} onClick={() => loadEvents(selectedYear)}
+          disabled={eventsLoading}>{eventsLoading ? '...' : '↻'}</button>
         {selectedEvent && (
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
-            <b>{selectedEvent.track_name}</b>
-            {selectedEvent.city && ` · ${selectedEvent.city}, ${selectedEvent.state}`}
-            {' · '}{selectedEvent.start_date_local} to {selectedEvent.end_date_local}
-            {' · '}<span style={{ color: selectedEvent.run_count > 0 ? '#16a34a' : '#6b7280' }}>{selectedEvent.run_count} runs</span>
-            {' · '}<span style={{ color: selectedEvent.weather_sample_count > 0 ? '#2563eb' : '#6b7280' }}>{selectedEvent.weather_sample_count} weather</span>
-          </div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>
+            {selectedEvent.track_name}{selectedEvent.city ? ` · ${selectedEvent.city}` : ''}
+          </span>
         )}
       </div>
 
@@ -2548,9 +2501,12 @@ function AdminTracksPanel() {
   const [tracks, setTracks] = useState<TrackWithStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
   const [editId, setEditId] = useState<number | null>(null);
   const [editFields, setEditFields] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [mergeSource, setMergeSource] = useState<number | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<number>(0);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -2571,6 +2527,7 @@ function AdminTracksPanel() {
       city: t.city || '',
       state: t.state || '',
       zip: t.zip || '',
+      street: t.street || '',
     });
   };
 
@@ -2585,27 +2542,62 @@ function AdminTracksPanel() {
     setSaving(false);
   };
 
+  const doMerge = async () => {
+    if (!mergeSource || !mergeTarget) return;
+    const src = tracks.find(t => t.id === mergeSource);
+    const tgt = tracks.find(t => t.id === mergeTarget);
+    if (!confirm(`Merge "${src?.track_name}" → "${tgt?.track_name}"?\nAll events will be moved. The source track will be deleted.`)) return;
+    setSaving(true); setError(''); setMsg('');
+    try {
+      const r = await parityApi.mergeTracks({ sourceTrackId: mergeSource, targetTrackId: mergeTarget });
+      setMsg(`Merged: ${r.eventsMoved} events moved from "${src?.track_name}" → "${tgt?.track_name}"`);
+      setMergeSource(null); setMergeTarget(0);
+      load();
+    } catch (e: any) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const stickyTh = { ...S.th, position: 'sticky' as const, top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' };
+
   return (
     <div>
-      <div style={{ ...S.row, marginBottom: '0.5rem' }}>
+      <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <b style={{ fontSize: '0.9rem' }}>Tracks</b>
         <button style={S.btn('secondary')} onClick={load} disabled={loading}>
           {loading ? '...' : '↻ Refresh'}
         </button>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>{tracks.length} tracks</span>
+        {/* Merge UI */}
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.72rem' }}>
+          <span style={{ fontWeight: 600 }}>Merge:</span>
+          <select style={{ ...S.input, width: 160, fontSize: '0.7rem' }} value={mergeSource ?? ''} onChange={e => setMergeSource(Number(e.target.value) || null)}>
+            <option value="">Source track...</option>
+            {tracks.map(t => <option key={t.id} value={t.id}>{t.track_name} (ID {t.id})</option>)}
+          </select>
+          <span>→</span>
+          <select style={{ ...S.input, width: 160, fontSize: '0.7rem' }} value={mergeTarget} onChange={e => setMergeTarget(Number(e.target.value))}>
+            <option value={0}>Target track...</option>
+            {tracks.filter(t => t.id !== mergeSource).map(t => <option key={t.id} value={t.id}>{t.track_name} (ID {t.id})</option>)}
+          </select>
+          <button style={{ ...S.btn('danger'), fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}
+            onClick={doMerge} disabled={!mergeSource || !mergeTarget || saving}>Merge</button>
+        </span>
       </div>
       {error && <div style={S.error}>{error}</div>}
-      <div style={{ overflow: 'auto' }}>
+      {msg && <div style={{ ...S.hint, color: '#16a34a' }}>{msg}</div>}
+      <div style={{ overflow: 'auto', maxHeight: 600 }}>
         <table style={S.table}>
           <thead>
             <tr>
-              <th style={S.th}>ID</th>
-              <th style={S.th}>Track Name</th>
-              <th style={S.th}>City/State</th>
-              <th style={S.th}>Timezone</th>
-              <th style={S.th}>Events</th>
-              <th style={S.th}>Runs</th>
-              <th style={S.th}>Weather</th>
-              <th style={S.th}></th>
+              <th style={stickyTh}>ID</th>
+              <th style={stickyTh}>Track Name</th>
+              <th style={stickyTh}>City/State</th>
+              <th style={stickyTh}>Timezone</th>
+              <th style={stickyTh}>Zip</th>
+              <th style={stickyTh}>Events</th>
+              <th style={stickyTh}>Runs</th>
+              <th style={stickyTh}>Weather</th>
+              <th style={stickyTh}></th>
             </tr>
           </thead>
           <tbody>
@@ -2614,7 +2606,7 @@ function AdminTracksPanel() {
                 <td style={S.td}>{t.id}</td>
                 <td style={S.td}>
                   {editId === t.id ? (
-                    <input style={{ ...S.input, width: 180 }} value={editFields.track_name}
+                    <input style={{ ...S.input, width: 200 }} value={editFields.track_name}
                       onChange={e => setEditFields(f => ({ ...f, track_name: e.target.value }))} />
                   ) : <b>{t.track_name}</b>}
                 </td>
@@ -2635,6 +2627,12 @@ function AdminTracksPanel() {
                     <input style={{ ...S.input, width: 140 }} value={editFields.timezone_iana}
                       onChange={e => setEditFields(f => ({ ...f, timezone_iana: e.target.value }))} />
                   ) : <span style={{ fontSize: '0.7rem' }}>{t.timezone_iana}</span>}
+                </td>
+                <td style={S.td}>
+                  {editId === t.id ? (
+                    <input style={{ ...S.input, width: 50 }} value={editFields.zip} placeholder="Zip"
+                      onChange={e => setEditFields(f => ({ ...f, zip: e.target.value }))} />
+                  ) : <span style={{ fontSize: '0.7rem' }}>{t.zip || ''}</span>}
                 </td>
                 <td style={S.td}>{t.event_count}</td>
                 <td style={S.td}><span style={{ color: t.total_run_count > 0 ? '#16a34a' : 'var(--color-muted)' }}>{t.total_run_count}</span></td>
@@ -5975,6 +5973,13 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
   const pts = filteredDerived;
   const latest = allDerived[allDerived.length - 1];
 
+  // Shared hover index across all 6 charts
+  const [hoverIdx, setHoverIdx] = useState<number | undefined>(undefined);
+  const onChartMove = useCallback((state: any) => {
+    if (state && state.activeTooltipIndex != null) setHoverIdx(state.activeTooltipIndex);
+  }, []);
+  const onChartLeave = useCallback(() => setHoverIdx(undefined), []);
+
   // Shared chart styles
   const ttStyle = { fontSize: '0.72rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)' };
   const chartH = 180;
@@ -5994,13 +5999,15 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '0.4rem' }}>
       <div style={{ fontSize: '0.68rem', fontWeight: 700, color, marginBottom: '0.2rem', paddingLeft: '0.3rem' }}>{label} <span style={{ fontWeight: 400, color: '#888' }}>({unit})</span></div>
       <ResponsiveContainer width="100%" height={chartH}>
-        <LineChart data={pts} margin={chartMargin}>
+        <LineChart data={pts} margin={chartMargin}
+          onMouseMove={onChartMove} onMouseLeave={onChartLeave}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
           <XAxis dataKey="tsLabel" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 9 }} tickCount={5}
             domain={[(dm: number) => dm - Math.abs(dm) * 0.02, (dm: number) => dm + Math.abs(dm) * 0.02]}
             tickFormatter={(v: number) => fmt(v)} width={yWidth ?? 48} />
-          <Tooltip contentStyle={ttStyle} formatter={(v: number) => [fmt(v), label]} labelFormatter={(l: string) => `Time: ${l}`} />
+          <Tooltip contentStyle={ttStyle} formatter={(v: number) => [fmt(v), label]} labelFormatter={(l: string) => `Time: ${l}`}
+            defaultIndex={hoverIdx} />
           <Line type="monotone" dataKey={dataKey} stroke={color} dot={false} strokeWidth={1.8} connectNulls />
         </LineChart>
       </ResponsiveContainer>
