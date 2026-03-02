@@ -606,6 +606,13 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
     } catch (e: any) { setError(e.message); }
   }, [flagReason, loadFlags]);
 
+  const doUnflag = useCallback(async (runId: number) => {
+    try {
+      await parityApi.unflagRun({ runId });
+      loadFlags();
+    } catch (e: any) { setError(e.message); }
+  }, [loadFlags]);
+
   const toggleCol = (key: string) => {
     setVisibleCols(prev => {
       const next = new Set(prev);
@@ -824,7 +831,8 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
                     })}
                     <td style={S.td}>
                       {isFlagged ? (
-                        <span style={{ color: '#dc2626', fontSize: '0.7rem' }}>🚩</span>
+                        <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.3rem', color: '#dc2626' }}
+                          onClick={() => doUnflag(r.id)} title="Click to unflag this run">🚩 Unflag</button>
                       ) : flaggingId === r.id ? (
                         <span style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                           <input style={{ ...S.input, width: 60, fontSize: '0.65rem', padding: '0.1rem' }}
@@ -2722,6 +2730,7 @@ function AdminEventsPanel({ onRefreshEvents }: { onRefreshEvents: () => void }) 
     setEditId(ev.id);
     setEditFields({
       event_name: ev.event_name || '',
+      event_code: ev.event_code || '',
       season_year: String(ev.season_year ?? ''),
       race_lookup: ev.race_lookup || '',
       start_date_local: ev.start_date_local || '',
@@ -2735,6 +2744,7 @@ function AdminEventsPanel({ onRefreshEvents }: { onRefreshEvents: () => void }) 
     try {
       const params: any = { eventId: editId };
       if (editFields.event_name) params.event_name = editFields.event_name;
+      params.event_code = editFields.event_code || null;
       if (editFields.season_year) params.season_year = Number(editFields.season_year);
       if (editFields.race_lookup) params.race_lookup = editFields.race_lookup;
       if (editFields.start_date_local) params.start_date_local = editFields.start_date_local;
@@ -2950,6 +2960,7 @@ function AdminEventsPanel({ onRefreshEvents }: { onRefreshEvents: () => void }) 
             <tr>
               <th style={stickyTh}>ID</th>
               <th style={stickyTh}>Event Name</th>
+              <th style={stickyTh}>Code</th>
               <th style={stickyTh}>Track</th>
               <th style={stickyTh}>Dates</th>
               <th style={stickyTh}>Lookup</th>
@@ -2967,6 +2978,12 @@ function AdminEventsPanel({ onRefreshEvents }: { onRefreshEvents: () => void }) 
                     <input style={{ ...S.input, width: 220 }} value={editFields.event_name}
                       onChange={e => setEditFields(f => ({ ...f, event_name: e.target.value }))} />
                   ) : <b>{ev.event_name}</b>}
+                </td>
+                <td style={S.td}>
+                  {editId === ev.id ? (
+                    <input style={{ ...S.input, width: 60, fontSize: '0.7rem' }} value={editFields.event_code} placeholder="e.g. GAT"
+                      onChange={e => setEditFields(f => ({ ...f, event_code: e.target.value }))} />
+                  ) : <code style={{ fontSize: '0.7rem', color: ev.event_code ? '#16a34a' : 'var(--color-muted)' }}>{ev.event_code || '—'}</code>}
                 </td>
                 <td style={{ ...S.td, fontSize: '0.7rem' }}>{ev.track_name}{ev.city ? `, ${ev.city}` : ''}</td>
                 <td style={S.td}>

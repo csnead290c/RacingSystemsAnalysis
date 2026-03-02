@@ -391,6 +391,7 @@ export interface BulkCreateEventsResponse {
 export interface EventWithStats {
   id: number;
   event_name: string;
+  event_code: string | null;
   season_year: number | null;
   track_id: number;
   track_name: string;
@@ -1325,6 +1326,7 @@ export interface RangeMatrixCell {
 export interface RangeParityEvent {
   eventId: number;
   event_name: string;
+  event_code: string | null;
   track_name: string;
   city: string | null;
   state: string | null;
@@ -1775,7 +1777,14 @@ export const parityApi = {
     });
   },
 
-  async updateEvent(params: { eventId: number; event_name?: string; season_year?: number | null; track_id?: number; start_date_local?: string; end_date_local?: string; race_lookup?: string }): Promise<{ ok: boolean; eventId: number }> {
+  async unflagRun(params: { runId: number; flagType?: string }): Promise<{ ok: boolean; runId: number; deleted: number }> {
+    return parityRequest<{ ok: boolean; runId: number; deleted: number }>('/parity.php?action=unflagRun', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async updateEvent(params: { eventId: number; event_name?: string; event_code?: string; season_year?: number | null; track_id?: number; start_date_local?: string; end_date_local?: string; race_lookup?: string }): Promise<{ ok: boolean; eventId: number }> {
     return parityRequest<{ ok: boolean; eventId: number }>('/parity.php?action=updateEvent', {
       method: 'POST',
       body: JSON.stringify(params),

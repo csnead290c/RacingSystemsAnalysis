@@ -674,9 +674,11 @@ function LongTermReport({ classIndex, metric, corrMode, sessionScope, onEventCli
   );
 }
 
-/** Generate a short event code like "2025 GP1" from event name + date */
-function eventShortCode(ev: { event_name: string; start_date_local: string }): string {
+/** Generate a short event code like "2025 GAT" from event_code or event name + date */
+function eventShortCode(ev: { event_name: string; event_code?: string | null; start_date_local: string }): string {
   const yr = ev.start_date_local.slice(0, 4);
+  // Use custom event_code if set
+  if (ev.event_code) return `${yr} ${ev.event_code}`;
   // Try to extract a recognizable abbreviation from the event name
   const name = ev.event_name.toUpperCase();
   // Common NHRA track abbreviations: take first 2-3 consonants of first significant word
@@ -687,7 +689,6 @@ function eventShortCode(ev: { event_name: string; start_date_local: string }): s
     code = words[0].slice(0, 2) + (words.length > 1 ? words[1].charAt(0) : words[0].charAt(2) || '');
   }
   if (!code) code = ev.start_date_local.slice(5, 7) + ev.start_date_local.slice(8, 10);
-  // Count duplicates for the same year+code would need full list — just use unique-ish
   return `${yr} ${code}`;
 }
 

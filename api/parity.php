@@ -163,6 +163,10 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleFlagRun($pdo, $userId);
         break;
+    case 'unflagRun':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleUnflagRun($pdo, $userId);
+        break;
     case 'runFlags':
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleRunFlags($pdo);
@@ -2307,7 +2311,7 @@ function handleEventsWithStats(PDO $pdo): void {
     }
 
     $stmt = $pdo->prepare("
-        SELECT e.id, e.event_name, e.season_year, e.track_id, t.track_name, t.timezone_iana,
+        SELECT e.id, e.event_name, e.event_code, e.season_year, e.track_id, t.track_name, t.timezone_iana,
                t.city, t.state,
                e.start_date_local, e.end_date_local, e.race_lookup, e.created_at,
                (SELECT COUNT(*) FROM parity_runs r WHERE r.race_lookup = e.race_lookup) AS run_count,
@@ -3168,6 +3172,36 @@ function handleFlagRun(PDO $pdo, int $userId): void {
         rsa_jsonResponse(['ok' => true, 'runId' => $runId, 'flagType' => $flagType]);
     } catch (PDOException $e) {
         rsa_jsonResponse(['error' => 'Failed to flag run: ' . $e->getMessage()], 500);
+    }
+}
+
+// ============================================================================
+// POST ?action=unflagRun
+// Body: { runId: int, flagType?: string }
+// If flagType provided, deletes only that flag. Otherwise deletes ALL flags for the run.
+// ============================================================================
+
+function handleUnflagRun(PDO $pdo, int $userId): void {
+    $input = rsa_getJsonInput();
+    $runId = (int)($input['runId'] ?? 0);
+    $flagType = isset($input['flagType']) ? trim($input['flagType']) : null;
+
+    if ($runId <= 0) {
+        rsa_jsonResponse(['error' => 'runId is required'], 400);
+    }
+
+    try {
+        if ($flagType) {
+            $stmt = $pdo->prepare("DELETE FROM parity_run_flags WHERE run_id = ? AND flag_type = ?");
+            $stmt->execute([$runId, $flagType]);
+        } else {
+            $stmt = $pdo->prepare("DELETE FROM parity_run_flags WHERE run_id = ?");
+            $stmt->execute([$runId]);
+        }
+        $deleted = $stmt->rowCount();
+        rsa_jsonResponse(['ok' => true, 'runId' => $runId, 'deleted' => $deleted]);
+    } catch (PDOException $e) {
+        rsa_jsonResponse(['error' => 'Failed to unflag run: ' . $e->getMessage()], 500);
     }
 }
 
@@ -4417,7 +4451,7 @@ function handleUpdateEvent(PDO $pdo, array $auth): void {
     $stmt->execute([$eventId]);
     if (!$stmt->fetch()) rsa_jsonResponse(['error' => 'Event not found'], 404);
 
-    $updatable = ['event_name', 'season_year', 'track_id', 'start_date_local', 'end_date_local', 'race_lookup'];
+    $updatable = ['event_name', 'event_code', 'season_year', 'track_id', 'start_date_local', 'end_date_local', 'race_lookup'];
     $sets = [];
     $params = [];
     foreach ($updatable as $col) {
@@ -6871,7 +6905,7 @@ function handleRangeParityMatrix(PDO $pdo): void {
 
     // Load events in range
     $evStmt = $pdo->prepare("
-        SELECT e.id, e.event_name, e.start_date_local, e.end_date_local, e.race_lookup,
+        SELECT e.id, e.event_name, e.event_code, e.start_date_local, e.end_date_local, e.race_lookup,
                t.track_name, t.city, t.state
         FROM parity_events e
         JOIN parity_tracks t ON t.id = e.track_id
@@ -6938,6 +6972,7 @@ function handleRangeParityMatrix(PDO $pdo): void {
             FROM parity_runs r
             WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
               AND COALESCE(r.dq_flag, 0) = 0 AND r.$dbCol IS NOT NULL AND r.$dbCol > 0
+              AND NOT EXISTS (SELECT 1 FROM parity_run_flags f WHERE f.run_id = r.id AND f.flag_type IN ('bad','exclude'))
               $sessionFilter
         ");
         $runStmt->execute($params);
@@ -7001,6 +7036,7 @@ function handleRangeParityMatrix(PDO $pdo): void {
         $outEvents[] = [
             'eventId' => $evId,
             'event_name' => $ev['event_name'],
+            'event_code' => $ev['event_code'] ?? null,
             'track_name' => $ev['track_name'],
             'city' => $ev['city'],
             'state' => $ev['state'],
