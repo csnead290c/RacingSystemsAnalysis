@@ -5982,6 +5982,13 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     return allDerived.filter(p => new Date(p.ts).getTime() >= cutoff);
   }, [allDerived, range]);
 
+  // Shared hover index across all 6 charts (must be before conditional returns — rules of hooks)
+  const [hoverIdx, setHoverIdx] = useState<number | undefined>(undefined);
+  const onChartMove = useCallback((state: any) => {
+    if (state && state.activeTooltipIndex != null) setHoverIdx(state.activeTooltipIndex);
+  }, []);
+  const onChartLeave = useCallback(() => setHoverIdx(undefined), []);
+
   if (!event) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Select an event above.</p></div>;
   if (loading) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Loading weather timeseries...</p></div>;
   if (error) return <div style={S.error}>{error}</div>;
@@ -5989,13 +5996,6 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
 
   const pts = filteredDerived;
   const latest = allDerived[allDerived.length - 1];
-
-  // Shared hover index across all 6 charts
-  const [hoverIdx, setHoverIdx] = useState<number | undefined>(undefined);
-  const onChartMove = useCallback((state: any) => {
-    if (state && state.activeTooltipIndex != null) setHoverIdx(state.activeTooltipIndex);
-  }, []);
-  const onChartLeave = useCallback(() => setHoverIdx(undefined), []);
 
   // Shared chart styles
   const ttStyle = { fontSize: '0.72rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)' };
