@@ -5982,12 +5982,6 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     return allDerived.filter(p => new Date(p.ts).getTime() >= cutoff);
   }, [allDerived, range]);
 
-  // Shared hover index across all 6 charts (must be before conditional returns — rules of hooks)
-  const [hoverIdx, setHoverIdx] = useState<number | undefined>(undefined);
-  const onChartMove = useCallback((state: any) => {
-    if (state && state.activeTooltipIndex != null) setHoverIdx(state.activeTooltipIndex);
-  }, []);
-  const onChartLeave = useCallback(() => setHoverIdx(undefined), []);
 
   if (!event) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Select an event above.</p></div>;
   if (loading) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Loading weather timeseries...</p></div>;
@@ -6016,15 +6010,13 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '0.4rem' }}>
       <div style={{ fontSize: '0.68rem', fontWeight: 700, color, marginBottom: '0.2rem', paddingLeft: '0.3rem' }}>{label} <span style={{ fontWeight: 400, color: '#888' }}>({unit})</span></div>
       <ResponsiveContainer width="100%" height={chartH}>
-        <LineChart data={pts} margin={chartMargin}
-          onMouseMove={onChartMove} onMouseLeave={onChartLeave}>
+        <LineChart data={pts} margin={chartMargin}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
           <XAxis dataKey="tsLabel" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 9 }} tickCount={5}
             domain={[(dm: number) => dm - Math.abs(dm) * 0.02, (dm: number) => dm + Math.abs(dm) * 0.02]}
             tickFormatter={(v: number) => fmt(v)} width={yWidth ?? 48} />
-          <Tooltip contentStyle={ttStyle} formatter={(v: number) => [fmt(v), label]} labelFormatter={(l: string) => `Time: ${l}`}
-            defaultIndex={hoverIdx} />
+          <Tooltip contentStyle={ttStyle} formatter={(v: number) => [fmt(v), label]} labelFormatter={(l: string) => `Time: ${l}`} />
           <Line type="monotone" dataKey={dataKey} stroke={color} dot={false} strokeWidth={1.8} connectNulls />
         </LineChart>
       </ResponsiveContainer>

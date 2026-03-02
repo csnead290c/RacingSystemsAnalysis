@@ -177,9 +177,8 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
 
   const modeLabel = corrMode === 'raw' ? 'Raw Data' : 'Corrected';
   const evYear = summary.event.start_date_local?.slice(0, 4) ?? '';
-  const evCode = (event as any).race_lookup
-    ? (event as any).race_lookup.slice(4)
-    : summary.event.start_date_local?.slice(5, 10).replace('-', '') ?? '';
+  const evCode = (event as any).event_code
+    || eventShortCode({ event_name: summary.event.event_name || '', start_date_local: summary.event.start_date_local || '' }).replace(/^\d{4}\s*/, '');
 
   // Compute best value across all combos for delta reference
   const isLB = summary.isLowerBetter;
@@ -209,166 +208,103 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
     .sort((a, b) => isLB ? a.value - b.value : b.value - a.value)
     .map((b, i) => ({ ...b, label: `${i + 1}` }));
 
+  // Best total average reference
+  const bestTotalAvg = combosSorted.reduce((best, x) => {
+    if (x.totalAvg == null) return best;
+    if (best == null) return x.totalAvg;
+    return isLB ? Math.min(best, x.totalAvg) : Math.max(best, x.totalAvg);
+  }, null as number | null);
+
   return (
     <div className="parity-event-report" data-testid="parity-event-report" style={{ pageBreakAfter: 'always' }}>
-      {/* ── Compact Title ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.3rem' }} data-testid="parity-header">
-        <h2 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
-          {evYear} {evCode} NHRA {classIndex} {modeLabel} Event Parity
-        </h2>
-        <span style={{ fontSize: '0.6rem', color: '#888' }}>
-          {summary.event.track_name}{summary.event.city ? ` · ${summary.event.city}` : ''} | {sessionScope.toUpperCase()} | {summary.totalRunsInClass} runs
-        </span>
+      {/* ── Title Block ── */}
+      <div data-testid="parity-header" style={{ marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
+            {evYear} {evCode} NHRA {classIndex} {modeLabel} Event Parity
+          </h2>
+          <span style={{ fontSize: '0.65rem', color: '#888' }}>
+            {sessionScope.toUpperCase()} | {summary.totalRunsInClass} runs
+          </span>
+        </div>
+        <div style={{ fontSize: '0.68rem', color: '#999', marginTop: '0.15rem' }}>
+          {summary.event.event_name} — {summary.event.track_name}{summary.event.city ? `, ${summary.event.city}` : ''}
+        </div>
       </div>
 
-      {/* ── Row 1: 4 summary tables ── */}
-      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr', gap: '0.3rem', marginBottom: '0.3rem' }}>
-        {/* Col 1: Quickest 4 Runs Per Combo */}
-        <div>
-          <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
-          <table style={SS.tbl}>
-            <thead><tr>
-              <th style={SS.th}>Engine Combo</th><th style={SS.th}>Name</th>
-              <th style={{ ...SS.th, textAlign: 'right' }}>ET</th><th style={{ ...SS.th, textAlign: 'right' }}>Speed</th>
-              <th style={SS.th}>Red</th>
-            </tr></thead>
-            <tbody>
-              {summary.combos.flatMap(c => c.topRuns.slice(0, topN).map((r, ri) => (
-                <tr key={`${c.engineCombo}-${ri}`} style={{ background: ri === 0 ? comboColor(c.engineCombo) + '22' : undefined }}>
-                  {ri === 0
-                    ? <td style={{ ...SS.td, fontWeight: 700 }} rowSpan={Math.min(c.topRuns.length, topN)}>
-                        <span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span>
-                      </td>
-                    : null}
-                  <td style={SS.td}>{r.driver}</td>
-                  <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
-                  <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
-                  <td style={SS.td}>{r.dqFlag ? '🔴' : ''}</td>
-                </tr>
-              )))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Col 2: Quickest Run Per Combo */}
-        <div>
-          <div style={SS.secHead}>Quickest Run Per Combo</div>
-          <table style={SS.tbl}>
-            <thead><tr>
-              <th style={SS.th}>Engine Combo</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
-              <th style={{ ...SS.th, textAlign: 'right' }}>Delta</th>
-            </tr></thead>
-            <tbody>
-              {combosSorted.map(c => {
-                const delta = bestComboValue != null && c.bestValue != null ? c.bestValue - bestComboValue : null;
-                return (
-                  <tr key={c.engineCombo}>
-                    <td style={SS.td}><span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span></td>
-                    <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(c.bestValue)}</td>
-                    <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace', color: delta != null && delta > 0 ? '#dc2626' : '#16a34a' }}>
-                      {delta != null ? (delta === 0 ? '0.000' : formatDelta(delta, metric)) : '—'}
+      {/* ── Section 1: Top Runs Table (full width) ── */}
+      <div style={{ marginBottom: '0.6rem' }}>
+        <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
+        <table style={SS.tbl}>
+          <thead><tr>
+            <th style={SS.th}>Engine Combo</th><th style={SS.th}>Driver</th>
+            <th style={{ ...SS.th, textAlign: 'right' }}>ET</th><th style={{ ...SS.th, textAlign: 'right' }}>Speed</th>
+            <th style={SS.th}>Red</th>
+          </tr></thead>
+          <tbody>
+            {summary.combos.flatMap(c => c.topRuns.slice(0, topN).map((r, ri) => (
+              <tr key={`${c.engineCombo}-${ri}`} style={{ background: ri === 0 ? comboColor(c.engineCombo) + '18' : undefined }}>
+                {ri === 0
+                  ? <td style={{ ...SS.td, fontWeight: 700 }} rowSpan={Math.min(c.topRuns.length, topN)}>
+                      <span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.62rem' }}>{c.engineCombo}</span>
                     </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Col 3: Average 4 Quickest Per Combo */}
-        <div>
-          <div style={SS.secHead}>Average {topN} Quickest Per Combo</div>
-          <table style={SS.tbl}>
-            <thead><tr>
-              <th style={SS.th}>Engine Combo</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
-              <th style={{ ...SS.th, textAlign: 'right' }}>Delta</th>
-            </tr></thead>
-            <tbody>
-              {combosSorted.map(c => {
-                const delta = bestAvg4Value != null && c.avgTopN != null ? c.avgTopN - bestAvg4Value : null;
-                return (
-                  <tr key={c.engineCombo}>
-                    <td style={SS.td}><span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span></td>
-                    <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(c.avgTopN)}</td>
-                    <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace', color: delta != null && delta > 0 ? '#dc2626' : '#16a34a' }}>
-                      {delta != null ? (delta === 0 ? '0.000' : formatDelta(delta, metric)) : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Col 4: Total Average Per Combo */}
-        <div>
-          <div style={SS.secHead}>Total Average Per Combo</div>
-          <table style={SS.tbl}>
-            <thead><tr>
-              <th style={SS.th}>Engine Combo</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
-              <th style={{ ...SS.th, textAlign: 'right' }}>Delta</th>
-            </tr></thead>
-            <tbody>
-              {combosSorted.map(c => {
-                const bestTotal = combosSorted.reduce((best, x) => {
-                  if (x.totalAvg == null) return best;
-                  if (best == null) return x.totalAvg;
-                  return isLB ? Math.min(best, x.totalAvg) : Math.max(best, x.totalAvg);
-                }, null as number | null);
-                const delta = bestTotal != null && c.totalAvg != null ? c.totalAvg - bestTotal : null;
-                return (
-                  <tr key={c.engineCombo}>
-                    <td style={SS.td}><span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span></td>
-                    <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(c.totalAvg)}</td>
-                    <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace', color: delta != null && delta > 0 ? '#dc2626' : '#16a34a' }}>
-                      {delta != null ? (delta === 0 ? '0.000' : formatDelta(delta, metric)) : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
+                  : null}
+                <td style={SS.td}>{r.driver}</td>
+                <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
+                <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
+                <td style={SS.td}>{r.dqFlag ? '🔴' : ''}</td>
+              </tr>
+            )))}
+          </tbody>
+        </table>
       </div>
 
-      {/* ── Row 2: Bar Chart + Qual Results side-by-side ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.3rem', marginBottom: '0.3rem' }}>
-        <div data-testid="parity-grouped-chart" style={{ pageBreakInside: 'avoid' }}>
-          <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
-          {interleavedBars.length > 0 ? (
-            <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '0.25rem' }}>
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={interleavedBars} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                  <XAxis dataKey="label" tick={{ fontSize: 7 }} interval={0} height={16} />
-                  <YAxis tick={{ fontSize: 8 }} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(2)} width={42} />
-                  <Tooltip
-                    formatter={(v: number, _name: string, props: any) => {
-                      const p = props.payload;
-                      return [`${formatMetric(v, metric)} — ${p.driver || ''} (${p.round || ''})`, p.combo || ''];
-                    }}
-                  />
-                  <Bar dataKey="value" barSize={12}>
-                    {interleavedBars.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : <p style={S.hint}>No combo data for chart.</p>}
-        </div>
+      {/* ── Section 2: Three summary comparison tables ── */}
+      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
+        <SummaryCompactTable title="Quickest Run" combos={combosSorted} refValue={bestComboValue} getValue={c => c.bestValue} metric={metric} />
+        <SummaryCompactTable title={`Avg Top ${topN}`} combos={combosSorted} refValue={bestAvg4Value} getValue={c => c.avgTopN} metric={metric} />
+        <SummaryCompactTable title="Total Average" combos={combosSorted} refValue={bestTotalAvg} getValue={c => c.totalAvg} metric={metric} />
+      </div>
+
+      {/* ── Section 3: Bar Chart (full width) ── */}
+      <div data-testid="parity-grouped-chart" style={{ marginBottom: '0.6rem', pageBreakInside: 'avoid' }}>
+        <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
+        {interleavedBars.length > 0 ? (
+          <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '0.3rem' }}>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={interleavedBars} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <XAxis dataKey="label" tick={{ fontSize: 8 }} interval={0} height={18} />
+                <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(2)} width={44} />
+                <Tooltip
+                  formatter={(v: number, _name: string, props: any) => {
+                    const p = props.payload;
+                    return [`${formatMetric(v, metric)} — ${p.driver || ''} (${p.round || ''})`, p.combo || ''];
+                  }}
+                />
+                <Bar dataKey="value" barSize={14}>
+                  {interleavedBars.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <p style={S.hint}>No combo data for chart.</p>}
+      </div>
+
+      {/* ── Section 4: Qual Results + Incrementals side-by-side ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
         <div data-testid="parity-qual-results">
           <div style={SS.secHead}>Raw Qualifying Results</div>
           {qualOrder ? <QualTable rows={qualOrder.qualOrder} /> : <p style={S.hint}>Loading...</p>}
         </div>
-      </div>
-
-      {/* ── Row 3: Incrementals + Weather + Deltas ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.3rem', marginBottom: '0.3rem' }}>
         <div data-testid="parity-incrementals">
           <div style={SS.secHead}>Incrementals</div>
           {inc ? <IncrementalsTable data={inc} /> : <p style={S.hint}>Loading...</p>}
         </div>
+      </div>
+
+      {/* ── Section 5: Weather + Deltas side-by-side ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
         <div data-testid="parity-weather">
           <div style={SS.secHead}>Weather by Session</div>
           {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
@@ -376,7 +312,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
         <div data-testid="parity-delta-tables" style={{ pageBreakInside: 'avoid' }}>
           <div style={SS.secHead}>Delta Comparisons</div>
           {deltas ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
               <DeltaTable label="Quickest" rows={deltas.deltaMatrices.quickest} trigger={triggers.quickest} metric={metric} />
               <DeltaTable label={`Avg Top ${topN}`} rows={deltas.deltaMatrices.avgTopN} trigger={triggers.avgTopN} metric={metric} />
               <DeltaTable label="Total Avg" rows={deltas.deltaMatrices.totalAvg} trigger={triggers.totalAvg} metric={metric} />
@@ -399,7 +335,40 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
 // SUB-COMPONENTS: Event Report
 // ═════════════════════════════════════════════════════════════════════════════
 
-
+function SummaryCompactTable({ title, combos, refValue, getValue, metric }: {
+  title: string;
+  combos: ParitySummaryResponse['combos'];
+  refValue: number | null;
+  getValue: (c: ParitySummaryResponse['combos'][number]) => number | null | undefined;
+  metric: string;
+}) {
+  return (
+    <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+      <div style={{ ...SS.secHead, margin: 0, borderRadius: 0 }}>{title}</div>
+      <table style={SS.tbl}>
+        <thead><tr>
+          <th style={SS.th}>Combo</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
+          <th style={{ ...SS.th, textAlign: 'right' }}>Delta</th>
+        </tr></thead>
+        <tbody>
+          {combos.map(c => {
+            const val = getValue(c) ?? null;
+            const delta = refValue != null && val != null ? val - refValue : null;
+            return (
+              <tr key={c.engineCombo}>
+                <td style={SS.td}><span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span></td>
+                <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(val)}</td>
+                <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace', color: delta != null && delta > 0 ? '#dc2626' : '#16a34a' }}>
+                  {delta != null ? (delta === 0 ? '0.000' : formatDelta(delta, metric)) : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function QualTable({ rows }: { rows: ParityComboRun[] }) {
   if (rows.length === 0) return <p style={S.hint}>No qual runs.</p>;
@@ -455,28 +424,10 @@ function IncrementalsTable({ data }: { data: ParityIncrementalsResponse }) {
   );
 }
 
-function WeatherConfidenceBanner({ data }: { data: ParitySessionWeatherResponse }) {
-  const wc = data.weatherConfidence;
-  if (!wc) return null;
-  const warn = (wc.avgOffsetMin != null && wc.avgOffsetMin > 20) || (wc.maxOffsetMin != null && wc.maxOffsetMin > 60);
-  return (
-    <div style={{ fontSize: '0.65rem', padding: '0.3rem 0.5rem', marginBottom: '0.35rem', borderRadius: 4,
-      background: warn ? '#fef2f2' : 'var(--color-bg)', border: warn ? '1px solid #fca5a5' : '1px solid var(--color-border)',
-      color: warn ? '#991b1b' : 'var(--color-muted)' }}>
-      <strong>Weather Match:</strong>{' '}
-      {wc.pctMatched != null ? `${wc.pctMatched}% runs matched` : 'N/A'}{' · '}
-      avg offset {wc.avgOffsetMin != null ? `${wc.avgOffsetMin} min` : '—'}{' · '}
-      max offset {wc.maxOffsetMin != null ? `${wc.maxOffsetMin} min` : '—'}
-      {warn && <span style={{ fontWeight: 700, marginLeft: 6 }}>⚠ Timezone mismatch likely — run backfillRunUtcFromLocal</span>}
-    </div>
-  );
-}
-
 function WeatherTable({ data }: { data: ParitySessionWeatherResponse }) {
   if (data.sessions.length === 0) return <p style={S.hint}>No weather data.</p>;
   return (
     <>
-      <WeatherConfidenceBanner data={data} />
       <table style={S.tbl}>
         <thead><tr>
           <th style={S.th}>Session</th><th style={{ ...S.th, textAlign: 'right' }}>Temp °F</th>
