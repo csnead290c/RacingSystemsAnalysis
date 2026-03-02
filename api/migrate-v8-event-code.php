@@ -4,19 +4,29 @@
  * Safe to re-run — uses IF NOT EXISTS logic.
  */
 
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
 header('Content-Type: text/plain');
 
-echo "=== RSA Database Migration v8 — Event Code ===\n\n";
-
 require_once __DIR__ . '/config.php';
+
+// Override config.php error suppression
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+// Catch fatal errors
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        echo "\nFATAL: " . $error['message'] . " in " . $error['file'] . ":" . $error['line'] . "\n";
+    }
+});
+
+echo "=== RSA Database Migration v8 — Event Code ===\n\n";
 
 echo "1. Connecting to database...\n";
 try {
     $pdo = getDB();
     echo "   OK\n\n";
-} catch (Exception $e) {
+} catch (\Throwable $e) {
     echo "   FAILED: " . $e->getMessage() . "\n";
     exit(1);
 }
@@ -31,7 +41,7 @@ try {
     } else {
         echo "   event_code column already exists.\n";
     }
-} catch (Exception $e) {
+} catch (\Throwable $e) {
     echo "   FAILED: " . $e->getMessage() . "\n";
     exit(1);
 }
