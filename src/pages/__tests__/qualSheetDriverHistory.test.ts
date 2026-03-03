@@ -312,8 +312,8 @@ describe('DriverDrilldownPanel — auto-load from initialFilter', () => {
   });
 
   it('triggers loadRuns when selectedDriver changes', () => {
-    expect(portalSource).toContain('if (selectedDriver) loadRuns(selectedDriver)');
-    expect(portalSource).toContain('[selectedDriver, loadRuns]');
+    expect(portalSource).toContain('if (selectedDriver) loadRuns(selectedDriver, currentOffset)');
+    expect(portalSource).toContain('[selectedDriver, currentOffset, loadRuns]');
   });
 
   it('requests weather data via includeWeather flag', () => {

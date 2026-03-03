@@ -298,6 +298,52 @@ export function correctMPH_strict(actualMPH: number, hpc: number): number {
   return actualMPH * Math.pow(hpc, 0.33);
 }
 
+// ── Simple (CF-based) Correction ─────────────────────────────────────────
+// Matches PHP parity_correctionFactor() + parity_correctET() exactly.
+// Used when engine-combo HPC data is unavailable (e.g. Driver History).
+// corrected_et = actual_et × CF   where CF = correctionFactor(BP, T, H)
+
+export interface SimpleCorrectionInput {
+  temp_f: number | null;
+  pressure_inhg: number | null;
+  rh_pct: number | null;
+}
+
+export interface SimpleCorrectionResult {
+  correctionFactor: number | null;
+  corrected_ft1320: number | null;
+  corrected_ft660: number | null;
+  corrected_ft60: number | null;
+}
+
+/**
+ * Compute simple CF-based corrected ET values from weather data.
+ * Pure function — no engine combo needed. Matches PHP backend exactly.
+ */
+export function applySimpleCorrection(
+  weather: SimpleCorrectionInput,
+  run: { ft1320?: number | null; ft660?: number | null; ft60?: number | null },
+): SimpleCorrectionResult {
+  const { temp_f, pressure_inhg, rh_pct } = weather;
+  if (temp_f == null || pressure_inhg == null) {
+    return { correctionFactor: null, corrected_ft1320: null, corrected_ft660: null, corrected_ft60: null };
+  }
+  const H = (rh_pct != null ? rh_pct : 0) / 100;
+  const cf = correctionFactor(pressure_inhg, temp_f, H);
+
+  const correct = (et: number | null | undefined): number | null => {
+    if (et == null) return null;
+    return Math.round(et * cf * 10000) / 10000; // round to 4 decimal places, matching PHP round($et * $factor, 4)
+  };
+
+  return {
+    correctionFactor: Math.round(cf * 1000000) / 1000000, // 6 decimal places, matching PHP
+    corrected_ft1320: correct(run.ft1320),
+    corrected_ft660: correct(run.ft660),
+    corrected_ft60: correct(run.ft60),
+  };
+}
+
 // ── Full Run Correction Pipeline ────────────────────────────────────────
 
 export interface RunCorrectionInput {

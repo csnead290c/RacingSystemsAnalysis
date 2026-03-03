@@ -2,12 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   parityApi,
   type ParitySummaryResponse,
-  type ParityDeltasResponse,
   type ParityQualOrderResponse,
   type ParityIncrementalsResponse,
   type ParitySessionWeatherResponse,
   type ParityComboRun,
-  type ParityDeltaRow,
   type RangeParityMatrixResponse,
   type EventWithStats,
   type EngineComboRow,
@@ -24,7 +22,7 @@ import {
   formatMetric, formatDelta, isIncrementalMph,
 } from '../domain/parity/format';
 
-const PARITY_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'] as const;
+// PARITY_CLASSES moved to ParityPortal global header
 const PARITY_METRICS = [
   { value: 'et_1320', label: 'ET 1320 ft' },
   { value: 'mph_1320', label: 'MPH 1320 ft' },
@@ -58,11 +56,8 @@ function fnv1aHash(str: string): number {
 }
 void fnv1aHash;
 
-type TriggerSet = { quickest: number; avgTopN: number; totalAvg: number };
-const ET_TRIGGERS: TriggerSet = { quickest: 0.050, avgTopN: 0.030, totalAvg: 0.070 };
-const MPH_TRIGGERS: TriggerSet = { quickest: 1.0, avgTopN: 0.6, totalAvg: 1.5 };
 function isMph(m: string) { return m.startsWith('mph_'); }
-function defaultTriggers(m: string): TriggerSet { return isMph(m) ? { ...MPH_TRIGGERS } : { ...ET_TRIGGERS }; }
+void isMph; // used by format helpers
 
 const _cache = new Map<string, { ts: number; data: unknown }>();
 const CACHE_TTL = 120_000;
@@ -108,15 +103,17 @@ const SS = {
 
 type Mode = 'event' | 'longTerm';
 
-export default function ParityReport({ event }: { event: EventWithStats | null }) {
+export default function ParityReport({ event, classIndex, onClassChange }: {
+  event: EventWithStats | null;
+  classIndex: string;
+  onClassChange?: (cls: string) => void;
+}) {
+  void onClassChange; // future-proofing hook — class changes propagate via useClassPreset
   const [mode, setMode] = useState<Mode>('event');
-  const [classIndex, setClassIndex] = useState(() => sessionStorage.getItem('parity_classIndex') || 'TF');
   const sessionScope = 'both' as const;
   const [corrMode, setCorrMode] = useState<'raw' | 'corrected'>('raw');
   const metric = 'et_1320';
   const [overrideEv, setOverrideEv] = useState<number | null>(null);
-
-  const handleClassChange = (c: string) => { setClassIndex(c); sessionStorage.setItem('parity_classIndex', c); };
 
   return (
     <div style={S.page}>
@@ -125,7 +122,7 @@ export default function ParityReport({ event }: { event: EventWithStats | null }
         <button style={mode === 'event' ? S.tabA : S.tabI} onClick={() => { setMode('event'); setOverrideEv(null); }}>Event Parity</button>
         <button style={mode === 'longTerm' ? S.tabA : S.tabI} onClick={() => setMode('longTerm')}>Long-Term Parity</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: '0.72rem' }}>Class:<select value={classIndex} onChange={e => handleClassChange(e.target.value)} style={{ ...S.inp, width: 72, marginLeft: 4 }}>{PARITY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-muted)' }}>Class: {classIndex}</span>
           <label style={{ fontSize: '0.72rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
         </div>
       </div>
@@ -147,14 +144,11 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
 }) {
   const topN = 4;
   const [summary, setSummary] = useState<ParitySummaryResponse | null>(null);
-  const [deltas, setDeltas] = useState<ParityDeltasResponse | null>(null);
   const [qualOrder, setQualOrder] = useState<ParityQualOrderResponse | null>(null);
   const [inc, setInc] = useState<ParityIncrementalsResponse | null>(null);
   const [wx, setWx] = useState<ParitySessionWeatherResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
-  const [triggers, setTriggers] = useState<TriggerSet>(defaultTriggers(metric));
-  useEffect(() => { setTriggers(defaultTriggers(metric)); }, [metric]);
 
   const load = useCallback(() => {
     if (!event) return;
@@ -162,11 +156,10 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
     const b = { eventId: event.id, classIndex, metric, mode: corrMode, topN, sessionScope };
     Promise.all([
       cf(ck('sum', b), () => parityApi.paritySummary(b)),
-      cf(ck('del', b), () => parityApi.parityDeltas(b)),
       cf(ck('qo', { eventId: event.id, classIndex, metric, mode: corrMode, sessionScope }), () => parityApi.parityQualOrder({ eventId: event.id, classIndex, metric, mode: corrMode, sessionScope })),
       cf(ck('inc', { eventId: event.id, classIndex, sessionScope }), () => parityApi.parityIncrementals({ eventId: event.id, classIndex, sessionScope })),
       cf(ck('wx', { eventId: event.id, classIndex }), () => parityApi.paritySessionWeather({ eventId: event.id, classIndex })),
-    ]).then(([s, d, q, i, w]) => { setSummary(s); setDeltas(d); setQualOrder(q); setInc(i); setWx(w); })
+    ]).then(([s, q, i, w]) => { setSummary(s); setQualOrder(q); setInc(i); setWx(w); })
       .catch(e => setErr(e instanceof Error ? e.message : 'Failed'))
       .finally(() => setLoading(false));
   }, [event?.id, classIndex, metric, corrMode, sessionScope]);
@@ -265,7 +258,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
       <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
         <SummaryCompactTable title="Quickest Run" combos={combosSorted} refValue={bestComboValue} getValue={c => c.bestValue} metric={metric} />
         <SummaryCompactTable title={`Avg Top ${topN}`} combos={combosSorted} refValue={bestAvg4Value} getValue={c => c.avgTopN} metric={metric} />
-        <SummaryCompactTable title="Total Average" combos={combosSorted} refValue={bestTotalAvg} getValue={c => c.totalAvg} metric={metric} />
+        <SummaryCompactTable title="Total Average" combos={combosSorted} refValue={bestTotalAvg} getValue={c => c.totalAvg} getCount={c => c.countTotalAvg} metric={metric} />
       </div>
 
       {/* ── Section 3: Bar Chart (full width) ── */}
@@ -293,34 +286,22 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
         ) : <p style={S.hint}>No combo data for chart.</p>}
       </div>
 
-      {/* ── Section 4: Qual Results + Incrementals side-by-side ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
-        <div data-testid="parity-qual-results">
-          <div style={SS.secHead}>Raw Qualifying Results</div>
-          {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={classIndex} onComboChanged={load} /> : <p style={S.hint}>Loading...</p>}
-        </div>
-        <div data-testid="parity-incrementals">
-          <div style={SS.secHead}>Incrementals</div>
-          {inc ? <IncrementalsTable data={inc} /> : <p style={S.hint}>Loading...</p>}
-        </div>
+      {/* ── Section 4: Incrementals (full width) ── */}
+      <div data-testid="parity-incrementals" style={{ marginBottom: '0.6rem' }}>
+        <div style={SS.secHead}>Incrementals</div>
+        {inc ? <IncrementalsTable data={inc} /> : <p style={S.hint}>Loading...</p>}
       </div>
 
-      {/* ── Section 5: Weather + Deltas side-by-side ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
-        <div data-testid="parity-weather">
-          <div style={SS.secHead}>Weather by Session</div>
-          {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
-        </div>
-        <div data-testid="parity-delta-tables" style={{ pageBreakInside: 'avoid' }}>
-          <div style={SS.secHead}>Delta Comparisons</div>
-          {deltas ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <DeltaTable label="Quickest" rows={deltas.deltaMatrices.quickest} trigger={triggers.quickest} metric={metric} />
-              <DeltaTable label={`Avg Top ${topN}`} rows={deltas.deltaMatrices.avgTopN} trigger={triggers.avgTopN} metric={metric} />
-              <DeltaTable label="Total Avg" rows={deltas.deltaMatrices.totalAvg} trigger={triggers.totalAvg} metric={metric} />
-            </div>
-          ) : <p style={S.hint}>Loading deltas...</p>}
-        </div>
+      {/* ── Section 5: Weather (full width) ── */}
+      <div data-testid="parity-weather" style={{ marginBottom: '0.6rem' }}>
+        <div style={SS.secHead}>Weather by Session</div>
+        {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
+      </div>
+
+      {/* ── Section 6: Qualifying Order (full width) ── */}
+      <div data-testid="parity-qual-results" style={{ marginBottom: '0.6rem' }}>
+        <div style={SS.secHead}>Raw Qualifying Results</div>
+        {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={classIndex} onComboChanged={load} /> : <p style={S.hint}>Loading...</p>}
       </div>
 
       {/* ── Footer (print only — hidden on screen) ── */}
@@ -337,11 +318,12 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
 // SUB-COMPONENTS: Event Report
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SummaryCompactTable({ title, combos, refValue, getValue, metric }: {
+function SummaryCompactTable({ title, combos, refValue, getValue, getCount, metric }: {
   title: string;
   combos: ParitySummaryResponse['combos'];
   refValue: number | null;
   getValue: (c: ParitySummaryResponse['combos'][number]) => number | null | undefined;
+  getCount?: (c: ParitySummaryResponse['combos'][number]) => number | undefined;
   metric: string;
 }) {
   return (
@@ -351,11 +333,13 @@ function SummaryCompactTable({ title, combos, refValue, getValue, metric }: {
         <thead><tr>
           <th style={SS.th}>Combo</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
           <th style={{ ...SS.th, textAlign: 'right' }}>Delta</th>
+          {getCount && <th style={{ ...SS.th, textAlign: 'right' }}>n</th>}
         </tr></thead>
         <tbody>
           {combos.map(c => {
             const val = getValue(c) ?? null;
             const delta = refValue != null && val != null ? val - refValue : null;
+            const cnt = getCount?.(c);
             return (
               <tr key={c.engineCombo}>
                 <td style={SS.td}><span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span></td>
@@ -363,6 +347,7 @@ function SummaryCompactTable({ title, combos, refValue, getValue, metric }: {
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace', color: delta != null && delta > 0 ? '#dc2626' : '#16a34a' }}>
                   {delta != null ? (delta === 0 ? '0.000' : formatDelta(delta, metric)) : '—'}
                 </td>
+                {getCount && <td style={{ ...SS.td, textAlign: 'right', fontSize: '0.55rem', color: '#888' }}>{cnt ?? '—'}</td>}
               </tr>
             );
           })}
@@ -419,6 +404,7 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
         <thead><tr>
           <th style={SS.th}>Pos</th><th style={SS.th}>Driver</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
           <th style={{ ...SS.th, textAlign: 'right' }}>Speed</th><th style={SS.th}>Round</th><th style={SS.th}>Engine Combo</th>
+          <th style={{ ...SS.th, width: 20, textAlign: 'center' }} title="Incidents (coming soon)"></th>
         </tr></thead>
         <tbody>
           {rows.map((r, i) => {
@@ -462,6 +448,7 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
                     </span>
                   )}
                 </td>
+                <td style={{ ...SS.td, textAlign: 'center', width: 20 }}>{r.incident_count && r.incident_count > 0 ? '⚠' : ''}</td>
               </tr>
             );
           })}
@@ -528,40 +515,6 @@ function WeatherTable({ data }: { data: ParitySessionWeatherResponse }) {
         </tbody>
       </table>
     </>
-  );
-}
-
-function DeltaTable({ label, rows, trigger, metric }: { label: string; rows: ParityDeltaRow[]; trigger: number; metric: string }) {
-  if (rows.length === 0) return <div style={S.card}><h3 style={{ fontSize: '0.75rem', margin: '0 0 0.25rem' }}>{label}</h3><p style={S.nd}>No deltas.</p></div>;
-  return (
-    <div style={S.card}>
-      <h3 style={{ fontSize: '0.75rem', margin: '0 0 0.25rem', fontWeight: 700 }}>{label}</h3>
-      <table style={S.tbl}>
-        <thead><tr>
-          <th style={S.th}>A</th><th style={S.th}>B</th><th style={{ ...S.th, textAlign: 'right' }}>Delta</th>
-        </tr></thead>
-        <tbody>
-          {rows.map((r, i) => {
-            const noData = r.delta == null || r.valueA == null || r.valueB == null;
-            let bg = 'transparent';
-            if (!noData && r.delta != null) {
-              const abs = Math.abs(r.delta);
-              if (abs <= trigger) bg = '#22c55e18';
-              else bg = '#ef444418';
-            }
-            return (
-              <tr key={i} style={{ background: bg }}>
-                <td style={S.td}><span style={S.badge(comboColor(r.comboA))}>{r.comboA}</span></td>
-                <td style={S.td}><span style={S.badge(comboColor(r.comboB))}>{r.comboB}</span></td>
-                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', ...(noData ? S.nd : {}) }}>
-                  {noData ? 'No Data' : formatDelta(r.delta, metric)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
@@ -875,8 +828,7 @@ const PRINT_CSS = `
   .parity-event-report h1, .parity-longterm-report h1 { font-size: 14pt !important; }
   .parity-event-report h2, .parity-longterm-report h2 { font-size: 11pt !important; page-break-after: avoid; }
   .parity-event-report table, .parity-longterm-report table { page-break-inside: avoid; }
-  .parity-event-report [data-testid="parity-grouped-chart"],
-  .parity-event-report [data-testid="parity-delta-tables"] { page-break-inside: avoid; }
+  .parity-event-report [data-testid="parity-grouped-chart"] { page-break-inside: avoid; }
   .recharts-responsive-container { max-height: 300px !important; }
   .parity-print-footer { display: flex !important; justify-content: space-between; font-size: 0.6rem; color: #888; margin-top: 0.75rem; border-top: 1px solid #ccc; padding-top: 0.3rem; }
   button, select, input { display: none !important; }

@@ -4160,7 +4160,8 @@ function handleRunsByDriver(PDO $pdo): void {
     $session     = strtolower(trim($_GET['session'] ?? '')); // qual, elim, or empty=both
     $includeFlagged = ($_GET['includeFlagged'] ?? '0') === '1';
     $includeWeather = ($_GET['includeWeather'] ?? '0') === '1';
-    $limit       = min((int)($_GET['limit'] ?? 500), 2000);
+    $limit       = min((int)($_GET['limit'] ?? 50), 2000);
+    $offset      = max((int)($_GET['offset'] ?? 0), 0);
 
     if ($driverName === '') {
         rsa_jsonResponse(['error' => 'driverName required'], 400);
@@ -4202,7 +4203,21 @@ function handleRunsByDriver(PDO $pdo): void {
     }
 
     $whereClause = implode(' AND ', $where);
+
+    // 1) Count total matching rows
+    $countParams = $params;
+    $stmtCount = $pdo->prepare("
+        SELECT COUNT(*) AS cnt
+        FROM parity_runs r
+        LEFT JOIN parity_run_flags f ON f.run_id = r.id AND f.flag_type IN ('bad','exclude')
+        WHERE $whereClause
+    ");
+    $stmtCount->execute($countParams);
+    $totalCount = (int)$stmtCount->fetchColumn();
+
+    // 2) Fetch page of rows
     $params[] = $limit;
+    $params[] = $offset;
 
     $stmt = $pdo->prepare("
         SELECT r.id, r.uuid, r.race_lookup, r.run_timestamp_utc,
@@ -4217,7 +4232,7 @@ function handleRunsByDriver(PDO $pdo): void {
         LEFT JOIN parity_tracks t ON t.id = e.track_id
         WHERE $whereClause
         ORDER BY r.race_lookup DESC, r.run_timestamp_utc DESC
-        LIMIT ?
+        LIMIT ? OFFSET ?
     ");
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -4316,7 +4331,9 @@ function handleRunsByDriver(PDO $pdo): void {
     rsa_jsonResponse([
         'driverName' => $driverName,
         'runs'       => $runs,
-        'total'      => count($runs),
+        'total'      => $totalCount,
+        'limit'      => $limit,
+        'offset'     => $offset,
     ]);
 }
 
@@ -4741,32 +4758,25 @@ function handleUpsertDriverCombo(PDO $pdo, array $auth): void {
     $ecChk->execute([$engineComboId]);
     if (!$ecChk->fetch()) rsa_jsonResponse(['error' => 'Engine combo not found'], 404);
 
-    // Validate date range
-    if ($effectiveTo !== null && $effectiveTo <= $effectiveFrom) {
-        rsa_jsonResponse(['error' => 'effectiveToUtc must be after effectiveFromUtc'], 400);
-    }
-
-    // Check for overlaps (exclude self when updating)
-    $overlapWhere = "driver_name=? AND class_index=? AND effective_from_utc < ? AND (effective_to_utc IS NULL OR effective_to_utc > ?)";
-    $overlapParams = [$driverName, $classIndex, $effectiveTo ?? '9999-12-31 23:59:59', $effectiveFrom];
     if ($id) {
-        $overlapWhere .= " AND id != ?";
-        $overlapParams[] = $id;
-    }
-    $olap = $pdo->prepare("SELECT id FROM parity_driver_combos WHERE $overlapWhere LIMIT 1");
-    $olap->execute($overlapParams);
-    if ($olap->fetch()) {
-        rsa_jsonResponse(['error' => 'Overlapping effective date range for this driver/class'], 409);
-    }
-
-    if ($id) {
+        // Direct update of an existing row (admin timeline editor)
+        if ($effectiveTo !== null && $effectiveTo <= $effectiveFrom) {
+            rsa_jsonResponse(['error' => 'effectiveToUtc must be after effectiveFromUtc'], 400);
+        }
         $pdo->prepare("UPDATE parity_driver_combos SET driver_name=?, class_index=?, engine_combo_id=?, effective_from_utc=?, effective_to_utc=? WHERE id=?")
             ->execute([$driverName, $classIndex, $engineComboId, $effectiveFrom, $effectiveTo, $id]);
         rsa_jsonResponse(['ok' => true, 'id' => $id]);
     } else {
-        $pdo->prepare("INSERT INTO parity_driver_combos (driver_name, class_index, engine_combo_id, effective_from_utc, effective_to_utc) VALUES (?,?,?,?,?)")
-            ->execute([$driverName, $classIndex, $engineComboId, $effectiveFrom, $effectiveTo]);
-        rsa_jsonResponse(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+        // New assignment — use timeline insert to handle overlaps cleanly
+        $pdo->beginTransaction();
+        try {
+            $result = parity_timelineInsertCombo($pdo, $driverName, $classIndex, $engineComboId, $effectiveFrom);
+            $pdo->commit();
+            rsa_jsonResponse(['ok' => true, 'timeline' => $result]);
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            rsa_jsonResponse(['error' => 'Timeline insert failed: ' . $e->getMessage()], 500);
+        }
     }
 }
 
@@ -5079,31 +5089,17 @@ function handleBulkUpsertDriverCombos(PDO $pdo, array $auth): void {
 
     $created = 0;
     $closed = 0;
+    $replaced = 0;
     $skipped = 0;
     $errors = [];
 
     $pdo->beginTransaction();
     try {
-        $stmtFindOpen = $pdo->prepare("
-            SELECT id, engine_combo_id, effective_from_utc
-            FROM parity_driver_combos
-            WHERE driver_name = ? AND class_index = ? AND effective_to_utc IS NULL
-            ORDER BY effective_from_utc DESC LIMIT 1
-        ");
-        $stmtClose = $pdo->prepare("
-            UPDATE parity_driver_combos SET effective_to_utc = ? WHERE id = ?
-        ");
-        $stmtInsert = $pdo->prepare("
-            INSERT INTO parity_driver_combos (driver_name, class_index, engine_combo_id, effective_from_utc, effective_to_utc)
-            VALUES (?, ?, ?, ?, ?)
-        ");
-
         foreach ($items as $i => $item) {
             $driverName    = strtoupper(trim($item['driverName'] ?? ''));
             $classIndex    = strtoupper(trim($item['classIndex'] ?? ''));
             $engineComboId = (int)($item['engineComboId'] ?? 0);
             $effectiveFrom = trim($item['effectiveFromUtc'] ?? '');
-            $effectiveTo   = isset($item['effectiveToUtc']) && trim($item['effectiveToUtc']) !== '' ? trim($item['effectiveToUtc']) : null;
 
             if ($driverName === '' || $classIndex === '' || !$engineComboId || $effectiveFrom === '') {
                 $errors[] = "Item $i: missing required fields";
@@ -5111,25 +5107,11 @@ function handleBulkUpsertDriverCombos(PDO $pdo, array $auth): void {
                 continue;
             }
 
-            // Check if there's already an open assignment with the same combo — skip if identical
-            $stmtFindOpen->execute([$driverName, $classIndex]);
-            $existing = $stmtFindOpen->fetch(PDO::FETCH_ASSOC);
-
-            if ($existing && (int)$existing['engine_combo_id'] === $engineComboId) {
-                // Already assigned same combo — skip
-                $skipped++;
-                continue;
-            }
-
-            // Close any open prior assignment at this timestamp
-            if ($existing) {
-                $stmtClose->execute([$effectiveFrom, $existing['id']]);
-                $closed++;
-            }
-
-            // Insert new
-            $stmtInsert->execute([$driverName, $classIndex, $engineComboId, $effectiveFrom, $effectiveTo]);
-            $created++;
+            $result = parity_timelineInsertCombo($pdo, $driverName, $classIndex, $engineComboId, $effectiveFrom);
+            $created  += $result['created'];
+            $closed   += $result['closed'];
+            $replaced += $result['replaced'];
+            $skipped  += $result['skipped'];
         }
 
         $pdo->commit();
@@ -5142,9 +5124,103 @@ function handleBulkUpsertDriverCombos(PDO $pdo, array $auth): void {
         'ok' => true,
         'created' => $created,
         'closed' => $closed,
+        'replaced' => $replaced,
         'skipped' => $skipped,
         'errors' => $errors,
     ]);
+}
+
+/**
+ * Timeline Insert for driver combo assignments.
+ *
+ * Semantics: start-inclusive, end-exclusive.
+ *   effective_from_utc = inclusive start
+ *   effective_to_utc   = exclusive end (NULL = open/unbounded)
+ *
+ * Given (driver, class, combo, effectiveFrom):
+ * 1) If an assignment starts exactly at effectiveFrom → replace it (update combo).
+ * 2) If an assignment is active at effectiveFrom (started before, ends after or is open)
+ *    → close it at effectiveFrom (set effective_to_utc = effectiveFrom).
+ * 3) Find the next assignment that starts after effectiveFrom → new assignment ends there.
+ *    If none, new assignment is open-ended (NULL).
+ * 4) Insert the new assignment with [effectiveFrom, nextStart) or [effectiveFrom, NULL).
+ *
+ * Returns: ['created' => 0|1, 'closed' => 0|1, 'replaced' => 0|1, 'skipped' => 0|1]
+ */
+function parity_timelineInsertCombo(PDO $pdo, string $driverName, string $classIndex, int $engineComboId, string $effectiveFrom): array {
+    $result = ['created' => 0, 'closed' => 0, 'replaced' => 0, 'skipped' => 0];
+
+    // 1) Check for exact-match: assignment starting exactly at effectiveFrom
+    $stmtExact = $pdo->prepare("
+        SELECT id, engine_combo_id
+        FROM parity_driver_combos
+        WHERE driver_name = ? AND class_index = ? AND effective_from_utc = ?
+        LIMIT 1
+    ");
+    $stmtExact->execute([$driverName, $classIndex, $effectiveFrom]);
+    $exact = $stmtExact->fetch(PDO::FETCH_ASSOC);
+
+    if ($exact) {
+        if ((int)$exact['engine_combo_id'] === $engineComboId) {
+            // Already has the same combo at this exact point — skip
+            $result['skipped'] = 1;
+            return $result;
+        }
+        // Replace: update the combo on the existing row (preserves its effective_to_utc)
+        $pdo->prepare("UPDATE parity_driver_combos SET engine_combo_id = ? WHERE id = ?")
+            ->execute([$engineComboId, $exact['id']]);
+        $result['replaced'] = 1;
+        return $result;
+    }
+
+    // 2) Find the assignment active at effectiveFrom
+    //    Active means: started before effectiveFrom AND (ends after effectiveFrom OR is open)
+    $stmtActive = $pdo->prepare("
+        SELECT id, engine_combo_id, effective_from_utc, effective_to_utc
+        FROM parity_driver_combos
+        WHERE driver_name = ? AND class_index = ?
+          AND effective_from_utc < ?
+          AND (effective_to_utc IS NULL OR effective_to_utc > ?)
+        ORDER BY effective_from_utc DESC
+        LIMIT 1
+    ");
+    $stmtActive->execute([$driverName, $classIndex, $effectiveFrom, $effectiveFrom]);
+    $active = $stmtActive->fetch(PDO::FETCH_ASSOC);
+
+    if ($active && (int)$active['engine_combo_id'] === $engineComboId) {
+        // The active assignment already has the same combo — skip
+        $result['skipped'] = 1;
+        return $result;
+    }
+
+    // Close the active assignment at effectiveFrom (end-exclusive)
+    if ($active) {
+        $pdo->prepare("UPDATE parity_driver_combos SET effective_to_utc = ? WHERE id = ?")
+            ->execute([$effectiveFrom, $active['id']]);
+        $result['closed'] = 1;
+    }
+
+    // 3) Find the next assignment that starts after effectiveFrom
+    $stmtNext = $pdo->prepare("
+        SELECT effective_from_utc
+        FROM parity_driver_combos
+        WHERE driver_name = ? AND class_index = ?
+          AND effective_from_utc > ?
+        ORDER BY effective_from_utc ASC
+        LIMIT 1
+    ");
+    $stmtNext->execute([$driverName, $classIndex, $effectiveFrom]);
+    $next = $stmtNext->fetch(PDO::FETCH_ASSOC);
+    $newEnd = $next ? $next['effective_from_utc'] : null;
+
+    // 4) Insert the new assignment
+    $pdo->prepare("
+        INSERT INTO parity_driver_combos (driver_name, class_index, engine_combo_id, effective_from_utc, effective_to_utc)
+        VALUES (?, ?, ?, ?, ?)
+    ")->execute([$driverName, $classIndex, $engineComboId, $effectiveFrom, $newEnd]);
+    $result['created'] = 1;
+
+    return $result;
 }
 
 // ============================================================================
@@ -6280,8 +6356,21 @@ function handleParityByCombo(PDO $pdo): void {
         $avgTopN = count($topNSlice) > 0 ? round(array_sum($topNSlice) / count($topNSlice), 4) : null;
         $countTopN = count($topNSlice);
 
-        // totalAvg = average of ALL active values
-        $totalAvg = $countActive > 0 ? round(array_sum($activeValues) / $countActive, 4) : null;
+        // totalAvg = average of runs within TOTAL_AVG_WITHIN_PCT of quickest (outlier filter)
+        $TOTAL_AVG_WITHIN_PCT = 0.02; // 2% — easy to tune
+        $totalAvg = null;
+        $countTotalAvg = 0;
+        if ($bestValue !== null && $countActive > 0) {
+            $cutoff = $bestValue * (1 + $TOTAL_AVG_WITHIN_PCT);
+            $filtered = $isLowerBetter
+                ? array_filter($activeValues, fn($v) => $v <= $cutoff)
+                : array_filter($activeValues, fn($v) => $v >= $bestValue * (1 - $TOTAL_AVG_WITHIN_PCT));
+            $filtered = array_values($filtered);
+            $countTotalAvg = count($filtered);
+            if ($countTotalAvg > 0) {
+                $totalAvg = round(array_sum($filtered) / $countTotalAvg, 4);
+            }
+        }
 
         // Spread
         $spread = null;
@@ -6308,6 +6397,7 @@ function handleParityByCombo(PDO $pdo): void {
             'countTotal'        => $countTotal,
             'countActive'       => $countActive,
             'countExcluded'     => $countExcluded,
+            'countTotalAvg'     => $countTotalAvg,
             'weatherCoveragePct'=> $comboCoveragePct,
             'topRuns'           => $topRunsForAudit,
         ];
@@ -6694,7 +6784,21 @@ function parity_buildComboAggregates(array $comboRuns, bool $includeUnknown, boo
         $topNSlice = array_slice($activeValues, 0, $topN);
         $avgTopN = count($topNSlice) > 0 ? round(array_sum($topNSlice) / count($topNSlice), 4) : null;
         $countTopN = count($topNSlice);
-        $totalAvg = $countActive > 0 ? round(array_sum($activeValues) / $countActive, 4) : null;
+        // totalAvg = average of runs within 2% of quickest (outlier filter)
+        $TOTAL_AVG_WITHIN_PCT = 0.02;
+        $totalAvg = null;
+        $countTotalAvg = 0;
+        if ($bestValue !== null && $countActive > 0) {
+            $cutoff = $bestValue * (1 + $TOTAL_AVG_WITHIN_PCT);
+            $filtered = $isLowerBetter
+                ? array_filter($activeValues, fn($v) => $v <= $cutoff)
+                : array_filter($activeValues, fn($v) => $v >= $bestValue * (1 - $TOTAL_AVG_WITHIN_PCT));
+            $filtered = array_values($filtered);
+            $countTotalAvg = count($filtered);
+            if ($countTotalAvg > 0) {
+                $totalAvg = round(array_sum($filtered) / $countTotalAvg, 4);
+            }
+        }
         $spread = null;
         if ($countTopN >= 2) {
             $lastIdx = $countTopN - 1;
@@ -6709,6 +6813,7 @@ function parity_buildComboAggregates(array $comboRuns, bool $includeUnknown, boo
             'bestValue' => $bestValue, 'avgTopN' => $avgTopN, 'totalAvg' => $totalAvg,
             'spread' => $spread, 'countTopN' => $countTopN, 'countTotal' => $countTotal,
             'countActive' => $countActive, 'countExcluded' => $countTotal - $countActive,
+            'countTotalAvg' => $countTotalAvg,
             'weatherCoveragePct' => $comboCoveragePct, 'topRuns' => $topRunsForAudit,
         ];
         $comboAggs[$comboName] = ['best' => $bestValue, 'avgTopN' => $avgTopN, 'totalAvg' => $totalAvg];
@@ -7018,7 +7123,14 @@ function handleRangeParityMatrix(PDO $pdo): void {
             $best = round($vals[0], 4);
             $topSlice = array_slice($vals, 0, $topN);
             $avgTopN = round(array_sum($topSlice) / count($topSlice), 4);
-            $totalAvg = round(array_sum($vals) / count($vals), 4);
+            // totalAvg = average of runs within 2% of quickest (outlier filter)
+            $TOTAL_AVG_WITHIN_PCT = 0.02;
+            $cutoff = $best * (1 + $TOTAL_AVG_WITHIN_PCT);
+            $filtered = $isLowerBetter
+                ? array_filter($vals, fn($v) => $v <= $cutoff)
+                : array_filter($vals, fn($v) => $v >= $best * (1 - $TOTAL_AVG_WITHIN_PCT));
+            $filtered = array_values($filtered);
+            $totalAvg = count($filtered) > 0 ? round(array_sum($filtered) / count($filtered), 4) : null;
             $matrix[$evId][$cn] = [
                 'best' => $best, 'avgTopN' => $avgTopN, 'totalAvg' => $totalAvg, 'count' => count($vals),
             ];

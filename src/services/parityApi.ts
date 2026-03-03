@@ -72,6 +72,8 @@ export interface ParityRun {
   place: string | null;
   source_ref: string | null;
   created_at: string;
+  /** Future: count of incidents/tags (crash, explosion, record, etc.) */
+  incident_count?: number;
 }
 
 export interface RunsResponse {
@@ -658,6 +660,8 @@ export interface RunsByDriverResponse {
   driverName: string;
   runs: DriverRun[];
   total: number;
+  limit: number;
+  offset: number;
 }
 
 // ── Class Alias Types ───────────────────────────────────────────────────
@@ -757,6 +761,7 @@ export interface BulkUpsertDriverCombosResponse {
   ok: boolean;
   created: number;
   closed: number;
+  replaced: number;
   skipped: number;
   errors: string[];
 }
@@ -1129,6 +1134,8 @@ export interface ParityComboRun {
   et: number | null;
   mph: number | null;
   qualPosition?: number;
+  /** Future: count of incidents/tags for this run */
+  incident_count?: number;
 }
 
 export interface ParityComboEntry {
@@ -1142,6 +1149,7 @@ export interface ParityComboEntry {
   countTotal: number;
   countActive: number;
   countExcluded: number;
+  countTotalAvg: number;
   weatherCoveragePct: number | null;
   topRuns: ParityComboRun[];
 }
@@ -1834,6 +1842,7 @@ export const parityApi = {
     includeFlagged?: boolean;
     includeWeather?: boolean;
     limit?: number;
+    offset?: number;
   }): Promise<RunsByDriverResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'runsByDriver');
@@ -1847,6 +1856,7 @@ export const parityApi = {
     if (params.includeFlagged) qs.set('includeFlagged', '1');
     if (params.includeWeather) qs.set('includeWeather', '1');
     if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
     return parityRequest<RunsByDriverResponse>(`/parity.php?${qs.toString()}`);
   },
 

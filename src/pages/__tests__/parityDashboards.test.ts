@@ -317,9 +317,9 @@ describe('ParityReport component structure', () => {
     expect(parityReportSource).toContain('PARITY_METRICS');
   });
 
-  it('fetches all 5 endpoints in Event Report', () => {
+  it('fetches all 4 endpoints in Event Report (deltas removed Phase 5.5)', () => {
     expect(parityReportSource).toContain('parityApi.paritySummary');
-    expect(parityReportSource).toContain('parityApi.parityDeltas');
+    expect(parityReportSource).not.toContain('parityApi.parityDeltas');
     expect(parityReportSource).toContain('parityApi.parityQualOrder');
     expect(parityReportSource).toContain('parityApi.parityIncrementals');
     expect(parityReportSource).toContain('parityApi.paritySessionWeather');
@@ -340,9 +340,9 @@ describe('ParityReport component structure', () => {
     expect(parityReportSource).toContain('Raw Qualifying Results');
   });
 
-  it('has delta tables with default trigger thresholds', () => {
-    expect(parityReportSource).toContain('DeltaTable');
-    expect(parityReportSource).toContain('defaultTriggers');
+  it('delta tables were removed (Phase 5.5)', () => {
+    expect(parityReportSource).not.toContain('DeltaTable');
+    expect(parityReportSource).not.toContain('defaultTriggers');
   });
 
   it('has bar chart for quickest per combo', () => {

@@ -14,20 +14,18 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(resolve(__dir, '../../../pages/ParityReport.tsx'), 'utf-8');
 
 describe('ParityReport section smoke test', () => {
-  it('contains the mapping banner section', () => {
-    expect(SRC).toContain('data-testid="parity-mapping-banner"');
-    expect(SRC).toContain('MappingBanner');
-    expect(SRC).toContain('mappedPct');
-    expect(SRC).toContain('unknownRunCount');
-    expect(SRC).toContain('topMissingDrivers');
-    expect(SRC).toContain('Assign Combos');
+  it('contains the combo mapping awareness section', () => {
+    // Mapping banner was consolidated into combo summary; verify combo-related markers
+    expect(SRC).toContain('data-testid="parity-combo-summary"');
+    expect(SRC).toContain('combosSorted');
+    expect(SRC).toContain('SummaryCompactTable');
   });
 
   it('contains the combo summary section', () => {
     expect(SRC).toContain('data-testid="parity-combo-summary"');
     expect(SRC).toContain('Quickest');
     expect(SRC).toContain('Average');
-    expect(SRC).toContain('Total Average Per Combo');
+    expect(SRC).toContain('Total Average');
     expect(SRC).toContain('combosSorted');
     expect(SRC).toContain('bestComboValue');
   });
@@ -35,7 +33,7 @@ describe('ParityReport section smoke test', () => {
   it('contains the grouped bar chart', () => {
     expect(SRC).toContain('data-testid="parity-grouped-chart"');
     expect(SRC).toContain('BarChart');
-    expect(SRC).toContain('barData');
+    expect(SRC).toContain('interleavedBars');
     expect(SRC).toContain('comboColor');
   });
 
@@ -55,13 +53,10 @@ describe('ParityReport section smoke test', () => {
     expect(SRC).toContain('formatTemp');
   });
 
-  it('contains the delta comparison tables', () => {
-    expect(SRC).toContain('data-testid="parity-delta-tables"');
-    expect(SRC).toContain('DeltaTable');
-    expect(SRC).toContain('triggers.quickest');
-    expect(SRC).toContain('triggers.avgTopN');
-    expect(SRC).toContain('triggers.totalAvg');
-    expect(SRC).toContain('No Data');
+  it('delta comparison tables were removed (Phase 5.5)', () => {
+    expect(SRC).not.toContain('data-testid="parity-delta-tables"');
+    expect(SRC).not.toContain('DeltaTable');
+    expect(SRC).not.toContain('triggers.quickest');
   });
 
   it('contains the qualifying results section', () => {
@@ -78,9 +73,14 @@ describe('ParityReport section smoke test', () => {
     expect(SRC).toContain('formatDelta');
     expect(SRC).toContain('formatHPC');
     expect(SRC).toContain('formatBaro');
-    // Should NOT have raw toFixed calls (except in comments)
+    // Should NOT have raw toFixed calls (except in comments and recharts axis formatters)
     const lines = SRC.split('\n');
-    const toFixedLines = lines.filter((l: string) => l.includes('.toFixed(') && !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'));
+    const toFixedLines = lines.filter((l: string) =>
+      l.includes('.toFixed(') &&
+      !l.trimStart().startsWith('//') &&
+      !l.trimStart().startsWith('*') &&
+      !l.includes('tickFormatter')  // recharts axis formatters are acceptable
+    );
     expect(toFixedLines).toHaveLength(0);
   });
 

@@ -65,8 +65,11 @@ import {
 } from '../domain/parity/weatherCorrection';
 import { parseCsvWeatherData, WEATHER_PROVIDERS, type WeatherSampleRow } from '../domain/parity/weatherBackfill';
 import { parseBulkCsv, normalizeTrackName } from '../domain/parity/eventImport';
+import { formatLocalTimeLabel, formatLocalDateTime } from '../domain/parity/formatLocalTime';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
+import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
+import { useClassPreset } from '../domain/parity/useClassPreset';
 
 // ── Styles ──────────────────────────────────────────────────────────────
 
@@ -228,7 +231,6 @@ type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash
 
 // Classes in scope for dashboard pickers (used by Phase 1 tab filters)
 const PARITY_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'] as const;
-void PARITY_CLASSES;
 
 const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'eventRuns', label: 'Event Runs' },
@@ -238,26 +240,7 @@ const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'trends', label: 'Trends' },
 ];
 
-/** Pick the best default event: active > most recently completed > latest with runs */
-function resolveDefaultEvent(events: EventWithStats[]): EventWithStats | null {
-  if (events.length === 0) return null;
-  const today = new Date().toISOString().slice(0, 10);
-  // 1) Active event (today is between start and end dates)
-  const active = events.find(e => e.start_date_local <= today && e.end_date_local >= today);
-  if (active) return active;
-  // 2) Most recently completed event (end_date < today, sort desc to get latest)
-  const completed = events
-    .filter(e => e.end_date_local < today)
-    .sort((a, b) => b.end_date_local.localeCompare(a.end_date_local));
-  if (completed.length > 0) return completed[0];
-  // 3) Latest with runs in DB (sort desc by start_date)
-  const withRuns = events
-    .filter(e => e.run_count > 0)
-    .sort((a, b) => b.start_date_local.localeCompare(a.start_date_local));
-  if (withRuns.length > 0) return withRuns[0];
-  // Fallback: first event
-  return events[0];
-}
+// resolveDefaultEvent imported from domain/parity/resolveDefaultEvent.ts
 
 const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'trackCoords', label: 'Track Coords' },
@@ -293,6 +276,7 @@ export default function ParityPortal() {
   const [showAdminTools, setShowAdminTools] = useState(false);
   const [raceLookup, setRaceLookup] = useState('');
   const [driverHistoryFilter, setDriverHistoryFilter] = useState<{ driver?: string; classIndex?: string } | null>(null);
+  const [classIndex, setClassIndex] = useClassPreset();
 
   // Event picker state (shared across tabs)
   const [events, setEvents] = useState<EventWithStats[]>([]);
@@ -387,13 +371,10 @@ export default function ParityPortal() {
             </option>
           ))}
         </select>
-        <button style={{ ...S.btn('secondary'), padding: '0.2rem 0.4rem', fontSize: '0.75rem' }} onClick={() => loadEvents(selectedYear)}
-          disabled={eventsLoading}>{eventsLoading ? '...' : '↻'}</button>
-        {selectedEvent && (
-          <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>
-            {selectedEvent.track_name}{selectedEvent.city ? ` · ${selectedEvent.city}` : ''}
-          </span>
-        )}
+        <select style={{ ...S.input, width: 72, fontSize: '0.8rem' }} value={classIndex}
+          onChange={e => setClassIndex(e.target.value)}>
+          {PARITY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
       </div>
 
       {/* Mobile: dropdown nav */}
@@ -432,12 +413,12 @@ export default function ParityPortal() {
       </div>
 
       {/* ── Dashboard Panels ── */}
-      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} onDriverClick={goToDriverHistory} />}
-      {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} onDriverClick={goToDriverHistory} />} {/* kept for admin */}
+      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
+      {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
-      {tab === 'parityReport' && <ParityReport event={selectedEvent} />}
+      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} onClassChange={setClassIndex} />}
 
       {/* ── Admin Panels ── */}
       {tab === 'adminTracks' && <AdminTracksPanel />}
@@ -509,15 +490,15 @@ function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
   return (r as any)[key] ?? null;
 }
 
-function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null; onDriverClick?: (driver: string, classIndex?: string) => void }) {
+function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: { event: EventWithStats | null; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void }) {
   const [runs, setRuns] = useState<RunWithWeather[]>([]);
   const [total, setTotal] = useState(0);
   const [joinedCount, setJoinedCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Filters
-  const [classFilter, setClassFilter] = useState('TF');
+  // Filters — classFilter mirrors global class preset
+  const classFilter = globalClassIndex;
   const [roundFilter, setRoundFilter] = useState('');
   const [laneFilter, setLaneFilter] = useState('');
   const [driverSearch, setDriverSearch] = useState('');
@@ -531,10 +512,23 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
   const [showIncrementals, setShowIncrementals] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
 
-  // Column picker state — initialise from defaults
-  const [visibleCols, setVisibleCols] = useState<Set<string>>(
-    () => new Set(ALL_COLUMNS.filter(c => c.defaultOn).map(c => c.key))
-  );
+  // Column picker state — all ON by default, persisted in localStorage
+  const COL_LS_KEY = 'parity_eventRunsCols';
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(COL_LS_KEY);
+      if (stored) {
+        const arr = JSON.parse(stored) as string[];
+        if (Array.isArray(arr) && arr.length > 0) return new Set(arr);
+      }
+    } catch { /* ignore corrupt data */ }
+    return new Set(ALL_COLUMNS.map(c => c.key));
+  });
+
+  // Persist column prefs whenever they change
+  useEffect(() => {
+    localStorage.setItem(COL_LS_KEY, JSON.stringify([...visibleCols]));
+  }, [visibleCols]);
 
   // Flags
   const [flaggingId, setFlaggingId] = useState<number | null>(null);
@@ -655,7 +649,6 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
   };
 
   // Get unique values for filter dropdowns
-  const availableClasses = useMemo(() => [...new Set(runs.map(r => r.class_index).filter(Boolean))].sort(), [runs]);
   const availableRounds = useMemo(() => [...new Set(runs.map(r => r.round).filter(Boolean))].sort(), [runs]);
 
   const activeCols = ALL_COLUMNS.filter(c => visibleCols.has(c.key));
@@ -733,22 +726,7 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
 
       {/* ── Filters Row ── */}
       <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-        <b style={{ fontSize: '0.8rem' }}>Class:</b>
-        {['TF', 'FC', 'PS', 'PSM', 'TD', 'TS', ''].map(c => (
-          <button key={c} style={{
-            ...S.btn(classFilter === c ? 'primary' : 'secondary'),
-            fontSize: '0.7rem', padding: '0.15rem 0.4rem',
-          }} onClick={() => setClassFilter(c)}>
-            {c || 'All'}
-          </button>
-        ))}
-        {availableClasses.filter(c => !['TF', 'FC', 'PS', 'PSM', 'TD', 'TS'].includes(c!)).length > 0 && (
-          <select style={{ ...S.input, width: 80, fontSize: '0.7rem' }} value={classFilter}
-            onChange={e => setClassFilter(e.target.value)}>
-            <option value="">All</option>
-            {availableClasses.map(c => <option key={c} value={c!}>{c}</option>)}
-          </select>
-        )}
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-muted)' }}>Class: {classFilter}</span>
 
         <span style={{ borderLeft: '1px solid var(--color-border)', height: 16, margin: '0 0.25rem' }} />
 
@@ -801,6 +779,7 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
                     {c.label}{c.sortKey ? sortArrow(c.sortKey) : ''}
                   </th>
                 ))}
+                <th style={{ ...stickyTh, width: 20, textAlign: 'center' }} title="Incidents (coming soon)"></th>
                 <th style={stickyTh}>Flag</th>
               </tr>
             </thead>
@@ -830,6 +809,7 @@ function EventRunsPanel({ event, onDriverClick }: { event: EventWithStats | null
                         </td>
                       );
                     })}
+                    <td style={{ ...S.td, textAlign: 'center', width: 20 }}>{(r as any).incident_count > 0 ? '⚠' : ''}</td>
                     <td style={S.td}>
                       {isFlagged ? (
                         <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.3rem', color: '#dc2626' }}
@@ -1003,6 +983,11 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
   const [valueMode, setValueMode] = useState<ValueMode>('raw');
   const [showCharts, setShowCharts] = useState(false);
 
+  // Pagination
+  const PAGE_SIZES = [25, 50, 100] as const;
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [currentOffset, setCurrentOffset] = useState(0);
+
   // Auto-load when navigated from another panel
   const loadedRef = useRef(false);
   useEffect(() => {
@@ -1028,7 +1013,7 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
     return () => clearTimeout(timer);
   }, [search, classFilter]);
 
-  const loadRuns = useCallback(async (driver: string) => {
+  const loadRuns = useCallback(async (driver: string, offset: number) => {
     if (!driver) return;
     setLoading(true); setError('');
     try {
@@ -1037,18 +1022,22 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
         classIndex: classFilter || undefined,
         session: sessionFilter || undefined,
         includeWeather: true,
-        limit: 500,
+        limit: pageSize,
+        offset,
       });
       setRuns(res.runs);
       setTotal(res.total);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
-  }, [classFilter, sessionFilter]);
+  }, [classFilter, sessionFilter, pageSize]);
 
-  // Reload when driver is set (including initial) or filters change
+  // Reset to first page when filters change
+  useEffect(() => { setCurrentOffset(0); }, [classFilter, sessionFilter, pageSize]);
+
+  // Reload when driver, filters, or page changes
   useEffect(() => {
-    if (selectedDriver) loadRuns(selectedDriver);
-  }, [selectedDriver, loadRuns]);
+    if (selectedDriver) loadRuns(selectedDriver, currentOffset);
+  }, [selectedDriver, currentOffset, loadRuns]);
 
   const selectDriver = useCallback((driver: string) => {
     setSelectedDriver(driver);
@@ -1324,6 +1313,7 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                 )}
                 <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>W</th>
                 <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>DQ</th>
+                <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)', width: 20, textAlign: 'center' }} title="Incidents (coming soon)"></th>
               </tr>
             </thead>
             <tbody>
@@ -1364,11 +1354,49 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                     )}
                     <td style={S.td}>{r.win_flag ? '✓' : ''}</td>
                     <td style={S.td}>{r.dq_flag ? '✗' : ''}</td>
+                    <td style={{ ...S.td, textAlign: 'center', width: 20 }}>{(r as any).incident_count > 0 ? '⚠' : ''}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination controls */}
+      {selectedDriver && total > 0 && !loading && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem', fontSize: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              style={{ ...S.btn('secondary'), fontSize: '0.7rem', padding: '0.15rem 0.5rem' }}
+              disabled={currentOffset === 0}
+              onClick={() => setCurrentOffset(o => Math.max(0, o - pageSize))}
+            >
+              ← Prev
+            </button>
+            <span style={{ color: 'var(--color-muted)' }}>
+              {currentOffset + 1}–{Math.min(currentOffset + pageSize, total)} of {total}
+            </span>
+            <button
+              style={{ ...S.btn('secondary'), fontSize: '0.7rem', padding: '0.15rem 0.5rem' }}
+              disabled={currentOffset + pageSize >= total}
+              onClick={() => setCurrentOffset(o => o + pageSize)}
+            >
+              Next →
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ color: 'var(--color-muted)' }}>Per page:</span>
+            {PAGE_SIZES.map(sz => (
+              <button
+                key={sz}
+                style={{ ...S.btn(pageSize === sz ? 'primary' : 'secondary'), fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}
+                onClick={() => setPageSize(sz)}
+              >
+                {sz}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -3133,8 +3161,8 @@ function ParitySummaryPanel({ event }: { event: EventWithStats | null }) {
 
 // ── Qual Sheet Panel ────────────────────────────────────────────────────
 
-function QualSheetPanel({ event, onDriverClick }: { event: EventWithStats | null; onDriverClick?: (driver: string, classIndex?: string) => void }) {
-  const [classFilter, setClassFilter] = useState('TF');
+function QualSheetPanel({ event, classIndex, onDriverClick }: { event: EventWithStats | null; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void }) {
+  const classFilter = classIndex;
   const [data, setData] = useState<QualSheetResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -3175,11 +3203,7 @@ function QualSheetPanel({ event, onDriverClick }: { event: EventWithStats | null
   return (
     <div>
       <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: '0.8rem' }}>Class:</b>
-        {CLASS_BUTTONS.map(c => (
-          <button key={c} style={{ ...S.btn(classFilter === c ? 'primary' : 'secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}
-            onClick={() => setClassFilter(c)}>{c}</button>
-        ))}
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-muted)' }}>Class: {classFilter}</span>
         {data && data.sheet.length > 0 && (
           <>
             <button style={{ ...S.btn('secondary'), marginLeft: 'auto', fontSize: '0.7rem' }} onClick={exportCsv}>Export CSV</button>
@@ -5949,12 +5973,15 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     return () => { cancelled = true; };
   }, [event?.id]);
 
+  // Resolve timezone: prefer timeseries response, fall back to event prop
+  const tz = data?.event?.timezone || event?.timezone_iana || 'UTC';
+
   // Compute derived metrics for every canonical point
   const allDerived: DerivedPoint[] = useMemo(() => {
     if (!data) return [];
     return data.points.map(p => {
       const ts = p.timestamp_utc;
-      const label = ts.length >= 16 ? ts.slice(11, 16) : ts;
+      const label = formatLocalTimeLabel(ts, tz);
       const T = p.canonical_temp_f;
       const RH = p.canonical_rh_pct;
       const BP = p.canonical_pressure_inhg;
@@ -5968,7 +5995,7 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
         airDensity: w.airDensity, waterGrains: w.waterGrains, vaporPressure: w.vp,
       };
     });
-  }, [data]);
+  }, [data, tz]);
 
   // Filter by time range
   const filteredDerived = useMemo(() => {
@@ -6015,7 +6042,10 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
           <YAxis tick={{ fontSize: 9 }} tickCount={5}
             domain={[(dm: number) => dm - Math.abs(dm) * 0.02, (dm: number) => dm + Math.abs(dm) * 0.02]}
             tickFormatter={(v: number) => fmt(v)} width={yWidth ?? 48} />
-          <Tooltip contentStyle={ttStyle} formatter={(v: number) => [fmt(v), label]} labelFormatter={(l: string) => `Time: ${l}`} />
+          <Tooltip contentStyle={ttStyle} formatter={(v: number) => [fmt(v), label]} labelFormatter={(_l: string, payload: any[]) => {
+            const utc = payload?.[0]?.payload?.ts;
+            return utc ? formatLocalDateTime(utc, tz) : _l;
+          }} />
           <Line type="monotone" dataKey={dataKey} stroke={color} dot={false} strokeWidth={1.8} connectNulls />
         </LineChart>
       </ResponsiveContainer>
@@ -6024,14 +6054,8 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
 
   return (
     <div>
-      {/* Header + Time Range in one row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-        <div>
-          <h2 style={{ ...S.h1, fontSize: '1.05rem', margin: 0 }}>Weather Station — {data.event.event_name}</h2>
-          <p style={{ fontSize: '0.72rem', color: '#888', margin: '0.1rem 0 0' }}>
-            {data.event.track_name} &nbsp;|&nbsp; {data.event.start_date_local} → {data.event.end_date_local}
-          </p>
-        </div>
+      {/* Time Range selector */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
         <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
           {WX_RANGES.map(r => (
             <button key={r.key} onClick={() => setRange(r.key)}
@@ -6055,8 +6079,6 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
           <CondCard label="Barometer" value={latest.baro?.toFixed(3) ?? '—'} unit="inHg" color="#3b82f6" />
           <CondCard label="Density Alt" value={latest.da?.toFixed(0) ?? '—'} unit="ft" color="#f97316" />
           <CondCard label="Corr Factor" value={latest.cf?.toFixed(4) ?? '—'} unit="" color="#16a34a" />
-          <CondCard label="Dew Point" value={latest.dewPt?.toFixed(1) ?? '—'} unit="°F" color="#06b6d4" />
-          <CondCard label="Air Density" value={latest.airDensity?.toFixed(2) ?? '—'} unit="" color="#d946ef" />
           <CondCard label="Water Grains" value={latest.waterGrains?.toFixed(1) ?? '—'} unit="gr/lb" color="#84cc16" />
         </div>
       )}
