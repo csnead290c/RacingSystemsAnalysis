@@ -245,11 +245,15 @@ function resolveDefaultEvent(events: EventWithStats[]): EventWithStats | null {
   // 1) Active event (today is between start and end dates)
   const active = events.find(e => e.start_date_local <= today && e.end_date_local >= today);
   if (active) return active;
-  // 2) Most recently completed (end_date < today, events already sorted desc by start_date)
-  const completed = events.filter(e => e.end_date_local < today);
+  // 2) Most recently completed event (end_date < today, sort desc to get latest)
+  const completed = events
+    .filter(e => e.end_date_local < today)
+    .sort((a, b) => b.end_date_local.localeCompare(a.end_date_local));
   if (completed.length > 0) return completed[0];
-  // 3) Latest with runs in DB
-  const withRuns = events.filter(e => e.run_count > 0);
+  // 3) Latest with runs in DB (sort desc by start_date)
+  const withRuns = events
+    .filter(e => e.run_count > 0)
+    .sort((a, b) => b.start_date_local.localeCompare(a.start_date_local));
   if (withRuns.length > 0) return withRuns[0];
   // Fallback: first event
   return events[0];
@@ -6058,7 +6062,7 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
       )}
 
       {/* 6-Panel Chart Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.5rem' }}>
         <MiniChart dataKey="temp" color="#ef4444" label="Temperature" unit="°F" fmt={(v: number) => v.toFixed(1)} />
         <MiniChart dataKey="rh" color="#8b5cf6" label="Humidity" unit="%" fmt={(v: number) => v.toFixed(1)} />
         <MiniChart dataKey="baro" color="#3b82f6" label="Barometer" unit="inHg" fmt={(v: number) => v.toFixed(3)} yWidth={55} />

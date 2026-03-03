@@ -10,7 +10,9 @@ import {
   type ParityDeltaRow,
   type RangeParityMatrixResponse,
   type EventWithStats,
+  type EngineComboRow,
 } from '../services/parityApi';
+import { useCapabilities } from '../domain/config/useCapabilities';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, Legend,
@@ -72,7 +74,7 @@ async function cf<T>(key: string, fn: () => Promise<T>): Promise<T> {
 }
 
 const S = {
-  page: { fontFamily: "'Inter','Segoe UI',sans-serif", maxWidth: 1200, margin: '0 auto' } as React.CSSProperties,
+  page: { fontFamily: "'Inter','Segoe UI',sans-serif", maxWidth: 1200, margin: '0 auto', padding: '0 0.5rem' } as React.CSSProperties,
   h1: { fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--color-text)' } as React.CSSProperties,
   h2: { fontSize: '1rem', fontWeight: 700, margin: '1.25rem 0 0.5rem', color: 'var(--color-text)', borderBottom: '2px solid var(--color-border)', paddingBottom: '0.25rem' } as React.CSSProperties,
   card: { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '0.75rem', marginBottom: '0.75rem' } as React.CSSProperties,
@@ -119,10 +121,10 @@ export default function ParityReport({ event }: { event: EventWithStats | null }
   return (
     <div style={S.page}>
       <PrintStyle />
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--color-border)', marginBottom: '0.5rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, borderBottom: '1px solid var(--color-border)', marginBottom: '0.5rem', alignItems: 'center' }}>
         <button style={mode === 'event' ? S.tabA : S.tabI} onClick={() => { setMode('event'); setOverrideEv(null); }}>Event Parity</button>
         <button style={mode === 'longTerm' ? S.tabA : S.tabI} onClick={() => setMode('longTerm')}>Long-Term Parity</button>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: '0.72rem' }}>Class:<select value={classIndex} onChange={e => handleClassChange(e.target.value)} style={{ ...S.inp, width: 72, marginLeft: 4 }}>{PARITY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
           <label style={{ fontSize: '0.72rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
         </div>
@@ -239,7 +241,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
           <thead><tr>
             <th style={SS.th}>Engine Combo</th><th style={SS.th}>Driver</th>
             <th style={{ ...SS.th, textAlign: 'right' }}>ET</th><th style={{ ...SS.th, textAlign: 'right' }}>Speed</th>
-            <th style={SS.th}>Red</th>
+            <th style={SS.th}>Round</th>
           </tr></thead>
           <tbody>
             {summary.combos.flatMap(c => c.topRuns.slice(0, topN).map((r, ri) => (
@@ -252,7 +254,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
                 <td style={SS.td}>{r.driver}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
-                <td style={SS.td}>{r.dqFlag ? '🔴' : ''}</td>
+                <td style={{ ...SS.td, fontSize: '0.55rem', color: '#888' }}>{r.round || ''}</td>
               </tr>
             )))}
           </tbody>
@@ -260,7 +262,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
       </div>
 
       {/* ── Section 2: Three summary comparison tables ── */}
-      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
+      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
         <SummaryCompactTable title="Quickest Run" combos={combosSorted} refValue={bestComboValue} getValue={c => c.bestValue} metric={metric} />
         <SummaryCompactTable title={`Avg Top ${topN}`} combos={combosSorted} refValue={bestAvg4Value} getValue={c => c.avgTopN} metric={metric} />
         <SummaryCompactTable title="Total Average" combos={combosSorted} refValue={bestTotalAvg} getValue={c => c.totalAvg} metric={metric} />
@@ -275,14 +277,14 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
               <BarChart data={interleavedBars} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                 <XAxis dataKey="label" tick={{ fontSize: 8 }} interval={0} height={18} />
-                <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(2)} width={44} />
+                <YAxis tick={{ fontSize: 9 }} domain={[(min: number) => Math.floor((min - (min * 0.002)) * 100) / 100, 'auto']} tickFormatter={(v: number) => v.toFixed(2)} width={44} />
                 <Tooltip
                   formatter={(v: number, _name: string, props: any) => {
                     const p = props.payload;
                     return [`${formatMetric(v, metric)} — ${p.driver || ''} (${p.round || ''})`, p.combo || ''];
                   }}
                 />
-                <Bar dataKey="value" barSize={14}>
+                <Bar dataKey="value" barSize={24}>
                   {interleavedBars.map((d, i) => <Cell key={i} fill={d.fill} />)}
                 </Bar>
               </BarChart>
@@ -292,10 +294,10 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
       </div>
 
       {/* ── Section 4: Qual Results + Incrementals side-by-side ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
         <div data-testid="parity-qual-results">
           <div style={SS.secHead}>Raw Qualifying Results</div>
-          {qualOrder ? <QualTable rows={qualOrder.qualOrder} /> : <p style={S.hint}>Loading...</p>}
+          {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={classIndex} onComboChanged={load} /> : <p style={S.hint}>Loading...</p>}
         </div>
         <div data-testid="parity-incrementals">
           <div style={SS.secHead}>Incrementals</div>
@@ -304,7 +306,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
       </div>
 
       {/* ── Section 5: Weather + Deltas side-by-side ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
         <div data-testid="parity-weather">
           <div style={SS.secHead}>Weather by Session</div>
           {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
@@ -370,26 +372,96 @@ function SummaryCompactTable({ title, combos, refValue, getValue, metric }: {
   );
 }
 
-function QualTable({ rows }: { rows: ParityComboRun[] }) {
+function QualTable({ rows, event, classIndex, onComboChanged }: {
+  rows: ParityComboRun[];
+  event: EventWithStats | null;
+  classIndex: string;
+  onComboChanged?: () => void;
+}) {
+  const { can } = useCapabilities();
+  const isAdmin = can('nhra.parity.admin' as any);
+  const [engineCombos, setEngineCombos] = useState<EngineComboRow[]>([]);
+  const [editingDriver, setEditingDriver] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Load engine combos for the dropdown
+  useEffect(() => {
+    if (!isAdmin) return;
+    parityApi.listEngineCombos().then(r => setEngineCombos(r.combos)).catch(() => {});
+  }, [isAdmin]);
+
+  const handleComboChange = useCallback(async (driverName: string, newComboId: number) => {
+    if (!event) return;
+    setSaving(true);
+    try {
+      const effectiveDate = (event.start_date_local?.slice(0, 10) || new Date().toISOString().slice(0, 10)) + 'T00:00:00Z';
+      await parityApi.bulkUpsertDriverCombos([{
+        driverName,
+        classIndex,
+        engineComboId: newComboId,
+        effectiveFromUtc: effectiveDate,
+      }]);
+      // Invalidate cache so reload picks up new combo
+      _cache.clear();
+      setEditingDriver(null);
+      onComboChanged?.();
+    } catch (e) {
+      console.error('Failed to assign combo:', e);
+    } finally {
+      setSaving(false);
+    }
+  }, [event, classIndex, onComboChanged]);
+
   if (rows.length === 0) return <p style={S.hint}>No qual runs.</p>;
   return (
     <div style={{ maxHeight: 400, overflowY: 'auto' }}>
       <table style={SS.tbl}>
         <thead><tr>
           <th style={SS.th}>Pos</th><th style={SS.th}>Driver</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
-          <th style={{ ...SS.th, textAlign: 'right' }}>Speed</th><th style={SS.th}>Red</th><th style={SS.th}>Engine Combo</th>
+          <th style={{ ...SS.th, textAlign: 'right' }}>Speed</th><th style={SS.th}>Round</th><th style={SS.th}>Engine Combo</th>
         </tr></thead>
         <tbody>
           {rows.map((r, i) => {
             const clr = r.engineCombo ? comboColor(r.engineCombo) : '#666';
+            const isEditing = editingDriver === r.driver;
             return (
               <tr key={i}>
                 <td style={SS.td}>{r.qualPosition ?? i + 1}</td>
                 <td style={{ ...SS.td, fontWeight: 600 }}>{r.driver}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
-                <td style={SS.td}>{r.dqFlag ? '🔴' : ''}</td>
-                <td style={SS.td}><span style={{ ...S.badge(clr), fontSize: '0.55rem' }}>{r.engineCombo || '?'}</span></td>
+                <td style={{ ...SS.td, fontSize: '0.55rem', color: '#888' }}>{r.round || ''}</td>
+                <td style={SS.td}>
+                  {isEditing && isAdmin ? (
+                    <select
+                      autoFocus
+                      style={{ ...S.inp, fontSize: '0.6rem', width: '100%', padding: '0.15rem 0.2rem' }}
+                      value={r.engineComboId ?? ''}
+                      onChange={e => {
+                        const id = parseInt(e.target.value, 10);
+                        if (id) handleComboChange(r.driver, id);
+                      }}
+                      onBlur={() => setEditingDriver(null)}
+                      disabled={saving}
+                    >
+                      <option value="">Select...</option>
+                      {engineCombos.map(ec => (
+                        <option key={ec.id} value={ec.id}>{ec.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      style={{
+                        ...S.badge(clr), fontSize: '0.55rem',
+                        ...(isAdmin ? { cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '2px' } : {}),
+                      }}
+                      onClick={isAdmin ? () => setEditingDriver(r.driver) : undefined}
+                      title={isAdmin ? 'Click to change engine combo' : undefined}
+                    >
+                      {r.engineCombo || '?'}
+                    </span>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -401,6 +473,9 @@ function QualTable({ rows }: { rows: ParityComboRun[] }) {
 
 function IncrementalsTable({ data }: { data: ParityIncrementalsResponse }) {
   if (data.combos.length === 0) return <p style={S.hint}>No combos.</p>;
+  // Filter out rows where ALL combos have no data
+  const visibleRows = data.rows.filter(row => data.combos.some(c => row.values[c] != null));
+  if (visibleRows.length === 0) return <p style={S.hint}>No incremental data.</p>;
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={S.tbl}>
@@ -409,12 +484,12 @@ function IncrementalsTable({ data }: { data: ParityIncrementalsResponse }) {
           {data.combos.map(c => <th key={c} style={{ ...S.th, textAlign: 'right' }}><span style={S.badge(comboColor(c))}>{c}</span></th>)}
         </tr></thead>
         <tbody>
-          {data.rows.map(row => (
+          {visibleRows.map(row => (
             <tr key={row.key}>
               <td style={{ ...S.td, fontWeight: 600 }}>{row.label}</td>
               {data.combos.map(c => {
                 const v = row.values[c];
-                return <td key={c} style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', ...(v == null ? S.nd : {}) }}>{v != null ? (isIncrementalMph(row.key) ? formatMPH(v) : formatET(v)) : 'No Data'}</td>;
+                return <td key={c} style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', ...(v == null ? S.nd : {}) }}>{v != null ? (isIncrementalMph(row.key) ? formatMPH(v) : formatET(v)) : '—'}</td>;
               })}
             </tr>
           ))}
