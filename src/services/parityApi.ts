@@ -797,6 +797,29 @@ export interface BackfillWeatherProviderResponse {
   }>;
 }
 
+// ── Refresh Event Data Types ─────────────────────────────────────────────
+
+export interface RefreshStepResult {
+  fetched?: number;
+  inserted?: number;
+  deduped?: number;
+  daysFetched?: number;
+  bucketsProcessed?: number;
+  errors: string[];
+}
+
+export interface RefreshEventDataResponse {
+  ok: boolean;
+  event_id: number;
+  event_name: string;
+  range: { startLocal: string; endLocal: string; timezone: string };
+  timing: RefreshStepResult;
+  tempest: RefreshStepResult;
+  open_meteo: RefreshStepResult;
+  canonical: RefreshStepResult;
+  duration_ms: number;
+}
+
 // ── Weather Reliability Types ────────────────────────────────────────────
 
 export interface WeatherCoverageResponse {
@@ -2277,5 +2300,14 @@ export const parityApi = {
     qs.set('classIndex', params.classIndex);
     if (params.limit) qs.set('limit', String(params.limit));
     return parityRequest<TimeDiagnosticsSampleResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Refresh Event Data ──────────────────────────────────────────────
+
+  async refreshEventData(eventId: number): Promise<RefreshEventDataResponse> {
+    return parityRequest<RefreshEventDataResponse>('/parity.php?action=refreshEventData', {
+      method: 'POST',
+      body: JSON.stringify({ eventId }),
+    });
   },
 };

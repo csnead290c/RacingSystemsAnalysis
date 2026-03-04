@@ -42,6 +42,8 @@ import {
   type StationCsvMappedRow,
   type WeatherTimeseriesResponse,
   type TimeDiagnosticsSampleResponse,
+  type RefreshEventDataResponse,
+  type RefreshStepResult,
 } from '../services/parityApi';
 import {
   formatET, formatMPH, formatBaro,
@@ -70,6 +72,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
 import { useClassPreset } from '../domain/parity/useClassPreset';
+import IncidentDrawer from './IncidentDrawer';
 
 // ── Styles ──────────────────────────────────────────────────────────────
 
@@ -267,6 +270,63 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'ladder', label: 'Ladder (exp.)' },
 ];
 
+// ── Refresh Result Banner ────────────────────────────────────────────────
+
+function RefreshStepSummary({ label, step }: { label: string; step: RefreshStepResult }) {
+  const parts: string[] = [];
+  if (step.fetched != null) parts.push(`${step.fetched} fetched`);
+  if (step.daysFetched != null) parts.push(`${step.daysFetched} days`);
+  if (step.inserted != null) parts.push(`${step.inserted} new`);
+  if (step.deduped != null && step.deduped > 0) parts.push(`${step.deduped} deduped`);
+  if (step.bucketsProcessed != null) parts.push(`${step.bucketsProcessed} buckets`);
+  const hasErrors = step.errors && step.errors.length > 0;
+  return (
+    <span>
+      <strong>{label}:</strong>{' '}
+      {parts.length > 0 ? parts.join(', ') : 'no data'}
+      {hasErrors && <span style={{ color: '#e44' }}> ({step.errors.length} error{step.errors.length > 1 ? 's' : ''})</span>}
+    </span>
+  );
+}
+
+function RefreshResultBanner({ result, onDismiss }: { result: RefreshEventDataResponse; onDismiss: () => void }) {
+  const allErrors = [
+    ...result.timing.errors,
+    ...result.tempest.errors,
+    ...result.open_meteo.errors,
+    ...result.canonical.errors,
+  ];
+  const hasErrors = allErrors.length > 0;
+  const bg = hasErrors ? 'rgba(220,180,50,0.12)' : 'rgba(50,180,80,0.12)';
+  const border = hasErrors ? '1px solid rgba(220,180,50,0.3)' : '1px solid rgba(50,180,80,0.3)';
+
+  return (
+    <div style={{ ...S.card, background: bg, border, padding: '0.5rem 0.75rem', marginBottom: '0.5rem', fontSize: '0.78rem', lineHeight: 1.6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <strong>{result.ok ? '✓' : '⚠'} Refresh complete</strong> — {result.event_name} ({result.range.startLocal} → {result.range.endLocal}, {result.range.timezone}) — {(result.duration_ms / 1000).toFixed(1)}s
+        </div>
+        <button style={{ ...S.btn, fontSize: '0.7rem', padding: '0.15rem 0.4rem' }} onClick={onDismiss}>✕</button>
+      </div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+        <RefreshStepSummary label="Timing" step={result.timing} />
+        <RefreshStepSummary label="Tempest" step={result.tempest} />
+        <RefreshStepSummary label="Open-Meteo" step={result.open_meteo} />
+        <RefreshStepSummary label="Canonical" step={result.canonical} />
+      </div>
+      {hasErrors && (
+        <details style={{ marginTop: '0.3rem', fontSize: '0.72rem', color: '#e44' }}>
+          <summary>{allErrors.length} error{allErrors.length > 1 ? 's' : ''}</summary>
+          <ul style={{ margin: '0.2rem 0', paddingLeft: '1.2rem' }}>
+            {allErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
+            {allErrors.length > 20 && <li>…and {allErrors.length - 20} more</li>}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 // ── Component ───────────────────────────────────────────────────────────
 
 export default function ParityPortal() {
@@ -288,6 +348,12 @@ export default function ParityPortal() {
 
   const selectedEvent = events.find(e => e.id === selectedEventId) ?? null;
 
+  // Refresh Event Data state
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStep, setRefreshStep] = useState('');
+  const [refreshResult, setRefreshResult] = useState<RefreshEventDataResponse | null>(null);
+  const [refreshError, setRefreshError] = useState('');
+
   const loadEvents = useCallback(async (year: number) => {
     setEventsLoading(true);
     try {
@@ -308,8 +374,33 @@ export default function ParityPortal() {
 
   useEffect(() => { loadEvents(selectedYear); }, [selectedYear, loadEvents]);
 
+  const handleRefreshEventData = useCallback(async () => {
+    if (!selectedEventId || refreshing) return;
+    setRefreshing(true);
+    setRefreshStep('Refreshing timing…');
+    setRefreshResult(null);
+    setRefreshError('');
+    try {
+      const stepTimer = setTimeout(() => setRefreshStep('Refreshing Tempest…'), 5000);
+      const stepTimer2 = setTimeout(() => setRefreshStep('Refreshing backfill…'), 15000);
+      const res = await parityApi.refreshEventData(selectedEventId);
+      clearTimeout(stepTimer);
+      clearTimeout(stepTimer2);
+      setRefreshResult(res);
+      setRefreshStep('');
+      loadEvents(selectedYear);
+    } catch (e: any) {
+      setRefreshError(e.message || 'Refresh failed');
+      setRefreshStep('');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [selectedEventId, refreshing, selectedYear, loadEvents]);
+
   const handleEventChange = useCallback((id: number) => {
     setSelectedEventId(id);
+    setRefreshResult(null);
+    setRefreshError('');
     const ev = events.find(e => e.id === id);
     if (ev) setRaceLookup(ev.race_lookup || '');
   }, [events]);
@@ -375,7 +466,28 @@ export default function ParityPortal() {
           onChange={e => setClassIndex(e.target.value)}>
           {PARITY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+        {isParityAdmin && selectedEventId && (
+          <button
+            style={{ ...S.btn, fontSize: '0.75rem', padding: '0.25rem 0.6rem', opacity: refreshing ? 0.6 : 1, whiteSpace: 'nowrap' }}
+            onClick={handleRefreshEventData}
+            disabled={refreshing}
+            title="Re-fetch timing data, Tempest weather, Open-Meteo backfill, and rebuild canonical weather for this event"
+          >
+            {refreshing ? (refreshStep || 'Refreshing…') : '↻ Refresh Event Data'}
+          </button>
+        )}
       </div>
+
+      {/* Refresh result / error banner */}
+      {refreshError && (
+        <div style={{ ...S.card, background: 'rgba(220,50,50,0.12)', border: '1px solid rgba(220,50,50,0.3)', padding: '0.5rem 0.75rem', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
+          <strong>Refresh failed:</strong> {refreshError}
+          <button style={{ ...S.btn, marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem' }} onClick={() => setRefreshError('')}>✕</button>
+        </div>
+      )}
+      {refreshResult && (
+        <RefreshResultBanner result={refreshResult} onDismiss={() => setRefreshResult(null)} />
+      )}
 
       {/* Mobile: dropdown nav */}
       <div className="parity-nav-mobile" data-testid="parity-nav-mobile">
@@ -491,11 +603,22 @@ function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
 }
 
 function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: { event: EventWithStats | null; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void }) {
+  const { can: canCap } = useCapabilities();
+  const canReadIncidents = canCap('incidents.read' as any);
+  const canCreateIncidents = canCap('incidents.create' as any);
   const [runs, setRuns] = useState<RunWithWeather[]>([]);
   const [total, setTotal] = useState(0);
   const [joinedCount, setJoinedCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Incident drawer state
+  const [drawerRunId, setDrawerRunId] = useState<number | null>(null);
+  const [drawerDriverName, setDrawerDriverName] = useState<string>('');
+
+  const handleIncidentCountChange = useCallback((runId: number, newCount: number) => {
+    setRuns(prev => prev.map(r => r.id === runId ? { ...r, incident_count: newCount } as RunWithWeather : r));
+  }, []);
 
   // Filters — classFilter mirrors global class preset
   const classFilter = globalClassIndex;
@@ -779,7 +902,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
                     {c.label}{c.sortKey ? sortArrow(c.sortKey) : ''}
                   </th>
                 ))}
-                <th style={{ ...stickyTh, width: 20, textAlign: 'center' }} title="Incidents (coming soon)"></th>
+                {canReadIncidents && <th style={{ ...stickyTh, width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
                 <th style={stickyTh}>Flag</th>
               </tr>
             </thead>
@@ -809,7 +932,22 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
                         </td>
                       );
                     })}
-                    <td style={{ ...S.td, textAlign: 'center', width: 20 }}>{(r as any).incident_count > 0 ? '⚠' : ''}</td>
+                    {canReadIncidents && (
+                      <td style={{ ...S.td, textAlign: 'center', width: 28 }}>
+                        {(r as any).incident_count > 0 ? (
+                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}
+                            title={`${(r as any).incident_count} incident(s)`}
+                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || ''); }}
+                            data-testid="incident-icon">
+                            ⚠️ <span style={{ fontSize: '0.6rem', verticalAlign: 'super', color: '#f59e0b' }}>{(r as any).incident_count}</span>
+                          </button>
+                        ) : canCreateIncidents ? (
+                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.7rem', color: 'var(--color-muted, #666)' }}
+                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || ''); }}
+                            title="Add incident" data-testid="incident-add-icon">＋</button>
+                        ) : null}
+                      </td>
+                    )}
                     <td style={S.td}>
                       {isFlagged ? (
                         <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.3rem', color: '#dc2626' }}
@@ -841,6 +979,17 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
       {/* ── Incrementals View ── */}
       {sortedRuns.length > 0 && showIncrementals && (
         <IncrementalDrilldown runs={sortedRuns} flaggedRunIds={flaggedRunIds} classFilter={classFilter} total={total} onDriverClick={onDriverClick} />
+      )}
+
+      {/* ── Incident Drawer ── */}
+      {drawerRunId != null && (
+        <IncidentDrawer
+          runId={drawerRunId}
+          driverName={drawerDriverName}
+          canCreate={canCreateIncidents}
+          onClose={() => setDrawerRunId(null)}
+          onCountChange={handleIncidentCountChange}
+        />
       )}
     </div>
   );
@@ -967,6 +1116,9 @@ type ViewMode = 'standard' | 'incrementals' | 'weather';
 type ValueMode = 'raw' | 'corrected';
 
 function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: string; classIndex?: string } | null }) {
+  const { can: canCap } = useCapabilities();
+  const canReadIncidents = canCap('incidents.read' as any);
+  const canCreateIncidents = canCap('incidents.create' as any);
   const [search, setSearch] = useState(initialFilter?.driver ?? '');
   const [driverList, setDriverList] = useState<DriverEntry[]>([]);
   const [selectedDriver, setSelectedDriver] = useState(initialFilter?.driver ?? '');
@@ -977,6 +1129,14 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
   const [loading, setLoading] = useState(false);
   const [driverLoading, setDriverLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Incident drawer state
+  const [drawerRunId, setDrawerRunId] = useState<number | null>(null);
+  const [drawerDriverName, setDrawerDriverName] = useState<string>('');
+
+  const handleIncidentCountChange = useCallback((runId: number, newCount: number) => {
+    setRuns(prev => prev.map(r => r.id === runId ? { ...r, incident_count: newCount } as DriverRun : r));
+  }, []);
   const [sortKey, setSortKey] = useState<DriverSortKey>('race_lookup');
   const [sortDir, setSortDir] = useState<DriverSortDir>('desc');
   const [viewMode, setViewMode] = useState<ViewMode>('standard');
@@ -1313,7 +1473,7 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                 )}
                 <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>W</th>
                 <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>DQ</th>
-                <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)', width: 20, textAlign: 'center' }} title="Incidents (coming soon)"></th>
+                {canReadIncidents && <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)', width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
               </tr>
             </thead>
             <tbody>
@@ -1354,7 +1514,22 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                     )}
                     <td style={S.td}>{r.win_flag ? '✓' : ''}</td>
                     <td style={S.td}>{r.dq_flag ? '✗' : ''}</td>
-                    <td style={{ ...S.td, textAlign: 'center', width: 20 }}>{(r as any).incident_count > 0 ? '⚠' : ''}</td>
+                    {canReadIncidents && (
+                      <td style={{ ...S.td, textAlign: 'center', width: 28 }}>
+                        {(r as any).incident_count > 0 ? (
+                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}
+                            title={`${(r as any).incident_count} incident(s)`}
+                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || selectedDriver); }}
+                            data-testid="incident-icon">
+                            ⚠️ <span style={{ fontSize: '0.6rem', verticalAlign: 'super', color: '#f59e0b' }}>{(r as any).incident_count}</span>
+                          </button>
+                        ) : canCreateIncidents ? (
+                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.7rem', color: 'var(--color-muted, #666)' }}
+                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || selectedDriver); }}
+                            title="Add incident" data-testid="incident-add-icon">＋</button>
+                        ) : null}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -1406,6 +1581,17 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
 
       {!selectedDriver && !loading && (
         <div style={S.hint}>Search for a driver above to view their run history.</div>
+      )}
+
+      {/* ── Incident Drawer ── */}
+      {drawerRunId != null && (
+        <IncidentDrawer
+          runId={drawerRunId}
+          driverName={drawerDriverName}
+          canCreate={canCreateIncidents}
+          onClose={() => setDrawerRunId(null)}
+          onCountChange={handleIncidentCountChange}
+        />
       )}
     </div>
   );

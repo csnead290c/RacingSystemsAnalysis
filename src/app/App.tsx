@@ -53,6 +53,7 @@ import { isInternalUser, buildVisibilityContext } from '../domain/ui/publicSurfa
 const DevPortal = lazy(() => import('../pages/DevPortal'));
 const AdminPortal = lazy(() => import('../pages/AdminPortal'));
 const ParityPortal = lazy(() => import('../pages/ParityPortal'));
+const ParityIdrViewer = lazy(() => import('../pages/ParityIdrViewer'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -631,6 +632,17 @@ function App() {
                 <InternalRoute>
                   <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
                     <DevPortal />
+                  </Suspense>
+                </InternalRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* IDR Viewer — reached from incident links */}
+            <Route path="/parity/idr" element={
+              <ProtectedRoute>
+                <InternalRoute>
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                    <ParityIdrViewer />
                   </Suspense>
                 </InternalRoute>
               </ProtectedRoute>

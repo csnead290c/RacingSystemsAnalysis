@@ -205,6 +205,12 @@ export const CAPABILITY_KEYS = [
   // ── NHRA Tech Parity (internal tooling) ──
   'nhra.parity',                 // Access NHRA parity dashboards (view-only)
   'nhra.parity.admin',           // Parity admin: ingest, backfill, manage data
+
+  // ── Incidents ──
+  'incidents.read',              // View run incidents
+  'incidents.create',            // Create new incidents
+  'incidents.edit.own',          // Edit/delete own incidents
+  'incidents.edit.all',          // Edit/delete any incident (admin)
 ] as const;
 
 export type Capability = typeof CAPABILITY_KEYS[number];
@@ -397,6 +403,9 @@ export const PLAN_CAPABILITIES: Record<PlanId, ReadonlySet<Capability>> = {
     'sim.basic',
     'charts.basic',
     'weather.manual',
+    'incidents.read',
+    'incidents.create',
+    'incidents.edit.own',
   ]),
 };
 
@@ -406,8 +415,8 @@ export const PLAN_CAPABILITIES: Record<PlanId, ReadonlySet<Capability>> = {
 
 /** Capabilities granted by role regardless of plan (owner/admin get admin tools). */
 export const ROLE_CAPABILITIES: Record<RoleId, ReadonlySet<Capability>> = {
-  owner: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity', 'nhra.parity.admin']),
-  admin: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity', 'nhra.parity.admin']),
+  owner: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity', 'nhra.parity.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all']),
+  admin: new Set<Capability>(['admin.access', 'admin.devTools', 'admin.userManagement', 'nhra.parity', 'nhra.parity.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all']),
   member: new Set<Capability>([]),
   viewer: new Set<Capability>([]),
 };

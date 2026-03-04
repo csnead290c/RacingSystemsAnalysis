@@ -11,6 +11,7 @@ import {
   type EngineComboRow,
 } from '../services/parityApi';
 import { useCapabilities } from '../domain/config/useCapabilities';
+import IncidentDrawer from './IncidentDrawer';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, Legend,
@@ -365,8 +366,20 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
 }) {
   const { can } = useCapabilities();
   const isAdmin = can('nhra.parity.admin' as any);
+  const canReadIncidents = can('incidents.read' as any);
+  const canCreateIncidents = can('incidents.create' as any);
   const [engineCombos, setEngineCombos] = useState<EngineComboRow[]>([]);
   const [editingDriver, setEditingDriver] = useState<string | null>(null);
+
+  // Incident drawer state
+  const [drawerRunId, setDrawerRunId] = useState<number | null>(null);
+  const [drawerDriverName, setDrawerDriverName] = useState<string>('');
+  const [localRows, setLocalRows] = useState<ParityComboRun[]>(rows);
+  useEffect(() => { setLocalRows(rows); }, [rows]);
+
+  const handleIncidentCountChange = useCallback((runId: number, newCount: number) => {
+    setLocalRows(prev => prev.map(r => r.runId === runId ? { ...r, incident_count: newCount } : r));
+  }, []);
   const [saving, setSaving] = useState(false);
 
   // Load engine combos for the dropdown
@@ -398,16 +411,18 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
   }, [event, classIndex, onComboChanged]);
 
   if (rows.length === 0) return <p style={S.hint}>No qual runs.</p>;
+  const displayRows = localRows.length === rows.length ? localRows : rows;
   return (
+    <>
     <div style={{ maxHeight: 400, overflowY: 'auto' }}>
       <table style={SS.tbl}>
         <thead><tr>
           <th style={SS.th}>Pos</th><th style={SS.th}>Driver</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
           <th style={{ ...SS.th, textAlign: 'right' }}>Speed</th><th style={SS.th}>Round</th><th style={SS.th}>Engine Combo</th>
-          <th style={{ ...SS.th, width: 20, textAlign: 'center' }} title="Incidents (coming soon)"></th>
+          {canReadIncidents && <th style={{ ...SS.th, width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
         </tr></thead>
         <tbody>
-          {rows.map((r, i) => {
+          {displayRows.map((r, i) => {
             const clr = r.engineCombo ? comboColor(r.engineCombo) : '#666';
             const isEditing = editingDriver === r.driver;
             return (
@@ -448,13 +463,38 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
                     </span>
                   )}
                 </td>
-                <td style={{ ...SS.td, textAlign: 'center', width: 20 }}>{r.incident_count && r.incident_count > 0 ? '⚠' : ''}</td>
+                {canReadIncidents && (
+                  <td style={{ ...SS.td, textAlign: 'center', width: 28 }}>
+                    {r.incident_count && r.incident_count > 0 ? (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}
+                        title={`${r.incident_count} incident(s)`}
+                        onClick={() => { setDrawerRunId(r.runId); setDrawerDriverName(r.driver); }}
+                        data-testid="incident-icon">
+                        ⚠️ <span style={{ fontSize: '0.6rem', verticalAlign: 'super', color: '#f59e0b' }}>{r.incident_count}</span>
+                      </button>
+                    ) : canCreateIncidents ? (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.7rem', color: '#666' }}
+                        onClick={() => { setDrawerRunId(r.runId); setDrawerDriverName(r.driver); }}
+                        title="Add incident" data-testid="incident-add-icon">＋</button>
+                    ) : null}
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+    {drawerRunId != null && (
+      <IncidentDrawer
+        runId={drawerRunId}
+        driverName={drawerDriverName}
+        canCreate={canCreateIncidents}
+        onClose={() => setDrawerRunId(null)}
+        onCountChange={handleIncidentCountChange}
+      />
+    )}
+    </>
   );
 }
 

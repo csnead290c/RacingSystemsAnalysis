@@ -124,13 +124,16 @@ const PLAN_CAPABILITIES = [
         'sim.basic',
         'charts.basic',
         'weather.manual',
+        'incidents.read',
+        'incidents.create',
+        'incidents.edit.own',
     ],
 ];
 
 // Role-based capabilities (independent of subscription plan)
 const ROLE_CAPABILITIES = [
-    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin'],
-    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin'],
+    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all'],
+    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all'],
     'beta'  => ['admin.devTools'],
 ];
 

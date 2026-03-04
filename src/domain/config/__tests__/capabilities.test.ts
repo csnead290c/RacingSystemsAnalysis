@@ -123,6 +123,53 @@ describe('ROLE_CAPABILITIES mapping', () => {
   it('viewer role grants no extra capabilities', () => {
     expect(ROLE_CAPABILITIES.viewer.size).toBe(0);
   });
+
+  it('owner role grants all incident capabilities', () => {
+    expect(ROLE_CAPABILITIES.owner.has('incidents.read')).toBe(true);
+    expect(ROLE_CAPABILITIES.owner.has('incidents.create')).toBe(true);
+    expect(ROLE_CAPABILITIES.owner.has('incidents.edit.own')).toBe(true);
+    expect(ROLE_CAPABILITIES.owner.has('incidents.edit.all')).toBe(true);
+  });
+
+  it('admin role grants all incident capabilities', () => {
+    expect(ROLE_CAPABILITIES.admin.has('incidents.read')).toBe(true);
+    expect(ROLE_CAPABILITIES.admin.has('incidents.create')).toBe(true);
+    expect(ROLE_CAPABILITIES.admin.has('incidents.edit.own')).toBe(true);
+    expect(ROLE_CAPABILITIES.admin.has('incidents.edit.all')).toBe(true);
+  });
+
+  it('member role does NOT grant incident capabilities', () => {
+    expect(ROLE_CAPABILITIES.member.has('incidents.read')).toBe(false);
+    expect(ROLE_CAPABILITIES.member.has('incidents.edit.all')).toBe(false);
+  });
+});
+
+// =========================================================================
+// Incident capabilities in PLAN_CAPABILITIES
+// =========================================================================
+describe('incident capabilities in PLAN_CAPABILITIES', () => {
+  it('nhra plan grants incidents.read, incidents.create, incidents.edit.own', () => {
+    expect(PLAN_CAPABILITIES.nhra.has('incidents.read')).toBe(true);
+    expect(PLAN_CAPABILITIES.nhra.has('incidents.create')).toBe(true);
+    expect(PLAN_CAPABILITIES.nhra.has('incidents.edit.own')).toBe(true);
+  });
+
+  it('nhra plan does NOT grant incidents.edit.all', () => {
+    expect(PLAN_CAPABILITIES.nhra.has('incidents.edit.all')).toBe(false);
+  });
+
+  it('free plan does NOT grant any incident capabilities', () => {
+    expect(PLAN_CAPABILITIES.free.has('incidents.read')).toBe(false);
+    expect(PLAN_CAPABILITIES.free.has('incidents.create')).toBe(false);
+    expect(PLAN_CAPABILITIES.free.has('incidents.edit.own')).toBe(false);
+    expect(PLAN_CAPABILITIES.free.has('incidents.edit.all')).toBe(false);
+  });
+
+  it('basic/pro/team plans do NOT grant incident capabilities by default', () => {
+    for (const plan of ['basic', 'pro', 'team'] as const) {
+      expect(PLAN_CAPABILITIES[plan].has('incidents.read')).toBe(false);
+    }
+  });
 });
 
 // =========================================================================
