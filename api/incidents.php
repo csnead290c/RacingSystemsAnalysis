@@ -32,6 +32,8 @@ require_once __DIR__ . '/lib/capabilities.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
+define('ALLOWED_LINK_TYPES', ['external_url', 'idr_session', 'idr_file']);
+
 try {
 
 $auth = rsa_getAuthUser();
@@ -348,12 +350,6 @@ function handleAttachIncidentMedia(PDO $pdo, int $userId, string $role): void {
     inc_requireCap($pdo, $userId, $role, 'incidents.create');
     rsa_jsonResponse(['error' => 'Not yet implemented — media attachments coming soon'], 501);
 }
-
-// ============================================================================
-// Allowed link types
-// ============================================================================
-
-const ALLOWED_LINK_TYPES = ['external_url', 'idr_session', 'idr_file'];
 
 // ============================================================================
 // GET ?action=listIncidentLinks&incident_id=N
