@@ -654,6 +654,7 @@ export interface DriverRun {
   corrected_ft1320?: number | null;
   corrected_ft660?: number | null;
   corrected_ft60?: number | null;
+  incident_count?: number;
 }
 
 export interface RunsByDriverResponse {

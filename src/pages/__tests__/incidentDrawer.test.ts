@@ -131,7 +131,7 @@ describe('Run tables — incident integration', () => {
   it('EventRunsPanel checks incident capabilities and renders drawer', () => {
     expect(portalSrc).toContain("canCap('incidents.read'");
     expect(portalSrc).toContain("canCap('incidents.create'");
-    expect(portalSrc).toContain('data-testid="incident-icon"');
+    expect(portalSrc).toContain('<IncidentCell');
     expect(portalSrc).toContain('<IncidentDrawer');
   });
 
@@ -143,7 +143,7 @@ describe('Run tables — incident integration', () => {
 
   it('ParityReport QualTable has incident icons and drawer', () => {
     expect(reportSrc).toContain("import IncidentDrawer from './IncidentDrawer'");
-    expect(reportSrc).toContain('data-testid="incident-icon"');
+    expect(reportSrc).toContain('<IncidentCell');
     expect(reportSrc).toContain('<IncidentDrawer');
   });
 });

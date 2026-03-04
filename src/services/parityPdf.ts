@@ -51,6 +51,7 @@ export function exportQualSheetPdf(
   eventName: string,
   classIndex: string,
   raceLookup: string,
+  correctedETs?: Map<string, number | null>,
 ) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
   const y = header(
@@ -66,16 +67,19 @@ export function exportQualSheetPdf(
       '#', 'Driver', 'Best ET', 'Corrected ET', 'Best MPH',
       'Runs', '60ft', '660ft',
     ]],
-    body: sheet.map(r => [
-      r.qual_pos,
-      r.driver,
-      r.best_et?.toFixed(3) ?? '—',
-      r.corrected_best_et?.toFixed(3) ?? '—',
-      r.best_mph?.toFixed(2) ?? '—',
-      r.run_count,
-      r.best_ft60?.toFixed(3) ?? '—',
-      r.best_ft660?.toFixed(3) ?? '—',
-    ]),
+    body: sheet.map(r => {
+      const cET = correctedETs?.get(r.driver) ?? null;
+      return [
+        r.qual_pos,
+        r.driver,
+        r.best_et?.toFixed(3) ?? '—',
+        cET?.toFixed(3) ?? '—',
+        r.best_mph?.toFixed(2) ?? '—',
+        r.run_count,
+        r.best_ft60?.toFixed(3) ?? '—',
+        r.best_ft660?.toFixed(3) ?? '—',
+      ];
+    }),
     styles: { fontSize: 8, cellPadding: 1.5 },
     headStyles: { fillColor: [30, 58, 95], fontSize: 8, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 245, 250] },
@@ -147,6 +151,7 @@ export function exportParitySummaryPdf(
   eventName: string,
   classIndex: string,
   raceLookup: string,
+  correctedRuns?: Map<number, { correctedET: number | null; hpc: number | null }>,
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   let y = header(
@@ -231,17 +236,20 @@ export function exportParitySummaryPdf(
 
   autoTable(doc, {
     startY: y,
-    head: [['Driver', 'Rnd', 'ET', 'MPH', 'Corrected ET', 'Factor', 'Temp', 'Press']],
-    body: runsToShow.map(r => [
-      r.driver_name || '—',
-      r.round || '—',
-      r.ft1320?.toFixed(3) ?? '—',
-      r.mph1320?.toFixed(1) ?? '—',
-      r.corrected_ft1320?.toFixed(3) ?? '—',
-      r.correction_factor?.toFixed(4) ?? '—',
-      r.temp_f != null ? `${r.temp_f.toFixed(0)}°F` : '—',
-      r.pressure_inhg != null ? `${r.pressure_inhg.toFixed(2)}"` : '—',
-    ]),
+    head: [['Driver', 'Rnd', 'ET', 'MPH', 'Corrected ET', 'HPC', 'Temp', 'Press']],
+    body: runsToShow.map(r => {
+      const c = correctedRuns?.get(r.id);
+      return [
+        r.driver_name || '—',
+        r.round || '—',
+        r.ft1320?.toFixed(3) ?? '—',
+        r.mph1320?.toFixed(1) ?? '—',
+        c?.correctedET?.toFixed(3) ?? '—',
+        c?.hpc?.toFixed(6) ?? '—',
+        r.temp_f != null ? `${r.temp_f.toFixed(0)}°F` : '—',
+        r.pressure_inhg != null ? `${r.pressure_inhg.toFixed(2)}"` : '—',
+      ];
+    }),
     styles: { fontSize: 7, cellPadding: 1.2 },
     headStyles: { fillColor: [30, 58, 95], fontSize: 7.5, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 245, 250] },

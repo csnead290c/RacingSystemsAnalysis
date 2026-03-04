@@ -317,6 +317,11 @@ export interface SimpleCorrectionResult {
 }
 
 /**
+ * @deprecated Use correctRunClientSide() from correctRunClient.ts instead.
+ * This function uses the WRONG formula: corrected ET = ET × CF (simple multiplication).
+ * The correct formula is: corrected ET = ET × HPC^(-0.33) (power-law via engine combo).
+ * Kept only for reference / documenting PHP backend parity.
+ *
  * Compute simple CF-based corrected ET values from weather data.
  * Pure function — no engine combo needed. Matches PHP backend exactly.
  */

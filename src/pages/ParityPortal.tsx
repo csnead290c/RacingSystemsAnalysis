@@ -65,6 +65,7 @@ import {
   type WeatherResult,
   type ClassDefaultComboRow,
 } from '../domain/parity/weatherCorrection';
+import { correctRunClientSide, type CorrectionContext } from '../domain/parity/correctRunClient';
 import { parseCsvWeatherData, WEATHER_PROVIDERS, type WeatherSampleRow } from '../domain/parity/weatherBackfill';
 import { parseBulkCsv, normalizeTrackName } from '../domain/parity/eventImport';
 import { formatLocalTimeLabel, formatLocalDateTime } from '../domain/parity/formatLocalTime';
@@ -73,6 +74,7 @@ import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
 import { useClassPreset } from '../domain/parity/useClassPreset';
 import IncidentDrawer from './IncidentDrawer';
+import IncidentCell from '../shared/components/IncidentCell';
 
 // ── Styles ──────────────────────────────────────────────────────────────
 
@@ -934,18 +936,11 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
                     })}
                     {canReadIncidents && (
                       <td style={{ ...S.td, textAlign: 'center', width: 28 }}>
-                        {(r as any).incident_count > 0 ? (
-                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}
-                            title={`${(r as any).incident_count} incident(s)`}
-                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || ''); }}
-                            data-testid="incident-icon">
-                            ⚠️ <span style={{ fontSize: '0.6rem', verticalAlign: 'super', color: '#f59e0b' }}>{(r as any).incident_count}</span>
-                          </button>
-                        ) : canCreateIncidents ? (
-                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.7rem', color: 'var(--color-muted, #666)' }}
-                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || ''); }}
-                            title="Add incident" data-testid="incident-add-icon">＋</button>
-                        ) : null}
+                        <IncidentCell
+                          count={r.incident_count ?? 0}
+                          canCreate={canCreateIncidents}
+                          onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || ''); }}
+                        />
                       </td>
                     )}
                     <td style={S.td}>
@@ -1143,6 +1138,30 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
   const [valueMode, setValueMode] = useState<ValueMode>('raw');
   const [showCharts, setShowCharts] = useState(false);
 
+  // Correction context — loaded once, used to compute HPC client-side
+  const [corrCtx, setCorrCtx] = useState<CorrectionContext | null>(null);
+  useEffect(() => {
+    Promise.all([
+      parityApi.listEngineCombos(),
+      parityApi.listDriverCombos(),
+      parityApi.listClassDefaults(),
+    ]).then(([ec, dc, cd]) => {
+      setCorrCtx({
+        engineCombos: ec.combos,
+        driverCombos: dc.combos.map(c => ({
+          driver_name: c.driver_name, class_index: c.class_index,
+          engine_combo_id: c.engine_combo_id, engine_combo_name: c.engine_combo_name,
+          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
+        })),
+        classDefaults: cd.classDefaults.map(c => ({
+          class_index: c.class_index, engine_combo_name: c.engine_combo_name,
+          engine_combo_id: c.engine_combo_id,
+          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
+        })),
+      });
+    }).catch(() => {});
+  }, []);
+
   // Pagination
   const PAGE_SIZES = [25, 50, 100] as const;
   const [pageSize, setPageSize] = useState<number>(50);
@@ -1210,10 +1229,24 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
     else { setSortKey(key); setSortDir(key === 'race_lookup' ? 'desc' : 'asc'); }
   };
 
-  // Get displayed ET/MPH value based on valueMode
-  const getET = (r: DriverRun) => valueMode === 'corrected' && r.corrected_ft1320 != null ? r.corrected_ft1320 : r.ft1320;
-  const get60 = (r: DriverRun) => valueMode === 'corrected' && r.corrected_ft60 != null ? r.corrected_ft60 : r.ft60;
-  const getMPH = (r: DriverRun) => r.mph1320;
+  // Client-side HPC correction — replaces backend corrected_* fields
+  const getCorrected = useCallback((r: DriverRun) => {
+    if (valueMode !== 'corrected' || !corrCtx) return null;
+    return correctRunClientSide(r, corrCtx);
+  }, [valueMode, corrCtx]);
+
+  const getET = (r: DriverRun) => {
+    const c = getCorrected(r);
+    return c?.correctedET != null ? c.correctedET : r.ft1320;
+  };
+  const get60 = (r: DriverRun) => {
+    const c = getCorrected(r);
+    return c?.corrected60 != null ? c.corrected60 : r.ft60;
+  };
+  const getMPH = (r: DriverRun) => {
+    const c = getCorrected(r);
+    return c?.correctedMPH != null ? c.correctedMPH : r.mph1320;
+  };
 
   const sortedRuns = [...runs].sort((a, b) => {
     const av = a[sortKey] ?? 0;
@@ -1291,30 +1324,34 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
 
   const etChartData = useMemo(() => chartRuns.map((r, i) => ({
     x: i,
-    y: valueMode === 'corrected' && r.corrected_ft1320 != null ? r.corrected_ft1320 : r.ft1320!,
+    y: getET(r) ?? r.ft1320!,
     label: `${r.event_name || r.race_lookup} ${r.round || ''}`.trim(),
-  })), [chartRuns, valueMode]);
+  })), [chartRuns, valueMode, corrCtx]);
 
   const mphChartData = useMemo(() => chartRuns.filter(r => r.mph1320 != null && r.mph1320 > 0).map((r, i) => ({
     x: i,
-    y: r.mph1320!,
+    y: getMPH(r) ?? r.mph1320!,
     label: `${r.event_name || r.race_lookup} ${r.round || ''}`.trim(),
-  })), [chartRuns]);
+  })), [chartRuns, valueMode, corrCtx]);
 
   // CSV export
   const exportCsv = useCallback(() => {
     if (!runs.length) return;
     const hdr = ['Event', 'Date', 'Round', 'Lane', 'RT', '60ft', '330', '660', 'MPH@660', '1000', 'MPH@1000', 'ET', 'MPH',
-      'Corr ET', 'Factor', 'Temp F', 'Press inHg', 'RH%', 'Win', 'DQ'];
-    const rows = sortedRuns.map(r => [
-      r.event_name || '', r.race_lookup || '', r.round || '', r.lane || '',
-      formatET(r.rt) !== '—' ? formatET(r.rt) : '', formatET(r.ft60) !== '—' ? formatET(r.ft60) : '', formatET(r.ft330) !== '—' ? formatET(r.ft330) : '', formatET(r.ft660) !== '—' ? formatET(r.ft660) : '',
-      r.mph660 != null ? formatMPH(r.mph660) : '', formatET(r.ft1000) !== '—' ? formatET(r.ft1000) : '', r.mph1000 != null ? formatMPH(r.mph1000) : '',
-      formatET(r.ft1320) !== '—' ? formatET(r.ft1320) : '', r.mph1320 != null ? formatMPH(r.mph1320) : '',
-      formatET(r.corrected_ft1320) !== '—' ? formatET(r.corrected_ft1320) : '', r.correction_factor?.toFixed(4) ?? '',
-      r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '', r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '',
-      r.win_flag ? 'Y' : '', r.dq_flag ? 'Y' : '',
-    ]);
+      'Corr ET', 'Corr MPH', 'HPC', 'Temp F', 'Press inHg', 'RH%', 'Win', 'DQ'];
+    const rows = sortedRuns.map(r => {
+      const c = corrCtx ? correctRunClientSide(r, corrCtx) : null;
+      return [
+        r.event_name || '', r.race_lookup || '', r.round || '', r.lane || '',
+        formatET(r.rt) !== '—' ? formatET(r.rt) : '', formatET(r.ft60) !== '—' ? formatET(r.ft60) : '', formatET(r.ft330) !== '—' ? formatET(r.ft330) : '', formatET(r.ft660) !== '—' ? formatET(r.ft660) : '',
+        r.mph660 != null ? formatMPH(r.mph660) : '', formatET(r.ft1000) !== '—' ? formatET(r.ft1000) : '', r.mph1000 != null ? formatMPH(r.mph1000) : '',
+        formatET(r.ft1320) !== '—' ? formatET(r.ft1320) : '', r.mph1320 != null ? formatMPH(r.mph1320) : '',
+        c?.correctedET != null ? formatET(c.correctedET) : '', c?.correctedMPH != null ? formatMPH(c.correctedMPH) : '',
+        c?.hpc != null ? c.hpc.toFixed(6) : '',
+        r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '', r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '',
+        r.win_flag ? 'Y' : '', r.dq_flag ? 'Y' : '',
+      ];
+    });
     const csv = [hdr, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -1465,7 +1502,7 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                   <>
                     <th style={stickyTh} onClick={() => handleSort('ft1320')}>ET{arrow('ft1320')}</th>
                     <th style={stickyTh}>Corr ET</th>
-                    <th style={stickyTh}>Factor</th>
+                    <th style={stickyTh}>HPC</th>
                     <th style={stickyTh}>Temp</th>
                     <th style={stickyTh}>Pres</th>
                     <th style={stickyTh}>RH%</th>
@@ -1502,32 +1539,28 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                         <td style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_1000_1320?.toFixed(4) ?? '—'}</td>
                       </>
                     )}
-                    {viewMode === 'weather' && (
-                      <>
-                        <td style={{ ...S.td, fontWeight: 600 }}>{formatET(r.ft1320)}</td>
-                        <td style={{ ...S.td, color: '#2563eb', fontWeight: 600 }}>{formatET(r.corrected_ft1320)}</td>
-                        <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.7rem' }}>{r.correction_factor?.toFixed(4) ?? '—'}</td>
-                        <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '—'}</td>
-                        <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '—'}</td>
-                        <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '—'}</td>
-                      </>
-                    )}
+                    {viewMode === 'weather' && (() => {
+                      const c = corrCtx ? correctRunClientSide(r, corrCtx) : null;
+                      return (
+                        <>
+                          <td style={{ ...S.td, fontWeight: 600 }}>{formatET(r.ft1320)}</td>
+                          <td style={{ ...S.td, color: '#2563eb', fontWeight: 600 }}>{c?.correctedET != null ? formatET(c.correctedET) : '—'}</td>
+                          <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.7rem' }}>{c?.hpc != null ? c.hpc.toFixed(6) : '—'}</td>
+                          <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '—'}</td>
+                          <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '—'}</td>
+                          <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '—'}</td>
+                        </>
+                      );
+                    })()}
                     <td style={S.td}>{r.win_flag ? '✓' : ''}</td>
                     <td style={S.td}>{r.dq_flag ? '✗' : ''}</td>
                     {canReadIncidents && (
                       <td style={{ ...S.td, textAlign: 'center', width: 28 }}>
-                        {(r as any).incident_count > 0 ? (
-                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}
-                            title={`${(r as any).incident_count} incident(s)`}
-                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || selectedDriver); }}
-                            data-testid="incident-icon">
-                            ⚠️ <span style={{ fontSize: '0.6rem', verticalAlign: 'super', color: '#f59e0b' }}>{(r as any).incident_count}</span>
-                          </button>
-                        ) : canCreateIncidents ? (
-                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.7rem', color: 'var(--color-muted, #666)' }}
-                            onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || selectedDriver); }}
-                            title="Add incident" data-testid="incident-add-icon">＋</button>
-                        ) : null}
+                        <IncidentCell
+                          count={r.incident_count ?? 0}
+                          canCreate={canCreateIncidents}
+                          onClick={() => { setDrawerRunId(r.id); setDrawerDriverName(r.driver_name || selectedDriver); }}
+                        />
                       </td>
                     )}
                   </tr>
@@ -3255,6 +3288,30 @@ function ParitySummaryPanel({ event }: { event: EventWithStats | null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Correction context for PDF export — compute HPC client-side
+  const [corrCtx, setCorrCtx] = useState<CorrectionContext | null>(null);
+  useEffect(() => {
+    Promise.all([
+      parityApi.listEngineCombos(),
+      parityApi.listDriverCombos(),
+      parityApi.listClassDefaults(),
+    ]).then(([ec, dc, cd]) => {
+      setCorrCtx({
+        engineCombos: ec.combos,
+        driverCombos: dc.combos.map(c => ({
+          driver_name: c.driver_name, class_index: c.class_index,
+          engine_combo_id: c.engine_combo_id, engine_combo_name: c.engine_combo_name,
+          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
+        })),
+        classDefaults: cd.classDefaults.map(c => ({
+          class_index: c.class_index, engine_combo_name: c.engine_combo_name,
+          engine_combo_id: c.engine_combo_id,
+          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
+        })),
+      });
+    }).catch(() => {});
+  }, []);
+
   const load = useCallback(async () => {
     if (!event) return;
     setLoading(true); setError('');
@@ -3294,7 +3351,22 @@ function ParitySummaryPanel({ event }: { event: EventWithStats | null }) {
         ))}
         {data && !loading && (
           <button style={{ ...S.btn('secondary'), marginLeft: 'auto', fontSize: '0.7rem' }}
-            onClick={() => exportParitySummaryPdf(data, data.event?.event_name ?? 'Event', classFilter, event?.race_lookup ?? '')}>
+            onClick={() => {
+              const corrMap = new Map<number, { correctedET: number | null; hpc: number | null }>();
+              if (corrCtx) {
+                for (const r of data.runs) {
+                  const c = correctRunClientSide({
+                    driver_name: r.driver_name, class_index: r.class_index,
+                    run_timestamp_utc: r.run_timestamp_utc,
+                    ft1320: r.ft1320, ft660: r.ft660, ft60: r.ft60, mph1320: r.mph1320,
+                    weather: r.temp_f != null && r.pressure_inhg != null
+                      ? { temp_f: r.temp_f, rh_pct: r.rh_pct, pressure_inhg: r.pressure_inhg } : null,
+                  }, corrCtx);
+                  corrMap.set(r.id, { correctedET: c.correctedET, hpc: c.hpc });
+                }
+              }
+              exportParitySummaryPdf(data, data.event?.event_name ?? 'Event', classFilter, event?.race_lookup ?? '', corrMap);
+            }}>
             Export PDF
           </button>
         )}
@@ -3353,6 +3425,43 @@ function QualSheetPanel({ event, classIndex, onDriverClick }: { event: EventWith
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Correction context — loaded once, used to compute HPC client-side
+  const [corrCtx, setCorrCtx] = useState<CorrectionContext | null>(null);
+  useEffect(() => {
+    Promise.all([
+      parityApi.listEngineCombos(),
+      parityApi.listDriverCombos(),
+      parityApi.listClassDefaults(),
+    ]).then(([ec, dc, cd]) => {
+      setCorrCtx({
+        engineCombos: ec.combos,
+        driverCombos: dc.combos.map(c => ({
+          driver_name: c.driver_name, class_index: c.class_index,
+          engine_combo_id: c.engine_combo_id, engine_combo_name: c.engine_combo_name,
+          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
+        })),
+        classDefaults: cd.classDefaults.map(c => ({
+          class_index: c.class_index, engine_combo_name: c.engine_combo_name,
+          engine_combo_id: c.engine_combo_id,
+          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
+        })),
+      });
+    }).catch(() => {});
+  }, []);
+
+  // Client-side HPC correction for a QualSheetRow
+  const correctedEtForRow = useCallback((r: QualSheetRow): number | null => {
+    if (!corrCtx || r.best_et == null || r.best_timestamp_utc == null) return null;
+    const c = correctRunClientSide({
+      driver_name: r.driver, class_index: classFilter,
+      run_timestamp_utc: r.best_timestamp_utc,
+      ft1320: r.best_et, ft660: null, ft60: null, mph1320: null,
+      weather: r.temp_f != null && r.pressure_inhg != null
+        ? { temp_f: r.temp_f, rh_pct: r.rh_pct, pressure_inhg: r.pressure_inhg } : null,
+    }, corrCtx);
+    return c.correctedET;
+  }, [corrCtx, classFilter]);
+
   const load = useCallback(async () => {
     if (!event) return;
     setLoading(true); setError('');
@@ -3367,20 +3476,23 @@ function QualSheetPanel({ event, classIndex, onDriverClick }: { event: EventWith
 
   const exportCsv = useCallback(() => {
     if (!data) return;
-    const hdr = ['Pos', 'Driver', 'Car#', 'Best ET', 'Best MPH', 'Corrected ET', 'Factor', 'RT', '60ft', '660 ET', 'Runs', 'Valid'];
-    const rows = data.sheet.map((r: QualSheetRow) => [
-      r.qual_pos ?? 'DQ', r.driver, r.car_number ?? '',
-      r.best_et != null ? formatET(r.best_et) : '', r.best_mph != null ? formatMPH(r.best_mph) : '',
-      r.corrected_best_et != null ? formatET(r.corrected_best_et) : '', r.correction_factor?.toFixed(4) ?? '',
-      r.best_rt != null ? formatET(r.best_rt) : '', r.best_ft60 != null ? formatET(r.best_ft60) : '', r.best_ft660 != null ? formatET(r.best_ft660) : '', r.run_count, r.is_valid ? 'Y' : 'N',
-    ]);
+    const hdr = ['Pos', 'Driver', 'Car#', 'Best ET', 'Best MPH', 'Corrected ET', 'RT', '60ft', '660 ET', 'Runs', 'Valid'];
+    const rows = data.sheet.map((r: QualSheetRow) => {
+      const cET = correctedEtForRow(r);
+      return [
+        r.qual_pos ?? 'DQ', r.driver, r.car_number ?? '',
+        r.best_et != null ? formatET(r.best_et) : '', r.best_mph != null ? formatMPH(r.best_mph) : '',
+        cET != null ? formatET(cET) : '',
+        r.best_rt != null ? formatET(r.best_rt) : '', r.best_ft60 != null ? formatET(r.best_ft60) : '', r.best_ft660 != null ? formatET(r.best_ft660) : '', r.run_count, r.is_valid ? 'Y' : 'N',
+      ];
+    });
     const csv = [hdr, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `qual-sheet-${data.classIndex}-${data.event?.start_date_local ?? 'event'}.csv`;
     a.click(); URL.revokeObjectURL(url);
-  }, [data]);
+  }, [data, corrCtx]);
 
   if (!event) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Select an event above.</p></div>;
 
@@ -3394,7 +3506,11 @@ function QualSheetPanel({ event, classIndex, onDriverClick }: { event: EventWith
           <>
             <button style={{ ...S.btn('secondary'), marginLeft: 'auto', fontSize: '0.7rem' }} onClick={exportCsv}>Export CSV</button>
             <button style={{ ...S.btn('secondary'), fontSize: '0.7rem' }}
-              onClick={() => exportQualSheetPdf(data.sheet, data.event?.event_name ?? 'Event', classFilter, event?.race_lookup ?? '')}>
+              onClick={() => {
+                const corrMap = new Map<string, number | null>();
+                data.sheet.forEach(r => corrMap.set(r.driver, correctedEtForRow(r)));
+                exportQualSheetPdf(data.sheet, data.event?.event_name ?? 'Event', classFilter, event?.race_lookup ?? '', corrMap);
+              }}>
               Export PDF
             </button>
           </>
@@ -3449,7 +3565,7 @@ function QualSheetPanel({ event, classIndex, onDriverClick }: { event: EventWith
                       <td style={S.td}>{r.car_number ?? '—'}</td>
                       <td style={{ ...S.td, textAlign: 'right', fontWeight: 600 }}>{formatET(r.best_et)}</td>
                       <td style={{ ...S.td, textAlign: 'right' }}>{formatMPH(r.best_mph)}</td>
-                      <td style={{ ...S.td, textAlign: 'right', color: '#2563eb' }}>{formatET(r.corrected_best_et)}</td>
+                      <td style={{ ...S.td, textAlign: 'right', color: '#2563eb' }}>{formatET(correctedEtForRow(r))}</td>
                       <td style={{ ...S.td, textAlign: 'right' }}>{formatET(r.best_rt)}</td>
                       <td style={{ ...S.td, textAlign: 'right' }}>{formatET(r.best_ft60)}</td>
                       <td style={{ ...S.td, textAlign: 'right' }}>{r.run_count}</td>
@@ -4509,8 +4625,8 @@ function formatRaceLookup(rl: string): string {
 function TrendsTooltip({ active, payload, metric }: any) {
   if (!active || !payload?.length) return null;
   const row: TopByEventRow = payload[0].payload;
-  const isCorrected = metric === 'corrected_ft1320';
-  const metricLabel = metric === 'mph1320' ? 'Top MPH' : isCorrected ? 'Corrected ET' : 'Best ET';
+  const isCorrected = false; // corrected_ft1320 metric removed — uses wrong backend CF
+  const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
   const fmtVal = (v: number | null | undefined, d: number) => v != null ? v.toFixed(d) : '—';
   const valStr = metric === 'mph1320' ? `${fmtVal(row.value, 2)} MPH` : `${fmtVal(row.value, 3)} sec`;
   return (
@@ -4534,7 +4650,7 @@ function TrendsTooltip({ active, payload, metric }: any) {
 function TrendsPanel() {
   // Chart controls
   const [classIndex, setClassIndex] = useState('TF');
-  const [metric, setMetric] = useState<'mph1320' | 'ft1320' | 'corrected_ft1320'>('mph1320');
+  const [metric, setMetric] = useState<'mph1320' | 'ft1320'>('mph1320');
   const [startYear, setStartYear] = useState('');
   const [endYear, setEndYear] = useState('');
   const [includeDQ, setIncludeDQ] = useState(false);
@@ -4561,17 +4677,12 @@ function TrendsPanel() {
 
   const exportCsv = useCallback(() => {
     if (!data?.rows.length) return;
-    const isCor = metric === 'corrected_ft1320';
-    const ml = metric === 'mph1320' ? 'Top MPH' : isCor ? 'Corrected ET' : 'Best ET';
-    const header = isCor
-      ? `Race Lookup,Date,Event Name,Track,${ml},Actual ET,Run Count`
-      : `Race Lookup,Date,Event Name,Track,${ml},Run Count`;
+    const ml = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
+    const header = `Race Lookup,Date,Event Name,Track,${ml},Run Count`;
     const esc = (s: string | null) => s ? `"${s.replace(/"/g, '""')}"` : '';
     const fv = (v: number | null | undefined) => v != null ? String(v) : '';
     const lines = data.rows.map(r =>
-      isCor
-        ? `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${esc(r.eventName)},${esc(r.trackName)},${fv(r.value)},${fv(r.actualValue)},${r.runCount}`
-        : `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${esc(r.eventName)},${esc(r.trackName)},${fv(r.value)},${r.runCount}`
+      `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${esc(r.eventName)},${esc(r.trackName)},${fv(r.value)},${r.runCount}`
     );
     const csv = [header, ...lines].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -4583,9 +4694,9 @@ function TrendsPanel() {
     URL.revokeObjectURL(url);
   }, [data, metric, classIndex]);
 
-  const metricLabel = metric === 'mph1320' ? 'Top MPH' : metric === 'corrected_ft1320' ? 'Corrected ET (sec)' : 'Best ET (sec)';
-  const chartColor = metric === 'mph1320' ? '#2563eb' : metric === 'corrected_ft1320' ? '#8b5cf6' : '#16a34a';
-  const isCorrectedMetric = metric === 'corrected_ft1320';
+  const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET (sec)';
+  const chartColor = metric === 'mph1320' ? '#2563eb' : '#16a34a';
+  const isCorrectedMetric = false;
 
   return (
     <div>
@@ -4605,7 +4716,6 @@ function TrendsPanel() {
               style={{ width: 165 }}>
               <option value="mph1320">Top MPH (1320)</option>
               <option value="ft1320">Best ET (1320)</option>
-              <option value="corrected_ft1320">Corrected ET (1320)</option>
             </select>
           </div>
           <div className="parity-form-field">

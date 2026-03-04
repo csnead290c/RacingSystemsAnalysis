@@ -1,0 +1,41 @@
+{
+  "_comment": "Test-only engine combo fixture for deterministic correction tests. These parameters are NOT copied from any real production combo. They exist solely to exercise the HPC pipeline with known, stable inputs. Do NOT use these values as approximations of real combos.",
+  "engineCombo": {
+    "id": 1,
+    "name": "TEST_COMBO_A",
+    "t_power": 1.0,
+    "d_power": 1.0,
+    "friction_factor": 0,
+    "created_at": "",
+    "updated_at": ""
+  },
+  "driverCombo": {
+    "driver_name": "TEST, DRIVER_A",
+    "class_index": "XX",
+    "engine_combo_id": 1,
+    "engine_combo_name": "TEST_COMBO_A",
+    "effective_from_utc": "2000-01-01T00:00:00Z",
+    "effective_to_utc": null
+  },
+  "classDefault": {
+    "class_index": "YY",
+    "engine_combo_id": 1,
+    "engine_combo_name": "TEST_COMBO_A",
+    "effective_from_utc": "2000-01-01T00:00:00Z",
+    "effective_to_utc": null
+  },
+  "weather": {
+    "temp_f": 80.0,
+    "rh_pct": 50,
+    "pressure_inhg": 29.92
+  },
+  "run": {
+    "driver_name": "TEST, DRIVER_A",
+    "class_index": "XX",
+    "run_timestamp_utc": "2024-06-15T18:00:00Z",
+    "ft1320": 4.000,
+    "ft660": 2.000,
+    "ft60": 0.900,
+    "mph1320": 300.0
+  }
+}

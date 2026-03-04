@@ -12,6 +12,7 @@ import {
 } from '../services/parityApi';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import IncidentDrawer from './IncidentDrawer';
+import IncidentCell from '../shared/components/IncidentCell';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, Legend,
@@ -465,18 +466,11 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
                 </td>
                 {canReadIncidents && (
                   <td style={{ ...SS.td, textAlign: 'center', width: 28 }}>
-                    {r.incident_count && r.incident_count > 0 ? (
-                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}
-                        title={`${r.incident_count} incident(s)`}
-                        onClick={() => { setDrawerRunId(r.runId); setDrawerDriverName(r.driver); }}
-                        data-testid="incident-icon">
-                        ⚠️ <span style={{ fontSize: '0.6rem', verticalAlign: 'super', color: '#f59e0b' }}>{r.incident_count}</span>
-                      </button>
-                    ) : canCreateIncidents ? (
-                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.7rem', color: '#666' }}
-                        onClick={() => { setDrawerRunId(r.runId); setDrawerDriverName(r.driver); }}
-                        title="Add incident" data-testid="incident-add-icon">＋</button>
-                    ) : null}
+                    <IncidentCell
+                      count={r.incident_count ?? 0}
+                      canCreate={canCreateIncidents}
+                      onClick={() => { setDrawerRunId(r.runId); setDrawerDriverName(r.driver); }}
+                    />
                   </td>
                 )}
               </tr>

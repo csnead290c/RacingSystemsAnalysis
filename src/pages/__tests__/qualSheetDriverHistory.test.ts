@@ -209,12 +209,12 @@ describe('DriverDrilldownPanel — view modes', () => {
     expect(portalSource).toContain('1000-1320');
   });
 
-  it('renders Weather view with corrected ET, factor, temp, pressure, RH%', () => {
+  it('renders Weather view with corrected ET, HPC, temp, pressure, RH%', () => {
     expect(portalSource).toContain("viewMode === 'weather'");
     expect(portalSource).toContain('Corr ET');
-    expect(portalSource).toContain('Factor');
-    expect(portalSource).toContain('corrected_ft1320');
-    expect(portalSource).toContain('correction_factor');
+    expect(portalSource).toContain('HPC');
+    // Uses client-side correctRunClientSide instead of backend corrected_ fields
+    expect(portalSource).toContain('correctRunClientSide');
   });
 
   it('weather view shows temp, pressure, RH from weather object', () => {
@@ -242,12 +242,13 @@ describe('DriverDrilldownPanel — raw/corrected toggle', () => {
     expect(portalSource).toContain("'Corrected'");
   });
 
-  it('getET helper uses corrected value when valueMode is corrected', () => {
-    expect(portalSource).toContain("valueMode === 'corrected' && r.corrected_ft1320 != null");
+  it('getET helper uses client-side getCorrected for corrected values', () => {
+    expect(portalSource).toContain('getCorrected(r)');
+    expect(portalSource).toContain('correctedET');
   });
 
-  it('get60 helper uses corrected value when valueMode is corrected', () => {
-    expect(portalSource).toContain("valueMode === 'corrected' && r.corrected_ft60 != null");
+  it('get60 helper uses client-side getCorrected for corrected values', () => {
+    expect(portalSource).toContain('corrected60');
   });
 
   it('best ET stat header shows (corr) label in corrected mode', () => {
@@ -284,8 +285,8 @@ describe('DriverDrilldownPanel — charts', () => {
     expect(portalSource).toContain('<svg viewBox');
   });
 
-  it('chart data respects valueMode for corrected ET', () => {
-    expect(portalSource).toContain("valueMode === 'corrected' && r.corrected_ft1320 != null ? r.corrected_ft1320 : r.ft1320!");
+  it('chart data uses getET helper for corrected ET', () => {
+    expect(portalSource).toContain('getET(r)');
   });
 
   it('chart renders gracefully with insufficient data', () => {
@@ -347,7 +348,7 @@ describe('DriverDrilldownPanel — CSV export', () => {
 
   it('CSV includes correction columns', () => {
     expect(portalSource).toContain("'Corr ET'");
-    expect(portalSource).toContain("'Factor'");
+    expect(portalSource).toContain("'HPC'");
   });
 });
 
