@@ -657,8 +657,8 @@ describe('Hotfix: useCategoryPreset hook', () => {
     expect(useClassPresetSource).toContain('return [category, setCategory, classIndex]');
   });
 
-  it('derives classIndex via CATEGORY_TO_CLASS reverse mapping', () => {
-    expect(useClassPresetSource).toContain('CATEGORY_TO_CLASS[category] || category');
+  it('derives classIndex via resolveClassIndex (case-insensitive)', () => {
+    expect(useClassPresetSource).toContain('resolveClassIndex(category) || category');
   });
 
   it('keeps useClassPreset as deprecated export', () => {
@@ -816,9 +816,11 @@ describe('Hotfix2: ParityReport category prop + display', () => {
     expect(portalSource).toContain('ParityReport event={selectedEvent} classIndex={classIndex} category={category}');
   });
 
-  it('ParityReport does not import or use useClassPreset directly', () => {
-    expect(parityReportSource).not.toContain('useClassPreset');
-    expect(parityReportSource).not.toContain('classPreset');
+  it('ParityReport imports resolveClassIndex but does not call useCategoryPreset hook directly', () => {
+    expect(parityReportSource).toContain('resolveClassIndex');
+    // Should not call the hook useCategoryPreset() — that's the portal's job
+    expect(parityReportSource).not.toContain('useCategoryPreset()');
+    expect(parityReportSource).not.toContain('useCategoryPreset(');
   });
 });
 
@@ -1042,5 +1044,143 @@ describe('Weather Dashboard: wxFmt centralized formatting helper', () => {
 
   it('water grains formatter produces 1 decimal', () => {
     expect(portalSource).toMatch(/grains:\s*\(v: number\)\s*=>\s*v\.toFixed\(1\)/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Fix: Parity Report category normalization + eventCategories lookup
+// ══════════════════════════════════════════════════════════════════════════
+
+import { normalizeCategory, resolveClassIndex } from '../../domain/parity/useClassPreset';
+
+const useClassPresetSource2 = readFileSync(
+  resolve(__dirname, '../../domain/parity/useClassPreset.ts'),
+  'utf-8',
+);
+
+describe('Fix: normalizeCategory', () => {
+  it('uppercases and trims', () => {
+    expect(normalizeCategory('Top Fuel')).toBe('TOP FUEL');
+    expect(normalizeCategory('  top fuel  ')).toBe('TOP FUEL');
+  });
+
+  it('collapses internal whitespace', () => {
+    expect(normalizeCategory('Top  Fuel')).toBe('TOP FUEL');
+    expect(normalizeCategory('Pro   Stock   Motorcycle')).toBe('PRO STOCK MOTORCYCLE');
+  });
+
+  it('handles already-uppercase', () => {
+    expect(normalizeCategory('TOP FUEL')).toBe('TOP FUEL');
+  });
+
+  it('handles mixed case', () => {
+    expect(normalizeCategory('tOp FuEl')).toBe('TOP FUEL');
+  });
+});
+
+describe('Fix: resolveClassIndex (hardcoded map, case-insensitive)', () => {
+  it('resolves title-case categories', () => {
+    expect(resolveClassIndex('Top Fuel')).toBe('TF');
+    expect(resolveClassIndex('Funny Car')).toBe('FC');
+    expect(resolveClassIndex('Pro Stock')).toBe('PRO');
+  });
+
+  it('resolves uppercase categories (DB values)', () => {
+    expect(resolveClassIndex('TOP FUEL')).toBe('TF');
+    expect(resolveClassIndex('FUNNY CAR')).toBe('FC');
+    expect(resolveClassIndex('PRO STOCK')).toBe('PRO');
+    expect(resolveClassIndex('PRO STOCK MOTORCYCLE')).toBe('PSM');
+    expect(resolveClassIndex('PRO MOD')).toBe('PM');
+    expect(resolveClassIndex('TOP ALCOHOL DRAGSTER')).toBe('TAD');
+    expect(resolveClassIndex('TOP ALCOHOL FUNNY CAR')).toBe('TAFC');
+  });
+
+  it('resolves with extra whitespace', () => {
+    expect(resolveClassIndex('  Top  Fuel  ')).toBe('TF');
+    expect(resolveClassIndex('  TOP FUEL  ')).toBe('TF');
+  });
+
+  it('returns null for unknown categories (no eventCategories)', () => {
+    expect(resolveClassIndex('Unknown Class')).toBeNull();
+    expect(resolveClassIndex('Stock Eliminator')).toBeNull();
+  });
+});
+
+describe('Fix: resolveClassIndex with eventCategories list', () => {
+  const mockEventCats = [
+    { category: 'TOP FUEL', class_index: 'TF' },
+    { category: 'FUNNY CAR', class_index: 'FC' },
+    { category: 'STOCK ELIMINATOR', class_index: 'SE' },
+    { category: null, class_index: 'UNK' },
+  ];
+
+  it('resolves known categories via hardcoded map first', () => {
+    expect(resolveClassIndex('Top Fuel', mockEventCats)).toBe('TF');
+    expect(resolveClassIndex('TOP FUEL', mockEventCats)).toBe('TF');
+  });
+
+  it('resolves categories not in hardcoded map via eventCategories', () => {
+    expect(resolveClassIndex('Stock Eliminator', mockEventCats)).toBe('SE');
+    expect(resolveClassIndex('STOCK ELIMINATOR', mockEventCats)).toBe('SE');
+    expect(resolveClassIndex('stock eliminator', mockEventCats)).toBe('SE');
+  });
+
+  it('returns null when category not found anywhere', () => {
+    expect(resolveClassIndex('Nonexistent', mockEventCats)).toBeNull();
+  });
+
+  it('handles null category entries in eventCategories gracefully', () => {
+    expect(resolveClassIndex('UNK', mockEventCats)).toBeNull();
+  });
+});
+
+describe('Fix: ParityReport uses eventCategories lookup (not hardcoded)', () => {
+  it('imports resolveClassIndex from useClassPreset', () => {
+    expect(parityReportSource).toContain("import { resolveClassIndex }");
+  });
+
+  it('imports EventCategory type', () => {
+    expect(parityReportSource).toContain("type { EventCategory }");
+  });
+
+  it('fetches eventCategories from the API', () => {
+    expect(parityReportSource).toContain('parityApi.eventCategories(');
+    expect(parityReportSource).toContain('setEventCats');
+  });
+
+  it('resolves classIndex using resolveClassIndex with eventCats', () => {
+    expect(parityReportSource).toContain('resolveClassIndex(category, eventCats)');
+  });
+
+  it('passes resolvedClassIndex to EventReport and LongTermReport', () => {
+    expect(parityReportSource).toContain('classIndex={resolvedClassIndex}');
+  });
+
+  it('shows warning banner when mapping fails', () => {
+    expect(parityReportSource).toContain('mappingFailed');
+    expect(parityReportSource).toContain('No class mapping found for category');
+  });
+
+  it('shows resolved classIndex in the header', () => {
+    expect(parityReportSource).toContain('class: {resolvedClassIndex}');
+  });
+});
+
+describe('Fix: useCategoryPreset uses case-insensitive classIndex derivation', () => {
+  it('derives classIndex via resolveClassIndex (not direct CATEGORY_TO_CLASS lookup)', () => {
+    expect(useClassPresetSource2).toContain('resolveClassIndex(category)');
+    expect(useClassPresetSource2).not.toContain('CATEGORY_TO_CLASS[category]');
+  });
+});
+
+describe('Fix: allEventCategories dedup uses normalizeCategory', () => {
+  it('imports normalizeCategory in ParityPortal', () => {
+    expect(portalSource).toContain('normalizeCategory');
+  });
+
+  it('uses normalizeCategory for recommended set comparison', () => {
+    expect(portalSource).toContain('recommendedNorm');
+    expect(portalSource).toContain('.map(normalizeCategory)');
+    expect(portalSource).toContain('normalizeCategory(cat)');
   });
 });

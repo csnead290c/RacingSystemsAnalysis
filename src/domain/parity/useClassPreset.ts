@@ -13,6 +13,14 @@ const CAT_URL_PARAM = 'category';
 const DEFAULT_CATEGORY = 'Top Fuel';
 
 /**
+ * Normalize a category string for case/whitespace-insensitive comparison.
+ * "Top Fuel", "TOP FUEL", "top  fuel " → "TOP FUEL"
+ */
+export function normalizeCategory(cat: string): string {
+  return cat.trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+/**
  * Map from class_index abbreviations to known human-readable category names.
  * Used for backward-compat: if someone has ?classPreset=TF in their URL,
  * we migrate to ?category=Top Fuel.
@@ -30,6 +38,37 @@ export const CLASS_TO_CATEGORY: Record<string, string> = {
 export const CATEGORY_TO_CLASS: Record<string, string> = Object.fromEntries(
   Object.entries(CLASS_TO_CATEGORY).map(([k, v]) => [v, k])
 );
+
+// Normalized lookup: uppercase category → classIndex (e.g. 'TOP FUEL' → 'TF')
+const NORMALIZED_CAT_TO_CLASS: Record<string, string> = Object.fromEntries(
+  Object.entries(CLASS_TO_CATEGORY).map(([k, v]) => [normalizeCategory(v), k])
+);
+
+/**
+ * Resolve classIndex from a category string, case/whitespace insensitive.
+ * Uses the hardcoded map first; if that fails, searches an optional
+ * eventCategories list (live data from the backend) for a match.
+ */
+export function resolveClassIndex(
+  category: string,
+  eventCategories?: { category: string | null; class_index: string }[],
+): string | null {
+  // 1) Hardcoded map (normalized)
+  const norm = normalizeCategory(category);
+  const fromMap = NORMALIZED_CAT_TO_CLASS[norm];
+  if (fromMap) return fromMap;
+
+  // 2) Live eventCategories list
+  if (eventCategories) {
+    const match = eventCategories.find(
+      ec => normalizeCategory(ec.category || '') === norm
+    );
+    if (match?.class_index) return match.class_index;
+  }
+
+  // 3) No mapping found
+  return null;
+}
 
 /**
  * Global category preset for the Parity Suite.
@@ -111,8 +150,8 @@ export function useCategoryPreset(): [string, (cat: string) => void, string] {
     window.history.replaceState(null, '', newUrl);
   }, []);
 
-  // Derive classIndex for backward-compat with report endpoints
-  const classIndex = CATEGORY_TO_CLASS[category] || category;
+  // Derive classIndex for backward-compat with report endpoints (case-insensitive)
+  const classIndex = resolveClassIndex(category) || category;
 
   return [category, setCategory, classIndex];
 }

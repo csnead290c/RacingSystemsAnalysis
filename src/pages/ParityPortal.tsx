@@ -73,7 +73,7 @@ import { formatLocalTimeLabel, formatLocalDateTime } from '../domain/parity/form
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
-import { useCategoryPreset, CLASS_TO_CATEGORY } from '../domain/parity/useClassPreset';
+import { useCategoryPreset, CLASS_TO_CATEGORY, normalizeCategory } from '../domain/parity/useClassPreset';
 import { canonicalLane, laneSort } from '../domain/parity/laneUtils';
 import IncidentDrawer from './IncidentDrawer';
 import IncidentCell from '../shared/components/IncidentCell';
@@ -468,11 +468,12 @@ export default function ParityPortal() {
   );
 
   // Build "All Categories" list from event data (unique category names not in RECOMMENDED)
+  // Uses normalizeCategory() to avoid duplicates like "Top Fuel" and "TOP FUEL"
   const allEventCategories = useMemo(() => {
-    const recommended = new Set<string>(RECOMMENDED_CATEGORIES as unknown as string[]);
+    const recommendedNorm = new Set<string>((RECOMMENDED_CATEGORIES as unknown as string[]).map(normalizeCategory));
     const extra = eventCategories
       .map(c => c.category || c.class_index)
-      .filter(cat => cat && !recommended.has(cat));
+      .filter(cat => cat && !recommendedNorm.has(normalizeCategory(cat)));
     return [...new Set(extra)].sort();
   }, [eventCategories]);
 

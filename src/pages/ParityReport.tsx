@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   parityApi,
   type ParitySummaryResponse,
@@ -11,6 +11,8 @@ import {
   type EngineComboRow,
 } from '../services/parityApi';
 import { useCapabilities } from '../domain/config/useCapabilities';
+import { resolveClassIndex } from '../domain/parity/useClassPreset';
+import type { EventCategory } from '../services/parityApi';
 import IncidentDrawer from './IncidentDrawer';
 import IncidentCell from '../shared/components/IncidentCell';
 import {
@@ -105,21 +107,42 @@ const SS = {
 
 type Mode = 'event' | 'longTerm';
 
-export default function ParityReport({ event, classIndex, category, onClassChange }: {
+export default function ParityReport({ event, classIndex: classIndexProp, category, onClassChange }: {
   event: EventWithStats | null;
   classIndex: string;
   category?: string;
   onClassChange?: (cls: string) => void;
 }) {
-  void onClassChange; // future-proofing hook — class changes propagate via useCategoryPreset
-  // category is the human-readable name (e.g. "Top Fuel"); classIndex is the abbreviation (e.g. "TF")
-  // Display category to user but use classIndex for backend combo API calls
-  const displayLabel = category || classIndex;
+  void onClassChange; // future-proofing hook — class changes propagate via the category preset
+  const displayLabel = category || classIndexProp;
   const [mode, setMode] = useState<Mode>('event');
   const sessionScope = 'both' as const;
   const [corrMode, setCorrMode] = useState<'raw' | 'corrected'>('raw');
   const metric = 'et_1320';
   const [overrideEv, setOverrideEv] = useState<number | null>(null);
+
+  // Fetch live eventCategories to resolve classIndex from actual DB data
+  const [eventCats, setEventCats] = useState<EventCategory[]>([]);
+  useEffect(() => {
+    const evId = overrideEv || event?.id;
+    if (!evId) { setEventCats([]); return; }
+    let cancelled = false;
+    parityApi.eventCategories(evId).then(res => {
+      if (!cancelled) setEventCats(res.categories);
+    }).catch(() => { if (!cancelled) setEventCats([]); });
+    return () => { cancelled = true; };
+  }, [event?.id, overrideEv]);
+
+  // Resolve classIndex: try live eventCategories first, then hardcoded map, then prop fallback
+  const resolvedClassIndex = useMemo(() => {
+    if (category) {
+      const resolved = resolveClassIndex(category, eventCats);
+      if (resolved) return resolved;
+    }
+    return classIndexProp;
+  }, [category, eventCats, classIndexProp]);
+
+  const mappingFailed = category ? resolvedClassIndex === classIndexProp && resolveClassIndex(category) === null && eventCats.length > 0 : false;
 
   return (
     <div style={S.page}>
@@ -129,12 +152,19 @@ export default function ParityReport({ event, classIndex, category, onClassChang
         <button style={mode === 'longTerm' ? S.tabA : S.tabI} onClick={() => setMode('longTerm')}>Long-Term Parity</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-muted)' }}>Category: {displayLabel}</span>
+          <span style={{ fontSize: '0.62rem', color: '#888' }}>→ class: {resolvedClassIndex}</span>
           <label style={{ fontSize: '0.72rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
         </div>
       </div>
+      {mappingFailed && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '0.5rem 0.75rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#92400e' }}>
+          ⚠ No class mapping found for category "{category}". Parity report needs a classIndex match from eventCategories.
+          Available: {eventCats.map(ec => `${ec.category} → ${ec.class_index}`).join(', ')}
+        </div>
+      )}
       {mode === 'event'
-        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} classIndex={classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
-        : <LongTermReport classIndex={classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
+        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} classIndex={resolvedClassIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
+        : <LongTermReport classIndex={resolvedClassIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
       }
     </div>
   );
