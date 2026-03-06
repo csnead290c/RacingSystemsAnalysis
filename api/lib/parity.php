@@ -205,6 +205,9 @@ function parity_normalizeRow(array $raw, string $raceLookup): array {
             case 'mov':
                 $row[$normalizedKey] = parity_parseFloat($value);
                 break;
+            case 'lane':
+                $row[$normalizedKey] = parity_normalizeLane($value);
+                break;
             case 'round':
             case 'place':
                 // Could be numeric or string
@@ -242,6 +245,28 @@ function parity_findField(array $raw, array $aliases): mixed {
         }
     }
     return null;
+}
+
+/**
+ * Normalize lane values to canonical form.
+ * Accepts: Left/Right/L/R (pair mode) and 1/2/3/4/Lane 1/etc (quad mode).
+ * Returns: 'L','R','1','2','3','4' or null.
+ */
+function parity_normalizeLane(mixed $value): ?string {
+    if ($value === null || $value === '') return null;
+    $s = strtolower(trim((string)$value));
+    // Strip "lane " prefix: "lane 1" -> "1", "lane left" -> "left"
+    $s = preg_replace('/^lane\s*/i', '', $s);
+    // Pair lanes
+    if (in_array($s, ['l', 'left'])) return 'L';
+    if (in_array($s, ['r', 'right'])) return 'R';
+    // Quad lanes
+    if ($s === '1') return '1';
+    if ($s === '2') return '2';
+    if ($s === '3') return '3';
+    if ($s === '4') return '4';
+    // Pass through anything else as-is (uppercase first char)
+    return strtoupper(substr(trim((string)$value), 0, 1)) ?: null;
 }
 
 /**

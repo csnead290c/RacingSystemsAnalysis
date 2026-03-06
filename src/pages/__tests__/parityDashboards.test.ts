@@ -766,3 +766,200 @@ describe('Hotfix: Backend parity_upsertRun merge logic', () => {
     expect(backendParitySource).toContain("'rowsSkipped'");
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// Hotfix 2: ParityReport category mapping, NHRA-style live timing, quad lanes
+// ══════════════════════════════════════════════════════════════════════════
+
+// parityReportSource already declared above (line ~284)
+// backendParitySource and backendLibSource already declared above
+
+// ── A) ParityReport category mapping ─────────────────────────────────────
+
+describe('Hotfix2: ParityReport category prop + display', () => {
+  it('accepts category prop alongside classIndex', () => {
+    expect(parityReportSource).toContain('category?: string');
+    expect(parityReportSource).toContain('classIndex: string');
+  });
+
+  it('derives displayLabel from category or classIndex', () => {
+    expect(parityReportSource).toContain('const displayLabel = category || classIndex');
+  });
+
+  it('shows "Category:" header with displayLabel (not "Class:")', () => {
+    expect(parityReportSource).toContain('Category: {displayLabel}');
+    expect(parityReportSource).not.toContain('Class: {classIndex}');
+  });
+
+  it('passes displayLabel to EventReport and LongTermReport sub-components', () => {
+    expect(parityReportSource).toContain('displayLabel={displayLabel}');
+  });
+
+  it('EventReport title uses displayLabel not classIndex', () => {
+    expect(parityReportSource).toContain('NHRA {displayLabel} {modeLabel} Event Parity');
+    expect(parityReportSource).not.toContain('NHRA {classIndex} {modeLabel} Event Parity');
+  });
+
+  it('LongTermReport title uses displayLabel not classIndex', () => {
+    expect(parityReportSource).toContain('NHRA {displayLabel} {modeLabel} Long Term Parity');
+    expect(parityReportSource).not.toContain('NHRA {classIndex} {modeLabel} Long Term Parity');
+  });
+
+  it('still uses classIndex for backend API calls (not category)', () => {
+    // paritySummary, parityQualOrder, parityIncrementals, paritySessionWeather all use classIndex
+    expect(parityReportSource).toContain('classIndex, metric');
+    expect(parityReportSource).toContain('parityApi.paritySummary');
+    expect(parityReportSource).toContain('parityApi.parityIncrementals');
+  });
+
+  it('ParityPortal passes both classIndex and category to ParityReport', () => {
+    expect(portalSource).toContain('ParityReport event={selectedEvent} classIndex={classIndex} category={category}');
+  });
+
+  it('ParityReport does not import or use useClassPreset directly', () => {
+    expect(parityReportSource).not.toContain('useClassPreset');
+    expect(parityReportSource).not.toContain('classPreset');
+  });
+});
+
+// ── B) Live Timing grouped pair/quad rendering ───────────────────────────
+
+describe('Hotfix2: Live Timing grouped pair/quad rendering', () => {
+  it('defines buildRunGroupKey function for grouping', () => {
+    expect(portalSource).toContain('function buildRunGroupKey');
+  });
+
+  it('defines RunGroup type', () => {
+    expect(portalSource).toContain('type RunGroup');
+  });
+
+  it('groups runs by timestamp window + round + category', () => {
+    // grouping key uses 10-second time window
+    const gkStart = portalSource.indexOf('function buildRunGroupKey');
+    const gkEnd = portalSource.indexOf('}', gkStart + 20);
+    const gkBody = portalSource.slice(gkStart, gkEnd + 1);
+    expect(gkBody).toContain('tsRounded');
+    expect(gkBody).toContain('round');
+    expect(gkBody).toContain('category');
+  });
+
+  it('renders group header rows with time, round, category, and pair/quad badge', () => {
+    expect(portalSource).toContain('Group header row');
+    expect(portalSource).toContain('Pair');
+    expect(portalSource).toContain('Quad');
+    expect(portalSource).toContain('g.time');
+    expect(portalSource).toContain('g.round');
+    expect(portalSource).toContain('g.category');
+  });
+
+  it('sorts lanes within groups using laneSort', () => {
+    expect(portalSource).toContain('laneSort(canonicalLane(');
+  });
+
+  it('sorts groups newest-first', () => {
+    expect(portalSource).toContain('b.time.localeCompare(a.time)');
+  });
+
+  it('uses canonicalLane for lane cell display', () => {
+    expect(portalSource).toContain("val = canonicalLane(run.lane)");
+  });
+
+  it('filters groups before rendering (driver search + local category)', () => {
+    expect(portalSource).toContain('localCategory');
+    expect(portalSource).toContain('driverSearch');
+  });
+
+  it('displays totalFilteredRuns and group count', () => {
+    expect(portalSource).toContain('totalFilteredRuns');
+    expect(portalSource).toContain('groups.length');
+  });
+
+  it('highlights winner rows', () => {
+    expect(portalSource).toContain('win_flag');
+    expect(portalSource).toContain('rgba(34,197,94,0.06)');
+  });
+});
+
+// ── C) Lane normalization ────────────────────────────────────────────────
+
+import { canonicalLane, laneSort, isQuadEvent } from '../../domain/parity/laneUtils';
+
+describe('Hotfix2: Frontend lane normalization (laneUtils)', () => {
+  it('canonicalLane normalizes Left/Right variants', () => {
+    expect(canonicalLane('Left')).toBe('L');
+    expect(canonicalLane('left')).toBe('L');
+    expect(canonicalLane('L')).toBe('L');
+    expect(canonicalLane('l')).toBe('L');
+    expect(canonicalLane('Right')).toBe('R');
+    expect(canonicalLane('right')).toBe('R');
+    expect(canonicalLane('R')).toBe('R');
+    expect(canonicalLane('r')).toBe('R');
+  });
+
+  it('canonicalLane normalizes quad lane numbers', () => {
+    expect(canonicalLane('1')).toBe('1');
+    expect(canonicalLane('2')).toBe('2');
+    expect(canonicalLane('3')).toBe('3');
+    expect(canonicalLane('4')).toBe('4');
+  });
+
+  it('canonicalLane strips "Lane " prefix', () => {
+    expect(canonicalLane('Lane 1')).toBe('1');
+    expect(canonicalLane('Lane Left')).toBe('L');
+    expect(canonicalLane('lane right')).toBe('R');
+    expect(canonicalLane('Lane 3')).toBe('3');
+  });
+
+  it('canonicalLane returns empty string for null/undefined', () => {
+    expect(canonicalLane(null)).toBe('');
+    expect(canonicalLane(undefined)).toBe('');
+    expect(canonicalLane('')).toBe('');
+  });
+
+  it('laneSort orders L before R', () => {
+    expect(laneSort('L', 'R')).toBeLessThan(0);
+    expect(laneSort('R', 'L')).toBeGreaterThan(0);
+  });
+
+  it('laneSort orders 1 < 2 < 3 < 4', () => {
+    expect(laneSort('1', '2')).toBeLessThan(0);
+    expect(laneSort('2', '3')).toBeLessThan(0);
+    expect(laneSort('3', '4')).toBeLessThan(0);
+    expect(laneSort('1', '4')).toBeLessThan(0);
+  });
+
+  it('isQuadEvent detects quad lanes', () => {
+    expect(isQuadEvent(['1', '2', '3', '4'])).toBe(true);
+    expect(isQuadEvent(['L', 'R'])).toBe(false);
+    expect(isQuadEvent(['L', 'R', '1'])).toBe(true);
+  });
+});
+
+describe('Hotfix2: Backend lane normalization', () => {
+  it('parity_normalizeLane function is defined', () => {
+    expect(backendLibSource).toContain('function parity_normalizeLane');
+  });
+
+  it('normalizes Left/Right to L/R', () => {
+    expect(backendLibSource).toContain("['l', 'left']");
+    expect(backendLibSource).toContain("return 'L'");
+    expect(backendLibSource).toContain("['r', 'right']");
+    expect(backendLibSource).toContain("return 'R'");
+  });
+
+  it('normalizes quad lane numbers 1-4', () => {
+    expect(backendLibSource).toContain("return '1'");
+    expect(backendLibSource).toContain("return '2'");
+    expect(backendLibSource).toContain("return '3'");
+    expect(backendLibSource).toContain("return '4'");
+  });
+
+  it('strips "lane " prefix', () => {
+    expect(backendLibSource).toContain("'/^lane\\s*/i'");
+  });
+
+  it('is wired into parity_normalizeRow for the lane field', () => {
+    expect(backendLibSource).toContain("case 'lane':");
+    expect(backendLibSource).toContain('parity_normalizeLane($value)');
+  });
+});

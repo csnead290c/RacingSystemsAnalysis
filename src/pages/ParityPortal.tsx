@@ -74,6 +74,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
 import { useCategoryPreset, CLASS_TO_CATEGORY } from '../domain/parity/useClassPreset';
+import { canonicalLane, laneSort } from '../domain/parity/laneUtils';
 import IncidentDrawer from './IncidentDrawer';
 import IncidentCell from '../shared/components/IncidentCell';
 import { useAutoRefresh, isEventOngoing } from '../domain/parity/useAutoRefresh';
@@ -617,7 +618,7 @@ export default function ParityPortal() {
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
-      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} />}
+      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} />}
 
       {/* ── Admin Panels ── */}
       {tab === 'adminTracks' && <AdminTracksPanel />}
@@ -6528,9 +6529,27 @@ const LIVE_TIMING_COLUMNS: ColDef[] = [
   { key: 'wx_press', label: 'Press inHg', sortKey: 'wx_press', group: 'weather', defaultOn: true, format: r => r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', align: 'right' },
 ];
 
+/** Build a grouping key for paired/quad runs. Runs with the same key belong to the same race pair or quad. */
+function buildRunGroupKey(r: RunWithWeather): string {
+  // Best available: round + category + timestamp rounded to the nearest 10 seconds
+  const ts = r.run_time_local || r.run_timestamp_utc || '';
+  // Round timestamp to 10-second window to capture paired runs that fire within seconds
+  const tsRounded = ts.slice(0, 18).replace(/\d$/, '0'); // "2025-10-30 14:23:4X" -> "2025-10-30 14:23:40"
+  const round = r.round || '';
+  const cat = r.category || r.class_index || '';
+  return `${tsRounded}|${round}|${cat}`;
+}
+
+type RunGroup = {
+  key: string;
+  time: string;        // display time from first run
+  round: string;
+  category: string;
+  runs: RunWithWeather[];
+};
+
 function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | null; refreshKey?: number }) {
   const [runs, setRuns] = useState<RunWithWeather[]>([]);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [driverSearch, setDriverSearch] = useState('');
@@ -6569,7 +6588,6 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
         return tb.localeCompare(ta);
       });
       setRuns(sorted);
-      setTotal(res.total);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
   }, [event?.race_lookup]);
@@ -6585,17 +6603,47 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
     return [...cats].sort();
   }, [runs]);
 
-  const filteredRuns = useMemo(() => {
-    let result = runs;
+  // Group runs into paired (L/R) or quad (1-4) blocks
+  const groups: RunGroup[] = useMemo(() => {
+    let filtered = runs;
     if (localCategory) {
-      result = result.filter(r => r.category === localCategory);
+      filtered = filtered.filter(r => r.category === localCategory);
     }
     if (driverSearch.trim()) {
       const q = driverSearch.trim().toLowerCase();
-      result = result.filter(r => r.driver_name?.toLowerCase().includes(q));
+      filtered = filtered.filter(r => r.driver_name?.toLowerCase().includes(q));
     }
+
+    // Build groups
+    const map = new Map<string, RunWithWeather[]>();
+    for (const r of filtered) {
+      const gk = buildRunGroupKey(r);
+      if (!map.has(gk)) map.set(gk, []);
+      map.get(gk)!.push(r);
+    }
+
+    // Convert to RunGroup[] and sort lane order within each group
+    const result: RunGroup[] = [];
+    for (const [key, groupRuns] of map) {
+      // Sort lanes within group: L before R, or 1<2<3<4
+      groupRuns.sort((a, b) => laneSort(canonicalLane(a.lane), canonicalLane(b.lane)));
+      const first = groupRuns[0];
+      const ts = first.run_time_local || first.run_timestamp_utc || '';
+      result.push({
+        key,
+        time: ts.replace(/T/, ' ').slice(0, 19),
+        round: first.round || '',
+        category: first.category || first.class_index || '',
+        runs: groupRuns,
+      });
+    }
+
+    // Sort groups newest-first by time
+    result.sort((a, b) => b.time.localeCompare(a.time));
     return result;
   }, [runs, driverSearch, localCategory]);
+
+  const totalFilteredRuns = useMemo(() => groups.reduce((n, g) => n + g.runs.length, 0), [groups]);
 
   const toggleCol = (key: string) => {
     setVisibleCols(prev => {
@@ -6615,7 +6663,8 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
     });
   };
 
-  const activeCols = LIVE_TIMING_COLUMNS.filter(c => visibleCols.has(c.key));
+  // Filter out 'run_time_local' from lane-row columns (shown in group header instead)
+  const activeCols = LIVE_TIMING_COLUMNS.filter(c => visibleCols.has(c.key) && c.key !== 'run_time_local');
 
   const stickyTh: React.CSSProperties = {
     ...S.th, position: 'sticky', top: 0, zIndex: 1,
@@ -6636,7 +6685,7 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
       <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <button style={{ ...S.btn(showColPicker ? 'primary' : 'secondary'), fontSize: '0.7rem' }}
           onClick={() => setShowColPicker(v => !v)}>
-          Columns ({activeCols.length}/{LIVE_TIMING_COLUMNS.length})
+          Columns ({activeCols.length}/{LIVE_TIMING_COLUMNS.length - 1})
         </button>
         <select style={{ ...S.input, width: 140, fontSize: '0.7rem', padding: '0.15rem 0.3rem' }}
           value={localCategory}
@@ -6649,7 +6698,7 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
           value={driverSearch}
           onChange={e => setDriverSearch(e.target.value)} />
         <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginLeft: 'auto' }}>
-          {filteredRuns.length} of {total} runs — newest first
+          {totalFilteredRuns} runs in {groups.length} groups — newest first
         </span>
       </div>
 
@@ -6679,11 +6728,12 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
       {error && <div style={S.error}>{error}</div>}
       {loading && <div style={S.hint}>Loading live timing...</div>}
 
-      {!loading && filteredRuns.length === 0 && (
+      {!loading && groups.length === 0 && (
         <div style={S.hint}>No runs found{localCategory ? ` for ${localCategory}` : ''}.</div>
       )}
 
-      {filteredRuns.length > 0 && (
+      {/* Grouped run blocks — NHRA-style paired/quad display */}
+      {groups.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
           <table style={S.table}>
             <thead>
@@ -6696,37 +6746,70 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
               </tr>
             </thead>
             <tbody>
-              {filteredRuns.map(run => (
-                <tr key={run.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  {activeCols.map(c => {
-                    let val: string;
-                    if (c.format) {
-                      val = c.format(run);
-                    } else if (c.key === 'driver_name') {
-                      val = run.driver_name || '';
-                    } else if (c.key === 'class_index') {
-                      val = run.class_index || '';
-                    } else if (c.key === 'round') {
-                      val = run.round || '';
-                    } else if (c.key === 'lane') {
-                      val = run.lane || '';
-                    } else {
-                      val = String((run as any)[c.key] ?? '');
-                    }
-                    return (
-                      <td key={c.key} style={{
-                        ...S.td,
-                        textAlign: c.align || 'left',
-                        fontWeight: c.bold ? 700 : 400,
-                        fontVariantNumeric: c.align === 'right' ? 'tabular-nums' : undefined,
-                        whiteSpace: 'nowrap',
+              {groups.map(g => {
+                const isQuad = g.runs.some(r => {
+                  const cl = canonicalLane(r.lane);
+                  return cl === '1' || cl === '2' || cl === '3' || cl === '4';
+                });
+                const laneLabel = isQuad ? 'Quad' : 'Pair';
+                return (
+                  <React.Fragment key={g.key}>
+                    {/* Group header row */}
+                    <tr style={{ background: 'var(--color-surface, #262640)' }}>
+                      <td colSpan={activeCols.length} style={{
+                        padding: '0.3rem 0.5rem', fontWeight: 700, fontSize: '0.72rem',
+                        borderBottom: '2px solid var(--color-primary, #3b82f6)',
+                        color: 'var(--color-text)',
                       }}>
-                        {val}
+                        <span style={{ marginRight: '0.75rem' }}>{g.time}</span>
+                        {g.round && <span style={{ marginRight: '0.75rem', fontWeight: 400, fontSize: '0.68rem', color: 'var(--color-muted)' }}>Rnd {g.round}</span>}
+                        <span style={{ marginRight: '0.75rem', fontWeight: 400, fontSize: '0.68rem', color: 'var(--color-muted)' }}>{g.category}</span>
+                        <span style={{
+                          display: 'inline-block', padding: '0.05rem 0.35rem', borderRadius: 3,
+                          background: isQuad ? '#8b5cf622' : '#3b82f622',
+                          color: isQuad ? '#8b5cf6' : '#3b82f6',
+                          fontSize: '0.6rem', fontWeight: 600,
+                        }}>{laneLabel} ({g.runs.length})</span>
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                    </tr>
+                    {/* Lane rows */}
+                    {g.runs.map((run, ri) => (
+                      <tr key={run.id} style={{
+                        borderBottom: ri === g.runs.length - 1 ? '2px solid var(--color-border)' : '1px solid var(--color-border)',
+                        background: run.win_flag ? 'rgba(34,197,94,0.06)' : undefined,
+                      }}>
+                        {activeCols.map(c => {
+                          let val: string;
+                          if (c.format) {
+                            val = c.format(run);
+                          } else if (c.key === 'driver_name') {
+                            val = run.driver_name || '';
+                          } else if (c.key === 'class_index') {
+                            val = run.class_index || '';
+                          } else if (c.key === 'round') {
+                            val = run.round || '';
+                          } else if (c.key === 'lane') {
+                            val = canonicalLane(run.lane);
+                          } else {
+                            val = String((run as any)[c.key] ?? '');
+                          }
+                          return (
+                            <td key={c.key} style={{
+                              ...S.td,
+                              textAlign: c.align || 'left',
+                              fontWeight: c.bold ? 700 : 400,
+                              fontVariantNumeric: c.align === 'right' ? 'tabular-nums' : undefined,
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {val}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

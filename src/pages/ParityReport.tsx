@@ -105,12 +105,16 @@ const SS = {
 
 type Mode = 'event' | 'longTerm';
 
-export default function ParityReport({ event, classIndex, onClassChange }: {
+export default function ParityReport({ event, classIndex, category, onClassChange }: {
   event: EventWithStats | null;
   classIndex: string;
+  category?: string;
   onClassChange?: (cls: string) => void;
 }) {
-  void onClassChange; // future-proofing hook — class changes propagate via useClassPreset
+  void onClassChange; // future-proofing hook — class changes propagate via useCategoryPreset
+  // category is the human-readable name (e.g. "Top Fuel"); classIndex is the abbreviation (e.g. "TF")
+  // Display category to user but use classIndex for backend combo API calls
+  const displayLabel = category || classIndex;
   const [mode, setMode] = useState<Mode>('event');
   const sessionScope = 'both' as const;
   const [corrMode, setCorrMode] = useState<'raw' | 'corrected'>('raw');
@@ -124,13 +128,13 @@ export default function ParityReport({ event, classIndex, onClassChange }: {
         <button style={mode === 'event' ? S.tabA : S.tabI} onClick={() => { setMode('event'); setOverrideEv(null); }}>Event Parity</button>
         <button style={mode === 'longTerm' ? S.tabA : S.tabI} onClick={() => setMode('longTerm')}>Long-Term Parity</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-muted)' }}>Class: {classIndex}</span>
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-muted)' }}>Category: {displayLabel}</span>
           <label style={{ fontSize: '0.72rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
         </div>
       </div>
       {mode === 'event'
-        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} classIndex={classIndex} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
-        : <LongTermReport classIndex={classIndex} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
+        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} classIndex={classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
+        : <LongTermReport classIndex={classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
       }
     </div>
   );
@@ -140,8 +144,8 @@ export default function ParityReport({ event, classIndex, onClassChange }: {
 // EVENT PARITY REPORT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
-  event: EventWithStats | null; classIndex: string; metric: string;
+function EventReport({ event, classIndex, displayLabel, metric, corrMode, sessionScope }: {
+  event: EventWithStats | null; classIndex: string; displayLabel: string; metric: string;
   corrMode: 'raw' | 'corrected'; sessionScope: 'qual' | 'elim' | 'both';
 }) {
   const topN = 4;
@@ -218,7 +222,7 @@ function EventReport({ event, classIndex, metric, corrMode, sessionScope }: {
       <div data-testid="parity-header" style={{ marginBottom: '0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
-            {evYear} {evCode} NHRA {classIndex} {modeLabel} Event Parity
+            {evYear} {evCode} NHRA {displayLabel} {modeLabel} Event Parity
           </h2>
           <span style={{ fontSize: '0.65rem', color: '#888' }}>
             {sessionScope.toUpperCase()} | {summary.totalRunsInClass} runs
@@ -558,8 +562,8 @@ function WeatherTable({ data }: { data: ParitySessionWeatherResponse }) {
 
 type RangeMode = 'previousN' | 'season' | 'custom';
 
-function LongTermReport({ classIndex, metric, corrMode, sessionScope, onEventClick }: {
-  classIndex: string; metric: string; corrMode: 'raw' | 'corrected';
+function LongTermReport({ classIndex, displayLabel, metric, corrMode, sessionScope, onEventClick }: {
+  classIndex: string; displayLabel: string; metric: string; corrMode: 'raw' | 'corrected';
   sessionScope: 'qual' | 'elim' | 'both'; onEventClick: (id: number) => void;
 }) {
   const topN = 4;
@@ -638,7 +642,7 @@ function LongTermReport({ classIndex, metric, corrMode, sessionScope, onEventCli
   return (
     <div className="parity-longterm-report" style={{ pageBreakAfter: 'always' }}>
       <div style={{ textAlign: 'center', padding: '0.5rem 0', marginBottom: '0.5rem' }}>
-        <h1 style={{ ...S.h1, margin: 0, fontSize: '1.1rem' }}>NHRA {classIndex} {modeLabel} Long Term Parity</h1>
+        <h1 style={{ ...S.h1, margin: 0, fontSize: '1.1rem' }}>NHRA {displayLabel} {modeLabel} Long Term Parity</h1>
         <div style={{ fontSize: '0.7rem', color: '#888', marginTop: 2 }}>{ml} | {sessionScope.toUpperCase()} | Top {topN}</div>
       </div>
 
