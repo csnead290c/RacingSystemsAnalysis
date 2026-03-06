@@ -6807,6 +6807,7 @@ function handleParityByCombo(PDO $pdo): void {
 function parity_loadEventRunData(PDO $pdo): array {
     $eventId = (int)($_GET['eventId'] ?? 0);
     $classIndex = trim($_GET['classIndex'] ?? '');
+    $category = trim($_GET['category'] ?? '');
     $metric = trim($_GET['metric'] ?? 'et_1320');
     $mode = trim($_GET['mode'] ?? 'raw');
     $topN = max(1, min(20, (int)($_GET['topN'] ?? 4)));
@@ -6815,7 +6816,7 @@ function parity_loadEventRunData(PDO $pdo): array {
     $includeUnknown = (bool)($_GET['includeUnknown'] ?? false);
 
     if ($eventId <= 0) rsa_jsonResponse(['error' => 'eventId is required'], 400);
-    if ($classIndex === '') rsa_jsonResponse(['error' => 'classIndex is required'], 400);
+    if ($category === '' && $classIndex === '') rsa_jsonResponse(['error' => 'classIndex or category is required'], 400);
 
     $validMetrics = ['et_1320', 'mph_1320', 'rt', 't60', 't330', 't660', 'mph_660', 't1000', 'mph_1000'];
     if (!in_array($metric, $validMetrics)) rsa_jsonResponse(['error' => 'Invalid metric'], 400);
@@ -6842,9 +6843,14 @@ function parity_loadEventRunData(PDO $pdo): array {
     $raceLookup = $event['race_lookup'];
     if (!$raceLookup) rsa_jsonResponse(['error' => 'Event has no race_lookup'], 400);
 
-    // Expand class, load combo lookups
-    $classIndices = parity_expandClassIndex($pdo, $classIndex);
-    $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    // Category filter takes priority over classIndex
+    $useCategory = ($category !== '');
+    $classIndices = [];
+    $classPlaceholders = '';
+    if (!$useCategory) {
+        $classIndices = parity_expandClassIndex($pdo, $classIndex);
+        $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    }
 
     $engineCombos = [];
     foreach ($pdo->query("SELECT id, name, t_power, d_power, friction_factor FROM parity_engine_combos")->fetchAll(PDO::FETCH_ASSOC) as $ec) {
@@ -6867,14 +6873,20 @@ function parity_loadEventRunData(PDO $pdo): array {
     elseif ($sessionScope === 'elim')  $sessionFilter = " AND r.round NOT LIKE 'Q%'";
 
     // Fetch runs
-    $params = array_merge([$raceLookup], $classIndices);
+    if ($useCategory) {
+        $params = [$raceLookup, $category];
+        $classFilter = "r.category = ?";
+    } else {
+        $params = array_merge([$raceLookup], $classIndices);
+        $classFilter = "r.class_index IN ($classPlaceholders)";
+    }
     $runStmt = $pdo->prepare("
         SELECT r.id, r.uuid, r.run_timestamp_utc, r.driver_name, r.class_index,
                r.round, r.lane, r.car_number, r.rt,
                r.ft60, r.ft330, r.ft660, r.mph660, r.ft1000, r.mph1000, r.ft1320, r.mph1320,
                COALESCE(r.dq_flag, 0) AS dq_flag
         FROM parity_runs r
-        WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
+        WHERE r.race_lookup = ? AND $classFilter
           AND COALESCE(r.dq_flag, 0) = 0 AND r.$dbCol IS NOT NULL AND r.$dbCol > 0
           $sessionFilter
         ORDER BY r.$dbCol $sortDir
@@ -7234,6 +7246,7 @@ function handleParityQualOrder(PDO $pdo): void {
 
 function handleRangeParityMatrix(PDO $pdo): void {
     $classIndex = trim($_GET['classIndex'] ?? '');
+    $category = trim($_GET['category'] ?? '');
     $metric = trim($_GET['metric'] ?? 'et_1320');
     $mode = trim($_GET['mode'] ?? 'raw');
     $topN = max(1, min(20, (int)($_GET['topN'] ?? 4)));
@@ -7242,7 +7255,7 @@ function handleRangeParityMatrix(PDO $pdo): void {
     $startDate = trim($_GET['startDate'] ?? '');
     $endDate = trim($_GET['endDate'] ?? '');
 
-    if ($classIndex === '') rsa_jsonResponse(['error' => 'classIndex is required'], 400);
+    if ($category === '' && $classIndex === '') rsa_jsonResponse(['error' => 'classIndex or category is required'], 400);
 
     $validMetrics = ['et_1320', 'mph_1320', 'rt', 't60', 't330', 't660', 'mph_660', 't1000', 'mph_1000'];
     if (!in_array($metric, $validMetrics)) {
@@ -7287,9 +7300,14 @@ function handleRangeParityMatrix(PDO $pdo): void {
         ]);
     }
 
-    // Expand class
-    $classIndices = parity_expandClassIndex($pdo, $classIndex);
-    $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    // Category filter takes priority over classIndex
+    $useCategory = ($category !== '');
+    $classIndices = [];
+    $classPlaceholders = '';
+    if (!$useCategory) {
+        $classIndices = parity_expandClassIndex($pdo, $classIndex);
+        $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    }
 
     // Load combo lookups (once, shared across events)
     $engineCombos = [];
@@ -7328,12 +7346,18 @@ function handleRangeParityMatrix(PDO $pdo): void {
         $raceLookup = $ev['race_lookup'];
         if (!$raceLookup) continue;
 
-        $params = array_merge([$raceLookup], $classIndices);
+        if ($useCategory) {
+            $params = [$raceLookup, $category];
+            $classFilter = "r.category = ?";
+        } else {
+            $params = array_merge([$raceLookup], $classIndices);
+            $classFilter = "r.class_index IN ($classPlaceholders)";
+        }
         $runStmt = $pdo->prepare("
             SELECT r.id, r.run_timestamp_utc, r.driver_name, r.class_index, r.$dbCol AS metric_val,
                    r.ft1320, r.mph1320, COALESCE(r.dq_flag, 0) AS dq_flag
             FROM parity_runs r
-            WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
+            WHERE r.race_lookup = ? AND $classFilter
               AND COALESCE(r.dq_flag, 0) = 0 AND r.$dbCol IS NOT NULL AND r.$dbCol > 0
               AND NOT EXISTS (SELECT 1 FROM parity_run_flags f WHERE f.run_id = r.id AND f.flag_type IN ('bad','exclude'))
               $sessionFilter
@@ -7441,12 +7465,13 @@ function handleRangeParityMatrix(PDO $pdo): void {
 function handleParityIncrementals(PDO $pdo): void {
     $eventId = (int)($_GET['eventId'] ?? 0);
     $classIndex = trim($_GET['classIndex'] ?? '');
+    $category = trim($_GET['category'] ?? '');
     $sessionScope = trim($_GET['sessionScope'] ?? 'both');
     $includeFlagged = (bool)($_GET['includeFlagged'] ?? false);
     $includeUnknown = (bool)($_GET['includeUnknown'] ?? false);
 
     if ($eventId <= 0) rsa_jsonResponse(['error' => 'eventId is required'], 400);
-    if ($classIndex === '') rsa_jsonResponse(['error' => 'classIndex is required'], 400);
+    if ($category === '' && $classIndex === '') rsa_jsonResponse(['error' => 'classIndex or category is required'], 400);
     if (!in_array($sessionScope, ['qual', 'elim', 'both'])) rsa_jsonResponse(['error' => 'sessionScope must be qual, elim, or both'], 400);
 
     // Load event
@@ -7460,8 +7485,13 @@ function handleParityIncrementals(PDO $pdo): void {
     $raceLookup = $event['race_lookup'];
     if (!$raceLookup) rsa_jsonResponse(['error' => 'Event has no race_lookup'], 400);
 
-    $classIndices = parity_expandClassIndex($pdo, $classIndex);
-    $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    $useCategory = ($category !== '');
+    $classIndices = [];
+    $classPlaceholders = '';
+    if (!$useCategory) {
+        $classIndices = parity_expandClassIndex($pdo, $classIndex);
+        $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    }
 
     // Load combo lookups
     $driverCombos = $pdo->query("
@@ -7480,13 +7510,19 @@ function handleParityIncrementals(PDO $pdo): void {
     elseif ($sessionScope === 'elim')  $sessionFilter = " AND r.round NOT LIKE 'Q%'";
 
     // Fetch ALL runs with incremental columns (no metric filter — we need all columns)
-    $params = array_merge([$raceLookup], $classIndices);
+    if ($useCategory) {
+        $params = [$raceLookup, $category];
+        $classFilter = "r.category = ?";
+    } else {
+        $params = array_merge([$raceLookup], $classIndices);
+        $classFilter = "r.class_index IN ($classPlaceholders)";
+    }
     $runStmt = $pdo->prepare("
         SELECT r.id, r.run_timestamp_utc, r.driver_name, r.class_index,
                r.round, r.ft60, r.ft330, r.ft660, r.mph660, r.ft1000, r.mph1000, r.ft1320, r.mph1320,
                COALESCE(r.dq_flag, 0) AS dq_flag
         FROM parity_runs r
-        WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
+        WHERE r.race_lookup = ? AND $classFilter
           AND COALESCE(r.dq_flag, 0) = 0
           $sessionFilter
     ");
@@ -7582,9 +7618,10 @@ function handleParityIncrementals(PDO $pdo): void {
 function handleParitySessionWeather(PDO $pdo): void {
     $eventId = (int)($_GET['eventId'] ?? 0);
     $classIndex = trim($_GET['classIndex'] ?? '');
+    $category = trim($_GET['category'] ?? '');
 
     if ($eventId <= 0) rsa_jsonResponse(['error' => 'eventId is required'], 400);
-    if ($classIndex === '') rsa_jsonResponse(['error' => 'classIndex is required'], 400);
+    if ($category === '' && $classIndex === '') rsa_jsonResponse(['error' => 'classIndex or category is required'], 400);
 
     // Load event + track timezone
     $evStmt = $pdo->prepare("
@@ -7600,17 +7637,24 @@ function handleParitySessionWeather(PDO $pdo): void {
     if (!$raceLookup) rsa_jsonResponse(['error' => 'Event has no race_lookup'], 400);
     $trackTz = $event['timezone_iana'] ?? 'America/New_York';
 
-    $classIndices = parity_expandClassIndex($pdo, $classIndex);
-    $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+    $useCategory = ($category !== '');
+    if ($useCategory) {
+        $params = [$raceLookup, $category];
+        $classFilter = "r.category = ?";
+    } else {
+        $classIndices = parity_expandClassIndex($pdo, $classIndex);
+        $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
+        $params = array_merge([$raceLookup], $classIndices);
+        $classFilter = "r.class_index IN ($classPlaceholders)";
+    }
 
     // Fetch runs with timestamps, rounds, and local time.
     // Exclude orphan runs (missing run_time_local) from confidence denominators
     // — these have unverified UTC timestamps and would poison weather matching.
-    $params = array_merge([$raceLookup], $classIndices);
     $runStmt = $pdo->prepare("
         SELECT r.run_timestamp_utc, r.run_time_local, r.round
         FROM parity_runs r
-        WHERE r.race_lookup = ? AND r.class_index IN ($classPlaceholders)
+        WHERE r.race_lookup = ? AND $classFilter
           AND COALESCE(r.dq_flag, 0) = 0
           AND r.run_timestamp_utc IS NOT NULL
           AND r.run_time_local IS NOT NULL

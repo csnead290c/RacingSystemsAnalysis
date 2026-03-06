@@ -2109,7 +2109,8 @@ export const parityApi = {
 
   async paritySummary(params: {
     eventId: number;
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
     metric?: string;
     mode?: 'raw' | 'corrected';
     topN?: number;
@@ -2120,7 +2121,8 @@ export const parityApi = {
     const qs = new URLSearchParams();
     qs.set('action', 'paritySummary');
     qs.set('eventId', String(params.eventId));
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.topN) qs.set('topN', String(params.topN));
@@ -2132,7 +2134,8 @@ export const parityApi = {
 
   async parityDeltas(params: {
     eventId: number;
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
     metric?: string;
     mode?: 'raw' | 'corrected';
     topN?: number;
@@ -2142,7 +2145,8 @@ export const parityApi = {
     const qs = new URLSearchParams();
     qs.set('action', 'parityDeltas');
     qs.set('eventId', String(params.eventId));
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.topN) qs.set('topN', String(params.topN));
@@ -2153,7 +2157,8 @@ export const parityApi = {
 
   async parityAllRuns(params: {
     eventId: number;
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
     metric?: string;
     mode?: 'raw' | 'corrected';
     sessionScope?: 'qual' | 'elim' | 'both';
@@ -2164,7 +2169,8 @@ export const parityApi = {
     const qs = new URLSearchParams();
     qs.set('action', 'parityAllRuns');
     qs.set('eventId', String(params.eventId));
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
@@ -2176,7 +2182,8 @@ export const parityApi = {
 
   async parityQualOrder(params: {
     eventId: number;
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
     metric?: string;
     mode?: 'raw' | 'corrected';
     sessionScope?: 'qual' | 'elim' | 'both';
@@ -2184,7 +2191,8 @@ export const parityApi = {
     const qs = new URLSearchParams();
     qs.set('action', 'parityQualOrder');
     qs.set('eventId', String(params.eventId));
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
@@ -2193,7 +2201,8 @@ export const parityApi = {
 
   async parityIncrementals(params: {
     eventId: number;
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
     sessionScope?: 'qual' | 'elim' | 'both';
     includeFlagged?: boolean;
     includeUnknown?: boolean;
@@ -2201,7 +2210,8 @@ export const parityApi = {
     const qs = new URLSearchParams();
     qs.set('action', 'parityIncrementals');
     qs.set('eventId', String(params.eventId));
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
     if (params.includeFlagged) qs.set('includeFlagged', '1');
     if (params.includeUnknown) qs.set('includeUnknown', '1');
@@ -2210,17 +2220,20 @@ export const parityApi = {
 
   async paritySessionWeather(params: {
     eventId: number;
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
   }): Promise<ParitySessionWeatherResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'paritySessionWeather');
     qs.set('eventId', String(params.eventId));
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     return parityRequest<ParitySessionWeatherResponse>(`/parity.php?${qs.toString()}`);
   },
 
   async rangeParityMatrix(params: {
-    classIndex: string;
+    classIndex?: string;
+    category?: string;
     metric?: string;
     mode?: 'raw' | 'corrected';
     topN?: number;
@@ -2231,7 +2244,8 @@ export const parityApi = {
   }): Promise<RangeParityMatrixResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'rangeParityMatrix');
-    qs.set('classIndex', params.classIndex);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.topN) qs.set('topN', String(params.topN));

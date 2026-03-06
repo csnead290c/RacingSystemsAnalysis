@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   parityApi,
   type ParitySummaryResponse,
@@ -11,8 +11,6 @@ import {
   type EngineComboRow,
 } from '../services/parityApi';
 import { useCapabilities } from '../domain/config/useCapabilities';
-import { resolveClassIndex } from '../domain/parity/useClassPreset';
-import type { EventCategory } from '../services/parityApi';
 import IncidentDrawer from './IncidentDrawer';
 import IncidentCell from '../shared/components/IncidentCell';
 import {
@@ -107,42 +105,20 @@ const SS = {
 
 type Mode = 'event' | 'longTerm';
 
-export default function ParityReport({ event, classIndex: classIndexProp, category, onClassChange }: {
+export default function ParityReport({ event, classIndex, category, onClassChange }: {
   event: EventWithStats | null;
   classIndex: string;
   category?: string;
   onClassChange?: (cls: string) => void;
 }) {
-  void onClassChange; // future-proofing hook — class changes propagate via the category preset
-  const displayLabel = category || classIndexProp;
+  void onClassChange; // future-proofing hook
+  void classIndex; // kept for backward compat but category is the primary filter
+  const displayLabel = category || classIndex;
   const [mode, setMode] = useState<Mode>('event');
   const sessionScope = 'both' as const;
   const [corrMode, setCorrMode] = useState<'raw' | 'corrected'>('raw');
   const metric = 'et_1320';
   const [overrideEv, setOverrideEv] = useState<number | null>(null);
-
-  // Fetch live eventCategories to resolve classIndex from actual DB data
-  const [eventCats, setEventCats] = useState<EventCategory[]>([]);
-  useEffect(() => {
-    const evId = overrideEv || event?.id;
-    if (!evId) { setEventCats([]); return; }
-    let cancelled = false;
-    parityApi.eventCategories(evId).then(res => {
-      if (!cancelled) setEventCats(res.categories);
-    }).catch(() => { if (!cancelled) setEventCats([]); });
-    return () => { cancelled = true; };
-  }, [event?.id, overrideEv]);
-
-  // Resolve classIndex: try live eventCategories first, then hardcoded map, then prop fallback
-  const resolvedClassIndex = useMemo(() => {
-    if (category) {
-      const resolved = resolveClassIndex(category, eventCats);
-      if (resolved) return resolved;
-    }
-    return classIndexProp;
-  }, [category, eventCats, classIndexProp]);
-
-  const mappingFailed = category ? resolvedClassIndex === classIndexProp && resolveClassIndex(category) === null && eventCats.length > 0 : false;
 
   return (
     <div style={S.page}>
@@ -152,19 +128,17 @@ export default function ParityReport({ event, classIndex: classIndexProp, catego
         <button style={mode === 'longTerm' ? S.tabA : S.tabI} onClick={() => setMode('longTerm')}>Long-Term Parity</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-muted)' }}>Category: {displayLabel}</span>
-          <span style={{ fontSize: '0.62rem', color: '#888' }}>→ class: {resolvedClassIndex}</span>
           <label style={{ fontSize: '0.72rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
         </div>
       </div>
-      {mappingFailed && (
+      {!category && (
         <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '0.5rem 0.75rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#92400e' }}>
-          ⚠ No class mapping found for category "{category}". Parity report needs a classIndex match from eventCategories.
-          Available: {eventCats.map(ec => `${ec.category} → ${ec.class_index}`).join(', ')}
+          ⚠ No category selected. Please select a category from the dropdown above.
         </div>
       )}
       {mode === 'event'
-        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} classIndex={resolvedClassIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
-        : <LongTermReport classIndex={resolvedClassIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
+        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} category={category || classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
+        : <LongTermReport category={category || classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
       }
     </div>
   );
@@ -174,8 +148,8 @@ export default function ParityReport({ event, classIndex: classIndexProp, catego
 // EVENT PARITY REPORT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EventReport({ event, classIndex, displayLabel, metric, corrMode, sessionScope }: {
-  event: EventWithStats | null; classIndex: string; displayLabel: string; metric: string;
+function EventReport({ event, category, displayLabel, metric, corrMode, sessionScope }: {
+  event: EventWithStats | null; category: string; displayLabel: string; metric: string;
   corrMode: 'raw' | 'corrected'; sessionScope: 'qual' | 'elim' | 'both';
 }) {
   const topN = 4;
@@ -189,16 +163,16 @@ function EventReport({ event, classIndex, displayLabel, metric, corrMode, sessio
   const load = useCallback(() => {
     if (!event) return;
     setLoading(true); setErr('');
-    const b = { eventId: event.id, classIndex, metric, mode: corrMode, topN, sessionScope };
+    const b = { eventId: event.id, category, metric, mode: corrMode, topN, sessionScope };
     Promise.all([
       cf(ck('sum', b), () => parityApi.paritySummary(b)),
-      cf(ck('qo', { eventId: event.id, classIndex, metric, mode: corrMode, sessionScope }), () => parityApi.parityQualOrder({ eventId: event.id, classIndex, metric, mode: corrMode, sessionScope })),
-      cf(ck('inc', { eventId: event.id, classIndex, sessionScope }), () => parityApi.parityIncrementals({ eventId: event.id, classIndex, sessionScope })),
-      cf(ck('wx', { eventId: event.id, classIndex }), () => parityApi.paritySessionWeather({ eventId: event.id, classIndex })),
+      cf(ck('qo', { eventId: event.id, category, metric, mode: corrMode, sessionScope }), () => parityApi.parityQualOrder({ eventId: event.id, category, metric, mode: corrMode, sessionScope })),
+      cf(ck('inc', { eventId: event.id, category, sessionScope }), () => parityApi.parityIncrementals({ eventId: event.id, category, sessionScope })),
+      cf(ck('wx', { eventId: event.id, category }), () => parityApi.paritySessionWeather({ eventId: event.id, category })),
     ]).then(([s, q, i, w]) => { setSummary(s); setQualOrder(q); setInc(i); setWx(w); })
       .catch(e => setErr(e instanceof Error ? e.message : 'Failed'))
       .finally(() => setLoading(false));
-  }, [event?.id, classIndex, metric, corrMode, sessionScope]);
+  }, [event?.id, category, metric, corrMode, sessionScope]);
   useEffect(() => { load(); }, [load]);
 
   if (!event) return <div style={S.card}><p style={S.hint}>Select an event above.</p></div>;
@@ -337,7 +311,7 @@ function EventReport({ event, classIndex, displayLabel, metric, corrMode, sessio
       {/* ── Section 6: Qualifying Order (full width) ── */}
       <div data-testid="parity-qual-results" style={{ marginBottom: '0.6rem' }}>
         <div style={SS.secHead}>Raw Qualifying Results</div>
-        {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={classIndex} onComboChanged={load} /> : <p style={S.hint}>Loading...</p>}
+        {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={qualOrder.classIndex} onComboChanged={load} /> : <p style={S.hint}>Loading...</p>}
       </div>
 
       {/* ── Footer (print only — hidden on screen) ── */}
@@ -592,8 +566,8 @@ function WeatherTable({ data }: { data: ParitySessionWeatherResponse }) {
 
 type RangeMode = 'previousN' | 'season' | 'custom';
 
-function LongTermReport({ classIndex, displayLabel, metric, corrMode, sessionScope, onEventClick }: {
-  classIndex: string; displayLabel: string; metric: string; corrMode: 'raw' | 'corrected';
+function LongTermReport({ category, displayLabel, metric, corrMode, sessionScope, onEventClick }: {
+  category: string; displayLabel: string; metric: string; corrMode: 'raw' | 'corrected';
   sessionScope: 'qual' | 'elim' | 'both'; onEventClick: (id: number) => void;
 }) {
   const topN = 4;
@@ -609,12 +583,12 @@ function LongTermReport({ classIndex, displayLabel, metric, corrMode, sessionSco
   const load = useCallback(() => {
     setLoading(true); setErr('');
     if (rangeMode === 'previousN') {
-      // Fetch multiple years to find last N events this class competed at
+      // Fetch multiple years to find last N events this category competed at
       const curYear = new Date().getFullYear();
       const yearsToFetch = Array.from({ length: 5 }, (_, i) => curYear - i);
       Promise.allSettled(yearsToFetch.map(y =>
-        cf(ck('range', { classIndex, metric, mode: corrMode, topN, sessionScope, year: y }),
-          () => parityApi.rangeParityMatrix({ classIndex, metric, mode: corrMode, topN, sessionScope, year: y }))
+        cf(ck('range', { category, metric, mode: corrMode, topN, sessionScope, year: y }),
+          () => parityApi.rangeParityMatrix({ category, metric, mode: corrMode, topN, sessionScope, year: y }))
       )).then(settled => {
         const results = settled
           .filter((r): r is PromiseFulfilledResult<RangeParityMatrixResponse> => r.status === 'fulfilled')
@@ -650,7 +624,7 @@ function LongTermReport({ classIndex, displayLabel, metric, corrMode, sessionSco
       }).catch(e => setErr(e instanceof Error ? e.message : 'Failed'))
         .finally(() => setLoading(false));
     } else {
-      let params: any = { classIndex, metric, mode: corrMode, topN, sessionScope };
+      let params: any = { category, metric, mode: corrMode, topN, sessionScope };
       if (rangeMode === 'season') {
         params.year = year;
       } else {
@@ -661,7 +635,7 @@ function LongTermReport({ classIndex, displayLabel, metric, corrMode, sessionSco
         .catch(e => setErr(e instanceof Error ? e.message : 'Failed'))
         .finally(() => setLoading(false));
     }
-  }, [classIndex, metric, corrMode, sessionScope, rangeMode, year, startDate, endDate, prevN]);
+  }, [category, metric, corrMode, sessionScope, rangeMode, year, startDate, endDate, prevN]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -805,9 +805,9 @@ describe('Hotfix2: ParityReport category prop + display', () => {
     expect(parityReportSource).not.toContain('NHRA {classIndex} {modeLabel} Long Term Parity');
   });
 
-  it('still uses classIndex for backend API calls (not category)', () => {
-    // paritySummary, parityQualOrder, parityIncrementals, paritySessionWeather all use classIndex
-    expect(parityReportSource).toContain('classIndex, metric');
+  it('uses category for backend API calls (not classIndex)', () => {
+    // paritySummary, parityQualOrder, parityIncrementals, paritySessionWeather all use category
+    expect(parityReportSource).toContain('category, metric');
     expect(parityReportSource).toContain('parityApi.paritySummary');
     expect(parityReportSource).toContain('parityApi.parityIncrementals');
   });
@@ -816,11 +816,10 @@ describe('Hotfix2: ParityReport category prop + display', () => {
     expect(portalSource).toContain('ParityReport event={selectedEvent} classIndex={classIndex} category={category}');
   });
 
-  it('ParityReport imports resolveClassIndex but does not call useCategoryPreset hook directly', () => {
-    expect(parityReportSource).toContain('resolveClassIndex');
-    // Should not call the hook useCategoryPreset() — that's the portal's job
-    expect(parityReportSource).not.toContain('useCategoryPreset()');
+  it('ParityReport does not import resolveClassIndex or useCategoryPreset (filters by category directly)', () => {
+    // ParityReport now sends category to backend — no classIndex mapping needed
     expect(parityReportSource).not.toContain('useCategoryPreset(');
+    expect(parityReportSource).not.toContain('import { resolveClassIndex }');
   });
 });
 
@@ -1134,35 +1133,26 @@ describe('Fix: resolveClassIndex with eventCategories list', () => {
   });
 });
 
-describe('Fix: ParityReport uses eventCategories lookup (not hardcoded)', () => {
-  it('imports resolveClassIndex from useClassPreset', () => {
-    expect(parityReportSource).toContain("import { resolveClassIndex }");
+describe('Fix: ParityReport filters by category directly (not classIndex)', () => {
+  it('sends category to EventReport and LongTermReport', () => {
+    expect(parityReportSource).toContain('category={category || classIndex}');
   });
 
-  it('imports EventCategory type', () => {
-    expect(parityReportSource).toContain("type { EventCategory }");
+  it('EventReport sends category to paritySummary', () => {
+    expect(parityReportSource).toContain('eventId: event.id, category, metric');
   });
 
-  it('fetches eventCategories from the API', () => {
-    expect(parityReportSource).toContain('parityApi.eventCategories(');
-    expect(parityReportSource).toContain('setEventCats');
+  it('does not import resolveClassIndex or EventCategory', () => {
+    expect(parityReportSource).not.toContain('import { resolveClassIndex }');
+    expect(parityReportSource).not.toContain("type { EventCategory }");
   });
 
-  it('resolves classIndex using resolveClassIndex with eventCats', () => {
-    expect(parityReportSource).toContain('resolveClassIndex(category, eventCats)');
+  it('does not fetch eventCategories (no longer needed)', () => {
+    expect(parityReportSource).not.toContain('parityApi.eventCategories(');
   });
 
-  it('passes resolvedClassIndex to EventReport and LongTermReport', () => {
-    expect(parityReportSource).toContain('classIndex={resolvedClassIndex}');
-  });
-
-  it('shows warning banner when mapping fails', () => {
-    expect(parityReportSource).toContain('mappingFailed');
-    expect(parityReportSource).toContain('No class mapping found for category');
-  });
-
-  it('shows resolved classIndex in the header', () => {
-    expect(parityReportSource).toContain('class: {resolvedClassIndex}');
+  it('shows warning when no category is selected', () => {
+    expect(parityReportSource).toContain('No category selected');
   });
 });
 
