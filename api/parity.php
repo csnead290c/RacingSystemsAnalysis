@@ -523,16 +523,10 @@ function handleIngest(PDO $pdo, int $userId): void {
         $trackTz = $tzRow['timezone_iana'];
     }
 
-    // Prepare statements
-    // NOTE: parity_runs_raw INSERT removed in v7 optimization — raw JSON was redundant
-    // Dedup handled by parity_runs unique index uk_pr_race_hash(race_lookup, row_hash)
-    $stmtRun = $pdo->prepare("
-        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-
+    // Upsert each run: INSERT new rows or merge-update partial rows
     $rowsInserted = 0;
-    $rowsDeduped = 0;
+    $rowsUpdated = 0;
+    $rowsSkipped = 0;
 
     foreach ($rows as $raw) {
         $normalized = parity_normalizeRow($raw, $raceLookup);
@@ -543,45 +537,10 @@ function handleIngest(PDO $pdo, int $userId): void {
         $localTime = $normalized['run_timestamp_utc']; // This is actually local time
         $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
 
-        // Insert normalized row (skip if duplicate race_lookup + row_hash)
-        try {
-            $stmtRun->execute([
-                parity_generateUUID(),
-                $importId,
-                $raceLookup,
-                $utcTime,
-                $localTime,
-                $normalized['category'],
-                $normalized['class_index'],
-                $normalized['round'],
-                $normalized['lane'],
-                $normalized['driver_name'],
-                $normalized['car_number'],
-                $normalized['dial_in'],
-                $normalized['rt'],
-                $normalized['ft60'],
-                $normalized['ft330'],
-                $normalized['ft660'],
-                $normalized['mph660'],
-                $normalized['ft1000'],
-                $normalized['mph1000'],
-                $normalized['ft1320'],
-                $normalized['mph1320'],
-                $normalized['win_flag'],
-                $normalized['dq_flag'],
-                $normalized['mov'],
-                $normalized['place'],
-                $normalized['source_ref'],
-                $rowHash,
-            ]);
-            $rowsInserted++;
-        } catch (PDOException $e) {
-            if (strpos($e->getMessage(), 'Duplicate') !== false) {
-                $rowsDeduped++;
-            } else {
-                throw $e;
-            }
-        }
+        $result = parity_upsertRun($pdo, $normalized, $rowHash, $importId, $raceLookup, $utcTime, $localTime);
+        if ($result === 'inserted') $rowsInserted++;
+        elseif ($result === 'updated') $rowsUpdated++;
+        else $rowsSkipped++;
     }
 
     // Update import row_count to reflect actual inserts
@@ -611,7 +570,9 @@ function handleIngest(PDO $pdo, int $userId): void {
         'importId' => $importUuid,
         'rowsFetched' => count($rows),
         'rowsInserted' => $rowsInserted,
-        'rowsDeduped' => $rowsDeduped,
+        'rowsUpdated' => $rowsUpdated,
+        'rowsSkipped' => $rowsSkipped,
+        'rowsDeduped' => $rowsUpdated + $rowsSkipped,
     ], $stats));
 }
 
@@ -634,8 +595,11 @@ function handleQueryRuns(PDO $pdo): void {
         $where[] = 'NOT EXISTS (SELECT 1 FROM parity_run_flags f WHERE f.run_id = r.id AND f.flag_type IN ("bad","exclude"))';
     }
 
-    // Optional filters (expand class aliases)
-    if (!empty($_GET['classIndex'])) {
+    // Optional filters: category (preferred) or classIndex (legacy)
+    if (!empty($_GET['category'])) {
+        $where[] = 'r.category = ?';
+        $params[] = trim($_GET['category']);
+    } elseif (!empty($_GET['classIndex'])) {
         $expanded = parity_expandClassIndex($pdo, trim($_GET['classIndex']));
         $ph = implode(',', array_fill(0, count($expanded), '?'));
         $where[] = "r.class_index IN ($ph)";
@@ -1302,42 +1266,26 @@ function handleIngestMany(PDO $pdo, int $userId, array $auth): void {
             $trackTz = $tzRow['timezone_iana'];
         }
 
-        $stmtRun = $pdo->prepare("
-            INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-
         $inserted = 0;
-        $deduped = 0;
+        $updated = 0;
+        $skipped = 0;
         foreach ($rows as $raw) {
             $normalized = parity_normalizeRow($raw, $raceLookup);
             $rowHash = parity_computeRowHash($raceLookup, $normalized, $raw);
-            // normalizer returns local wall-clock time in 'run_timestamp_utc' (legacy key name).
-            // Store local in run_time_local; compute true UTC for weather joins.
             $localTime = $normalized['run_timestamp_utc'];
             $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
-            try {
-                $stmtRun->execute([
-                    parity_generateUUID(), $importId, $raceLookup,
-                    $utcTime, $localTime,
-                    $normalized['category'], $normalized['class_index'],
-                    $normalized['round'], $normalized['lane'], $normalized['driver_name'],
-                    $normalized['car_number'], $normalized['dial_in'], $normalized['rt'],
-                    $normalized['ft60'], $normalized['ft330'], $normalized['ft660'], $normalized['mph660'],
-                    $normalized['ft1000'], $normalized['mph1000'], $normalized['ft1320'], $normalized['mph1320'],
-                    $normalized['win_flag'], $normalized['dq_flag'], $normalized['mov'],
-                    $normalized['place'], $normalized['source_ref'], $rowHash,
-                ]);
-                $inserted++;
-            } catch (PDOException $e) {
-                if (strpos($e->getMessage(), 'Duplicate') !== false) { $deduped++; } else { throw $e; }
-            }
+            $res = parity_upsertRun($pdo, $normalized, $rowHash, $importId, $raceLookup, $utcTime, $localTime);
+            if ($res === 'inserted') $inserted++;
+            elseif ($res === 'updated') $updated++;
+            else $skipped++;
         }
 
         $pdo->prepare("UPDATE parity_run_imports SET row_count = ? WHERE id = ?")->execute([$inserted, $importId]);
 
         $entry['rowsInserted'] = $inserted;
-        $entry['rowsDeduped'] = $deduped;
+        $entry['rowsUpdated'] = $updated;
+        $entry['rowsSkipped'] = $skipped;
+        $entry['rowsDeduped'] = $updated + $skipped;
         $entry['status'] = 'success';
         $results[] = $entry;
 
@@ -1793,7 +1741,11 @@ function handleRunsWithWeather(PDO $pdo): void {
     $where = ['r.race_lookup = ?'];
     $params = [$raceLookup];
 
-    if (!empty($_GET['classIndex'])) {
+    // Category filter (human-readable, preferred) or classIndex (legacy)
+    if (!empty($_GET['category'])) {
+        $where[] = 'r.category = ?';
+        $params[] = trim($_GET['category']);
+    } elseif (!empty($_GET['classIndex'])) {
         $expandedRW = parity_expandClassIndex($pdo, trim($_GET['classIndex']));
         $phRW = implode(',', array_fill(0, count($expandedRW), '?'));
         $where[] = "r.class_index IN ($phRW)";
@@ -2600,7 +2552,7 @@ function handleRefreshEventData(PDO $pdo, int $userId, array $auth): void {
     $endUtc = $endDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
 
     // ── Step 1: Timing data ingest ──────────────────────────────────────
-    $timingResult = ['fetched' => 0, 'inserted' => 0, 'deduped' => 0, 'errors' => []];
+    $timingResult = ['fetched' => 0, 'inserted' => 0, 'updated' => 0, 'skipped' => 0, 'deduped' => 0, 'errors' => []];
     $raceLookup = $event['race_lookup'] ?? '';
 
     if (!empty($raceLookup) && preg_match('/^\d{8}$/', $raceLookup)) {
@@ -2623,10 +2575,6 @@ function handleRefreshEventData(PDO $pdo, int $userId, array $auth): void {
 
                 // Resolve track timezone for local→UTC conversion
                 $trackTz = $tz;
-                $stmtRun = $pdo->prepare("
-                    INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ");
 
                 foreach ($rows as $raw) {
                     $normalized = parity_normalizeRow($raw, $raceLookup);
@@ -2634,26 +2582,16 @@ function handleRefreshEventData(PDO $pdo, int $userId, array $auth): void {
                     $localTime = $normalized['run_timestamp_utc'];
                     $utcTime = ($localTime !== null) ? parity_localToUtc($localTime, $trackTz) : null;
                     try {
-                        $stmtRun->execute([
-                            parity_generateUUID(), $importId, $raceLookup,
-                            $utcTime, $localTime,
-                            $normalized['category'], $normalized['class_index'],
-                            $normalized['round'], $normalized['lane'], $normalized['driver_name'], $normalized['car_number'],
-                            $normalized['dial_in'], $normalized['rt'], $normalized['ft60'], $normalized['ft330'],
-                            $normalized['ft660'], $normalized['mph660'], $normalized['ft1000'], $normalized['mph1000'],
-                            $normalized['ft1320'], $normalized['mph1320'], $normalized['win_flag'], $normalized['dq_flag'],
-                            $normalized['mov'], $normalized['place'], $normalized['source_ref'], $rowHash,
-                        ]);
-                        $timingResult['inserted']++;
-                    } catch (PDOException $e) {
-                        if (strpos($e->getMessage(), 'Duplicate') !== false) {
-                            $timingResult['deduped']++;
-                        } else {
-                            $timingResult['errors'][] = $e->getMessage();
-                        }
+                        $res = parity_upsertRun($pdo, $normalized, $rowHash, $importId, $raceLookup, $utcTime, $localTime);
+                        if ($res === 'inserted') $timingResult['inserted']++;
+                        elseif ($res === 'updated') $timingResult['updated']++;
+                        else $timingResult['skipped']++;
+                    } catch (Exception $e) {
+                        $timingResult['errors'][] = $e->getMessage();
                     }
                 }
 
+                $timingResult['deduped'] = $timingResult['updated'] + $timingResult['skipped'];
                 $pdo->prepare("UPDATE parity_run_imports SET row_count = ? WHERE id = ?")->execute([$timingResult['inserted'], $importId]);
             }
         } catch (Exception $e) {

@@ -73,7 +73,7 @@ import { formatLocalTimeLabel, formatLocalDateTime } from '../domain/parity/form
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
-import { useClassPreset } from '../domain/parity/useClassPreset';
+import { useCategoryPreset, CLASS_TO_CATEGORY } from '../domain/parity/useClassPreset';
 import IncidentDrawer from './IncidentDrawer';
 import IncidentCell from '../shared/components/IncidentCell';
 import { useAutoRefresh, isEventOngoing } from '../domain/parity/useAutoRefresh';
@@ -237,8 +237,8 @@ type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash
   | 'weatherCorrection' | 'backfillWeather' | 'weatherHealth' | 'importStationCsv'
   | 'trackCoords' | 'batchBackfill' | 'timeDiagnostics';
 
-// Recommended classes shown at the top of the class/category selector
-const RECOMMENDED_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'] as const;
+// Recommended categories shown at the top of the category selector (human-readable names)
+const RECOMMENDED_CATEGORIES = ['Top Fuel', 'Funny Car', 'Pro Stock', 'Pro Stock Motorcycle', 'Pro Mod', 'Top Alcohol Dragster', 'Top Alcohol Funny Car'] as const;
 
 const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'eventRuns', label: 'Event Runs' },
@@ -367,7 +367,7 @@ export default function ParityPortal() {
   const [showAdminTools, setShowAdminTools] = useState(false);
   const [raceLookup, setRaceLookup] = useState('');
   const [driverHistoryFilter, setDriverHistoryFilter] = useState<{ driver?: string; classIndex?: string } | null>(null);
-  const [classIndex, setClassIndex] = useClassPreset();
+  const [category, setCategory, classIndex] = useCategoryPreset();
 
   // Event picker state (shared across tabs)
   const [events, setEvents] = useState<EventWithStats[]>([]);
@@ -466,12 +466,12 @@ export default function ParityPortal() {
     eventIsOngoing && !showAdminTools,
   );
 
-  // Build "All Categories" list from event data (unique class_index values not in RECOMMENDED)
-  const allEventClasses = useMemo(() => {
-    const recommended = new Set<string>(RECOMMENDED_CLASSES as unknown as string[]);
+  // Build "All Categories" list from event data (unique category names not in RECOMMENDED)
+  const allEventCategories = useMemo(() => {
+    const recommended = new Set<string>(RECOMMENDED_CATEGORIES as unknown as string[]);
     const extra = eventCategories
-      .map(c => c.class_index)
-      .filter(ci => ci && !recommended.has(ci));
+      .map(c => c.category || c.class_index)
+      .filter(cat => cat && !recommended.has(cat));
     return [...new Set(extra)].sort();
   }, [eventCategories]);
 
@@ -532,14 +532,14 @@ export default function ParityPortal() {
             </option>
           ))}
         </select>
-        <select style={{ ...S.input, width: 90, fontSize: '0.8rem' }} value={classIndex}
-          onChange={e => setClassIndex(e.target.value)}>
+        <select style={{ ...S.input, width: 140, fontSize: '0.8rem' }} value={category}
+          onChange={e => setCategory(e.target.value)}>
           <optgroup label="Recommended">
-            {RECOMMENDED_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            {RECOMMENDED_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </optgroup>
-          {allEventClasses.length > 0 && (
+          {allEventCategories.length > 0 && (
             <optgroup label="All Categories">
-              {allEventClasses.map(c => <option key={c} value={c}>{c}</option>)}
+              {allEventCategories.map((c: string) => <option key={c} value={c}>{c}</option>)}
             </optgroup>
           )}
         </select>
@@ -611,13 +611,13 @@ export default function ParityPortal() {
       </div>
 
       {/* ── Dashboard Panels ── */}
-      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey} />}
-      {tab === 'liveTiming' && <LiveTimingPanel event={selectedEvent} classIndex={classIndex} refreshKey={refreshKey} />}
+      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} category={category} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey} />}
+      {tab === 'liveTiming' && <LiveTimingPanel event={selectedEvent} refreshKey={refreshKey} />}
       {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
-      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} onClassChange={setClassIndex} />}
+      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} />}
 
       {/* ── Admin Panels ── */}
       {tab === 'adminTracks' && <AdminTracksPanel />}
@@ -698,7 +698,8 @@ function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
   return (r as any)[key] ?? null;
 }
 
-function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, refreshKey = 0 }: { event: EventWithStats | null; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void; refreshKey?: number }) {
+function EventRunsPanel({ event, category: globalCategory, classIndex: _globalClassIndex, onDriverClick, refreshKey = 0 }: { event: EventWithStats | null; category?: string; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void; refreshKey?: number }) {
+  void _globalClassIndex; // kept for backward-compat prop interface
   const { can: canCap } = useCapabilities();
   const canReadIncidents = canCap('incidents.read' as any);
   const canCreateIncidents = canCap('incidents.create' as any);
@@ -716,8 +717,8 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, re
     setRuns(prev => prev.map(r => r.id === runId ? { ...r, incident_count: newCount } as RunWithWeather : r));
   }, []);
 
-  // Filters — classFilter mirrors global class preset
-  const classFilter = globalClassIndex;
+  // Filters — categoryFilter mirrors global category preset
+  const categoryFilter = globalCategory || '';
   const [roundFilter, setRoundFilter] = useState('');
   const [laneFilter, setLaneFilter] = useState('');
   const [driverSearch, setDriverSearch] = useState('');
@@ -760,7 +761,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, re
     try {
       const res = await parityApi.runsWithWeather({
         raceLookup: event.race_lookup,
-        classIndex: classFilter || undefined,
+        category: categoryFilter || undefined,
         round: roundFilter || undefined,
         lane: laneFilter || undefined,
         limit: 5000,
@@ -770,7 +771,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, re
       setJoinedCount(res.joinedCount);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
-  }, [event?.race_lookup, classFilter, roundFilter, laneFilter]);
+  }, [event?.race_lookup, categoryFilter, roundFilter, laneFilter]);
 
   const loadFlags = useCallback(async () => {
     if (!event?.race_lookup) return;
@@ -958,7 +959,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, re
 
       {/* ── Filters Row ── */}
       <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-muted)' }}>Class: {classFilter}</span>
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-muted)' }}>Category: {categoryFilter}</span>
 
         <span style={{ borderLeft: '1px solid var(--color-border)', height: 16, margin: '0 0.25rem' }} />
 
@@ -986,13 +987,13 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, re
       {loading && <div style={S.hint}>Loading runs with weather...</div>}
 
       {!loading && sortedRuns.length === 0 && (
-        <div style={S.hint}>No runs found{classFilter ? ` for class ${classFilter}` : ''}.</div>
+        <div style={S.hint}>No runs found{categoryFilter ? ` for ${categoryFilter}` : ''}.</div>
       )}
 
       {/* ── Summary stats ── */}
       {!loading && sortedRuns.length > 0 && (
         <div style={{ marginBottom: '0.35rem', color: 'var(--color-muted)', fontSize: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <span>{sortedRuns.length} of {total} runs{classFilter ? ` (${classFilter})` : ''}</span>
+          <span>{sortedRuns.length} of {total} runs{categoryFilter ? ` (${categoryFilter})` : ''}</span>
           <span style={{ color: joinedCount > 0 ? '#2563eb' : '#6b7280' }}>
             {joinedCount} with weather ({total > 0 ? Math.round(joinedCount / total * 100) : 0}%)
           </span>
@@ -1080,7 +1081,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, re
 
       {/* ── Incrementals View ── */}
       {sortedRuns.length > 0 && showIncrementals && (
-        <IncrementalDrilldown runs={sortedRuns} flaggedRunIds={flaggedRunIds} classFilter={classFilter} total={total} onDriverClick={onDriverClick} />
+        <IncrementalDrilldown runs={sortedRuns} flaggedRunIds={flaggedRunIds} classFilter={categoryFilter} total={total} onDriverClick={onDriverClick} />
       )}
 
       {/* ── Incident Drawer ── */}
@@ -6527,12 +6528,13 @@ const LIVE_TIMING_COLUMNS: ColDef[] = [
   { key: 'wx_press', label: 'Press inHg', sortKey: 'wx_press', group: 'weather', defaultOn: true, format: r => r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', align: 'right' },
 ];
 
-function LiveTimingPanel({ event, classIndex, refreshKey = 0 }: { event: EventWithStats | null; classIndex: string; refreshKey?: number }) {
+function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | null; refreshKey?: number }) {
   const [runs, setRuns] = useState<RunWithWeather[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [driverSearch, setDriverSearch] = useState('');
+  const [localCategory, setLocalCategory] = useState('');  // local-only category filter
   const [showColPicker, setShowColPicker] = useState(false);
 
   const LT_COL_LS_KEY = 'parity_liveTimingCols';
@@ -6551,13 +6553,13 @@ function LiveTimingPanel({ event, classIndex, refreshKey = 0 }: { event: EventWi
     localStorage.setItem(LT_COL_LS_KEY, JSON.stringify([...visibleCols]));
   }, [visibleCols]);
 
+  // Live Timing fetches ALL runs for the event (no global class filter)
   const loadRuns = useCallback(async () => {
     if (!event?.race_lookup) return;
     setLoading(true); setError('');
     try {
       const res = await parityApi.runsWithWeather({
         raceLookup: event.race_lookup,
-        classIndex: classIndex || undefined,
         limit: 2000,
       });
       // Sort newest-to-oldest by local time
@@ -6570,15 +6572,30 @@ function LiveTimingPanel({ event, classIndex, refreshKey = 0 }: { event: EventWi
       setTotal(res.total);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
-  }, [event?.race_lookup, classIndex]);
+  }, [event?.race_lookup]);
 
   useEffect(() => { loadRuns(); }, [loadRuns, refreshKey]);
 
+  // Derive unique categories from loaded runs for the local filter dropdown
+  const availableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const r of runs) {
+      if (r.category) cats.add(r.category);
+    }
+    return [...cats].sort();
+  }, [runs]);
+
   const filteredRuns = useMemo(() => {
-    if (!driverSearch.trim()) return runs;
-    const q = driverSearch.trim().toLowerCase();
-    return runs.filter(r => r.driver_name?.toLowerCase().includes(q));
-  }, [runs, driverSearch]);
+    let result = runs;
+    if (localCategory) {
+      result = result.filter(r => r.category === localCategory);
+    }
+    if (driverSearch.trim()) {
+      const q = driverSearch.trim().toLowerCase();
+      result = result.filter(r => r.driver_name?.toLowerCase().includes(q));
+    }
+    return result;
+  }, [runs, driverSearch, localCategory]);
 
   const toggleCol = (key: string) => {
     setVisibleCols(prev => {
@@ -6621,6 +6638,12 @@ function LiveTimingPanel({ event, classIndex, refreshKey = 0 }: { event: EventWi
           onClick={() => setShowColPicker(v => !v)}>
           Columns ({activeCols.length}/{LIVE_TIMING_COLUMNS.length})
         </button>
+        <select style={{ ...S.input, width: 140, fontSize: '0.7rem', padding: '0.15rem 0.3rem' }}
+          value={localCategory}
+          onChange={e => setLocalCategory(e.target.value)}>
+          <option value="">All Categories</option>
+          {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
         <input style={{ ...S.input, width: 150, fontSize: '0.7rem', padding: '0.15rem 0.3rem' }}
           placeholder="Driver search..."
           value={driverSearch}
@@ -6657,7 +6680,7 @@ function LiveTimingPanel({ event, classIndex, refreshKey = 0 }: { event: EventWi
       {loading && <div style={S.hint}>Loading live timing...</div>}
 
       {!loading && filteredRuns.length === 0 && (
-        <div style={S.hint}>No runs found{classIndex ? ` for class ${classIndex}` : ''}.</div>
+        <div style={S.hint}>No runs found{localCategory ? ` for ${localCategory}` : ''}.</div>
       )}
 
       {filteredRuns.length > 0 && (

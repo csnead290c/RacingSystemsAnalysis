@@ -360,7 +360,8 @@ function parity_localToUtc(?string $localDatetime, string $tzIana): ?string {
 /**
  * Compute a deterministic row hash for de-duplication.
  *
- * If source_ref exists, use it. Otherwise hash stable fields.
+ * If source_ref exists, use it. Otherwise hash STABLE identity fields only
+ * (no timing values like ft1320/mph1320/rt which change when a partial run completes).
  */
 function parity_computeRowHash(string $raceLookup, array $normalized, array $raw): string {
     $sourceRef = $normalized['source_ref'] ?? null;
@@ -369,19 +370,108 @@ function parity_computeRowHash(string $raceLookup, array $normalized, array $raw
         return hash('sha256', $raceLookup . '|' . $sourceRef);
     }
 
-    // Build stable key from available fields
+    // Build stable key from identity fields only — timing values excluded
+    // so partial and complete versions of the same run produce the same hash.
     $parts = [
         $raceLookup,
         $normalized['driver_name'] ?? '',
         $normalized['lane'] ?? '',
         $normalized['round'] ?? '',
         $normalized['class_index'] ?? '',
-        ($normalized['ft1320'] !== null) ? (string)$normalized['ft1320'] : '',
-        ($normalized['mph1320'] !== null) ? (string)$normalized['mph1320'] : '',
-        ($normalized['rt'] !== null) ? (string)$normalized['rt'] : '',
+        $normalized['run_timestamp_utc'] ?? '',  // local time string (stable identity)
     ];
 
     return hash('sha256', implode('|', $parts));
+}
+
+/**
+ * Upsert a normalized run row: INSERT or merge-update if a matching row exists.
+ *
+ * Merge strategy: new non-null values overwrite existing null values.
+ * Existing non-null values are NOT overwritten with null.
+ *
+ * Returns: 'inserted' | 'updated' | 'skipped'
+ */
+function parity_upsertRun(PDO $pdo, array $normalized, string $rowHash, int $importId, string $raceLookup, ?string $utcTime, ?string $localTime): string {
+    // Timing/numeric fields that can be filled in on a merge-update
+    static $mergeFields = [
+        'category', 'class_index', 'round', 'lane', 'driver_name', 'car_number',
+        'dial_in', 'rt', 'ft60', 'ft330', 'ft660', 'mph660', 'ft1000', 'mph1000',
+        'ft1320', 'mph1320', 'win_flag', 'dq_flag', 'mov', 'place', 'source_ref',
+    ];
+
+    // Try INSERT first (fast path — most runs are new)
+    $stmtInsert = $pdo->prepare("
+        INSERT INTO parity_runs (uuid, import_id, race_lookup, run_timestamp_utc, run_time_local, category, class_index, round, lane, driver_name, car_number, dial_in, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320, win_flag, dq_flag, mov, place, source_ref, row_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+
+    try {
+        $stmtInsert->execute([
+            parity_generateUUID(), $importId, $raceLookup,
+            $utcTime, $localTime,
+            $normalized['category'], $normalized['class_index'],
+            $normalized['round'], $normalized['lane'], $normalized['driver_name'], $normalized['car_number'],
+            $normalized['dial_in'], $normalized['rt'], $normalized['ft60'], $normalized['ft330'],
+            $normalized['ft660'], $normalized['mph660'], $normalized['ft1000'], $normalized['mph1000'],
+            $normalized['ft1320'], $normalized['mph1320'], $normalized['win_flag'], $normalized['dq_flag'],
+            $normalized['mov'], $normalized['place'], $normalized['source_ref'], $rowHash,
+        ]);
+        return 'inserted';
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'Duplicate') === false) {
+            throw $e;  // real error, not a dupe
+        }
+    }
+
+    // Duplicate row_hash — check if existing row is partial and needs merging
+    $stmtFind = $pdo->prepare("
+        SELECT id, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320,
+               dial_in, car_number, win_flag, dq_flag, mov, place, source_ref,
+               run_timestamp_utc, run_time_local, category, class_index
+        FROM parity_runs
+        WHERE race_lookup = ? AND row_hash = ?
+        LIMIT 1
+    ");
+    $stmtFind->execute([$raceLookup, $rowHash]);
+    $existing = $stmtFind->fetch(PDO::FETCH_ASSOC);
+
+    if (!$existing) {
+        return 'skipped';  // shouldn't happen, but defensive
+    }
+
+    // Build SET clause: only update fields where existing is null and incoming is not null
+    $setClauses = [];
+    $setParams = [];
+
+    foreach ($mergeFields as $field) {
+        $incomingVal = $normalized[$field] ?? null;
+        $existingVal = $existing[$field] ?? null;
+        if ($incomingVal !== null && $incomingVal !== '' && ($existingVal === null || $existingVal === '')) {
+            $setClauses[] = "$field = ?";
+            $setParams[] = $incomingVal;
+        }
+    }
+
+    // Also merge timestamp fields
+    if ($utcTime !== null && ($existing['run_timestamp_utc'] === null || $existing['run_timestamp_utc'] === '')) {
+        $setClauses[] = "run_timestamp_utc = ?";
+        $setParams[] = $utcTime;
+    }
+    if ($localTime !== null && ($existing['run_time_local'] === null || $existing['run_time_local'] === '')) {
+        $setClauses[] = "run_time_local = ?";
+        $setParams[] = $localTime;
+    }
+
+    if (empty($setClauses)) {
+        return 'skipped';  // nothing to update
+    }
+
+    // Perform merge update
+    $setClause = implode(', ', $setClauses);
+    $setParams[] = (int)$existing['id'];
+    $pdo->prepare("UPDATE parity_runs SET $setClause WHERE id = ?")->execute($setParams);
+    return 'updated';
 }
 
 // ============================================================================

@@ -6,15 +6,119 @@ const LEGACY_URL_PARAM = 'class';
 const LEGACY_LS_KEY = 'parity_classIndex';
 const DEFAULT_CLASS = 'TF';
 
+// ── Category preset (new: filters by human-readable category) ────────
+
+const CAT_LS_KEY = 'parity_categoryPreset';
+const CAT_URL_PARAM = 'category';
+const DEFAULT_CATEGORY = 'Top Fuel';
+
 /**
- * Global class preset for the Parity Suite.
- * Priority: URL ?classPreset=XX > legacy ?class=XX > localStorage > default ('TF').
+ * Map from class_index abbreviations to known human-readable category names.
+ * Used for backward-compat: if someone has ?classPreset=TF in their URL,
+ * we migrate to ?category=Top Fuel.
+ */
+export const CLASS_TO_CATEGORY: Record<string, string> = {
+  TF: 'Top Fuel',
+  FC: 'Funny Car',
+  PRO: 'Pro Stock',
+  PSM: 'Pro Stock Motorcycle',
+  PM: 'Pro Mod',
+  TAD: 'Top Alcohol Dragster',
+  TAFC: 'Top Alcohol Funny Car',
+};
+
+export const CATEGORY_TO_CLASS: Record<string, string> = Object.fromEntries(
+  Object.entries(CLASS_TO_CATEGORY).map(([k, v]) => [v, k])
+);
+
+/**
+ * Global category preset for the Parity Suite.
+ * Priority: URL ?category=X > legacy ?classPreset=X (mapped) > localStorage > default.
  *
- * - On init, migrates legacy ?class= param to ?classPreset= via replaceState.
- * - On init, migrates legacy localStorage key parity_classIndex to parity_classPreset.
- * - On change, writes to both URL (replaceState) and localStorage.
- * - Consumers share state via localStorage + storage event so multiple
- *   mounted instances stay in sync.
+ * Returns [category, setCategory, classIndex] where classIndex is the reverse-mapped
+ * abbreviation (or the category string itself if no mapping exists).
+ */
+export function useCategoryPreset(): [string, (cat: string) => void, string] {
+  const [category, setCategoryState] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    // 1) New URL param ?category= wins
+    const fromCat = params.get(CAT_URL_PARAM);
+    if (fromCat) {
+      localStorage.setItem(CAT_LS_KEY, fromCat);
+      return fromCat;
+    }
+
+    // 2) Legacy URL params ?classPreset= or ?class= — migrate to category
+    const fromClassPreset = params.get(URL_PARAM) || params.get(LEGACY_URL_PARAM);
+    if (fromClassPreset) {
+      const mapped = CLASS_TO_CATEGORY[fromClassPreset] || fromClassPreset;
+      localStorage.setItem(CAT_LS_KEY, mapped);
+      // Migrate URL
+      params.delete(URL_PARAM);
+      params.delete(LEGACY_URL_PARAM);
+      params.set(CAT_URL_PARAM, mapped);
+      const migrated = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+      window.history.replaceState(null, '', migrated);
+      return mapped;
+    }
+
+    // 3) localStorage: new key, then legacy keys (mapped)
+    const stored = localStorage.getItem(CAT_LS_KEY);
+    if (stored) return stored;
+    const legacyStored = localStorage.getItem(LS_KEY) || localStorage.getItem(LEGACY_LS_KEY);
+    if (legacyStored) {
+      const mapped = CLASS_TO_CATEGORY[legacyStored] || legacyStored;
+      localStorage.setItem(CAT_LS_KEY, mapped);
+      return mapped;
+    }
+
+    // 4) Default
+    return DEFAULT_CATEGORY;
+  });
+
+  // Sync URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(CAT_URL_PARAM) !== category) {
+      params.delete(URL_PARAM);
+      params.delete(LEGACY_URL_PARAM);
+      params.set(CAT_URL_PARAM, category);
+      const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-component sync via storage event
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === CAT_LS_KEY && e.newValue && e.newValue !== category) {
+        setCategoryState(e.newValue);
+      }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, [category]);
+
+  const setCategory = useCallback((cat: string) => {
+    setCategoryState(cat);
+    localStorage.setItem(CAT_LS_KEY, cat);
+    const params = new URLSearchParams(window.location.search);
+    params.delete(URL_PARAM);
+    params.delete(LEGACY_URL_PARAM);
+    params.set(CAT_URL_PARAM, cat);
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+    window.history.replaceState(null, '', newUrl);
+  }, []);
+
+  // Derive classIndex for backward-compat with report endpoints
+  const classIndex = CATEGORY_TO_CLASS[category] || category;
+
+  return [category, setCategory, classIndex];
+}
+
+/**
+ * @deprecated Use useCategoryPreset() instead. Kept for backward compatibility.
  */
 export function useClassPreset(): [string, (cls: string) => void] {
   const [classIndex, setClassIndexState] = useState<string>(() => {

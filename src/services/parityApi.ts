@@ -207,6 +207,7 @@ export interface RunWithWeather extends ParityRun {
 export interface RunsWithWeatherParams {
   raceLookup: string;
   windowMinutes?: number;
+  category?: string;
   classIndex?: string;
   driverName?: string;
   lane?: string;
@@ -1618,6 +1619,7 @@ export const parityApi = {
     qs.set('action', 'runsWithWeather');
     qs.set('raceLookup', params.raceLookup);
     if (params.windowMinutes) qs.set('windowMinutes', String(params.windowMinutes));
+    if (params.category) qs.set('category', params.category);
     if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.driverName) qs.set('driverName', params.driverName);
     if (params.lane) qs.set('lane', params.lane);

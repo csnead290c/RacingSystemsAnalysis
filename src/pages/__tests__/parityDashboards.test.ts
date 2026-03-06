@@ -465,20 +465,39 @@ describe('Beta Sprint: Live Timing tab', () => {
     expect(portalSource).toContain("key: 'dq_flag'");
   });
 
-  it('LiveTimingPanel receives refreshKey prop', () => {
-    expect(portalSource).toContain('LiveTimingPanel event={selectedEvent} classIndex={classIndex} refreshKey={refreshKey}');
+  it('LiveTimingPanel receives refreshKey prop (no classIndex)', () => {
+    expect(portalSource).toContain('LiveTimingPanel event={selectedEvent} refreshKey={refreshKey}');
+  });
+
+  it('LiveTimingPanel does NOT pass classIndex or category to API call', () => {
+    // Extract the LiveTimingPanel function body
+    const ltStart = portalSource.indexOf('function LiveTimingPanel');
+    const ltEnd = portalSource.indexOf('function ', ltStart + 30);
+    const ltBody = portalSource.slice(ltStart, ltEnd > ltStart ? ltEnd : undefined);
+    // The runsWithWeather call should NOT include classIndex or category
+    const apiCallMatch = ltBody.match(/runsWithWeather\(\{[^}]+\}\)/);
+    expect(apiCallMatch).toBeTruthy();
+    expect(apiCallMatch![0]).not.toContain('classIndex');
+    expect(apiCallMatch![0]).not.toContain('category:');
+  });
+
+  it('LiveTimingPanel has a local category filter dropdown', () => {
+    expect(portalSource).toContain('localCategory');
+    expect(portalSource).toContain('setLocalCategory');
+    expect(portalSource).toContain('availableCategories');
+    expect(portalSource).toContain('All Categories');
   });
 });
 
 describe('Beta Sprint: Improved class/category selector', () => {
-  it('uses RECOMMENDED_CLASSES for top section', () => {
-    expect(portalSource).toContain('RECOMMENDED_CLASSES');
+  it('uses RECOMMENDED_CATEGORIES for top section', () => {
+    expect(portalSource).toContain('RECOMMENDED_CATEGORIES');
     expect(portalSource).toContain("<optgroup label=\"Recommended\">");
   });
 
-  it('has "All Categories" optgroup for event-specific classes', () => {
+  it('has "All Categories" optgroup for event-specific categories', () => {
     expect(portalSource).toContain("<optgroup label=\"All Categories\">");
-    expect(portalSource).toContain('allEventClasses');
+    expect(portalSource).toContain('allEventCategories');
   });
 
   it('fetches event categories via eventCategories API', () => {
@@ -522,8 +541,8 @@ describe('Beta Sprint: Auto-refetch after refresh', () => {
     expect(portalSource).toContain("setRefreshKey(k => k + 1)");
   });
 
-  it('EventRunsPanel accepts refreshKey prop', () => {
-    expect(portalSource).toContain('EventRunsPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey}');
+  it('EventRunsPanel accepts category and refreshKey props', () => {
+    expect(portalSource).toContain('EventRunsPanel event={selectedEvent} category={category} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey}');
   });
 
   it('EventRunsPanel useEffect depends on refreshKey', () => {
@@ -587,5 +606,163 @@ describe('Beta Sprint: eventCategories API type', () => {
   it('eventCategories method exists', () => {
     expect(apiSource).toContain('eventCategories');
     expect(apiSource).toContain('action=eventCategories');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Hotfix: Live Timing unfiltered, partial run merge, category-based filtering
+// ══════════════════════════════════════════════════════════════════════════
+
+const useClassPresetSource = readFileSync(
+  resolve(__dirname, '../../domain/parity/useClassPreset.ts'),
+  'utf-8',
+);
+
+const backendParitySource = readFileSync(
+  resolve(__dirname, '../../../api/parity.php'),
+  'utf-8',
+);
+
+const backendLibSource = readFileSync(
+  resolve(__dirname, '../../../api/lib/parity.php'),
+  'utf-8',
+);
+
+describe('Hotfix: useCategoryPreset hook', () => {
+  it('exports useCategoryPreset function', () => {
+    expect(useClassPresetSource).toContain('export function useCategoryPreset');
+  });
+
+  it('exports CLASS_TO_CATEGORY mapping with known categories', () => {
+    expect(useClassPresetSource).toContain('export const CLASS_TO_CATEGORY');
+    expect(useClassPresetSource).toContain("TF: 'Top Fuel'");
+    expect(useClassPresetSource).toContain("FC: 'Funny Car'");
+    expect(useClassPresetSource).toContain("PRO: 'Pro Stock'");
+  });
+
+  it('exports CATEGORY_TO_CLASS reverse mapping', () => {
+    expect(useClassPresetSource).toContain('export const CATEGORY_TO_CLASS');
+  });
+
+  it('uses category URL param as primary', () => {
+    expect(useClassPresetSource).toContain("CAT_URL_PARAM = 'category'");
+  });
+
+  it('migrates legacy classPreset URL param to category', () => {
+    expect(useClassPresetSource).toContain('params.get(URL_PARAM) || params.get(LEGACY_URL_PARAM)');
+    expect(useClassPresetSource).toContain('CLASS_TO_CATEGORY[fromClassPreset]');
+  });
+
+  it('returns [category, setCategory, classIndex] tuple', () => {
+    expect(useClassPresetSource).toContain('return [category, setCategory, classIndex]');
+  });
+
+  it('derives classIndex via CATEGORY_TO_CLASS reverse mapping', () => {
+    expect(useClassPresetSource).toContain('CATEGORY_TO_CLASS[category] || category');
+  });
+
+  it('keeps useClassPreset as deprecated export', () => {
+    expect(useClassPresetSource).toContain('@deprecated');
+    expect(useClassPresetSource).toContain('export function useClassPreset');
+  });
+});
+
+describe('Hotfix: Category-based filtering in frontend', () => {
+  it('ParityPortal uses useCategoryPreset instead of useClassPreset', () => {
+    expect(portalSource).toContain('useCategoryPreset');
+    expect(portalSource).toContain('const [category, setCategory, classIndex] = useCategoryPreset()');
+  });
+
+  it('uses RECOMMENDED_CATEGORIES (human-readable) not RECOMMENDED_CLASSES', () => {
+    expect(portalSource).toContain('RECOMMENDED_CATEGORIES');
+    expect(portalSource).not.toContain('RECOMMENDED_CLASSES');
+  });
+
+  it('selector is bound to category state', () => {
+    expect(portalSource).toContain('value={category}');
+    expect(portalSource).toContain('setCategory(e.target.value)');
+  });
+
+  it('EventRunsPanel passes category to API instead of classIndex', () => {
+    // Find EventRunsPanel loadRuns
+    const erpStart = portalSource.indexOf('function EventRunsPanel');
+    const erpEnd = portalSource.indexOf('\nfunction ', erpStart + 30);
+    const erpBody = portalSource.slice(erpStart, erpEnd > erpStart ? erpEnd : undefined);
+    const apiCall = erpBody.match(/runsWithWeather\(\{[^}]+\}\)/);
+    expect(apiCall).toBeTruthy();
+    expect(apiCall![0]).toContain('category:');
+    expect(apiCall![0]).not.toContain('classIndex');
+  });
+
+  it('API client sends category param in runsWithWeather', () => {
+    expect(apiSource).toContain("category?: string");
+    expect(apiSource).toContain("qs.set('category', params.category)");
+  });
+});
+
+describe('Hotfix: Backend category filter param', () => {
+  it('handleRunsWithWeather accepts category filter', () => {
+    expect(backendParitySource).toContain("$_GET['category']");
+    expect(backendParitySource).toContain("r.category = ?");
+  });
+
+  it('handleQueryRuns accepts category filter', () => {
+    // The function should have category check before classIndex
+    const qrStart = backendParitySource.indexOf('function handleQueryRuns');
+    const qrEnd = backendParitySource.indexOf('\nfunction ', qrStart + 30);
+    const qrBody = backendParitySource.slice(qrStart, qrEnd > qrStart ? qrEnd : undefined);
+    expect(qrBody).toContain("$_GET['category']");
+    expect(qrBody).toContain("r.category = ?");
+  });
+
+  it('category filter takes priority over classIndex', () => {
+    // Pattern: if category → elseif classIndex
+    expect(backendParitySource).toContain("} elseif (!empty($_GET['classIndex']))");
+  });
+});
+
+describe('Hotfix: Backend parity_upsertRun merge logic', () => {
+  it('parity_upsertRun function is defined', () => {
+    expect(backendLibSource).toContain('function parity_upsertRun');
+  });
+
+  it('returns inserted/updated/skipped status', () => {
+    expect(backendLibSource).toContain("return 'inserted'");
+    expect(backendLibSource).toContain("return 'updated'");
+    expect(backendLibSource).toContain("return 'skipped'");
+  });
+
+  it('merges only non-null incoming values over null existing values', () => {
+    expect(backendLibSource).toContain('$incomingVal !== null');
+    expect(backendLibSource).toContain('$existingVal === null');
+  });
+
+  it('parity_computeRowHash excludes timing fields from fallback hash', () => {
+    // The stable identity should NOT include ft1320, mph1320, rt
+    const hashStart = backendLibSource.indexOf('function parity_computeRowHash');
+    const hashEnd = backendLibSource.indexOf('\nfunction ', hashStart + 30);
+    const hashBody = backendLibSource.slice(hashStart, hashEnd > hashStart ? hashEnd : undefined);
+    expect(hashBody).not.toContain("'ft1320'");
+    expect(hashBody).not.toContain("'mph1320'");
+    expect(hashBody).not.toContain("'rt'");
+    // But should include identity fields
+    expect(hashBody).toContain("driver_name");
+    expect(hashBody).toContain("lane");
+    expect(hashBody).toContain("round");
+  });
+
+  it('all ingest paths use parity_upsertRun', () => {
+    // handleIngest, handleIngestEventRuns, handleRefreshEventData should all call it
+    expect(backendParitySource).toContain('parity_upsertRun($pdo');
+    // Count occurrences — should be at least 3
+    const matches = backendParitySource.match(/parity_upsertRun\(\$pdo/g);
+    expect(matches).toBeTruthy();
+    expect(matches!.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('ingest responses include inserted/updated/skipped counters', () => {
+    expect(backendParitySource).toContain("'rowsInserted'");
+    expect(backendParitySource).toContain("'rowsUpdated'");
+    expect(backendParitySource).toContain("'rowsSkipped'");
   });
 });
