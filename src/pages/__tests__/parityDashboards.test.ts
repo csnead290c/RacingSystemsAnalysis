@@ -963,3 +963,84 @@ describe('Hotfix2: Backend lane normalization', () => {
     expect(backendLibSource).toContain('parity_normalizeLane($value)');
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// Weather Dashboard: Water Grains chart + consistent axis formatting
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('Weather Dashboard: Water Grains chart replaces Dew Point', () => {
+  it('chart grid contains Water Grains chart', () => {
+    expect(portalSource).toContain('label="Water Grains"');
+    expect(portalSource).toContain('dataKey="waterGrains"');
+    expect(portalSource).toContain('unit="gr/lb"');
+  });
+
+  it('chart grid does NOT contain Dew Point chart', () => {
+    // The 6-Panel Chart Grid section should have no Dew Point MiniChart
+    const chartGridStart = portalSource.indexOf('6-Panel Chart Grid');
+    const chartGridEnd = portalSource.indexOf('</div>', portalSource.indexOf('</div>', chartGridStart) + 6);
+    const chartGridSection = portalSource.slice(chartGridStart, chartGridEnd);
+    expect(chartGridSection).not.toContain('label="Dew Point"');
+    expect(chartGridSection).not.toContain('dataKey="dewPt"');
+  });
+
+  it('Water Grains uses color #84cc16', () => {
+    expect(portalSource).toContain('color="#84cc16" label="Water Grains"');
+  });
+});
+
+describe('Weather Dashboard: wxFmt centralized formatting helper', () => {
+  it('defines wxFmt object with all metric formatters', () => {
+    expect(portalSource).toContain('const wxFmt');
+    expect(portalSource).toContain('wxFmt.temp');
+    expect(portalSource).toContain('wxFmt.rh');
+    expect(portalSource).toContain('wxFmt.baro');
+    expect(portalSource).toContain('wxFmt.da');
+    expect(portalSource).toContain('wxFmt.cf');
+    expect(portalSource).toContain('wxFmt.grains');
+  });
+
+  it('all MiniChart components use wxFmt formatters (no inline toFixed)', () => {
+    // Extract all MiniChart lines
+    const miniChartLines = portalSource.split('\n').filter((l: string) => l.includes('<MiniChart '));
+    expect(miniChartLines.length).toBeGreaterThanOrEqual(6);
+    for (const line of miniChartLines) {
+      // Each should reference wxFmt.xxx, not inline arrow functions
+      expect(line).toMatch(/fmt=\{wxFmt\.\w+\}/);
+    }
+  });
+
+  it('CondCard values use wxFmt formatters', () => {
+    expect(portalSource).toContain('wxFmt.temp(latest.temp)');
+    expect(portalSource).toContain('wxFmt.rh(latest.rh)');
+    expect(portalSource).toContain('wxFmt.baro(latest.baro)');
+    expect(portalSource).toContain('wxFmt.da(latest.da)');
+    expect(portalSource).toContain('wxFmt.cf(latest.cf)');
+    expect(portalSource).toContain('wxFmt.grains(latest.waterGrains)');
+  });
+
+  it('temp formatter produces 1 decimal', () => {
+    expect(portalSource).toMatch(/temp:\s*\(v: number\)\s*=>\s*v\.toFixed\(1\)/);
+  });
+
+  it('humidity formatter produces integer (0 decimals)', () => {
+    expect(portalSource).toMatch(/rh:\s*\(v: number\)\s*=>\s*v\.toFixed\(0\)/);
+  });
+
+  it('barometer formatter produces 2 decimals', () => {
+    expect(portalSource).toMatch(/baro:\s*\(v: number\)\s*=>\s*v\.toFixed\(2\)/);
+  });
+
+  it('density altitude formatter produces integer with commas', () => {
+    expect(portalSource).toContain("toLocaleString('en-US'");
+    expect(portalSource).toContain('maximumFractionDigits: 0');
+  });
+
+  it('correction factor formatter produces 4 decimals', () => {
+    expect(portalSource).toMatch(/cf:\s*\(v: number\)\s*=>\s*v\.toFixed\(4\)/);
+  });
+
+  it('water grains formatter produces 1 decimal', () => {
+    expect(portalSource).toMatch(/grains:\s*\(v: number\)\s*=>\s*v\.toFixed\(1\)/);
+  });
+});

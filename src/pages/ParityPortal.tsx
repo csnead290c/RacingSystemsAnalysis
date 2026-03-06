@@ -6358,6 +6358,16 @@ interface DerivedPoint {
   vaporPressure: number | null;
 }
 
+/** Centralized weather metric formatters for consistent axis ticks, tooltips, and readouts */
+const wxFmt = {
+  temp:   (v: number) => v.toFixed(1),                                         // °F — 1 decimal
+  rh:     (v: number) => v.toFixed(0),                                         // % — integer
+  baro:   (v: number) => v.toFixed(2),                                         // inHg — 2 decimals
+  da:     (v: number) => v < 0 ? v.toFixed(0) : v.toLocaleString('en-US', { maximumFractionDigits: 0 }), // ft — integer with commas
+  cf:     (v: number) => v.toFixed(4),                                         // correction factor — 4 decimals
+  grains: (v: number) => v.toFixed(1),                                         // gr/lb — 1 decimal
+};
+
 function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
   const [data, setData] = useState<WeatherTimeseriesResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -6479,23 +6489,23 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
       {/* Current Conditions — even grid filling full width */}
       {latest && latest.temp != null && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.4rem', marginBottom: '0.5rem' }}>
-          <CondCard label="Temperature" value={latest.temp?.toFixed(1) ?? '—'} unit="°F" color="#ef4444" />
-          <CondCard label="Humidity" value={latest.rh?.toFixed(1) ?? '—'} unit="%" color="#8b5cf6" />
-          <CondCard label="Barometer" value={latest.baro?.toFixed(3) ?? '—'} unit="inHg" color="#3b82f6" />
-          <CondCard label="Density Alt" value={latest.da?.toFixed(0) ?? '—'} unit="ft" color="#f97316" />
-          <CondCard label="Corr Factor" value={latest.cf?.toFixed(4) ?? '—'} unit="" color="#16a34a" />
-          <CondCard label="Water Grains" value={latest.waterGrains?.toFixed(1) ?? '—'} unit="gr/lb" color="#84cc16" />
+          <CondCard label="Temperature" value={latest.temp != null ? wxFmt.temp(latest.temp) : '—'} unit="°F" color="#ef4444" />
+          <CondCard label="Humidity" value={latest.rh != null ? wxFmt.rh(latest.rh) : '—'} unit="%" color="#8b5cf6" />
+          <CondCard label="Barometer" value={latest.baro != null ? wxFmt.baro(latest.baro) : '—'} unit="inHg" color="#3b82f6" />
+          <CondCard label="Density Alt" value={latest.da != null ? wxFmt.da(latest.da) : '—'} unit="ft" color="#f97316" />
+          <CondCard label="Corr Factor" value={latest.cf != null ? wxFmt.cf(latest.cf) : '—'} unit="" color="#16a34a" />
+          <CondCard label="Water Grains" value={latest.waterGrains != null ? wxFmt.grains(latest.waterGrains) : '—'} unit="gr/lb" color="#84cc16" />
         </div>
       )}
 
       {/* 6-Panel Chart Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.5rem' }}>
-        <MiniChart dataKey="temp" color="#ef4444" label="Temperature" unit="°F" fmt={(v: number) => v.toFixed(1)} />
-        <MiniChart dataKey="rh" color="#8b5cf6" label="Humidity" unit="%" fmt={(v: number) => v.toFixed(1)} />
-        <MiniChart dataKey="baro" color="#3b82f6" label="Barometer" unit="inHg" fmt={(v: number) => v.toFixed(3)} yWidth={55} />
-        <MiniChart dataKey="da" color="#f97316" label="Density Alt" unit="ft" fmt={(v: number) => v.toFixed(0)} />
-        <MiniChart dataKey="cf" color="#16a34a" label="Corr Factor" unit="" fmt={(v: number) => v.toFixed(4)} yWidth={55} />
-        <MiniChart dataKey="dewPt" color="#06b6d4" label="Dew Point" unit="°F" fmt={(v: number) => v.toFixed(1)} />
+        <MiniChart dataKey="temp" color="#ef4444" label="Temperature" unit="°F" fmt={wxFmt.temp} />
+        <MiniChart dataKey="rh" color="#8b5cf6" label="Humidity" unit="%" fmt={wxFmt.rh} />
+        <MiniChart dataKey="baro" color="#3b82f6" label="Barometer" unit="inHg" fmt={wxFmt.baro} yWidth={55} />
+        <MiniChart dataKey="da" color="#f97316" label="Density Alt" unit="ft" fmt={wxFmt.da} />
+        <MiniChart dataKey="cf" color="#16a34a" label="Corr Factor" unit="" fmt={wxFmt.cf} yWidth={55} />
+        <MiniChart dataKey="waterGrains" color="#84cc16" label="Water Grains" unit="gr/lb" fmt={wxFmt.grains} />
       </div>
     </div>
   );
