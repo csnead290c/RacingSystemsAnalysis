@@ -413,3 +413,179 @@ describe('Backend metric-to-column mapping consistency', () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// Beta Sprint: Live Timing, Class Selector, Auto-Refresh, Refresh Banner
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('Beta Sprint: Live Timing tab', () => {
+  it('DASHBOARD_TABS includes liveTiming', () => {
+    expect(portalSource).toContain("key: 'liveTiming'");
+    expect(portalSource).toContain("label: 'Live Timing'");
+  });
+
+  it('tab rendering dispatches to LiveTimingPanel', () => {
+    expect(portalSource).toContain("tab === 'liveTiming'");
+    expect(portalSource).toContain('<LiveTimingPanel');
+  });
+
+  it('LiveTimingPanel function is defined', () => {
+    expect(portalSource).toContain('function LiveTimingPanel');
+  });
+
+  it('LiveTimingPanel sorts newest-to-oldest', () => {
+    expect(portalSource).toContain('tb.localeCompare(ta)');
+  });
+
+  it('LiveTimingPanel has column picker with localStorage persistence', () => {
+    expect(portalSource).toContain('parity_liveTimingCols');
+    expect(portalSource).toContain('LIVE_TIMING_COLUMNS');
+  });
+
+  it('LiveTimingPanel has driver search', () => {
+    expect(portalSource).toContain("placeholder=\"Driver search...\"");
+  });
+
+  it('LIVE_TIMING_COLUMNS includes all timing + weather + extra fields', () => {
+    // Core timing
+    expect(portalSource).toContain("key: 'run_time_local'");
+    expect(portalSource).toContain("key: 'ft60'");
+    expect(portalSource).toContain("key: 'ft1320'");
+    expect(portalSource).toContain("key: 'mph1320'");
+    // Weather
+    expect(portalSource).toContain("key: 'wx_temp'");
+    expect(portalSource).toContain("key: 'wx_rh'");
+    expect(portalSource).toContain("key: 'wx_press'");
+    // Extra
+    expect(portalSource).toContain("key: 'category'");
+    expect(portalSource).toContain("key: 'car_number'");
+    expect(portalSource).toContain("key: 'dial_in'");
+    expect(portalSource).toContain("key: 'mov'");
+    expect(portalSource).toContain("key: 'win_flag'");
+    expect(portalSource).toContain("key: 'dq_flag'");
+  });
+
+  it('LiveTimingPanel receives refreshKey prop', () => {
+    expect(portalSource).toContain('LiveTimingPanel event={selectedEvent} classIndex={classIndex} refreshKey={refreshKey}');
+  });
+});
+
+describe('Beta Sprint: Improved class/category selector', () => {
+  it('uses RECOMMENDED_CLASSES for top section', () => {
+    expect(portalSource).toContain('RECOMMENDED_CLASSES');
+    expect(portalSource).toContain("<optgroup label=\"Recommended\">");
+  });
+
+  it('has "All Categories" optgroup for event-specific classes', () => {
+    expect(portalSource).toContain("<optgroup label=\"All Categories\">");
+    expect(portalSource).toContain('allEventClasses');
+  });
+
+  it('fetches event categories via eventCategories API', () => {
+    expect(portalSource).toContain('parityApi.eventCategories');
+    expect(portalSource).toContain('setEventCategories');
+  });
+});
+
+describe('Beta Sprint: Refresh banner auto-dismiss', () => {
+  it('defines BANNER_AUTO_DISMISS_MS constant', () => {
+    expect(portalSource).toContain('BANNER_AUTO_DISMISS_MS');
+    expect(portalSource).toContain('10_000');
+  });
+
+  it('uses setTimeout for auto-dismiss in RefreshResultBanner', () => {
+    expect(portalSource).toContain('setTimeout(onDismiss, BANNER_AUTO_DISMISS_MS)');
+  });
+
+  it('skips auto-dismiss when errors are present', () => {
+    expect(portalSource).toContain('if (hasErrors) return');
+  });
+
+  it('shows simplified one-line summary by default', () => {
+    expect(portalSource).toContain('oneLiner');
+    expect(portalSource).toContain('stepBadge');
+  });
+
+  it('keeps detailed breakdown in expandable details element', () => {
+    expect(portalSource).toContain('<details');
+    expect(portalSource).toContain('RefreshStepSummary');
+  });
+});
+
+describe('Beta Sprint: Auto-refetch after refresh', () => {
+  it('defines refreshKey state counter', () => {
+    expect(portalSource).toContain('refreshKey');
+    expect(portalSource).toContain('setRefreshKey');
+  });
+
+  it('increments refreshKey after successful refresh', () => {
+    expect(portalSource).toContain("setRefreshKey(k => k + 1)");
+  });
+
+  it('EventRunsPanel accepts refreshKey prop', () => {
+    expect(portalSource).toContain('EventRunsPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey}');
+  });
+
+  it('EventRunsPanel useEffect depends on refreshKey', () => {
+    expect(portalSource).toContain('[loadRuns, loadFlags, refreshKey]');
+  });
+});
+
+describe('Beta Sprint: Auto-refresh for ongoing events', () => {
+  it('imports useAutoRefresh and isEventOngoing', () => {
+    expect(portalSource).toContain('useAutoRefresh');
+    expect(portalSource).toContain('isEventOngoing');
+  });
+
+  it('computes eventIsOngoing from selected event dates', () => {
+    expect(portalSource).toContain('eventIsOngoing');
+    expect(portalSource).toContain('isEventOngoing(selectedEvent.start_date_local');
+  });
+
+  it('calls useAutoRefresh with eventIsOngoing gating', () => {
+    expect(portalSource).toContain('useAutoRefresh(');
+    expect(portalSource).toContain('eventIsOngoing && !showAdminTools');
+  });
+
+  it('renders auto-refresh toggle button for ongoing events', () => {
+    expect(portalSource).toContain('Auto: ON');
+    expect(portalSource).toContain('Auto: OFF');
+    expect(portalSource).toContain('toggleAutoRefresh');
+  });
+});
+
+describe('Beta Sprint: Expanded columns in Event Runs', () => {
+  it('ALL_COLUMNS includes extra group columns', () => {
+    expect(portalSource).toContain("group: 'extra'");
+  });
+
+  it('column picker has Extra toggle group', () => {
+    expect(portalSource).toContain("<b>Extra</b>");
+    expect(portalSource).toContain("toggleGroup('extra')");
+  });
+
+  it('RunSortKey includes new sortable fields', () => {
+    expect(portalSource).toContain("'category'");
+    expect(portalSource).toContain("'car_number'");
+    expect(portalSource).toContain("'dial_in'");
+    expect(portalSource).toContain("'mov'");
+    expect(portalSource).toContain("'run_time_local'");
+  });
+});
+
+describe('Beta Sprint: eventCategories API type', () => {
+  it('defines EventCategory interface', () => {
+    expect(apiSource).toContain('interface EventCategory');
+    expect(apiSource).toContain('class_index: string');
+    expect(apiSource).toContain('run_count: number');
+  });
+
+  it('defines EventCategoriesResponse interface', () => {
+    expect(apiSource).toContain('interface EventCategoriesResponse');
+  });
+
+  it('eventCategories method exists', () => {
+    expect(apiSource).toContain('eventCategories');
+    expect(apiSource).toContain('action=eventCategories');
+  });
+});

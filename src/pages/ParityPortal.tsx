@@ -44,6 +44,7 @@ import {
   type TimeDiagnosticsSampleResponse,
   type RefreshEventDataResponse,
   type RefreshStepResult,
+  type EventCategory,
 } from '../services/parityApi';
 import {
   formatET, formatMPH, formatBaro,
@@ -75,6 +76,7 @@ import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
 import { useClassPreset } from '../domain/parity/useClassPreset';
 import IncidentDrawer from './IncidentDrawer';
 import IncidentCell from '../shared/components/IncidentCell';
+import { useAutoRefresh, isEventOngoing } from '../domain/parity/useAutoRefresh';
 
 // ── Styles ──────────────────────────────────────────────────────────────
 
@@ -229,16 +231,18 @@ const S = {
 } as const;
 
 type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash' | 'parityDash' | 'parityReport'
+  | 'liveTiming'
   | 'parity' | 'ladder' | 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'backfill'
   | 'adminTracks' | 'adminEvents' | 'classAliases' | 'engineCombos' | 'driverCombos' | 'assignCombos'
   | 'weatherCorrection' | 'backfillWeather' | 'weatherHealth' | 'importStationCsv'
   | 'trackCoords' | 'batchBackfill' | 'timeDiagnostics';
 
-// Classes in scope for dashboard pickers (used by Phase 1 tab filters)
-const PARITY_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'] as const;
+// Recommended classes shown at the top of the class/category selector
+const RECOMMENDED_CLASSES = ['TF', 'FC', 'PRO', 'PSM', 'PM', 'TAD', 'TAFC'] as const;
 
 const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'eventRuns', label: 'Event Runs' },
+  { key: 'liveTiming', label: 'Live Timing' },
   { key: 'driverHistory', label: 'Driver History' },
   { key: 'weatherDash', label: 'Weather' },
   { key: 'parityReport', label: 'Parity Report' },
@@ -291,6 +295,8 @@ function RefreshStepSummary({ label, step }: { label: string; step: RefreshStepR
   );
 }
 
+const BANNER_AUTO_DISMISS_MS = 10_000; // 10 seconds
+
 function RefreshResultBanner({ result, onDismiss }: { result: RefreshEventDataResponse; onDismiss: () => void }) {
   const allErrors = [
     ...result.timing.errors,
@@ -302,29 +308,52 @@ function RefreshResultBanner({ result, onDismiss }: { result: RefreshEventDataRe
   const bg = hasErrors ? 'rgba(220,180,50,0.12)' : 'rgba(50,180,80,0.12)';
   const border = hasErrors ? '1px solid rgba(220,180,50,0.3)' : '1px solid rgba(50,180,80,0.3)';
 
+  // Auto-dismiss after BANNER_AUTO_DISMISS_MS (skip if errors present)
+  useEffect(() => {
+    if (hasErrors) return;
+    const timer = setTimeout(onDismiss, BANNER_AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [hasErrors, onDismiss]);
+
+  // Simplified one-line summary: step emoji badges
+  const stepBadge = (label: string, step: RefreshStepResult) => {
+    const ok = !step.errors || step.errors.length === 0;
+    const count = step.inserted ?? step.fetched ?? step.bucketsProcessed ?? 0;
+    return `${ok ? '✓' : '⚠'} ${label}${count > 0 ? ` +${count}` : ''}`;
+  };
+  const oneLiner = [
+    stepBadge('Timing', result.timing),
+    stepBadge('Tempest', result.tempest),
+    stepBadge('Backfill', result.open_meteo),
+    stepBadge('Canonical', result.canonical),
+  ].join('  ·  ');
+
   return (
     <div style={{ ...S.card, background: bg, border, padding: '0.5rem 0.75rem', marginBottom: '0.5rem', fontSize: '0.78rem', lineHeight: 1.6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <strong>{result.ok ? '✓' : '⚠'} Refresh complete</strong> — {result.event_name} ({result.range.startLocal} → {result.range.endLocal}, {result.range.timezone}) — {(result.duration_ms / 1000).toFixed(1)}s
+          <strong>{result.ok ? '✓' : '⚠'} Refresh complete</strong> — {(result.duration_ms / 1000).toFixed(1)}s — {oneLiner}
         </div>
         <button style={{ ...S.btn, fontSize: '0.7rem', padding: '0.15rem 0.4rem' }} onClick={onDismiss}>✕</button>
       </div>
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-        <RefreshStepSummary label="Timing" step={result.timing} />
-        <RefreshStepSummary label="Tempest" step={result.tempest} />
-        <RefreshStepSummary label="Open-Meteo" step={result.open_meteo} />
-        <RefreshStepSummary label="Canonical" step={result.canonical} />
-      </div>
-      {hasErrors && (
-        <details style={{ marginTop: '0.3rem', fontSize: '0.72rem', color: '#e44' }}>
-          <summary>{allErrors.length} error{allErrors.length > 1 ? 's' : ''}</summary>
-          <ul style={{ margin: '0.2rem 0', paddingLeft: '1.2rem' }}>
-            {allErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
-            {allErrors.length > 20 && <li>…and {allErrors.length - 20} more</li>}
-          </ul>
-        </details>
-      )}
+      <details style={{ marginTop: '0.25rem', fontSize: '0.72rem' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--color-muted)' }}>Details</summary>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+          <RefreshStepSummary label="Timing" step={result.timing} />
+          <RefreshStepSummary label="Tempest" step={result.tempest} />
+          <RefreshStepSummary label="Open-Meteo" step={result.open_meteo} />
+          <RefreshStepSummary label="Canonical" step={result.canonical} />
+        </div>
+        {hasErrors && (
+          <div style={{ marginTop: '0.3rem', color: '#e44' }}>
+            <strong>{allErrors.length} error{allErrors.length > 1 ? 's' : ''}:</strong>
+            <ul style={{ margin: '0.2rem 0', paddingLeft: '1.2rem' }}>
+              {allErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
+              {allErrors.length > 20 && <li>…and {allErrors.length - 20} more</li>}
+            </ul>
+          </div>
+        )}
+      </details>
     </div>
   );
 }
@@ -356,6 +385,12 @@ export default function ParityPortal() {
   const [refreshResult, setRefreshResult] = useState<RefreshEventDataResponse | null>(null);
   const [refreshError, setRefreshError] = useState('');
 
+  // refreshKey: incremented after successful refresh to trigger child panel refetch
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Event categories for the class/category selector
+  const [eventCategories, setEventCategories] = useState<EventCategory[]>([]);
+
   const loadEvents = useCallback(async (year: number) => {
     setEventsLoading(true);
     try {
@@ -376,6 +411,16 @@ export default function ParityPortal() {
 
   useEffect(() => { loadEvents(selectedYear); }, [selectedYear, loadEvents]);
 
+  // Load event categories whenever selected event changes
+  useEffect(() => {
+    if (!selectedEventId) { setEventCategories([]); return; }
+    let cancelled = false;
+    parityApi.eventCategories(selectedEventId).then(res => {
+      if (!cancelled) setEventCategories(res.categories);
+    }).catch(() => { if (!cancelled) setEventCategories([]); });
+    return () => { cancelled = true; };
+  }, [selectedEventId]);
+
   const handleRefreshEventData = useCallback(async () => {
     if (!selectedEventId || refreshing) return;
     setRefreshing(true);
@@ -391,6 +436,10 @@ export default function ParityPortal() {
       setRefreshResult(res);
       setRefreshStep('');
       loadEvents(selectedYear);
+      // Trigger child panel refetch so UI updates without page reload
+      setRefreshKey(k => k + 1);
+      // Reload event categories too (new runs may introduce new classes)
+      parityApi.eventCategories(selectedEventId).then(r => setEventCategories(r.categories)).catch(() => {});
     } catch (e: any) {
       setRefreshError(e.message || 'Refresh failed');
       setRefreshStep('');
@@ -406,6 +455,25 @@ export default function ParityPortal() {
     const ev = events.find(e => e.id === id);
     if (ev) setRaceLookup(ev.race_lookup || '');
   }, [events]);
+
+  // Auto-refresh: lightweight refetch of visible data for ongoing events
+  const eventIsOngoing = selectedEvent
+    ? isEventOngoing(selectedEvent.start_date_local, selectedEvent.end_date_local, selectedEvent.timezone_iana)
+    : false;
+
+  const { autoRefreshOn, toggleAutoRefresh } = useAutoRefresh(
+    useCallback(() => { setRefreshKey(k => k + 1); }, []),
+    eventIsOngoing && !showAdminTools,
+  );
+
+  // Build "All Categories" list from event data (unique class_index values not in RECOMMENDED)
+  const allEventClasses = useMemo(() => {
+    const recommended = new Set<string>(RECOMMENDED_CLASSES as unknown as string[]);
+    const extra = eventCategories
+      .map(c => c.class_index)
+      .filter(ci => ci && !recommended.has(ci));
+    return [...new Set(extra)].sort();
+  }, [eventCategories]);
 
   if (!can('nhra.parity' as any)) {
     return (
@@ -464,9 +532,16 @@ export default function ParityPortal() {
             </option>
           ))}
         </select>
-        <select style={{ ...S.input, width: 72, fontSize: '0.8rem' }} value={classIndex}
+        <select style={{ ...S.input, width: 90, fontSize: '0.8rem' }} value={classIndex}
           onChange={e => setClassIndex(e.target.value)}>
-          {PARITY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+          <optgroup label="Recommended">
+            {RECOMMENDED_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+          </optgroup>
+          {allEventClasses.length > 0 && (
+            <optgroup label="All Categories">
+              {allEventClasses.map(c => <option key={c} value={c}>{c}</option>)}
+            </optgroup>
+          )}
         </select>
         {isParityAdmin && selectedEventId && (
           <button
@@ -476,6 +551,15 @@ export default function ParityPortal() {
             title="Re-fetch timing data, Tempest weather, Open-Meteo backfill, and rebuild canonical weather for this event"
           >
             {refreshing ? (refreshStep || 'Refreshing…') : '↻ Refresh Event Data'}
+          </button>
+        )}
+        {eventIsOngoing && (
+          <button
+            style={{ ...S.btn('secondary'), fontSize: '0.65rem', padding: '0.15rem 0.4rem', opacity: 0.8, whiteSpace: 'nowrap' }}
+            onClick={toggleAutoRefresh}
+            title={autoRefreshOn ? 'Auto-refresh is ON (60s). Click to pause.' : 'Auto-refresh is paused. Click to resume.'}
+          >
+            {autoRefreshOn ? '⟳ Auto: ON' : '⏸ Auto: OFF'}
           </button>
         )}
       </div>
@@ -527,7 +611,8 @@ export default function ParityPortal() {
       </div>
 
       {/* ── Dashboard Panels ── */}
-      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
+      {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey} />}
+      {tab === 'liveTiming' && <LiveTimingPanel event={selectedEvent} classIndex={classIndex} refreshKey={refreshKey} />}
       {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
@@ -563,7 +648,9 @@ export default function ParityPortal() {
 
 // ── Event Runs Panel ────────────────────────────────────────────────────
 
-type RunSortKey = 'driver_name' | 'class_index' | 'round' | 'lane' | 'rt' | 'ft60' | 'ft330' | 'ft660' | 'mph660' | 'ft1000' | 'mph1000' | 'ft1320' | 'mph1320' | 'wx_temp' | 'wx_rh' | 'wx_press';
+type RunSortKey = 'driver_name' | 'class_index' | 'category' | 'round' | 'lane' | 'car_number'
+  | 'dial_in' | 'rt' | 'ft60' | 'ft330' | 'ft660' | 'mph660' | 'ft1000' | 'mph1000' | 'ft1320' | 'mph1320'
+  | 'mov' | 'wx_temp' | 'wx_rh' | 'wx_press' | 'run_time_local';
 type SortDir = 'asc' | 'desc';
 
 // Column definitions for the column picker
@@ -571,7 +658,7 @@ interface ColDef {
   key: string;
   label: string;
   sortKey?: RunSortKey;
-  group: 'core' | 'slip' | 'weather';
+  group: 'core' | 'slip' | 'weather' | 'extra';
   defaultOn: boolean;
   format?: (r: RunWithWeather) => string;
   align?: 'left' | 'right';
@@ -579,10 +666,14 @@ interface ColDef {
 }
 
 const ALL_COLUMNS: ColDef[] = [
+  { key: 'run_time_local', label: 'Time', sortKey: 'run_time_local', group: 'core', defaultOn: false, format: r => r.run_time_local ? r.run_time_local.replace(/T/, ' ').slice(0, 16) : '', align: 'left' },
   { key: 'driver_name', label: 'Driver', sortKey: 'driver_name', group: 'core', defaultOn: true, align: 'left' },
-  { key: 'class_index', label: 'Class', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'class_index', label: 'Class', sortKey: 'class_index', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'category', label: 'Category', sortKey: 'category', group: 'extra', defaultOn: false, format: r => r.category || '', align: 'left' },
+  { key: 'car_number', label: 'Car#', sortKey: 'car_number', group: 'extra', defaultOn: false, format: r => r.car_number || '', align: 'left' },
   { key: 'round', label: 'Rnd', sortKey: 'round', group: 'core', defaultOn: true, align: 'left' },
   { key: 'lane', label: 'Ln', sortKey: 'lane', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'dial_in', label: 'Dial', sortKey: 'dial_in', group: 'extra', defaultOn: false, format: r => r.dial_in != null ? formatET(r.dial_in) : '', align: 'right' },
   { key: 'rt', label: 'RT', sortKey: 'rt', group: 'core', defaultOn: true, format: r => r.rt != null ? formatET(r.rt) : '', align: 'right' },
   { key: 'ft60', label: '60ft', sortKey: 'ft60', group: 'slip', defaultOn: true, format: r => r.ft60 != null ? formatET(r.ft60) : '', align: 'right' },
   { key: 'ft330', label: '330ft', sortKey: 'ft330', group: 'slip', defaultOn: false, format: r => r.ft330 != null ? formatET(r.ft330) : '', align: 'right' },
@@ -592,6 +683,9 @@ const ALL_COLUMNS: ColDef[] = [
   { key: 'mph1000', label: '1000mph', sortKey: 'mph1000', group: 'slip', defaultOn: false, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
   { key: 'ft1320', label: 'ET', sortKey: 'ft1320', group: 'core', defaultOn: true, format: r => r.ft1320 != null ? formatET(r.ft1320) : '', align: 'right', bold: true },
   { key: 'mph1320', label: 'MPH', sortKey: 'mph1320', group: 'core', defaultOn: true, format: r => r.mph1320 != null ? formatMPH(r.mph1320) : '', align: 'right', bold: true },
+  { key: 'mov', label: 'MOV', sortKey: 'mov', group: 'extra', defaultOn: false, format: r => r.mov != null ? r.mov.toFixed(4) : '', align: 'right' },
+  { key: 'win_flag', label: 'W', group: 'extra', defaultOn: false, format: r => r.win_flag ? 'W' : '', align: 'left' },
+  { key: 'dq_flag', label: 'DQ', group: 'extra', defaultOn: false, format: r => r.dq_flag ? 'DQ' : '', align: 'left' },
   { key: 'wx_temp', label: 'Temp °F', sortKey: 'wx_temp', group: 'weather', defaultOn: false, format: r => r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '', align: 'right' },
   { key: 'wx_rh', label: 'RH%', sortKey: 'wx_rh', group: 'weather', defaultOn: false, format: r => r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '', align: 'right' },
   { key: 'wx_press', label: 'Press inHg', sortKey: 'wx_press', group: 'weather', defaultOn: false, format: r => r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', align: 'right' },
@@ -604,7 +698,7 @@ function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
   return (r as any)[key] ?? null;
 }
 
-function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: { event: EventWithStats | null; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void }) {
+function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick, refreshKey = 0 }: { event: EventWithStats | null; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void; refreshKey?: number }) {
   const { can: canCap } = useCapabilities();
   const canReadIncidents = canCap('incidents.read' as any);
   const canCreateIncidents = canCap('incidents.create' as any);
@@ -686,7 +780,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
     } catch { /* ignore */ }
   }, [event?.race_lookup]);
 
-  useEffect(() => { loadRuns(); loadFlags(); }, [loadRuns, loadFlags]);
+  useEffect(() => { loadRuns(); loadFlags(); }, [loadRuns, loadFlags, refreshKey]);
 
   // Client-side filters: flagged + driver search
   const filteredRuns = useMemo(() => {
@@ -741,7 +835,7 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
     });
   };
 
-  const toggleGroup = (group: 'slip' | 'weather') => {
+  const toggleGroup = (group: 'slip' | 'weather' | 'extra') => {
     const groupCols = ALL_COLUMNS.filter(c => c.group === group);
     const allOn = groupCols.every(c => visibleCols.has(c.key));
     setVisibleCols(prev => {
@@ -836,6 +930,19 @@ function EventRunsPanel({ event, classIndex: globalClassIndex, onDriverClick }: 
                 onClick={() => toggleGroup('weather')}>Toggle All</button>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
                 {ALL_COLUMNS.filter(c => c.group === 'weather').map(c => (
+                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <b>Extra</b>
+              <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0 0.3rem', marginLeft: '0.4rem' }}
+                onClick={() => toggleGroup('extra')}>Toggle All</button>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                {ALL_COLUMNS.filter(c => c.group === 'extra').map(c => (
                   <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
                     {c.label}
@@ -6388,6 +6495,219 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
         <MiniChart dataKey="cf" color="#16a34a" label="Corr Factor" unit="" fmt={(v: number) => v.toFixed(4)} yWidth={55} />
         <MiniChart dataKey="dewPt" color="#06b6d4" label="Dew Point" unit="°F" fmt={(v: number) => v.toFixed(1)} />
       </div>
+    </div>
+  );
+}
+
+// ── Live Timing Panel ────────────────────────────────────────────────────
+
+const LIVE_TIMING_COLUMNS: ColDef[] = [
+  { key: 'run_time_local', label: 'Time', sortKey: 'run_time_local', group: 'core', defaultOn: true, format: r => r.run_time_local ? r.run_time_local.replace(/T/, ' ').slice(0, 16) : '', align: 'left' },
+  { key: 'driver_name', label: 'Driver', sortKey: 'driver_name', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'class_index', label: 'Class', sortKey: 'class_index', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'category', label: 'Category', sortKey: 'category', group: 'extra', defaultOn: false, format: r => r.category || '', align: 'left' },
+  { key: 'car_number', label: 'Car#', sortKey: 'car_number', group: 'extra', defaultOn: false, format: r => r.car_number || '', align: 'left' },
+  { key: 'round', label: 'Rnd', sortKey: 'round', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'lane', label: 'Ln', sortKey: 'lane', group: 'core', defaultOn: true, align: 'left' },
+  { key: 'dial_in', label: 'Dial', sortKey: 'dial_in', group: 'extra', defaultOn: false, format: r => r.dial_in != null ? formatET(r.dial_in) : '', align: 'right' },
+  { key: 'rt', label: 'RT', sortKey: 'rt', group: 'core', defaultOn: true, format: r => r.rt != null ? formatET(r.rt) : '', align: 'right' },
+  { key: 'ft60', label: '60ft', sortKey: 'ft60', group: 'slip', defaultOn: true, format: r => r.ft60 != null ? formatET(r.ft60) : '', align: 'right' },
+  { key: 'ft330', label: '330ft', sortKey: 'ft330', group: 'slip', defaultOn: true, format: r => r.ft330 != null ? formatET(r.ft330) : '', align: 'right' },
+  { key: 'ft660', label: '660ft', sortKey: 'ft660', group: 'slip', defaultOn: true, format: r => r.ft660 != null ? formatET(r.ft660) : '', align: 'right' },
+  { key: 'mph660', label: '660mph', sortKey: 'mph660', group: 'slip', defaultOn: true, format: r => r.mph660 != null ? formatMPH(r.mph660) : '', align: 'right' },
+  { key: 'ft1000', label: '1000ft', sortKey: 'ft1000', group: 'slip', defaultOn: true, format: r => r.ft1000 != null ? formatET(r.ft1000) : '', align: 'right' },
+  { key: 'mph1000', label: '1000mph', sortKey: 'mph1000', group: 'slip', defaultOn: true, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
+  { key: 'ft1320', label: 'ET', sortKey: 'ft1320', group: 'core', defaultOn: true, format: r => r.ft1320 != null ? formatET(r.ft1320) : '', align: 'right', bold: true },
+  { key: 'mph1320', label: 'MPH', sortKey: 'mph1320', group: 'core', defaultOn: true, format: r => r.mph1320 != null ? formatMPH(r.mph1320) : '', align: 'right', bold: true },
+  { key: 'mov', label: 'MOV', sortKey: 'mov', group: 'extra', defaultOn: false, format: r => r.mov != null ? r.mov.toFixed(4) : '', align: 'right' },
+  { key: 'win_flag', label: 'W', group: 'extra', defaultOn: false, format: r => r.win_flag ? 'W' : '', align: 'left' },
+  { key: 'dq_flag', label: 'DQ', group: 'extra', defaultOn: false, format: r => r.dq_flag ? 'DQ' : '', align: 'left' },
+  { key: 'wx_temp', label: 'Temp °F', sortKey: 'wx_temp', group: 'weather', defaultOn: true, format: r => r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '', align: 'right' },
+  { key: 'wx_rh', label: 'RH%', sortKey: 'wx_rh', group: 'weather', defaultOn: true, format: r => r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '', align: 'right' },
+  { key: 'wx_press', label: 'Press inHg', sortKey: 'wx_press', group: 'weather', defaultOn: true, format: r => r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', align: 'right' },
+];
+
+function LiveTimingPanel({ event, classIndex, refreshKey = 0 }: { event: EventWithStats | null; classIndex: string; refreshKey?: number }) {
+  const [runs, setRuns] = useState<RunWithWeather[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [driverSearch, setDriverSearch] = useState('');
+  const [showColPicker, setShowColPicker] = useState(false);
+
+  const LT_COL_LS_KEY = 'parity_liveTimingCols';
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(LT_COL_LS_KEY);
+      if (stored) {
+        const arr = JSON.parse(stored) as string[];
+        if (Array.isArray(arr) && arr.length > 0) return new Set(arr);
+      }
+    } catch { /* ignore */ }
+    return new Set(LIVE_TIMING_COLUMNS.filter(c => c.defaultOn).map(c => c.key));
+  });
+
+  useEffect(() => {
+    localStorage.setItem(LT_COL_LS_KEY, JSON.stringify([...visibleCols]));
+  }, [visibleCols]);
+
+  const loadRuns = useCallback(async () => {
+    if (!event?.race_lookup) return;
+    setLoading(true); setError('');
+    try {
+      const res = await parityApi.runsWithWeather({
+        raceLookup: event.race_lookup,
+        classIndex: classIndex || undefined,
+        limit: 2000,
+      });
+      // Sort newest-to-oldest by local time
+      const sorted = [...res.runs].sort((a, b) => {
+        const ta = a.run_time_local || a.run_timestamp_utc || '';
+        const tb = b.run_time_local || b.run_timestamp_utc || '';
+        return tb.localeCompare(ta);
+      });
+      setRuns(sorted);
+      setTotal(res.total);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [event?.race_lookup, classIndex]);
+
+  useEffect(() => { loadRuns(); }, [loadRuns, refreshKey]);
+
+  const filteredRuns = useMemo(() => {
+    if (!driverSearch.trim()) return runs;
+    const q = driverSearch.trim().toLowerCase();
+    return runs.filter(r => r.driver_name?.toLowerCase().includes(q));
+  }, [runs, driverSearch]);
+
+  const toggleCol = (key: string) => {
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleGroup = (group: 'core' | 'slip' | 'weather' | 'extra') => {
+    const groupCols = LIVE_TIMING_COLUMNS.filter(c => c.group === group);
+    const allOn = groupCols.every(c => visibleCols.has(c.key));
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      groupCols.forEach(c => allOn ? next.delete(c.key) : next.add(c.key));
+      return next;
+    });
+  };
+
+  const activeCols = LIVE_TIMING_COLUMNS.filter(c => visibleCols.has(c.key));
+
+  const stickyTh: React.CSSProperties = {
+    ...S.th, position: 'sticky', top: 0, zIndex: 1,
+    background: 'var(--color-surface, #1e1e2e)',
+  };
+
+  if (!event) {
+    return (
+      <div style={S.card}>
+        <p style={{ color: 'var(--color-muted)' }}>Select an event above to view live timing.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <button style={{ ...S.btn(showColPicker ? 'primary' : 'secondary'), fontSize: '0.7rem' }}
+          onClick={() => setShowColPicker(v => !v)}>
+          Columns ({activeCols.length}/{LIVE_TIMING_COLUMNS.length})
+        </button>
+        <input style={{ ...S.input, width: 150, fontSize: '0.7rem', padding: '0.15rem 0.3rem' }}
+          placeholder="Driver search..."
+          value={driverSearch}
+          onChange={e => setDriverSearch(e.target.value)} />
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginLeft: 'auto' }}>
+          {filteredRuns.length} of {total} runs — newest first
+        </span>
+      </div>
+
+      {/* Column Picker */}
+      {showColPicker && (
+        <div style={{ ...S.card, padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.75rem' }}>
+            {(['slip', 'weather', 'extra'] as const).map(group => (
+              <div key={group}>
+                <b>{group === 'slip' ? 'Slip' : group === 'weather' ? 'Weather' : 'Extra'}</b>
+                <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0 0.3rem', marginLeft: '0.4rem' }}
+                  onClick={() => toggleGroup(group)}>Toggle All</button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                  {LIVE_TIMING_COLUMNS.filter(c => c.group === group).map(c => (
+                    <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {error && <div style={S.error}>{error}</div>}
+      {loading && <div style={S.hint}>Loading live timing...</div>}
+
+      {!loading && filteredRuns.length === 0 && (
+        <div style={S.hint}>No runs found{classIndex ? ` for class ${classIndex}` : ''}.</div>
+      )}
+
+      {filteredRuns.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                {activeCols.map(c => (
+                  <th key={c.key} style={{ ...stickyTh, textAlign: c.align || 'left', whiteSpace: 'nowrap' }}>
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRuns.map(run => (
+                <tr key={run.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  {activeCols.map(c => {
+                    let val: string;
+                    if (c.format) {
+                      val = c.format(run);
+                    } else if (c.key === 'driver_name') {
+                      val = run.driver_name || '';
+                    } else if (c.key === 'class_index') {
+                      val = run.class_index || '';
+                    } else if (c.key === 'round') {
+                      val = run.round || '';
+                    } else if (c.key === 'lane') {
+                      val = run.lane || '';
+                    } else {
+                      val = String((run as any)[c.key] ?? '');
+                    }
+                    return (
+                      <td key={c.key} style={{
+                        ...S.td,
+                        textAlign: c.align || 'left',
+                        fontWeight: c.bold ? 700 : 400,
+                        fontVariantNumeric: c.align === 'right' ? 'tabular-nums' : undefined,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {val}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

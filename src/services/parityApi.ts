@@ -413,6 +413,17 @@ export interface EventsWithStatsResponse {
   count: number;
 }
 
+export interface EventCategory {
+  category: string | null;
+  class_index: string;
+  run_count: number;
+}
+
+export interface EventCategoriesResponse {
+  eventId: number;
+  categories: EventCategory[];
+}
+
 export interface ScrapeResult {
   yearsScraped: number[];
   eventsUpserted: number;
@@ -1722,6 +1733,10 @@ export const parityApi = {
     qs.set('action', 'eventsWithStats');
     if (seasonYear) qs.set('seasonYear', String(seasonYear));
     return parityRequest<EventsWithStatsResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async eventCategories(eventId: number): Promise<EventCategoriesResponse> {
+    return parityRequest<EventCategoriesResponse>(`/parity.php?action=eventCategories&eventId=${eventId}`);
   },
 
   async scrapeNhraSchedule(params: { yearStart: number; yearEnd: number; throttleMs?: number; force?: boolean }): Promise<ScrapeResult> {

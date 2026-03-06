@@ -408,6 +408,10 @@ switch ($action) {
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleTimeDiagnosticsSample($pdo, $auth);
         break;
+    case 'eventCategories':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleEventCategories($pdo);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -2340,6 +2344,47 @@ function handleEventsWithStats(PDO $pdo): void {
     }
 
     rsa_jsonResponse(['events' => $rows, 'count' => count($rows)]);
+}
+
+// ============================================================================
+// GET ?action=eventCategories&eventId=N
+// Returns distinct (category, class_index) pairs + run counts for the event.
+// Used by the class/category selector to build "Recommended + All" dropdown.
+// ============================================================================
+
+function handleEventCategories(PDO $pdo): void {
+    $eventId = (int)($_GET['eventId'] ?? 0);
+    if ($eventId <= 0) {
+        rsa_jsonResponse(['error' => 'eventId is required'], 400);
+    }
+
+    // Resolve race_lookup for this event
+    $stmt = $pdo->prepare("SELECT race_lookup FROM parity_events WHERE id = ?");
+    $stmt->execute([$eventId]);
+    $raceLookup = $stmt->fetchColumn();
+    if (!$raceLookup) {
+        rsa_jsonResponse(['error' => "Event $eventId not found"], 404);
+    }
+
+    // Get distinct (category, class_index) pairs with run counts
+    $stmt = $pdo->prepare("
+        SELECT category, class_index, COUNT(*) AS run_count
+        FROM parity_runs
+        WHERE race_lookup = ? AND class_index IS NOT NULL AND class_index != ''
+        GROUP BY category, class_index
+        ORDER BY category, class_index
+    ");
+    $stmt->execute([$raceLookup]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($rows as &$r) {
+        $r['run_count'] = (int)$r['run_count'];
+    }
+
+    rsa_jsonResponse([
+        'eventId' => $eventId,
+        'categories' => $rows,
+    ]);
 }
 
 // ============================================================================
