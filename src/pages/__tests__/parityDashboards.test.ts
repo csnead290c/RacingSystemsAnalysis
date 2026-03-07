@@ -1156,6 +1156,39 @@ describe('Fix: ParityReport filters by category directly (not classIndex)', () =
   });
 });
 
+describe('Fix: Parity Report combo assignment write path', () => {
+  it('QualTable guards against empty classIndex before calling bulkUpsertDriverCombos', () => {
+    expect(parityReportSource).toContain("if (!classIndex)");
+    expect(parityReportSource).toContain('Unable to map category to class index');
+  });
+
+  it('QualTable gets classIndex from qualOrder.classIndex (backend-derived)', () => {
+    expect(parityReportSource).toContain('classIndex={qualOrder.classIndex}');
+  });
+
+  it('QualTable does not send raw category as classIndex to bulkUpsertDriverCombos', () => {
+    // The bulkUpsertDriverCombos call should use classIndex (from qualOrder response), not category
+    const comboCallRegex = /bulkUpsertDriverCombos\(\[\{[^}]*classIndex:\s*category/;
+    expect(parityReportSource).not.toMatch(comboCallRegex);
+  });
+
+  it('QualTable shows toast on success and failure', () => {
+    expect(parityReportSource).toContain("setToast({ msg: `Combo updated for");
+    expect(parityReportSource).toContain("type: 'ok'");
+    expect(parityReportSource).toContain("type: 'err'");
+  });
+
+  it('QualTable invalidates cache and calls onComboChanged after successful upsert', () => {
+    expect(parityReportSource).toContain('_cache.clear()');
+    expect(parityReportSource).toContain('onComboChanged?.()');
+  });
+
+  it('QualTable shows warning banner when classIndex is missing and user is admin', () => {
+    expect(parityReportSource).toContain('Unable to resolve class index for this category');
+    expect(parityReportSource).toContain('combo assignment is disabled');
+  });
+});
+
 describe('Fix: useCategoryPreset uses case-insensitive classIndex derivation', () => {
   it('derives classIndex via resolveClassIndex (not direct CATEGORY_TO_CLASS lookup)', () => {
     expect(useClassPresetSource2).toContain('resolveClassIndex(category)');

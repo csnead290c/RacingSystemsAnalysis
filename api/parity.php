@@ -6852,6 +6852,9 @@ function parity_loadEventRunData(PDO $pdo): array {
         $classPlaceholders = implode(',', array_fill(0, count($classIndices), '?'));
     }
 
+    // When filtering by category, derive classIndex from actual runs so write paths (combo assignment) work
+    $derivedClassIndex = $classIndex;
+
     $engineCombos = [];
     foreach ($pdo->query("SELECT id, name, t_power, d_power, friction_factor FROM parity_engine_combos")->fetchAll(PDO::FETCH_ASSOC) as $ec) {
         $engineCombos[(int)$ec['id']] = $ec;
@@ -6893,6 +6896,11 @@ function parity_loadEventRunData(PDO $pdo): array {
     ");
     $runStmt->execute($params);
     $runs = $runStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // When filtering by category, derive classIndex from actual run data so write paths (combo assignment) work
+    if ($useCategory && !empty($runs) && $derivedClassIndex === '') {
+        $derivedClassIndex = $runs[0]['class_index'] ?? '';
+    }
 
     // Flagged runs
     $flaggedIds = [];
@@ -7011,7 +7019,8 @@ function parity_loadEventRunData(PDO $pdo): array {
 
     return [
         'params' => [
-            'eventId' => $eventId, 'classIndex' => $classIndex, 'metric' => $metric,
+            'eventId' => $eventId, 'classIndex' => $derivedClassIndex, 'category' => $category,
+            'metric' => $metric,
             'mode' => $mode, 'topN' => $topN, 'sessionScope' => $sessionScope,
             'includeFlagged' => $includeFlagged, 'includeUnknown' => $includeUnknown,
             'isLowerBetter' => $isLowerBetter,

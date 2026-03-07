@@ -379,6 +379,7 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
   const canCreateIncidents = can('incidents.create' as any);
   const [engineCombos, setEngineCombos] = useState<EngineComboRow[]>([]);
   const [editingDriver, setEditingDriver] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
 
   // Incident drawer state
   const [drawerRunId, setDrawerRunId] = useState<number | null>(null);
@@ -391,6 +392,13 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
   }, []);
   const [saving, setSaving] = useState(false);
 
+  // Auto-dismiss toast after 4s
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   // Load engine combos for the dropdown
   useEffect(() => {
     if (!isAdmin) return;
@@ -399,6 +407,10 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
 
   const handleComboChange = useCallback(async (driverName: string, newComboId: number) => {
     if (!event) return;
+    if (!classIndex) {
+      setToast({ msg: `Unable to map category to class index — cannot assign combos.`, type: 'err' });
+      return;
+    }
     setSaving(true);
     try {
       const effectiveDate = (event.start_date_local?.slice(0, 10) || new Date().toISOString().slice(0, 10)) + 'T00:00:00Z';
@@ -411,8 +423,11 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
       // Invalidate cache so reload picks up new combo
       _cache.clear();
       setEditingDriver(null);
+      setToast({ msg: `Combo updated for ${driverName} at ${event.start_date_local?.slice(0, 10) ?? 'event'}`, type: 'ok' });
       onComboChanged?.();
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to assign combo';
+      setToast({ msg, type: 'err' });
       console.error('Failed to assign combo:', e);
     } finally {
       setSaving(false);
@@ -423,6 +438,16 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
   const displayRows = localRows.length === rows.length ? localRows : rows;
   return (
     <>
+    {toast && (
+      <div style={{ background: toast.type === 'ok' ? '#d1fae5' : '#fee2e2', border: `1px solid ${toast.type === 'ok' ? '#10b981' : '#ef4444'}`, borderRadius: 6, padding: '0.4rem 0.75rem', marginBottom: '0.4rem', fontSize: '0.72rem', color: toast.type === 'ok' ? '#065f46' : '#991b1b' }}>
+        {toast.msg}
+      </div>
+    )}
+    {isAdmin && !classIndex && (
+      <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '0.4rem 0.75rem', marginBottom: '0.4rem', fontSize: '0.72rem', color: '#92400e' }}>
+        ⚠ Unable to resolve class index for this category — combo assignment is disabled.
+      </div>
+    )}
     <div style={{ maxHeight: 400, overflowY: 'auto' }}>
       <table style={SS.tbl}>
         <thead><tr>
