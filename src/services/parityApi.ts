@@ -2345,7 +2345,7 @@ export const parityApi = {
     });
   },
 
-  async updateRun(runId: number, fields: Record<string, number | null>): Promise<{ ok: boolean; runId: number; updatedFields: string[] }> {
+  async updateRun(runId: number, fields: Record<string, string | number | boolean | null>): Promise<{ ok: boolean; runId: number; updatedFields: string[] }> {
     return parityRequest<{ ok: boolean; runId: number; updatedFields: string[] }>('/parity.php?action=updateRun', {
       method: 'POST',
       body: JSON.stringify({ runId, fields }),

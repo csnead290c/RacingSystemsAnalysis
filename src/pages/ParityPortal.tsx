@@ -1109,15 +1109,25 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
                           onClick={() => {
                             setEditingRun(r);
                             setEditFields({
+                              driver_name: r.driver_name ?? '',
+                              car_number: r.car_number ?? '',
+                              round: r.round ?? '',
+                              lane: r.lane ?? '',
+                              category: r.category ?? '',
+                              class_index: r.class_index ?? '',
                               rt: r.rt != null ? String(r.rt) : '',
                               ft60: r.ft60 != null ? String(r.ft60) : '',
                               ft330: r.ft330 != null ? String(r.ft330) : '',
                               ft660: r.ft660 != null ? String(r.ft660) : '',
-                              mph660: r.mph660 != null ? String(r.mph660) : '',
                               ft1000: r.ft1000 != null ? String(r.ft1000) : '',
-                              mph1000: r.mph1000 != null ? String(r.mph1000) : '',
                               ft1320: r.ft1320 != null ? String(r.ft1320) : '',
+                              mph660: r.mph660 != null ? String(r.mph660) : '',
+                              mph1000: r.mph1000 != null ? String(r.mph1000) : '',
                               mph1320: r.mph1320 != null ? String(r.mph1320) : '',
+                              dial_in: r.dial_in != null ? String(r.dial_in) : '',
+                              mov: r.mov != null ? String(r.mov) : '',
+                              win_flag: r.win_flag ? 'true' : 'false',
+                              dq_flag: r.dq_flag ? 'true' : 'false',
                             });
                             setEditError('');
                           }}>✏</button>
@@ -1148,53 +1158,132 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
       )}
 
       {/* ── Run Edit Modal (admin only) ── */}
-      {editingRun && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={() => setEditingRun(null)}>
-          <div style={{ background: 'var(--color-surface, #1e1e2e)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1.25rem', minWidth: 340, maxWidth: 440 }}
-            onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>Edit Run — {editingRun.driver_name} ({editingRun.round})</h3>
-            {editError && <div style={{ color: '#ef4444', fontSize: '0.72rem', marginBottom: '0.4rem' }}>{editError}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-              {(['rt', 'ft60', 'ft330', 'ft660', 'mph660', 'ft1000', 'mph1000', 'ft1320', 'mph1320'] as const).map(field => (
-                <label key={field} style={{ fontSize: '0.72rem' }}>
-                  <span style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>{field}</span>
-                  <input type="text" inputMode="decimal"
-                    style={{ ...S.input, width: '100%', fontSize: '0.72rem', padding: '0.2rem 0.35rem', fontFamily: 'monospace' }}
-                    value={editFields[field] ?? ''}
-                    onChange={e => setEditFields(prev => ({ ...prev, [field]: e.target.value }))}
-                  />
-                </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', justifyContent: 'flex-end' }}>
-              <button style={S.btn('secondary')} onClick={() => setEditingRun(null)} disabled={editSaving}>Cancel</button>
-              <button style={S.btn('primary')} disabled={editSaving}
-                onClick={async () => {
-                  setEditSaving(true); setEditError('');
-                  try {
-                    const fields: Record<string, number | null> = {};
-                    for (const [k, v] of Object.entries(editFields)) {
-                      if (v === '') { fields[k] = null; }
-                      else {
-                        const n = parseFloat(v);
-                        if (isNaN(n)) { setEditError(`Invalid number for ${k}`); setEditSaving(false); return; }
-                        fields[k] = n;
+      {editingRun && (() => {
+        const numericKeys = new Set(['rt', 'ft60', 'ft330', 'ft660', 'ft1000', 'ft1320', 'mph660', 'mph1000', 'mph1320', 'dial_in', 'mov']);
+        const boolKeys = new Set(['win_flag', 'dq_flag']);
+        const secStyle: React.CSSProperties = { marginBottom: '0.6rem' };
+        const secTitle: React.CSSProperties = { fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-muted, #888)', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.15rem', marginBottom: '0.35rem' };
+        const fieldGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.35rem 0.5rem' };
+        const fieldLabel: React.CSSProperties = { fontSize: '0.7rem' };
+        const fieldTitle: React.CSSProperties = { display: 'block', fontWeight: 600, marginBottom: 1, fontSize: '0.65rem', color: 'var(--color-muted, #aaa)' };
+        const fieldInput: React.CSSProperties = { ...S.input, width: '100%', fontSize: '0.72rem', padding: '0.2rem 0.35rem', fontFamily: 'monospace' };
+        const textInput: React.CSSProperties = { ...S.input, width: '100%', fontSize: '0.72rem', padding: '0.2rem 0.35rem' };
+        const renderField = (key: string, label: string, mono = true) => (
+          <label key={key} style={fieldLabel}>
+            <span style={fieldTitle}>{label}</span>
+            <input type="text" inputMode={numericKeys.has(key) ? 'decimal' : 'text'}
+              style={mono ? fieldInput : textInput}
+              value={editFields[key] ?? ''}
+              onChange={e => setEditFields(prev => ({ ...prev, [key]: e.target.value }))}
+            />
+          </label>
+        );
+        const renderBool = (key: string, label: string) => (
+          <label key={key} style={fieldLabel}>
+            <span style={fieldTitle}>{label}</span>
+            <select style={{ ...S.input, width: '100%', fontSize: '0.72rem', padding: '0.2rem 0.35rem' }}
+              value={editFields[key] ?? 'false'}
+              onChange={e => setEditFields(prev => ({ ...prev, [key]: e.target.value }))}>
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </label>
+        );
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+            onClick={() => setEditingRun(null)}>
+            <div style={{ background: 'var(--color-surface, #1e1e2e)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1.25rem 1.5rem', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}
+              onClick={e => e.stopPropagation()}>
+              <h3 style={{ margin: '0 0 0.15rem', fontSize: '0.95rem', fontWeight: 700 }}>Edit Run</h3>
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-muted, #888)', marginBottom: '0.6rem' }}>
+                {editingRun.driver_name || 'Unknown'} — {editingRun.round || '?'} — ID {editingRun.id}
+              </div>
+              {editError && <div style={{ color: '#ef4444', fontSize: '0.72rem', marginBottom: '0.5rem', padding: '0.25rem 0.4rem', background: 'rgba(239,68,68,0.08)', borderRadius: 4 }}>{editError}</div>}
+
+              {/* Section: Run Identity */}
+              <div style={secStyle}>
+                <div style={secTitle}>Run Identity</div>
+                <div style={fieldGrid}>
+                  {renderField('driver_name', 'Driver', false)}
+                  {renderField('car_number', 'Car #', false)}
+                  {renderField('round', 'Round', false)}
+                  {renderField('lane', 'Lane', false)}
+                  {renderField('category', 'Category', false)}
+                  {renderField('class_index', 'Class Index', false)}
+                </div>
+              </div>
+
+              {/* Section: Timing / Incrementals */}
+              <div style={secStyle}>
+                <div style={secTitle}>Timing / Incrementals</div>
+                <div style={fieldGrid}>
+                  {renderField('rt', 'RT')}
+                  {renderField('ft60', '60 ft')}
+                  {renderField('ft330', '330 ft')}
+                  {renderField('ft660', '660 ft')}
+                  {renderField('ft1000', '1000 ft')}
+                  {renderField('ft1320', '1320 ft (ET)')}
+                </div>
+              </div>
+
+              {/* Section: Speed */}
+              <div style={secStyle}>
+                <div style={secTitle}>Speed</div>
+                <div style={fieldGrid}>
+                  {renderField('mph660', '660 MPH')}
+                  {renderField('mph1000', '1000 MPH')}
+                  {renderField('mph1320', '1320 MPH')}
+                </div>
+              </div>
+
+              {/* Section: Result / Status */}
+              <div style={secStyle}>
+                <div style={secTitle}>Result / Status</div>
+                <div style={fieldGrid}>
+                  {renderField('dial_in', 'Dial-In')}
+                  {renderField('mov', 'MOV')}
+                  {renderBool('win_flag', 'Win')}
+                  {renderBool('dq_flag', 'DQ')}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
+                <button style={S.btn('secondary')} onClick={() => setEditingRun(null)} disabled={editSaving}>Cancel</button>
+                <button style={S.btn('primary')} disabled={editSaving}
+                  onClick={async () => {
+                    setEditSaving(true); setEditError('');
+                    try {
+                      const payload: Record<string, string | number | boolean | null> = {};
+                      for (const [k, v] of Object.entries(editFields)) {
+                        if (boolKeys.has(k)) {
+                          payload[k] = v === 'true';
+                        } else if (numericKeys.has(k)) {
+                          if (v === '') { payload[k] = null; }
+                          else {
+                            const n = parseFloat(v);
+                            if (isNaN(n)) { setEditError(`Invalid number for ${k}`); setEditSaving(false); return; }
+                            payload[k] = n;
+                          }
+                        } else {
+                          // String field
+                          payload[k] = v === '' ? null : v;
+                        }
                       }
-                    }
-                    await parityApi.updateRun(editingRun.id, fields);
-                    setEditingRun(null);
-                    loadRuns();
-                  } catch (e: any) {
-                    setEditError(e.message || 'Save failed');
-                  } finally { setEditSaving(false); }
-                }}>
-                {editSaving ? 'Saving...' : 'Save'}
-              </button>
+                      await parityApi.updateRun(editingRun.id, payload);
+                      setEditingRun(null);
+                      loadRuns();
+                    } catch (e: any) {
+                      setEditError(e.message || 'Save failed');
+                    } finally { setEditSaving(false); }
+                  }}>
+                  {editSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

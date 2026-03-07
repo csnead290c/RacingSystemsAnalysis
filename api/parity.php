@@ -9288,23 +9288,47 @@ function handleUpdateRun(PDO $pdo, ?array $auth): void {
     if ($runId <= 0) rsa_jsonResponse(['error' => 'runId is required'], 400);
     if (!is_array($fields) || empty($fields)) rsa_jsonResponse(['error' => 'fields object is required and must be non-empty'], 400);
 
-    // Whitelist of editable columns
-    $allowed = ['ft60', 'ft330', 'ft660', 'mph660', 'ft1000', 'mph1000', 'ft1320', 'mph1320', 'rt'];
+    // Whitelist of editable columns by type
+    $numericFields = ['rt', 'ft60', 'ft330', 'ft660', 'mph660', 'ft1000', 'mph1000', 'ft1320', 'mph1320', 'dial_in', 'mov'];
+    $stringFields  = ['driver_name', 'car_number', 'lane', 'round', 'category', 'class_index'];
+    $boolFields    = ['win_flag', 'dq_flag'];
+    $allowed = array_merge($numericFields, $stringFields, $boolFields);
+
     $setClauses = [];
     $params = [];
     foreach ($fields as $col => $val) {
         if (!in_array($col, $allowed)) {
             rsa_jsonResponse(['error' => "Field '$col' is not editable"], 400);
         }
-        if ($val === null || $val === '') {
-            $setClauses[] = "$col = NULL";
-        } else {
-            $numVal = (float)$val;
-            if ($numVal < 0 || $numVal > 1000) {
-                rsa_jsonResponse(['error' => "Field '$col' value out of range (0-1000)"], 400);
+        if (in_array($col, $numericFields)) {
+            if ($val === null || $val === '') {
+                $setClauses[] = "$col = NULL";
+            } else {
+                $numVal = (float)$val;
+                if ($numVal < -100 || $numVal > 1000) {
+                    rsa_jsonResponse(['error' => "Field '$col' value out of range (-100 to 1000)"], 400);
+                }
+                $setClauses[] = "$col = ?";
+                $params[] = round($numVal, 4);
             }
-            $setClauses[] = "$col = ?";
-            $params[] = round($numVal, 4);
+        } elseif (in_array($col, $stringFields)) {
+            if ($val === null || $val === '') {
+                $setClauses[] = "$col = NULL";
+            } else {
+                $trimmed = trim((string)$val);
+                if (strlen($trimmed) > 255) {
+                    rsa_jsonResponse(['error' => "Field '$col' exceeds max length (255)"], 400);
+                }
+                $setClauses[] = "$col = ?";
+                $params[] = $trimmed;
+            }
+        } elseif (in_array($col, $boolFields)) {
+            if ($val === null) {
+                $setClauses[] = "$col = NULL";
+            } else {
+                $setClauses[] = "$col = ?";
+                $params[] = $val ? 1 : 0;
+            }
         }
     }
 

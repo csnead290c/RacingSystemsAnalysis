@@ -221,18 +221,46 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
     return isLB ? Math.min(best, x.totalAvg) : Math.max(best, x.totalAvg);
   }, null as number | null);
 
-  // PART 4: Compute a sane y-axis max using P75+1.5*IQR to clip extreme outliers
+  // PART 4: Zoom y-axis to the fastest meaningful cluster.
+  // For ET (lower-is-better): prioritize the LOW end — set a tight upper bound
+  // derived from the fastest quarter so differences among quick runs are visible
+  // and slow outliers clip off the top.
+  // Rule: yMin = min - pad, yMax = P25 + 2*(P25 - min).  If no clipping needed, auto.
+  // For MPH (higher-is-better): symmetric opposite — prioritize the HIGH end.
   const barValues = interleavedBars.map(b => b.value).filter(v => v != null && isFinite(v));
-  let yMax: number | 'auto' = 'auto';
-  if (barValues.length >= 4 && isLB) {
+  let yDomain: [number | ((v: number) => number), number | ((v: number) => number) | 'auto'] = [(min: number) => Math.floor((min - min * 0.002) * 100) / 100, 'auto'];
+  if (barValues.length >= 4) {
     const sorted = [...barValues].sort((a, b) => a - b);
-    const q1 = sorted[Math.floor(sorted.length * 0.25)];
-    const q3 = sorted[Math.floor(sorted.length * 0.75)];
-    const iqr = q3 - q1;
-    const cap = q3 + 1.5 * iqr;
-    // Only apply cap if it would actually clip something
-    if (sorted[sorted.length - 1] > cap) {
-      yMax = Math.ceil(cap * 100) / 100;
+    const n = sorted.length;
+    if (isLB) {
+      // ET: zoom to fastest (lowest) cluster
+      const fastest = sorted[0];
+      const p25 = sorted[Math.floor(n * 0.25)];
+      const lowSpread = p25 - fastest;
+      // Upper cap = P25 + 2× the spread within the fastest quarter
+      // Minimum headroom of 0.5% of the fastest value to avoid overly tight framing
+      const headroom = Math.max(lowSpread * 2, fastest * 0.005);
+      const cap = p25 + headroom;
+      const slowest = sorted[n - 1];
+      // Only apply if it would actually clip at least one bar
+      if (slowest > cap) {
+        const yMin = Math.floor((fastest - fastest * 0.001) * 100) / 100;
+        const yMax = Math.ceil(cap * 100) / 100;
+        yDomain = [yMin, yMax];
+      }
+    } else {
+      // MPH: zoom to fastest (highest) cluster — mirror logic
+      const fastest = sorted[n - 1];
+      const p75 = sorted[Math.floor(n * 0.75)];
+      const highSpread = fastest - p75;
+      const headroom = Math.max(highSpread * 2, fastest * 0.005);
+      const floor = p75 - headroom;
+      const slowest = sorted[0];
+      if (slowest < floor) {
+        const yMin = Math.floor(floor * 100) / 100;
+        const yMax = Math.ceil((fastest + fastest * 0.001) * 100) / 100;
+        yDomain = [yMin, yMax];
+      }
     }
   }
 
@@ -293,7 +321,7 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
               <BarChart data={interleavedBars} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                 <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={0} height={18} />
-                <YAxis tick={{ fontSize: 10 }} domain={[(min: number) => Math.floor((min - (min * 0.002)) * 100) / 100, yMax]} tickFormatter={(v: number) => v.toFixed(2)} width={48} />
+                <YAxis tick={{ fontSize: 10 }} domain={yDomain} tickFormatter={(v: number) => v.toFixed(2)} width={48} allowDataOverflow />
                 <Tooltip
                   formatter={(v: number, _name: string, props: any) => {
                     const p = props.payload;
