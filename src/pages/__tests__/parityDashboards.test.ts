@@ -337,7 +337,7 @@ describe('ParityReport component structure', () => {
 
   it('has qualifying results table', () => {
     expect(parityReportSource).toContain('QualTable');
-    expect(parityReportSource).toContain('Raw Qualifying Results');
+    expect(parityReportSource).toContain('Qualifying Results');
   });
 
   it('delta tables were removed (Phase 5.5)', () => {
@@ -786,8 +786,8 @@ describe('Hotfix2: ParityReport category prop + display', () => {
     expect(parityReportSource).toContain('const displayLabel = category || classIndex');
   });
 
-  it('shows "Category:" header with displayLabel (not "Class:")', () => {
-    expect(parityReportSource).toContain('Category: {displayLabel}');
+  it('shows displayLabel in the header (not classIndex)', () => {
+    expect(parityReportSource).toContain('{displayLabel}');
     expect(parityReportSource).not.toContain('Class: {classIndex}');
   });
 
@@ -844,10 +844,8 @@ describe('Hotfix2: Live Timing grouped pair/quad rendering', () => {
     expect(gkBody).toContain('category');
   });
 
-  it('renders group header rows with time, round, category, and pair/quad badge', () => {
+  it('renders group header rows with time, round, and category', () => {
     expect(portalSource).toContain('Group header row');
-    expect(portalSource).toContain('Pair');
-    expect(portalSource).toContain('Quad');
     expect(portalSource).toContain('g.time');
     expect(portalSource).toContain('g.round');
     expect(portalSource).toContain('g.category');

@@ -48,7 +48,7 @@ import {
 } from '../services/parityApi';
 import {
   formatET, formatMPH, formatBaro,
-  formatTemp, formatRH,
+  formatTemp, formatRH, formatDA,
 } from '../domain/parity/format';
 import TrackCoordCoveragePanel from './TrackCoordCoveragePanel';
 import BatchBackfillPanel from './BatchBackfillPanel';
@@ -614,12 +614,12 @@ export default function ParityPortal() {
 
       {/* ── Dashboard Panels ── */}
       {tab === 'eventRuns' && <EventRunsPanel event={selectedEvent} category={category} classIndex={classIndex} onDriverClick={goToDriverHistory} refreshKey={refreshKey} />}
-      {tab === 'liveTiming' && <LiveTimingPanel event={selectedEvent} refreshKey={refreshKey} />}
+      {tab === 'liveTiming' && <LiveTimingPanel event={selectedEvent} refreshKey={refreshKey} onDriverClick={goToDriverHistory} />}
       {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
-      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} />}
+      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} onDriverClick={goToDriverHistory} />}
 
       {/* ── Admin Panels ── */}
       {tab === 'adminTracks' && <AdminTracksPanel />}
@@ -685,12 +685,34 @@ const ALL_COLUMNS: ColDef[] = [
   { key: 'mph1000', label: '1000mph', sortKey: 'mph1000', group: 'slip', defaultOn: false, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
   { key: 'ft1320', label: 'ET', sortKey: 'ft1320', group: 'core', defaultOn: true, format: r => r.ft1320 != null ? formatET(r.ft1320) : '', align: 'right', bold: true },
   { key: 'mph1320', label: 'MPH', sortKey: 'mph1320', group: 'core', defaultOn: true, format: r => r.mph1320 != null ? formatMPH(r.mph1320) : '', align: 'right', bold: true },
+  { key: 'split_60_330', label: '60-330', group: 'slip', defaultOn: false, format: r => (r.ft60 != null && r.ft330 != null) ? formatET(r.ft330 - r.ft60) : '', align: 'right' },
+  { key: 'split_330_660', label: '330-660', group: 'slip', defaultOn: false, format: r => (r.ft330 != null && r.ft660 != null) ? formatET(r.ft660 - r.ft330) : '', align: 'right' },
+  { key: 'split_660_1000', label: '660-1000', group: 'slip', defaultOn: false, format: r => (r.ft660 != null && r.ft1000 != null) ? formatET(r.ft1000 - r.ft660) : '', align: 'right' },
+  { key: 'split_1000_1320', label: '1000-1320', group: 'slip', defaultOn: false, format: r => (r.ft1000 != null && r.ft1320 != null) ? formatET(r.ft1320 - r.ft1000) : '', align: 'right' },
+  { key: 'backhalf_et', label: 'Back½ ET', group: 'slip', defaultOn: false, format: r => (r.ft660 != null && r.ft1320 != null) ? formatET(r.ft1320 - r.ft660) : '', align: 'right' },
+  { key: 'backhalf_mph', label: '½ΔM', group: 'slip', defaultOn: false, format: r => (r.mph660 != null && r.mph1320 != null) ? (r.mph1320 - r.mph660).toFixed(2) : '', align: 'right' },
   { key: 'mov', label: 'MOV', sortKey: 'mov', group: 'extra', defaultOn: false, format: r => r.mov != null ? r.mov.toFixed(4) : '', align: 'right' },
   { key: 'win_flag', label: 'W', group: 'extra', defaultOn: false, format: r => r.win_flag ? 'W' : '', align: 'left' },
   { key: 'dq_flag', label: 'DQ', group: 'extra', defaultOn: false, format: r => r.dq_flag ? 'DQ' : '', align: 'left' },
   { key: 'wx_temp', label: 'Temp °F', sortKey: 'wx_temp', group: 'weather', defaultOn: false, format: r => r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '', align: 'right' },
   { key: 'wx_rh', label: 'RH%', sortKey: 'wx_rh', group: 'weather', defaultOn: false, format: r => r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '', align: 'right' },
   { key: 'wx_press', label: 'Press inHg', sortKey: 'wx_press', group: 'weather', defaultOn: false, format: r => r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', align: 'right' },
+  { key: 'wx_da', label: 'DA ft', group: 'weather', defaultOn: false, format: r => {
+    const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
+    return formatDA(computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).densityAltitude);
+  }, align: 'right' },
+  { key: 'wx_wg', label: 'WG', group: 'weather', defaultOn: false, format: r => {
+    const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
+    return computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).waterGrains.toFixed(1);
+  }, align: 'right' },
+  { key: 'wx_dp', label: 'Dew Pt', group: 'weather', defaultOn: false, format: r => {
+    const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
+    return computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).dewPoint.toFixed(1);
+  }, align: 'right' },
+  { key: 'wx_cf', label: 'CF', group: 'weather', defaultOn: false, format: r => {
+    const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
+    return computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).correctionFactor.toFixed(4);
+  }, align: 'right' },
 ];
 
 function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
@@ -756,6 +778,13 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
   const [flaggingId, setFlaggingId] = useState<number | null>(null);
   const [flagReason, setFlagReason] = useState('');
   const [flaggedRunIds, setFlaggedRunIds] = useState<Set<number>>(new Set());
+
+  // PART 9: Run editing (admin only)
+  const isParityAdmin = canCap('nhra.parity.admin' as any);
+  const [editingRun, setEditingRun] = useState<RunWithWeather | null>(null);
+  const [editFields, setEditFields] = useState<Record<string, string>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const loadRuns = useCallback(async () => {
     if (!event?.race_lookup) return;
@@ -1016,6 +1045,7 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
                 ))}
                 {canReadIncidents && <th style={{ ...stickyTh, width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
                 <th style={stickyTh}>Flag</th>
+                {isParityAdmin && <th style={stickyTh}>Edit</th>}
               </tr>
             </thead>
             <tbody>
@@ -1073,6 +1103,26 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
                           onClick={() => setFlaggingId(r.id)}>Flag</button>
                       )}
                     </td>
+                    {isParityAdmin && (
+                      <td style={S.td}>
+                        <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}
+                          onClick={() => {
+                            setEditingRun(r);
+                            setEditFields({
+                              rt: r.rt != null ? String(r.rt) : '',
+                              ft60: r.ft60 != null ? String(r.ft60) : '',
+                              ft330: r.ft330 != null ? String(r.ft330) : '',
+                              ft660: r.ft660 != null ? String(r.ft660) : '',
+                              mph660: r.mph660 != null ? String(r.mph660) : '',
+                              ft1000: r.ft1000 != null ? String(r.ft1000) : '',
+                              mph1000: r.mph1000 != null ? String(r.mph1000) : '',
+                              ft1320: r.ft1320 != null ? String(r.ft1320) : '',
+                              mph1320: r.mph1320 != null ? String(r.mph1320) : '',
+                            });
+                            setEditError('');
+                          }}>✏</button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -1095,6 +1145,55 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
           onClose={() => setDrawerRunId(null)}
           onCountChange={handleIncidentCountChange}
         />
+      )}
+
+      {/* ── Run Edit Modal (admin only) ── */}
+      {editingRun && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setEditingRun(null)}>
+          <div style={{ background: 'var(--color-surface, #1e1e2e)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1.25rem', minWidth: 340, maxWidth: 440 }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>Edit Run — {editingRun.driver_name} ({editingRun.round})</h3>
+            {editError && <div style={{ color: '#ef4444', fontSize: '0.72rem', marginBottom: '0.4rem' }}>{editError}</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+              {(['rt', 'ft60', 'ft330', 'ft660', 'mph660', 'ft1000', 'mph1000', 'ft1320', 'mph1320'] as const).map(field => (
+                <label key={field} style={{ fontSize: '0.72rem' }}>
+                  <span style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>{field}</span>
+                  <input type="text" inputMode="decimal"
+                    style={{ ...S.input, width: '100%', fontSize: '0.72rem', padding: '0.2rem 0.35rem', fontFamily: 'monospace' }}
+                    value={editFields[field] ?? ''}
+                    onChange={e => setEditFields(prev => ({ ...prev, [field]: e.target.value }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', justifyContent: 'flex-end' }}>
+              <button style={S.btn('secondary')} onClick={() => setEditingRun(null)} disabled={editSaving}>Cancel</button>
+              <button style={S.btn('primary')} disabled={editSaving}
+                onClick={async () => {
+                  setEditSaving(true); setEditError('');
+                  try {
+                    const fields: Record<string, number | null> = {};
+                    for (const [k, v] of Object.entries(editFields)) {
+                      if (v === '') { fields[k] = null; }
+                      else {
+                        const n = parseFloat(v);
+                        if (isNaN(n)) { setEditError(`Invalid number for ${k}`); setEditSaving(false); return; }
+                        fields[k] = n;
+                      }
+                    }
+                    await parityApi.updateRun(editingRun.id, fields);
+                    setEditingRun(null);
+                    loadRuns();
+                  } catch (e: any) {
+                    setEditError(e.message || 'Save failed');
+                  } finally { setEditSaving(false); }
+                }}>
+                {editSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -6559,7 +6658,7 @@ type RunGroup = {
   runs: RunWithWeather[];
 };
 
-function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | null; refreshKey?: number }) {
+function LiveTimingPanel({ event, refreshKey = 0, onDriverClick }: { event: EventWithStats | null; refreshKey?: number; onDriverClick?: (driver: string, classIndex?: string) => void }) {
   const [runs, setRuns] = useState<RunWithWeather[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -6758,11 +6857,6 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
             </thead>
             <tbody>
               {groups.map(g => {
-                const isQuad = g.runs.some(r => {
-                  const cl = canonicalLane(r.lane);
-                  return cl === '1' || cl === '2' || cl === '3' || cl === '4';
-                });
-                const laneLabel = isQuad ? 'Quad' : 'Pair';
                 return (
                   <React.Fragment key={g.key}>
                     {/* Group header row */}
@@ -6775,12 +6869,7 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
                         <span style={{ marginRight: '0.75rem' }}>{g.time}</span>
                         {g.round && <span style={{ marginRight: '0.75rem', fontWeight: 400, fontSize: '0.68rem', color: 'var(--color-muted)' }}>Rnd {g.round}</span>}
                         <span style={{ marginRight: '0.75rem', fontWeight: 400, fontSize: '0.68rem', color: 'var(--color-muted)' }}>{g.category}</span>
-                        <span style={{
-                          display: 'inline-block', padding: '0.05rem 0.35rem', borderRadius: 3,
-                          background: isQuad ? '#8b5cf622' : '#3b82f622',
-                          color: isQuad ? '#8b5cf6' : '#3b82f6',
-                          fontSize: '0.6rem', fontWeight: 600,
-                        }}>{laneLabel} ({g.runs.length})</span>
+                        <span style={{ fontSize: '0.6rem', fontWeight: 400, color: 'var(--color-muted)' }}>({g.runs.length})</span>
                       </td>
                     </tr>
                     {/* Lane rows */}
@@ -6790,6 +6879,17 @@ function LiveTimingPanel({ event, refreshKey = 0 }: { event: EventWithStats | nu
                         background: run.win_flag ? 'rgba(34,197,94,0.06)' : undefined,
                       }}>
                         {activeCols.map(c => {
+                          // Clickable driver names
+                          if (c.key === 'driver_name' && onDriverClick && run.driver_name) {
+                            return (
+                              <td key={c.key} style={{ ...S.td, textAlign: c.align || 'left', whiteSpace: 'nowrap' }}>
+                                <a href="#" style={{ color: 'inherit', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }}
+                                  onClick={e => { e.preventDefault(); onDriverClick(run.driver_name!, run.class_index || undefined); }}>
+                                  {run.driver_name}
+                                </a>
+                              </td>
+                            );
+                          }
                           let val: string;
                           if (c.format) {
                             val = c.format(run);

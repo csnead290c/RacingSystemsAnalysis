@@ -49,6 +49,11 @@ export function formatDA(v: number | null | undefined): string {
   return v != null ? Math.round(v).toString() : DASH;
 }
 
+/** Water grains: 1 decimal */
+export function formatWG(v: number | null | undefined): string {
+  return v != null ? v.toFixed(1) : DASH;
+}
+
 /** Reaction time: 3 decimals */
 export function formatRT(v: number | null | undefined): string {
   return v != null ? v.toFixed(3) : DASH;

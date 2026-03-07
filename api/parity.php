@@ -323,6 +323,10 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleImportStationCsv($pdo, $auth);
         break;
+    case 'updateRun':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleUpdateRun($pdo, $auth);
+        break;
     // ── Dashboard endpoints ──────────────────────────────────────────────
     case 'eventSummary':
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
@@ -7476,12 +7480,14 @@ function handleParityIncrementals(PDO $pdo): void {
     $classIndex = trim($_GET['classIndex'] ?? '');
     $category = trim($_GET['category'] ?? '');
     $sessionScope = trim($_GET['sessionScope'] ?? 'both');
+    $mode = trim($_GET['mode'] ?? 'raw');
     $includeFlagged = (bool)($_GET['includeFlagged'] ?? false);
     $includeUnknown = (bool)($_GET['includeUnknown'] ?? false);
 
     if ($eventId <= 0) rsa_jsonResponse(['error' => 'eventId is required'], 400);
     if ($category === '' && $classIndex === '') rsa_jsonResponse(['error' => 'classIndex or category is required'], 400);
     if (!in_array($sessionScope, ['qual', 'elim', 'both'])) rsa_jsonResponse(['error' => 'sessionScope must be qual, elim, or both'], 400);
+    if (!in_array($mode, ['raw', 'corrected'])) $mode = 'raw';
 
     // Load event
     $evStmt = $pdo->prepare("
@@ -7513,6 +7519,25 @@ function handleParityIncrementals(PDO $pdo): void {
                cd.effective_from_utc, cd.effective_to_utc
         FROM parity_class_defaults cd JOIN parity_engine_combos ec ON ec.id = cd.engine_combo_id
     ")->fetchAll(PDO::FETCH_ASSOC);
+
+    // Engine combos indexed by id (needed for corrected mode)
+    $engineCombos = [];
+    if ($mode === 'corrected') {
+        $ecRows = $pdo->query("SELECT id, name, t_power, d_power, friction_factor FROM parity_engine_combos")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($ecRows as $ec) { $engineCombos[(int)$ec['id']] = $ec; }
+    }
+
+    // Weather lookup for corrected mode
+    $weatherWindow = 30;
+    $stmtWeather = null;
+    if ($mode === 'corrected') {
+        $stmtWeather = $pdo->prepare("
+            SELECT cw.temp_f, cw.rh_pct, cw.pressure_inhg
+            FROM parity_canonical_weather cw
+            WHERE ABS(TIMESTAMPDIFF(MINUTE, cw.timestamp_utc, ?)) <= ?
+            ORDER BY ABS(TIMESTAMPDIFF(SECOND, cw.timestamp_utc, ?)) ASC LIMIT 1
+        ");
+    }
 
     $sessionFilter = '';
     if ($sessionScope === 'qual')      $sessionFilter = " AND r.round LIKE 'Q%'";
@@ -7571,7 +7596,26 @@ function handleParityIncrementals(PDO $pdo): void {
 
         $resolved = resolveComboForRun($run['driver_name'], $run['class_index'], $run['run_timestamp_utc'], $driverCombos, $classDefaults);
         $comboName = $resolved ? $resolved['name'] : 'Unknown';
+        $comboId = $resolved ? (int)$resolved['id'] : 0;
         if ($comboName === 'Unknown' && !$includeUnknown) continue;
+
+        // Compute HPC for corrected mode
+        $hpc = null;
+        if ($mode === 'corrected' && $comboId && isset($engineCombos[$comboId]) && $stmtWeather && $run['run_timestamp_utc']) {
+            $stmtWeather->execute([$run['run_timestamp_utc'], $weatherWindow, $run['run_timestamp_utc']]);
+            $wx = $stmtWeather->fetch(PDO::FETCH_ASSOC);
+            if ($wx && $wx['temp_f'] !== null && $wx['rh_pct'] !== null && $wx['pressure_inhg'] !== null) {
+                $T = (float)$wx['temp_f']; $H = (float)$wx['rh_pct'] / 100; $BP = (float)$wx['pressure_inhg'];
+                $ec = $engineCombos[$comboId];
+                $tPow = (float)$ec['t_power']; $dPow = (float)$ec['d_power']; $FF = (float)$ec['friction_factor'];
+                $theta = ($T + 459.67) / 519.67;
+                $vp = $H * (29.98 / exp(35.83 * (212 - $T) / pow($T + 459.67, 1.152)));
+                $dap = $BP - $vp;
+                $delta = $dap / 29.92;
+                $h = (1 + $FF / 100) * (pow($theta, $tPow) / pow($delta, $dPow)) - $FF / 100;
+                if ($h > 0 && is_finite($h)) $hpc = $h;
+            }
+        }
 
         $allComboNames[$comboName] = true;
         if (!isset($comboIncrementals[$comboName])) $comboIncrementals[$comboName] = [];
@@ -7579,7 +7623,11 @@ function handleParityIncrementals(PDO $pdo): void {
         foreach ($incrementals as $inc) {
             $val = $run[$inc['dbCol']];
             if ($val !== null && (float)$val > 0) {
-                $comboIncrementals[$comboName][$inc['key']][] = (float)$val;
+                $raw = (float)$val;
+                if ($hpc !== null) {
+                    $raw = $inc['isLower'] ? $raw * pow($hpc, -0.33) : $raw * pow($hpc, 0.33);
+                }
+                $comboIncrementals[$comboName][$inc['key']][] = $raw;
             }
         }
     }
@@ -9217,5 +9265,79 @@ function handleTimeDiagnosticsSample(PDO $pdo, array $auth): void {
         'avgOffsetMin' => $avgOffsetMin,
         'maxOffsetMin' => $maxOffsetMin,
         'samples' => $sampleRows,
+    ]);
+}
+
+// ============================================================================
+// POST ?action=updateRun
+// Admin-only: Edit individual run fields (ET splits, MPH, RT, etc.)
+// Body: { runId, fields: { ft60?, ft330?, ft660?, mph660?, ft1000?, mph1000?, ft1320?, mph1320?, rt? } }
+// ============================================================================
+function handleUpdateRun(PDO $pdo, ?array $auth): void {
+    if (!$auth) rsa_jsonResponse(['error' => 'Authentication required'], 401);
+    $caps = $auth['capabilities'] ?? [];
+    if (!in_array('nhra.parity.admin', $caps)) {
+        rsa_jsonResponse(['error' => 'Forbidden: nhra.parity.admin required'], 403);
+    }
+
+    $body = json_decode(file_get_contents('php://input'), true);
+    if (!$body) rsa_jsonResponse(['error' => 'Invalid JSON body'], 400);
+
+    $runId = (int)($body['runId'] ?? 0);
+    $fields = $body['fields'] ?? [];
+    if ($runId <= 0) rsa_jsonResponse(['error' => 'runId is required'], 400);
+    if (!is_array($fields) || empty($fields)) rsa_jsonResponse(['error' => 'fields object is required and must be non-empty'], 400);
+
+    // Whitelist of editable columns
+    $allowed = ['ft60', 'ft330', 'ft660', 'mph660', 'ft1000', 'mph1000', 'ft1320', 'mph1320', 'rt'];
+    $setClauses = [];
+    $params = [];
+    foreach ($fields as $col => $val) {
+        if (!in_array($col, $allowed)) {
+            rsa_jsonResponse(['error' => "Field '$col' is not editable"], 400);
+        }
+        if ($val === null || $val === '') {
+            $setClauses[] = "$col = NULL";
+        } else {
+            $numVal = (float)$val;
+            if ($numVal < 0 || $numVal > 1000) {
+                rsa_jsonResponse(['error' => "Field '$col' value out of range (0-1000)"], 400);
+            }
+            $setClauses[] = "$col = ?";
+            $params[] = round($numVal, 4);
+        }
+    }
+
+    // Verify run exists and capture old values for audit
+    $oldStmt = $pdo->prepare("SELECT id, driver_name, race_lookup, " . implode(', ', $allowed) . " FROM parity_runs WHERE id = ?");
+    $oldStmt->execute([$runId]);
+    $oldRun = $oldStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$oldRun) rsa_jsonResponse(['error' => 'Run not found'], 404);
+
+    // Apply update
+    $params[] = $runId;
+    $sql = "UPDATE parity_runs SET " . implode(', ', $setClauses) . " WHERE id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    // Audit log
+    if (function_exists('rsa_audit')) {
+        $changes = [];
+        foreach ($fields as $col => $val) {
+            $oldVal = $oldRun[$col] ?? null;
+            $changes[$col] = ['old' => $oldVal, 'new' => $val];
+        }
+        rsa_audit($pdo, $auth['user_id'] ?? 0, 'parity.updateRun', [
+            'runId' => $runId,
+            'driver' => $oldRun['driver_name'],
+            'raceLookup' => $oldRun['race_lookup'],
+            'changes' => $changes,
+        ]);
+    }
+
+    rsa_jsonResponse([
+        'ok' => true,
+        'runId' => $runId,
+        'updatedFields' => array_keys($fields),
     ]);
 }

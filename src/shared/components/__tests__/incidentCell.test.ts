@@ -85,19 +85,18 @@ describe('ParityPortal — uses shared IncidentCell', () => {
   });
 });
 
-describe('ParityReport — uses shared IncidentCell', () => {
-  it('imports IncidentCell', () => {
-    expect(reportSrc).toContain("import IncidentCell from '../shared/components/IncidentCell'");
+describe('ParityReport — incidents removed from QualTable', () => {
+  it('no longer imports IncidentCell', () => {
+    expect(reportSrc).not.toContain("import IncidentCell from '../shared/components/IncidentCell'");
   });
 
-  it('uses <IncidentCell in QualTable', () => {
-    expect(reportSrc).toContain('<IncidentCell');
+  it('no longer uses <IncidentCell in QualTable', () => {
+    expect(reportSrc).not.toContain('<IncidentCell');
   });
 
-  it('passes count, canCreate, onClick using r.runId', () => {
-    expect(reportSrc).toContain('count={r.incident_count ?? 0}');
-    expect(reportSrc).toContain('canCreate={canCreateIncidents}');
-    expect(reportSrc).toContain('setDrawerRunId(r.runId)');
+  it('incidents still used in EventRunsPanel', () => {
+    expect(portalSrc).toContain('<IncidentCell');
+    expect(portalSrc).toContain('count={r.incident_count ?? 0}');
   });
 });
 
@@ -123,9 +122,10 @@ describe('Count update — DriverDrilldownPanel', () => {
   });
 });
 
-describe('Count update — QualTable', () => {
-  it('has handleIncidentCountChange that updates localRows by r.runId', () => {
-    expect(reportSrc).toContain('r.runId === runId ? { ...r, incident_count: newCount }');
+describe('Count update — QualTable incidents removed', () => {
+  it('QualTable no longer has handleIncidentCountChange', () => {
+    // Incidents were removed from QualTable in Part 2 cleanup
+    expect(reportSrc).not.toContain('handleIncidentCountChange');
   });
 
   it('uses localRows for display', () => {
@@ -158,8 +158,7 @@ describe('ID field consistency', () => {
     expect(portalSrc).toContain('r.id === runId');
   });
 
-  it('QualTable uses r.runId for drawer and count update', () => {
-    expect(reportSrc).toContain('setDrawerRunId(r.runId)');
-    expect(reportSrc).toContain('r.runId === runId');
+  it('QualTable no longer has incident drawer (removed in Part 2)', () => {
+    expect(reportSrc).not.toContain('setDrawerRunId(r.runId)');
   });
 });

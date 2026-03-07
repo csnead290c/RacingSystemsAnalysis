@@ -11,8 +11,7 @@ import {
   type EngineComboRow,
 } from '../services/parityApi';
 import { useCapabilities } from '../domain/config/useCapabilities';
-import IncidentDrawer from './IncidentDrawer';
-import IncidentCell from '../shared/components/IncidentCell';
+import { waterGrains, pct_to_frac } from '../domain/parity/weatherCorrection';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, Legend,
@@ -20,7 +19,7 @@ import {
 void Legend;
 import {
   formatET, formatMPH, formatBaro, formatHPC,
-  formatTemp, formatRH, formatDA,
+  formatTemp, formatRH, formatDA, formatWG,
   formatMetric, formatDelta, isIncrementalMph,
 } from '../domain/parity/format';
 
@@ -77,24 +76,24 @@ const S = {
   card: { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '0.75rem', marginBottom: '0.75rem' } as React.CSSProperties,
   row: { display: 'flex', gap: '0.5rem', alignItems: 'center' } as React.CSSProperties,
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' } as React.CSSProperties,
-  tbl: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.72rem' },
-  th: { textAlign: 'left' as const, padding: '0.3rem 0.5rem', borderBottom: '2px solid var(--color-border)', fontSize: '0.68rem', whiteSpace: 'nowrap' as const, fontWeight: 700 },
-  td: { padding: '0.25rem 0.5rem', borderBottom: '1px solid var(--color-border)', verticalAlign: 'middle' as const },
+  tbl: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.82rem' },
+  th: { textAlign: 'left' as const, padding: '0.25rem 0.4rem', borderBottom: '2px solid var(--color-border)', fontSize: '0.78rem', whiteSpace: 'nowrap' as const, fontWeight: 700 },
+  td: { padding: '0.2rem 0.4rem', borderBottom: '1px solid var(--color-border)', verticalAlign: 'middle' as const },
   inp: { padding: '0.25rem 0.4rem', border: '1px solid var(--color-border)', borderRadius: 3, fontSize: '0.75rem', fontFamily: 'inherit' } as React.CSSProperties,
-  hint: { color: 'var(--color-muted)', fontSize: '0.8rem', fontStyle: 'italic' } as React.CSSProperties,
-  nd: { color: '#888', fontStyle: 'italic' as const, fontSize: '0.68rem' },
-  badge: (c: string) => ({ display: 'inline-block', padding: '0.1rem 0.4rem', borderRadius: 4, background: c + '22', color: c, fontSize: '0.65rem', fontWeight: 600 }) as React.CSSProperties,
-  btn: { padding: '0.3rem 0.6rem', borderRadius: 4, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' } as React.CSSProperties,
-  tabA: { borderBottom: '2px solid var(--color-primary)', fontWeight: 700, color: 'var(--color-primary)', background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8rem' } as React.CSSProperties,
-  tabI: { borderBottom: '2px solid transparent', fontWeight: 400, color: 'var(--color-muted)', background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8rem' } as React.CSSProperties,
+  hint: { color: 'var(--color-muted)', fontSize: '0.85rem', fontStyle: 'italic' } as React.CSSProperties,
+  nd: { color: '#888', fontStyle: 'italic' as const, fontSize: '0.72rem' },
+  badge: (c: string) => ({ display: 'inline-block', padding: '0.1rem 0.4rem', borderRadius: 4, background: c + '22', color: c, fontSize: '0.72rem', fontWeight: 600 }) as React.CSSProperties,
+  btn: { padding: '0.3rem 0.6rem', borderRadius: 4, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' } as React.CSSProperties,
+  tabA: { borderBottom: '2px solid var(--color-primary)', fontWeight: 700, color: 'var(--color-primary)', background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.85rem' } as React.CSSProperties,
+  tabI: { borderBottom: '2px solid transparent', fontWeight: 400, color: 'var(--color-muted)', background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.85rem' } as React.CSSProperties,
 };
 
 // Compact sub-styles for dense report tables (matches reference PDF layout)
 const SS = {
-  secHead: { fontSize: '0.72rem', fontWeight: 700, padding: '0.25rem 0.4rem', marginBottom: '0.2rem', background: 'var(--color-bg)', borderBottom: '2px solid var(--color-border)', whiteSpace: 'nowrap' as const } as React.CSSProperties,
-  tbl: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.62rem' },
-  th: { textAlign: 'left' as const, padding: '0.15rem 0.3rem', borderBottom: '2px solid var(--color-border)', fontSize: '0.58rem', whiteSpace: 'nowrap' as const, fontWeight: 700, background: 'var(--color-surface)' },
-  td: { padding: '0.12rem 0.3rem', borderBottom: '1px solid var(--color-border)', verticalAlign: 'middle' as const, whiteSpace: 'nowrap' as const, fontSize: '0.6rem' },
+  secHead: { fontSize: '0.82rem', fontWeight: 700, padding: '0.3rem 0.5rem', marginBottom: '0.15rem', background: 'var(--color-bg)', borderBottom: '2px solid var(--color-border)', whiteSpace: 'nowrap' as const } as React.CSSProperties,
+  tbl: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.75rem' },
+  th: { textAlign: 'left' as const, padding: '0.2rem 0.35rem', borderBottom: '2px solid var(--color-border)', fontSize: '0.72rem', whiteSpace: 'nowrap' as const, fontWeight: 700, background: 'var(--color-surface)' },
+  td: { padding: '0.15rem 0.35rem', borderBottom: '1px solid var(--color-border)', verticalAlign: 'middle' as const, whiteSpace: 'nowrap' as const, fontSize: '0.72rem' },
 };
 
 // fmt() replaced by shared formatET/formatMPH/formatMetric/formatDelta in domain/parity/format.ts
@@ -105,11 +104,12 @@ const SS = {
 
 type Mode = 'event' | 'longTerm';
 
-export default function ParityReport({ event, classIndex, category, onClassChange }: {
+export default function ParityReport({ event, classIndex, category, onClassChange, onDriverClick }: {
   event: EventWithStats | null;
   classIndex: string;
   category?: string;
   onClassChange?: (cls: string) => void;
+  onDriverClick?: (driver: string, classIndex?: string) => void;
 }) {
   void onClassChange; // future-proofing hook
   void classIndex; // kept for backward compat but category is the primary filter
@@ -127,8 +127,8 @@ export default function ParityReport({ event, classIndex, category, onClassChang
         <button style={mode === 'event' ? S.tabA : S.tabI} onClick={() => { setMode('event'); setOverrideEv(null); }}>Event Parity</button>
         <button style={mode === 'longTerm' ? S.tabA : S.tabI} onClick={() => setMode('longTerm')}>Long-Term Parity</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-muted)' }}>Category: {displayLabel}</span>
-          <label style={{ fontSize: '0.72rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-muted)' }}>{displayLabel}</span>
+          <label style={{ fontSize: '0.78rem' }}>Mode:<select value={corrMode} onChange={e => setCorrMode(e.target.value as any)} style={{ ...S.inp, width: 90, marginLeft: 4 }}><option value="raw">Raw</option><option value="corrected">Corrected</option></select></label>
         </div>
       </div>
       {!category && (
@@ -137,7 +137,7 @@ export default function ParityReport({ event, classIndex, category, onClassChang
         </div>
       )}
       {mode === 'event'
-        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} category={category || classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} />
+        ? <EventReport event={overrideEv ? { ...(event as any), id: overrideEv } : event} category={category || classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onDriverClick={onDriverClick} />
         : <LongTermReport category={category || classIndex} displayLabel={displayLabel} metric={metric} corrMode={corrMode} sessionScope={sessionScope} onEventClick={id => { setOverrideEv(id); setMode('event'); }} />
       }
     </div>
@@ -148,9 +148,10 @@ export default function ParityReport({ event, classIndex, category, onClassChang
 // EVENT PARITY REPORT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EventReport({ event, category, displayLabel, metric, corrMode, sessionScope }: {
+function EventReport({ event, category, displayLabel, metric, corrMode, sessionScope, onDriverClick }: {
   event: EventWithStats | null; category: string; displayLabel: string; metric: string;
   corrMode: 'raw' | 'corrected'; sessionScope: 'qual' | 'elim' | 'both';
+  onDriverClick?: (driver: string, classIndex?: string) => void;
 }) {
   const topN = 4;
   const [summary, setSummary] = useState<ParitySummaryResponse | null>(null);
@@ -167,7 +168,7 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
     Promise.all([
       cf(ck('sum', b), () => parityApi.paritySummary(b)),
       cf(ck('qo', { eventId: event.id, category, metric, mode: corrMode, sessionScope }), () => parityApi.parityQualOrder({ eventId: event.id, category, metric, mode: corrMode, sessionScope })),
-      cf(ck('inc', { eventId: event.id, category, sessionScope }), () => parityApi.parityIncrementals({ eventId: event.id, category, sessionScope })),
+      cf(ck('inc', { eventId: event.id, category, sessionScope, mode: corrMode }), () => parityApi.parityIncrementals({ eventId: event.id, category, sessionScope, mode: corrMode })),
       cf(ck('wx', { eventId: event.id, category }), () => parityApi.paritySessionWeather({ eventId: event.id, category })),
     ]).then(([s, q, i, w]) => { setSummary(s); setQualOrder(q); setInc(i); setWx(w); })
       .catch(e => setErr(e instanceof Error ? e.message : 'Failed'))
@@ -220,25 +221,37 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
     return isLB ? Math.min(best, x.totalAvg) : Math.max(best, x.totalAvg);
   }, null as number | null);
 
+  // PART 4: Compute a sane y-axis max using P75+1.5*IQR to clip extreme outliers
+  const barValues = interleavedBars.map(b => b.value).filter(v => v != null && isFinite(v));
+  let yMax: number | 'auto' = 'auto';
+  if (barValues.length >= 4 && isLB) {
+    const sorted = [...barValues].sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)];
+    const q3 = sorted[Math.floor(sorted.length * 0.75)];
+    const iqr = q3 - q1;
+    const cap = q3 + 1.5 * iqr;
+    // Only apply cap if it would actually clip something
+    if (sorted[sorted.length - 1] > cap) {
+      yMax = Math.ceil(cap * 100) / 100;
+    }
+  }
+
   return (
     <div className="parity-event-report" data-testid="parity-event-report" style={{ pageBreakAfter: 'always' }}>
       {/* ── Title Block ── */}
-      <div data-testid="parity-header" style={{ marginBottom: '0.75rem' }}>
+      <div data-testid="parity-header" style={{ marginBottom: '0.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
+          <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text)' }}>
             {evYear} {evCode} NHRA {displayLabel} {modeLabel} Event Parity
           </h2>
-          <span style={{ fontSize: '0.65rem', color: '#888' }}>
-            {sessionScope.toUpperCase()} | {summary.totalRunsInClass} runs
-          </span>
         </div>
-        <div style={{ fontSize: '0.68rem', color: '#999', marginTop: '0.15rem' }}>
+        <div style={{ fontSize: '0.78rem', color: '#999', marginTop: '0.1rem' }}>
           {summary.event.event_name} — {summary.event.track_name}{summary.event.city ? `, ${summary.event.city}` : ''}
         </div>
       </div>
 
       {/* ── Section 1: Top Runs Table (full width) ── */}
-      <div style={{ marginBottom: '0.6rem' }}>
+      <div style={{ marginBottom: '0.5rem' }}>
         <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
         <table style={SS.tbl}>
           <thead><tr>
@@ -251,13 +264,13 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
               <tr key={`${c.engineCombo}-${ri}`} style={{ background: ri === 0 ? comboColor(c.engineCombo) + '18' : undefined }}>
                 {ri === 0
                   ? <td style={{ ...SS.td, fontWeight: 700 }} rowSpan={Math.min(c.topRuns.length, topN)}>
-                      <span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.62rem' }}>{c.engineCombo}</span>
+                      <span style={S.badge(comboColor(c.engineCombo))}>{c.engineCombo}</span>
                     </td>
                   : null}
-                <td style={SS.td}>{r.driver}</td>
+                <td style={SS.td}>{onDriverClick ? <a href="#" style={{ color: 'inherit', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }} onClick={e => { e.preventDefault(); onDriverClick(r.driver); }}>{r.driver}</a> : r.driver}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
-                <td style={{ ...SS.td, fontSize: '0.55rem', color: '#888' }}>{r.round || ''}</td>
+                <td style={{ ...SS.td, fontSize: '0.65rem', color: '#888' }}>{r.round || ''}</td>
               </tr>
             )))}
           </tbody>
@@ -265,22 +278,22 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
       </div>
 
       {/* ── Section 2: Three summary comparison tables ── */}
-      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', marginBottom: '0.6rem' }}>
+      <div data-testid="parity-combo-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', marginBottom: '0.5rem' }}>
         <SummaryCompactTable title="Quickest Run" combos={combosSorted} refValue={bestComboValue} getValue={c => c.bestValue} metric={metric} />
         <SummaryCompactTable title={`Avg Top ${topN}`} combos={combosSorted} refValue={bestAvg4Value} getValue={c => c.avgTopN} metric={metric} />
-        <SummaryCompactTable title="Total Average" combos={combosSorted} refValue={bestTotalAvg} getValue={c => c.totalAvg} getCount={c => c.countTotalAvg} metric={metric} />
+        <SummaryCompactTable title="Total Average" combos={combosSorted} refValue={bestTotalAvg} getValue={c => c.totalAvg} metric={metric} />
       </div>
 
       {/* ── Section 3: Bar Chart (full width) ── */}
-      <div data-testid="parity-grouped-chart" style={{ marginBottom: '0.6rem', pageBreakInside: 'avoid' }}>
+      <div data-testid="parity-grouped-chart" style={{ marginBottom: '0.5rem', pageBreakInside: 'avoid' }}>
         <div style={SS.secHead}>Quickest {topN} Runs Per Combo</div>
         {interleavedBars.length > 0 ? (
           <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '0.3rem' }}>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={interleavedBars} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis dataKey="label" tick={{ fontSize: 8 }} interval={0} height={18} />
-                <YAxis tick={{ fontSize: 9 }} domain={[(min: number) => Math.floor((min - (min * 0.002)) * 100) / 100, 'auto']} tickFormatter={(v: number) => v.toFixed(2)} width={44} />
+                <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={0} height={18} />
+                <YAxis tick={{ fontSize: 10 }} domain={[(min: number) => Math.floor((min - (min * 0.002)) * 100) / 100, yMax]} tickFormatter={(v: number) => v.toFixed(2)} width={48} />
                 <Tooltip
                   formatter={(v: number, _name: string, props: any) => {
                     const p = props.payload;
@@ -296,22 +309,22 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
         ) : <p style={S.hint}>No combo data for chart.</p>}
       </div>
 
-      {/* ── Section 4: Incrementals (full width) ── */}
-      <div data-testid="parity-incrementals" style={{ marginBottom: '0.6rem' }}>
-        <div style={SS.secHead}>Incrementals</div>
-        {inc ? <IncrementalsTable data={inc} /> : <p style={S.hint}>Loading...</p>}
-      </div>
-
-      {/* ── Section 5: Weather (full width) ── */}
-      <div data-testid="parity-weather" style={{ marginBottom: '0.6rem' }}>
-        <div style={SS.secHead}>Weather by Session</div>
-        {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
+      {/* ── Section 4+5: Incrementals + Weather side-by-side on wide screens ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <div data-testid="parity-incrementals">
+          <div style={SS.secHead}>Incrementals</div>
+          {inc ? <IncrementalsTable data={inc} /> : <p style={S.hint}>Loading...</p>}
+        </div>
+        <div data-testid="parity-weather">
+          <div style={SS.secHead}>Weather by Session</div>
+          {wx ? <WeatherTable data={wx} /> : <p style={S.hint}>Loading...</p>}
+        </div>
       </div>
 
       {/* ── Section 6: Qualifying Order (full width) ── */}
-      <div data-testid="parity-qual-results" style={{ marginBottom: '0.6rem' }}>
-        <div style={SS.secHead}>Raw Qualifying Results</div>
-        {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={qualOrder.classIndex} onComboChanged={load} /> : <p style={S.hint}>Loading...</p>}
+      <div data-testid="parity-qual-results" style={{ marginBottom: '0.5rem' }}>
+        <div style={SS.secHead}>Qualifying Results</div>
+        {qualOrder ? <QualTable rows={qualOrder.qualOrder} event={event} classIndex={qualOrder.classIndex} onComboChanged={load} onDriverClick={onDriverClick} /> : <p style={S.hint}>Loading...</p>}
       </div>
 
       {/* ── Footer (print only — hidden on screen) ── */}
@@ -328,12 +341,11 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
 // SUB-COMPONENTS: Event Report
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SummaryCompactTable({ title, combos, refValue, getValue, getCount, metric }: {
+function SummaryCompactTable({ title, combos, refValue, getValue, metric }: {
   title: string;
   combos: ParitySummaryResponse['combos'];
   refValue: number | null;
   getValue: (c: ParitySummaryResponse['combos'][number]) => number | null | undefined;
-  getCount?: (c: ParitySummaryResponse['combos'][number]) => number | undefined;
   metric: string;
 }) {
   return (
@@ -343,21 +355,18 @@ function SummaryCompactTable({ title, combos, refValue, getValue, getCount, metr
         <thead><tr>
           <th style={SS.th}>Combo</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
           <th style={{ ...SS.th, textAlign: 'right' }}>Delta</th>
-          {getCount && <th style={{ ...SS.th, textAlign: 'right' }}>n</th>}
         </tr></thead>
         <tbody>
           {combos.map(c => {
             const val = getValue(c) ?? null;
             const delta = refValue != null && val != null ? val - refValue : null;
-            const cnt = getCount?.(c);
             return (
               <tr key={c.engineCombo}>
-                <td style={SS.td}><span style={{ ...S.badge(comboColor(c.engineCombo)), fontSize: '0.6rem' }}>{c.engineCombo}</span></td>
+                <td style={SS.td}><span style={S.badge(comboColor(c.engineCombo))}>{c.engineCombo}</span></td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(val)}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace', color: delta != null && delta > 0 ? '#dc2626' : '#16a34a' }}>
                   {delta != null ? (delta === 0 ? '0.000' : formatDelta(delta, metric)) : '—'}
                 </td>
-                {getCount && <td style={{ ...SS.td, textAlign: 'right', fontSize: '0.55rem', color: '#888' }}>{cnt ?? '—'}</td>}
               </tr>
             );
           })}
@@ -367,29 +376,22 @@ function SummaryCompactTable({ title, combos, refValue, getValue, getCount, metr
   );
 }
 
-function QualTable({ rows, event, classIndex, onComboChanged }: {
+function QualTable({ rows, event, classIndex, onComboChanged, onDriverClick }: {
   rows: ParityComboRun[];
   event: EventWithStats | null;
   classIndex: string;
   onComboChanged?: () => void;
+  onDriverClick?: (driver: string, classIndex?: string) => void;
 }) {
   const { can } = useCapabilities();
   const isAdmin = can('nhra.parity.admin' as any);
-  const canReadIncidents = can('incidents.read' as any);
-  const canCreateIncidents = can('incidents.create' as any);
   const [engineCombos, setEngineCombos] = useState<EngineComboRow[]>([]);
   const [editingDriver, setEditingDriver] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
 
-  // Incident drawer state
-  const [drawerRunId, setDrawerRunId] = useState<number | null>(null);
-  const [drawerDriverName, setDrawerDriverName] = useState<string>('');
   const [localRows, setLocalRows] = useState<ParityComboRun[]>(rows);
   useEffect(() => { setLocalRows(rows); }, [rows]);
 
-  const handleIncidentCountChange = useCallback((runId: number, newCount: number) => {
-    setLocalRows(prev => prev.map(r => r.runId === runId ? { ...r, incident_count: newCount } : r));
-  }, []);
   const [saving, setSaving] = useState(false);
 
   // Auto-dismiss toast after 4s
@@ -453,7 +455,6 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
         <thead><tr>
           <th style={SS.th}>Pos</th><th style={SS.th}>Driver</th><th style={{ ...SS.th, textAlign: 'right' }}>ET</th>
           <th style={{ ...SS.th, textAlign: 'right' }}>Speed</th><th style={SS.th}>Round</th><th style={SS.th}>Engine Combo</th>
-          {canReadIncidents && <th style={{ ...SS.th, width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
         </tr></thead>
         <tbody>
           {displayRows.map((r, i) => {
@@ -462,10 +463,10 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
             return (
               <tr key={i}>
                 <td style={SS.td}>{r.qualPosition ?? i + 1}</td>
-                <td style={{ ...SS.td, fontWeight: 600 }}>{r.driver}</td>
+                <td style={{ ...SS.td, fontWeight: 600 }}>{onDriverClick ? <a href="#" style={{ color: 'inherit', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }} onClick={e => { e.preventDefault(); onDriverClick(r.driver, classIndex); }}>{r.driver}</a> : r.driver}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatET(r.et)}</td>
                 <td style={{ ...SS.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatMPH(r.mph)}</td>
-                <td style={{ ...SS.td, fontSize: '0.55rem', color: '#888' }}>{r.round || ''}</td>
+                <td style={{ ...SS.td, fontSize: '0.65rem', color: '#888' }}>{r.round || ''}</td>
                 <td style={SS.td}>
                   {isEditing && isAdmin ? (
                     <select
@@ -497,30 +498,12 @@ function QualTable({ rows, event, classIndex, onComboChanged }: {
                     </span>
                   )}
                 </td>
-                {canReadIncidents && (
-                  <td style={{ ...SS.td, textAlign: 'center', width: 28 }}>
-                    <IncidentCell
-                      count={r.incident_count ?? 0}
-                      canCreate={canCreateIncidents}
-                      onClick={() => { setDrawerRunId(r.runId); setDrawerDriverName(r.driver); }}
-                    />
-                  </td>
-                )}
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
-    {drawerRunId != null && (
-      <IncidentDrawer
-        runId={drawerRunId}
-        driverName={drawerDriverName}
-        canCreate={canCreateIncidents}
-        onClose={() => setDrawerRunId(null)}
-        onCountChange={handleIncidentCountChange}
-      />
-    )}
     </>
   );
 }
@@ -562,23 +545,28 @@ function WeatherTable({ data }: { data: ParitySessionWeatherResponse }) {
           <th style={S.th}>Session</th><th style={{ ...S.th, textAlign: 'right' }}>Temp °F</th>
           <th style={{ ...S.th, textAlign: 'right' }}>RH %</th><th style={{ ...S.th, textAlign: 'right' }}>Baro inHg</th>
           <th style={{ ...S.th, textAlign: 'right' }}>DA ft</th><th style={{ ...S.th, textAlign: 'right' }}>HPC</th>
-          <th style={{ ...S.th, textAlign: 'right' }}>Runs</th>
+          <th style={{ ...S.th, textAlign: 'right' }}>WG</th>
         </tr></thead>
         <tbody>
-          {data.sessions.map(s => (
-            <tr key={s.session}>
-              <td style={{ ...S.td, fontWeight: 600 }}>
-                {s.session}
-                {s.localTimeHint && <span style={{ fontWeight: 400, fontSize: '0.58rem', color: '#888', marginLeft: 4 }}>({s.localTimeHint})</span>}
-              </td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatTemp(s.temp_f)}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatRH(s.rh_pct)}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatBaro(s.pressure_inhg)}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatDA(s.density_alt_ft)}</td>
-              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatHPC(s.hpc)}</td>
-              <td style={{ ...S.td, textAlign: 'right' }}>{s.runCount}</td>
-            </tr>
-          ))}
+          {data.sessions.map(s => {
+            const wg = (s.temp_f != null && s.rh_pct != null && s.pressure_inhg != null)
+              ? waterGrains(s.pressure_inhg, s.temp_f, pct_to_frac(s.rh_pct))
+              : null;
+            return (
+              <tr key={s.session}>
+                <td style={{ ...S.td, fontWeight: 600 }}>
+                  {s.session}
+                  {s.localTimeHint && <span style={{ fontWeight: 400, fontSize: '0.65rem', color: '#888', marginLeft: 4 }}>({s.localTimeHint})</span>}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatTemp(s.temp_f)}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatRH(s.rh_pct)}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatBaro(s.pressure_inhg)}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatDA(s.density_alt_ft)}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatHPC(s.hpc)}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{formatWG(wg)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </>

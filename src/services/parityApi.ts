@@ -2204,6 +2204,7 @@ export const parityApi = {
     classIndex?: string;
     category?: string;
     sessionScope?: 'qual' | 'elim' | 'both';
+    mode?: 'raw' | 'corrected';
     includeFlagged?: boolean;
     includeUnknown?: boolean;
   }): Promise<ParityIncrementalsResponse> {
@@ -2213,6 +2214,7 @@ export const parityApi = {
     if (params.category) qs.set('category', params.category);
     else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.mode) qs.set('mode', params.mode);
     if (params.includeFlagged) qs.set('includeFlagged', '1');
     if (params.includeUnknown) qs.set('includeUnknown', '1');
     return parityRequest<ParityIncrementalsResponse>(`/parity.php?${qs.toString()}`);
@@ -2340,6 +2342,13 @@ export const parityApi = {
     return parityRequest<RefreshEventDataResponse>('/parity.php?action=refreshEventData', {
       method: 'POST',
       body: JSON.stringify({ eventId }),
+    });
+  },
+
+  async updateRun(runId: number, fields: Record<string, number | null>): Promise<{ ok: boolean; runId: number; updatedFields: string[] }> {
+    return parityRequest<{ ok: boolean; runId: number; updatedFields: string[] }>('/parity.php?action=updateRun', {
+      method: 'POST',
+      body: JSON.stringify({ runId, fields }),
     });
   },
 };

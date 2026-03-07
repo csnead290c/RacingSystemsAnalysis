@@ -141,9 +141,9 @@ describe('Run tables — incident integration', () => {
     expect(dd).toContain('<IncidentDrawer');
   });
 
-  it('ParityReport QualTable has incident icons and drawer', () => {
-    expect(reportSrc).toContain("import IncidentDrawer from './IncidentDrawer'");
-    expect(reportSrc).toContain('<IncidentCell');
-    expect(reportSrc).toContain('<IncidentDrawer');
+  it('ParityReport QualTable no longer has incidents (removed in Part 2)', () => {
+    expect(reportSrc).not.toContain("import IncidentDrawer from './IncidentDrawer'");
+    expect(reportSrc).not.toContain('<IncidentCell');
+    expect(reportSrc).not.toContain('<IncidentDrawer');
   });
 });
