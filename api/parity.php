@@ -7533,7 +7533,7 @@ function handleParityIncrementals(PDO $pdo): void {
     if ($mode === 'corrected') {
         $stmtWeather = $pdo->prepare("
             SELECT cw.temp_f, cw.rh_pct, cw.pressure_inhg
-            FROM parity_canonical_weather cw
+            FROM parity_weather_canonical cw
             WHERE ABS(TIMESTAMPDIFF(MINUTE, cw.timestamp_utc, ?)) <= ?
             ORDER BY ABS(TIMESTAMPDIFF(SECOND, cw.timestamp_utc, ?)) ASC LIMIT 1
         ");

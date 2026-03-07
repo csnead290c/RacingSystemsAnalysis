@@ -167,7 +167,7 @@ function EventReport({ event, category, displayLabel, metric, corrMode, sessionS
     const b = { eventId: event.id, category, metric, mode: corrMode, topN, sessionScope };
     Promise.all([
       cf(ck('sum', b), () => parityApi.paritySummary(b)),
-      cf(ck('qo', { eventId: event.id, category, metric, mode: corrMode, sessionScope }), () => parityApi.parityQualOrder({ eventId: event.id, category, metric, mode: corrMode, sessionScope })),
+      cf(ck('qo', { eventId: event.id, category, metric, mode: 'raw', sessionScope }), () => parityApi.parityQualOrder({ eventId: event.id, category, metric, mode: 'raw', sessionScope })),
       cf(ck('inc', { eventId: event.id, category, sessionScope, mode: corrMode }), () => parityApi.parityIncrementals({ eventId: event.id, category, sessionScope, mode: corrMode })),
       cf(ck('wx', { eventId: event.id, category }), () => parityApi.paritySessionWeather({ eventId: event.id, category })),
     ]).then(([s, q, i, w]) => { setSummary(s); setQualOrder(q); setInc(i); setWx(w); })
