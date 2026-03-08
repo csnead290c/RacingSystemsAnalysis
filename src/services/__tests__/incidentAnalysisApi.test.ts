@@ -550,3 +550,134 @@ describe('decimateRows', () => {
     expect(dec).toEqual([10, 50]);
   });
 });
+
+// ── Upload error handling tests ──────────────────────────────────────────────
+
+describe('Upload error message extraction', () => {
+  // Re-implement the hint extraction logic from IncidentAnalysis.tsx loadAll catch block
+  function extractHint(rawMessage: string): { msg: string; serverHint: string } {
+    const hintSep = rawMessage.indexOf(' | Hint: ');
+    const msg = hintSep >= 0 ? rawMessage.slice(0, hintSep) : rawMessage;
+    const serverHint = hintSep >= 0 ? rawMessage.slice(hintSep + 9) : '';
+    return { msg, serverHint };
+  }
+
+  it('extracts server hint from combined error message', () => {
+    const raw = 'Database table not found | Hint: Run migration v16: /api/migrate-v16-incident-analysis.php';
+    const { msg, serverHint } = extractHint(raw);
+    expect(msg).toBe('Database table not found');
+    expect(serverHint).toBe('Run migration v16: /api/migrate-v16-incident-analysis.php');
+  });
+
+  it('returns full message when no hint separator', () => {
+    const { msg, serverHint } = extractHint('File upload failed: No file was selected');
+    expect(msg).toBe('File upload failed: No file was selected');
+    expect(serverHint).toBe('');
+  });
+
+  it('handles upload size limit error with hint', () => {
+    const raw = 'File exceeds maximum size (50 MB) | Hint: Reduce file size or split into smaller files';
+    const { msg, serverHint } = extractHint(raw);
+    expect(msg).toBe('File exceeds maximum size (50 MB)');
+    expect(serverHint).toContain('Reduce file size');
+  });
+
+  it('handles MIME rejection error', () => {
+    const raw = "File content type 'application/pdf' is not a recognized text/CSV format | Hint: Ensure the file is a plain-text CSV.";
+    const { msg, serverHint } = extractHint(raw);
+    expect(msg).toContain('application/pdf');
+    expect(serverHint).toContain('plain-text CSV');
+  });
+
+  it('handles directory not writable error', () => {
+    const raw = 'Upload directory is not writable | Hint: uploads/incident_analysis/datasets/ exists but PHP cannot write to it.';
+    const { msg, serverHint } = extractHint(raw);
+    expect(msg).toBe('Upload directory is not writable');
+    expect(serverHint).toContain('cannot write');
+  });
+});
+
+describe('Upload error categorization', () => {
+  // Re-implement the frontend pattern matching from IncidentAnalysis.tsx
+  function categorizeError(msg: string): string {
+    if (msg.includes('HTML instead of JSON')) return 'endpoint_missing';
+    if (msg.includes('table not found') || msg.includes('migration')) return 'migration_missing';
+    if (msg.includes('Network error')) return 'network';
+    if (msg.includes('Authentication required') || msg.includes('401')) return 'auth_expired';
+    if (msg.includes('Forbidden') || msg.includes('403')) return 'forbidden';
+    if (msg.includes('Incident not found') || msg.includes('404')) return 'not_found';
+    if (msg.includes('Internal server error')) return 'server_error';
+    if (msg.includes('File upload failed')) return 'upload_error';
+    if (msg.includes('Upload directory')) return 'upload_dir_error';
+    if (msg.includes('content type') && msg.includes('not a recognized')) return 'mime_error';
+    if (msg.includes('exceeds maximum size')) return 'file_too_large';
+    return 'unknown';
+  }
+
+  it('categorizes upload error codes', () => {
+    expect(categorizeError('File upload failed: File exceeds server upload_max_filesize (256M)')).toBe('upload_error');
+    expect(categorizeError('File upload failed: No file was selected')).toBe('upload_error');
+    expect(categorizeError('File upload failed: File was only partially uploaded')).toBe('upload_error');
+  });
+
+  it('categorizes MIME errors', () => {
+    expect(categorizeError("File content type 'application/pdf' is not a recognized text/CSV format")).toBe('mime_error');
+    expect(categorizeError("File content type 'image/jpeg' is not a recognized video format")).toBe('mime_error');
+  });
+
+  it('categorizes directory errors', () => {
+    expect(categorizeError('Upload directory could not be created')).toBe('upload_dir_error');
+    expect(categorizeError('Upload directory is not writable')).toBe('upload_dir_error');
+  });
+
+  it('categorizes size limit errors', () => {
+    expect(categorizeError('File exceeds maximum size (50 MB)')).toBe('file_too_large');
+    expect(categorizeError('Video exceeds maximum size (500 MB)')).toBe('file_too_large');
+  });
+
+  it('categorizes other known errors', () => {
+    expect(categorizeError('[getSession] HTTP 200 — received HTML instead of JSON')).toBe('endpoint_missing');
+    expect(categorizeError('Database table not found — migration may not have been run')).toBe('migration_missing');
+    expect(categorizeError('[getSession] Network error: Failed to fetch')).toBe('network');
+    expect(categorizeError('Authentication required')).toBe('auth_expired');
+    expect(categorizeError('Forbidden — Missing capability: incidents.read')).toBe('forbidden');
+  });
+});
+
+describe('iaRequest hint passthrough', () => {
+  // Simulate the iaRequest error construction logic
+  function buildErrorMessage(data: { error?: string; message?: string; hint?: string }, status: number): string {
+    const base = data?.error || data?.message || `HTTP ${status}`;
+    const hint = data?.hint ? ` | Hint: ${data.hint}` : '';
+    return base + hint;
+  }
+
+  it('includes hint when backend provides one', () => {
+    const msg = buildErrorMessage({
+      error: 'File upload failed: File exceeds server upload_max_filesize (256M)',
+      hint: 'Increase upload_max_filesize in api/.user.ini',
+    }, 400);
+    expect(msg).toContain('upload_max_filesize (256M)');
+    expect(msg).toContain('| Hint: Increase');
+  });
+
+  it('omits hint separator when no hint', () => {
+    const msg = buildErrorMessage({ error: 'Session not found' }, 404);
+    expect(msg).toBe('Session not found');
+    expect(msg).not.toContain('Hint');
+  });
+
+  it('falls back to status code when no error field', () => {
+    const msg = buildErrorMessage({}, 500);
+    expect(msg).toBe('HTTP 500');
+  });
+
+  it('constructs actionable message for directory errors', () => {
+    const msg = buildErrorMessage({
+      error: 'Upload directory is not writable',
+      hint: 'uploads/incident_analysis/datasets/ exists but PHP cannot write to it. Check directory permissions.',
+    }, 500);
+    expect(msg).toContain('not writable');
+    expect(msg).toContain('Check directory permissions');
+  });
+});
