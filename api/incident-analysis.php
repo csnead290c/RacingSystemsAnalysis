@@ -227,6 +227,70 @@ function ia_safeFilename(int $sessionId, string $originalName): string {
 }
 
 /**
+ * Human-readable message for PHP upload error codes.
+ */
+function ia_uploadErrorMessage(int $code): string {
+    return match ($code) {
+        UPLOAD_ERR_INI_SIZE   => 'File exceeds server upload_max_filesize (' . ini_get('upload_max_filesize') . ')',
+        UPLOAD_ERR_FORM_SIZE  => 'File exceeds form MAX_FILE_SIZE',
+        UPLOAD_ERR_PARTIAL    => 'File was only partially uploaded (connection interrupted?)',
+        UPLOAD_ERR_NO_FILE    => 'No file was selected',
+        UPLOAD_ERR_NO_TMP_DIR => 'Server has no temp directory configured for uploads',
+        UPLOAD_ERR_CANT_WRITE => 'Server failed to write upload to disk (permissions?)',
+        UPLOAD_ERR_EXTENSION  => 'A PHP extension blocked the upload',
+        default               => "Unknown upload error (code $code)",
+    };
+}
+
+/**
+ * Detect MIME type using finfo. Returns the MIME string or 'unknown' on failure.
+ */
+function ia_detectMime(string $filePath): string {
+    if (!file_exists($filePath)) return 'unknown';
+    try {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($filePath);
+        return $mime ?: 'unknown';
+    } catch (Throwable $e) {
+        return 'unknown';
+    }
+}
+
+/**
+ * Check if a detected MIME type is acceptable for CSV/text uploads.
+ * Broad enough for shared hosting environments where finfo can return unusual types.
+ */
+function ia_isAllowedCsvMime(string $mime): bool {
+    $allowed = [
+        'text/plain', 'text/csv', 'text/tab-separated-values',
+        'text/x-csv', 'text/comma-separated-values', 'text/x-comma-separated-values',
+        'application/csv', 'application/x-csv',
+        'application/octet-stream', // some systems report this for .csv
+        'application/vnd.ms-excel',  // Windows sometimes reports this for .csv
+        'unknown', // finfo failed — fall back to extension check which already passed
+    ];
+    // Also accept anything starting with text/
+    return in_array($mime, $allowed) || str_starts_with($mime, 'text/');
+}
+
+/**
+ * Check if a detected MIME type is acceptable for video uploads.
+ * Broad enough for shared hosting environments.
+ */
+function ia_isAllowedVideoMime(string $mime): bool {
+    $allowed = [
+        'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+        'video/x-matroska', 'video/ogg', 'video/x-m4v', 'video/3gpp',
+        'video/mpeg', 'video/x-flv',
+        'application/octet-stream', // some systems report this for video files
+        'application/mp4',
+        'unknown', // finfo failed — fall back to extension check which already passed
+    ];
+    // Also accept anything starting with video/
+    return in_array($mime, $allowed) || str_starts_with($mime, 'video/');
+}
+
+/**
  * Detect the time column from CSV headers.
  * Returns the header name or null.
  */
@@ -409,86 +473,107 @@ function handleUploadDataset(PDO $pdo, int $userId): void {
     $check->execute([$sessionId]);
     if (!$check->fetch()) rsa_jsonResponse(['error' => 'Session not found'], 404);
 
-    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-        $errCode = $_FILES['file']['error'] ?? 'no file';
-        rsa_jsonResponse(['error' => "File upload failed (code: $errCode)"], 400);
+    // ── File upload validation with actionable error messages ──
+    if (!isset($_FILES['file'])) {
+        rsa_jsonResponse(['error' => 'No file received', 'hint' => 'The request must include a "file" field (multipart/form-data). If you see this after selecting a file, post_max_size may have been exceeded.'], 400);
+    }
+    if ($_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        rsa_jsonResponse(['error' => 'File upload failed: ' . ia_uploadErrorMessage($_FILES['file']['error']), 'code' => $_FILES['file']['error']], 400);
     }
 
     $file = $_FILES['file'];
     if ($file['size'] > IA_MAX_CSV_SIZE) {
-        rsa_jsonResponse(['error' => 'File exceeds maximum size (50 MB)'], 400);
+        rsa_jsonResponse(['error' => 'File exceeds maximum size (50 MB)', 'file_size' => $file['size'], 'limit' => IA_MAX_CSV_SIZE], 400);
     }
 
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, ['csv', 'tsv', 'txt', 'log'])) {
-        rsa_jsonResponse(['error' => 'Only CSV/TSV/TXT/LOG files are accepted'], 400);
+        rsa_jsonResponse(['error' => 'Only CSV/TSV/TXT/LOG files are accepted', 'received_extension' => $ext], 400);
     }
 
-    // Store file
+    // ── Ensure target directory exists and is writable ──
     $subdir = IA_UPLOAD_DIR . '/datasets';
-    if (!is_dir($subdir)) mkdir($subdir, 0755, true);
+    if (!is_dir($subdir)) {
+        if (!@mkdir($subdir, 0755, true)) {
+            rsa_jsonResponse(['error' => 'Upload directory could not be created', 'hint' => 'The server cannot create uploads/incident_analysis/datasets/. Check filesystem permissions or run migration v16.'], 500);
+        }
+    }
+    if (!is_writable($subdir)) {
+        rsa_jsonResponse(['error' => 'Upload directory is not writable', 'hint' => 'uploads/incident_analysis/datasets/ exists but PHP cannot write to it. Check directory permissions.'], 500);
+    }
 
-    // MIME validation via finfo
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $detectedMime = $finfo->file($file['tmp_name']);
-    $allowedCsvMimes = ['text/plain', 'text/csv', 'text/tab-separated-values', 'application/csv',
-                        'application/octet-stream']; // some systems report octet-stream for .csv
-    if (!in_array($detectedMime, $allowedCsvMimes)) {
-        rsa_jsonResponse(['error' => "File MIME type '$detectedMime' is not a recognized text/CSV format"], 400);
+    // ── MIME validation — broad enough for shared hosting ──
+    $detectedMime = ia_detectMime($file['tmp_name']);
+    if (!ia_isAllowedCsvMime($detectedMime)) {
+        rsa_jsonResponse(['error' => "File content type '$detectedMime' is not a recognized text/CSV format", 'hint' => 'Ensure the file is a plain-text CSV. Binary files are not accepted.'], 400);
     }
 
     $storedName = ia_safeFilename($sessionId, $file['name']);
     $destPath = $subdir . '/' . $storedName;
 
     if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-        rsa_jsonResponse(['error' => 'Failed to store uploaded file'], 500);
+        // Diagnose why move failed
+        $diag = [];
+        if (!file_exists($file['tmp_name'])) $diag[] = 'temp file missing (upload may have been interrupted)';
+        if (!is_writable($subdir)) $diag[] = 'target directory not writable';
+        $diag[] = 'tmp_dir=' . (ini_get('upload_tmp_dir') ?: sys_get_temp_dir());
+        rsa_jsonResponse(['error' => 'Failed to store uploaded file', 'hint' => implode('; ', $diag)], 500);
     }
 
     // Parse CSV metadata
     try {
         $meta = ia_parseCsvMetadata($destPath);
     } catch (RuntimeException $e) {
-        unlink($destPath);
+        @unlink($destPath);
         rsa_jsonResponse(['error' => 'CSV parse error: ' . $e->getMessage()], 400);
     }
 
     // Insert dataset
-    $stmt = $pdo->prepare("
-        INSERT INTO incident_analysis_datasets
-            (session_id, name, file_path, file_size, file_mime, time_column, time_unit, sample_count, time_min, time_max, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([
-        $sessionId,
-        $file['name'],
-        $storedName, // relative to upload dir
-        $file['size'],
-        $file['type'] ?: 'text/csv',
-        $meta['time_column'],
-        $meta['time_unit'],
-        $meta['sample_count'],
-        $meta['time_min'],
-        $meta['time_max'],
-        $userId,
-    ]);
-    $datasetId = (int)$pdo->lastInsertId();
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO incident_analysis_datasets
+                (session_id, name, file_path, file_size, file_mime, time_column, time_unit, sample_count, time_min, time_max, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $sessionId,
+            $file['name'],
+            $storedName,
+            $file['size'],
+            $file['type'] ?: 'text/csv',
+            $meta['time_column'],
+            $meta['time_unit'],
+            $meta['sample_count'],
+            $meta['time_min'],
+            $meta['time_max'],
+            $userId,
+        ]);
+        $datasetId = (int)$pdo->lastInsertId();
+    } catch (Throwable $e) {
+        @unlink($destPath);
+        rsa_jsonResponse(['error' => 'Database error saving dataset', 'detail' => $e->getMessage()], 500);
+    }
 
     // Insert channels
-    $chStmt = $pdo->prepare("
-        INSERT INTO incident_analysis_channels
-            (dataset_id, name, source, sample_count, min_value, max_value, mean_value, sort_order)
-        VALUES (?, ?, 'imported', ?, ?, ?, ?, ?)
-    ");
-    foreach ($meta['channels'] as $i => $ch) {
-        $chStmt->execute([
-            $datasetId,
-            $ch['name'],
-            $ch['sample_count'],
-            $ch['min_value'],
-            $ch['max_value'],
-            $ch['mean_value'],
-            $i,
-        ]);
+    try {
+        $chStmt = $pdo->prepare("
+            INSERT INTO incident_analysis_channels
+                (dataset_id, name, source, sample_count, min_value, max_value, mean_value, sort_order)
+            VALUES (?, ?, 'imported', ?, ?, ?, ?, ?)
+        ");
+        foreach ($meta['channels'] as $i => $ch) {
+            $chStmt->execute([
+                $datasetId,
+                $ch['name'],
+                $ch['sample_count'],
+                $ch['min_value'],
+                $ch['max_value'],
+                $ch['mean_value'],
+                $i,
+            ]);
+        }
+    } catch (Throwable $e) {
+        rsa_jsonResponse(['error' => 'Database error saving channels', 'detail' => $e->getMessage()], 500);
     }
 
     rsa_jsonResponse([
@@ -654,54 +739,71 @@ function handleUploadVideo(PDO $pdo, int $userId): void {
     $check->execute([$sessionId]);
     if (!$check->fetch()) rsa_jsonResponse(['error' => 'Session not found'], 404);
 
-    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-        $errCode = $_FILES['file']['error'] ?? 'no file';
-        rsa_jsonResponse(['error' => "File upload failed (code: $errCode)"], 400);
+    // ── File upload validation with actionable error messages ──
+    if (!isset($_FILES['file'])) {
+        rsa_jsonResponse(['error' => 'No file received', 'hint' => 'The request must include a "file" field (multipart/form-data). If the file is large, post_max_size (' . ini_get('post_max_size') . ') may have been exceeded — when this happens PHP silently drops the entire POST body.'], 400);
+    }
+    if ($_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        rsa_jsonResponse(['error' => 'File upload failed: ' . ia_uploadErrorMessage($_FILES['file']['error']), 'code' => $_FILES['file']['error']], 400);
     }
 
     $file = $_FILES['file'];
     if ($file['size'] > IA_MAX_VIDEO_SIZE) {
-        rsa_jsonResponse(['error' => 'Video exceeds maximum size (500 MB)'], 400);
+        rsa_jsonResponse(['error' => 'Video exceeds maximum size (500 MB)', 'file_size' => $file['size'], 'limit' => IA_MAX_VIDEO_SIZE], 400);
     }
 
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    $videoExts = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
+    $videoExts = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv', 'm4v'];
     if (!in_array($ext, $videoExts)) {
-        rsa_jsonResponse(['error' => 'Only video files are accepted (' . implode(', ', $videoExts) . ')'], 400);
+        rsa_jsonResponse(['error' => 'Only video files are accepted (' . implode(', ', $videoExts) . ')', 'received_extension' => $ext], 400);
     }
 
+    // ── Ensure target directory exists and is writable ──
     $subdir = IA_UPLOAD_DIR . '/videos';
-    if (!is_dir($subdir)) mkdir($subdir, 0755, true);
+    if (!is_dir($subdir)) {
+        if (!@mkdir($subdir, 0755, true)) {
+            rsa_jsonResponse(['error' => 'Upload directory could not be created', 'hint' => 'The server cannot create uploads/incident_analysis/videos/. Check filesystem permissions or run migration v16.'], 500);
+        }
+    }
+    if (!is_writable($subdir)) {
+        rsa_jsonResponse(['error' => 'Upload directory is not writable', 'hint' => 'uploads/incident_analysis/videos/ exists but PHP cannot write to it. Check directory permissions.'], 500);
+    }
 
-    // MIME validation via finfo
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $detectedMime = $finfo->file($file['tmp_name']);
-    $allowedVideoMimes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
-                          'video/x-matroska', 'video/ogg', 'application/octet-stream'];
-    if (!in_array($detectedMime, $allowedVideoMimes)) {
-        rsa_jsonResponse(['error' => "File MIME type '$detectedMime' is not a recognized video format"], 400);
+    // ── MIME validation — broad enough for shared hosting ──
+    $detectedMime = ia_detectMime($file['tmp_name']);
+    if (!ia_isAllowedVideoMime($detectedMime)) {
+        rsa_jsonResponse(['error' => "File content type '$detectedMime' is not a recognized video format", 'hint' => 'Accepted: mp4, webm, mov, avi, mkv, ogv, m4v'], 400);
     }
 
     $storedName = ia_safeFilename($sessionId, $file['name']);
     $destPath = $subdir . '/' . $storedName;
 
     if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-        rsa_jsonResponse(['error' => 'Failed to store uploaded video'], 500);
+        $diag = [];
+        if (!file_exists($file['tmp_name'])) $diag[] = 'temp file missing (upload may have been interrupted or exceeded server limits)';
+        if (!is_writable($subdir)) $diag[] = 'target directory not writable';
+        $diag[] = 'tmp_dir=' . (ini_get('upload_tmp_dir') ?: sys_get_temp_dir());
+        rsa_jsonResponse(['error' => 'Failed to store uploaded video', 'hint' => implode('; ', $diag)], 500);
     }
 
-    $stmt = $pdo->prepare("
-        INSERT INTO incident_analysis_videos (session_id, name, file_path, file_size, file_mime, created_by)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([
-        $sessionId,
-        $file['name'],
-        $storedName,
-        $file['size'],
-        $file['type'] ?: 'video/mp4',
-        $userId,
-    ]);
-    $videoId = (int)$pdo->lastInsertId();
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO incident_analysis_videos (session_id, name, file_path, file_size, file_mime, created_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $sessionId,
+            $file['name'],
+            $storedName,
+            $file['size'],
+            $file['type'] ?: 'video/mp4',
+            $userId,
+        ]);
+        $videoId = (int)$pdo->lastInsertId();
+    } catch (Throwable $e) {
+        @unlink($destPath);
+        rsa_jsonResponse(['error' => 'Database error saving video record', 'detail' => $e->getMessage()], 500);
+    }
 
     rsa_jsonResponse([
         'ok' => true,
@@ -1032,15 +1134,69 @@ function handleDiagnose(PDO $pdo, int $userId, string $role): void {
         'detail' => file_exists($htaccess) ? 'Deny from all — direct access blocked' : 'Missing — uploads may be directly accessible',
     ];
 
-    // 7. PHP config relevant to uploads — flag if too low for video
+    // 7. PHP upload system readiness
+    $checks['php:file_uploads'] = [
+        'pass' => (bool)ini_get('file_uploads'),
+        'value' => ini_get('file_uploads'),
+    ];
+
+    // Temp directory for uploads
+    $tmpDir = ini_get('upload_tmp_dir') ?: sys_get_temp_dir();
+    $tmpWritable = is_dir($tmpDir) && is_writable($tmpDir);
+    $checks['php:upload_tmp_dir'] = [
+        'pass' => $tmpWritable,
+        'value' => $tmpDir ? 'configured' : 'not set (using sys default)',
+        'writable' => $tmpWritable,
+    ];
+    if (!$tmpWritable) {
+        $checks['php:upload_tmp_dir']['hint'] = 'PHP temp directory is not writable — ALL uploads will fail';
+    }
+
+    // Upload size limits with proper byte parsing
     $uploadMax = ini_get('upload_max_filesize');
     $postMax = ini_get('post_max_size');
-    $uploadBytes = (int)$uploadMax * (stripos($uploadMax, 'G') !== false ? 1073741824 : (stripos($uploadMax, 'M') !== false ? 1048576 : 1));
+    $uploadBytes = ia_parseIniBytes($uploadMax);
+    $postBytes = ia_parseIniBytes($postMax);
+
+    $csvOk = $uploadBytes >= IA_MAX_CSV_SIZE;
+    $videoOk = $uploadBytes >= IA_MAX_VIDEO_SIZE;
+    $postOk = $postBytes >= $uploadBytes; // post_max_size must be >= upload_max_filesize
+
     $checks['php:upload_max_filesize'] = [
         'value' => $uploadMax,
-        'warn' => $uploadBytes < 512 * 1048576 ? 'Below 512M — large video uploads will fail. Set in api/.user.ini or PHP settings.' : null,
+        'bytes' => $uploadBytes,
+        'csv_ok' => $csvOk,
+        'video_ok' => $videoOk,
     ];
-    $checks['php:post_max_size'] = ['value' => $postMax];
+    if (!$videoOk) {
+        $checks['php:upload_max_filesize']['warn'] = "Current {$uploadMax} is below 512M — video uploads over {$uploadMax} will fail. Fix: add upload_max_filesize=512M to api/.user.ini";
+    }
+    $checks['php:post_max_size'] = [
+        'value' => $postMax,
+        'bytes' => $postBytes,
+        'pass' => $postOk,
+    ];
+    if (!$postOk) {
+        $checks['php:post_max_size']['warn'] = "post_max_size ({$postMax}) should be larger than upload_max_filesize ({$uploadMax})";
+    }
+
+    // 8. Upload readiness verdicts
+    $dirsOk = !empty($checks['dir:datasets']['pass']) && !empty($checks['dir:datasets']['writable'])
+           && !empty($checks['dir:videos']['pass']) && !empty($checks['dir:videos']['writable']);
+    $checks['verdict:csv_upload'] = [
+        'pass' => $csvOk && $tmpWritable && $dirsOk && empty($missingTables),
+        'detail' => !$tmpWritable ? 'BLOCKED: temp dir not writable'
+                  : (!$dirsOk ? 'BLOCKED: upload directories missing or not writable'
+                  : (!empty($missingTables) ? 'BLOCKED: database tables missing'
+                  : (!$csvOk ? 'BLOCKED: upload_max_filesize too low' : 'Ready'))),
+    ];
+    $checks['verdict:video_upload'] = [
+        'pass' => $videoOk && $tmpWritable && $dirsOk && empty($missingTables),
+        'detail' => !$tmpWritable ? 'BLOCKED: temp dir not writable'
+                  : (!$dirsOk ? 'BLOCKED: upload directories missing or not writable'
+                  : (!empty($missingTables) ? 'BLOCKED: database tables missing'
+                  : (!$videoOk ? "BLOCKED: upload_max_filesize ({$uploadMax}) is below 512M — large videos will fail" : 'Ready'))),
+    ];
 
     // Summary with actionable fix
     $allPass = true;
@@ -1061,7 +1217,7 @@ function handleDiagnose(PDO $pdo, int $userId, string $role): void {
         $response['fix'] = 'Run migration: GET /api/migrate-v16-incident-analysis.php (requires admin auth)';
         $response['missing_tables'] = $missingTables;
     } elseif (!$allPass) {
-        $response['summary'] = 'FAILED — see checks for details';
+        $response['summary'] = 'Some checks failed — see details';
     } else {
         $response['summary'] = 'All checks passed — module is ready';
     }
@@ -1071,4 +1227,19 @@ function handleDiagnose(PDO $pdo, int $userId, string $role): void {
     }
 
     rsa_jsonResponse($response);
+}
+
+/**
+ * Parse PHP ini byte values like '128M', '2G', '1024K' into integer bytes.
+ */
+function ia_parseIniBytes(string $val): int {
+    $val = trim($val);
+    $num = (int)$val;
+    $suffix = strtolower(substr($val, -1));
+    return match ($suffix) {
+        'g' => $num * 1073741824,
+        'm' => $num * 1048576,
+        'k' => $num * 1024,
+        default => $num,
+    };
 }
