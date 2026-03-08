@@ -40,6 +40,11 @@ require_once __DIR__ . '/lib/capabilities.php';
 
 $action = $_GET['action'] ?? '';
 
+// Constants must be defined before the try/catch dispatch block so handler functions can use them.
+define('IA_UPLOAD_DIR', __DIR__ . '/../uploads/incident_analysis');
+define('IA_MAX_CSV_SIZE', 50 * 1024 * 1024); // 50 MB
+define('IA_MAX_VIDEO_SIZE', 500 * 1024 * 1024); // 500 MB
+
 // For file streaming, skip JSON content-type
 if ($action !== 'getDatasetData' && $action !== 'getVideoFile') {
     header('Content-Type: application/json; charset=utf-8');
@@ -189,9 +194,9 @@ switch ($action) {
 // Helpers
 // ============================================================================
 
-define('IA_UPLOAD_DIR', __DIR__ . '/../uploads/incident_analysis');
-define('IA_MAX_CSV_SIZE', 50 * 1024 * 1024); // 50 MB
-define('IA_MAX_VIDEO_SIZE', 500 * 1024 * 1024); // 500 MB
+// NOTE: IA_UPLOAD_DIR, IA_MAX_CSV_SIZE, IA_MAX_VIDEO_SIZE are defined near the
+// top of this file (before the try/catch dispatch block) so they are available
+// to all handler functions.
 
 function ia_requireCap(PDO $pdo, int $userId, string $role, string $cap): void {
     if (!rsa_hasCap($pdo, $userId, $role, $cap)) {
