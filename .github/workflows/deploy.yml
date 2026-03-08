@@ -79,6 +79,9 @@ jobs:
           cd ..
           echo "Composer dependencies installed successfully"
 
+      # NOTE: Database migrations are NOT run by this workflow.
+      # After deploying a new module, an admin must manually run the migration endpoint.
+      # See README.md "Post-Deploy Migrations" and docs/INCIDENT_ANALYSIS_RECOVERY.md
       - name: Copy API to dist
         run: |
           echo "Copying API files to dist..."

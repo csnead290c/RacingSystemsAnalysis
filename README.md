@@ -78,6 +78,23 @@ npm run typecheck
 npm run lint
 ```
 
+## Deployment
+
+Pushes to `main` trigger the GitHub Actions workflow (`.github/workflows/deploy.yml`) which builds the frontend and deploys via FTP to SiteGround.
+
+### Post-Deploy Migrations
+
+Some modules require database migrations that are **not** run automatically by the deploy pipeline. After deploying new modules, an admin must run the relevant migration endpoint with an admin auth token.
+
+| Migration | Module | Endpoint |
+|-----------|--------|----------|
+| v15 | Incidents | `/api/migrate-v15-incidents.php` |
+| v16 | Incident Analysis | `/api/migrate-v16-incident-analysis.php` |
+
+**To verify Incident Analysis is ready:** `GET /api/incident-analysis.php?action=diagnose`
+
+See `docs/INCIDENT_ANALYSIS_RECOVERY.md` for the full production recovery runbook.
+
 ## PWA Features
 
 The application is configured as a Progressive Web App with:

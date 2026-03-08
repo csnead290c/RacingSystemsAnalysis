@@ -149,7 +149,10 @@ async function iaRequest<T>(endpoint: string, options: RequestInit = {}): Promis
   }
 
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || `HTTP ${response.status}`);
+    // Include server hint in error message when available (e.g. "Run migration v16")
+    const base = data?.error || data?.message || `HTTP ${response.status}`;
+    const hint = data?.hint ? ` | Hint: ${data.hint}` : '';
+    throw new Error(base + hint);
   }
 
   return data as T;
@@ -190,8 +193,17 @@ export const incidentAnalysisApi = {
   },
 
   getDatasetDataUrl(datasetId: number): string {
+    return `${API_BASE}/incident-analysis.php?action=getDatasetData&dataset_id=${datasetId}`;
+  },
+
+  async fetchDatasetData(datasetId: number): Promise<string> {
+    const url = `${API_BASE}/incident-analysis.php?action=getDatasetData&dataset_id=${datasetId}`;
+    const headers: Record<string, string> = {};
     const token = getAuthToken();
-    return `${API_BASE}/incident-analysis.php?action=getDatasetData&dataset_id=${datasetId}${token ? `&_token=${token}` : ''}`;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Failed to fetch dataset ${datasetId}: HTTP ${res.status}`);
+    return res.text();
   },
 
   async updateDataset(datasetId: number, fields: { time_offset?: number; color?: string; name?: string }): Promise<UpdateDatasetResponse> {
@@ -230,6 +242,11 @@ export const incidentAnalysisApi = {
       method: 'POST',
       body: JSON.stringify({ video_id: videoId, ...fields }),
     });
+  },
+
+  getVideoUrl(videoId: number): string {
+    const token = getAuthToken();
+    return `${API_BASE}/incident-analysis.php?action=getVideoFile&video_id=${videoId}${token ? `&_token=${encodeURIComponent(token)}` : ''}`;
   },
 
   async deleteVideo(videoId: number): Promise<DeleteVideoResponse> {

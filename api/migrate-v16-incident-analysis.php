@@ -10,6 +10,10 @@
  *   5. incident_analysis_measurements — cursor measurements (time deltas, value deltas)
  *
  * Safe to run multiple times (IF NOT EXISTS).
+ *
+ * MUST BE RUN after first deploy of the Incident Analysis module.
+ * Requires admin/owner auth token in Authorization header.
+ * See docs/INCIDENT_ANALYSIS_RECOVERY.md for the full runbook.
  */
 
 ini_set('display_errors', '1');

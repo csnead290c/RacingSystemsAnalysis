@@ -17,12 +17,18 @@
  *   POST ?action=saveMeasurement                   — Create or update a measurement
  *   GET  ?action=listMeasurements&session_id=N     — List measurements
  *   POST ?action=deleteMeasurement                 — Delete a measurement
+ *   GET  ?action=diagnose                          — Production readiness check (all prerequisites)
  *
  * Permission model:
  *   incidents.read   — view analysis data
  *   incidents.create — create/upload/modify analysis data
  *
  * All endpoints require authentication.
+ *
+ * DEPLOYMENT NOTE:
+ *   This module requires migration v16 (migrate-v16-incident-analysis.php).
+ *   If the 500 error "table not found" appears, the migration has not been run.
+ *   Use ?action=diagnose to check all prerequisites.
  */
 
 ini_set('display_errors', '0');
@@ -42,6 +48,11 @@ if ($action !== 'getDatasetData' && $action !== 'getVideoFile') {
 try {
 
 $auth = rsa_getAuthUser();
+// For streaming endpoints (<video src>, <img src>), browser can't send Authorization header.
+// Fall back to query-param token for getVideoFile and getDatasetData only.
+if (!$auth && in_array($action, ['getVideoFile', 'getDatasetData']) && !empty($_GET['_token'])) {
+    $auth = rsa_verifyToken($_GET['_token']);
+}
 if (!$auth) {
     rsa_jsonResponse(['error' => 'Authentication required'], 401);
 }
@@ -88,7 +99,7 @@ switch ($action) {
     case 'deleteDataset':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         ia_requireCap($pdo, $userId, $role, 'incidents.create');
-        handleDeleteDataset($pdo);
+        handleDeleteDataset($pdo, $userId, $role);
         break;
     case 'uploadVideo':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
@@ -108,7 +119,7 @@ switch ($action) {
     case 'deleteVideo':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         ia_requireCap($pdo, $userId, $role, 'incidents.create');
-        handleDeleteVideo($pdo);
+        handleDeleteVideo($pdo, $userId, $role);
         break;
     case 'getVideoFile':
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
@@ -128,15 +139,50 @@ switch ($action) {
     case 'deleteMeasurement':
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         ia_requireCap($pdo, $userId, $role, 'incidents.create');
-        handleDeleteMeasurement($pdo);
+        handleDeleteMeasurement($pdo, $userId, $role);
+        break;
+    case 'diagnose':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.read');
+        handleDiagnose($pdo, $userId, $role);
         break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
 
 } catch (Throwable $e) {
-    error_log('incident-analysis.php unhandled exception [' . ($action ?? '') . ']: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-    rsa_jsonResponse(['error' => 'Internal server error', 'detail' => $e->getMessage()], 500);
+    $errorContext = [
+        'action' => $action ?? '',
+        'class'  => get_class($e),
+        'msg'    => $e->getMessage(),
+        'file'   => $e->getFile(),
+        'line'   => $e->getLine(),
+    ];
+    error_log('incident-analysis.php unhandled exception: ' . json_encode($errorContext));
+
+    // Surface diagnostic info safely — include detail for non-production debugging.
+    // The 'detail' and 'debug' keys help developers; 'error' is the user-facing message.
+    $response = ['error' => 'Internal server error'];
+
+    // Detect likely root causes and add actionable hints
+    $msg = $e->getMessage();
+    if (stripos($msg, "doesn't exist") !== false || stripos($msg, 'table') !== false) {
+        $response['hint'] = 'Database tables may not exist. Run migration v16: /api/migrate-v16-incident-analysis.php';
+        $response['error'] = 'Database table not found — migration may not have been run';
+    } elseif (stripos($msg, 'Access denied') !== false || stripos($msg, 'SQLSTATE[HY000]') !== false) {
+        $response['hint'] = 'Database connection or permission error. Check config.php credentials.';
+    } elseif (stripos($msg, 'No such file') !== false || stripos($msg, 'Permission denied') !== false) {
+        $response['hint'] = 'File system error. Check that uploads/incident_analysis/ exists and is writable.';
+    }
+
+    $response['detail'] = $msg;
+    $response['debug'] = [
+        'action' => $action ?? '',
+        'exception' => get_class($e),
+        'location' => basename($e->getFile()) . ':' . $e->getLine(),
+    ];
+
+    rsa_jsonResponse($response, 500);
 }
 
 // ============================================================================
@@ -151,6 +197,28 @@ function ia_requireCap(PDO $pdo, int $userId, string $role, string $cap): void {
     if (!rsa_hasCap($pdo, $userId, $role, $cap)) {
         rsa_jsonResponse(['error' => 'Forbidden', 'message' => "Missing capability: $cap"], 403);
     }
+}
+
+/**
+ * Verify that the given session belongs to the given user, or user is admin/owner.
+ * For delete operations we require ownership or elevated role.
+ */
+function ia_requireSessionAccess(PDO $pdo, int $sessionId, int $userId, string $role): void {
+    if (in_array($role, ['owner', 'admin'])) return;
+    $stmt = $pdo->prepare("SELECT created_by FROM incident_analysis_sessions WHERE id = ?");
+    $stmt->execute([$sessionId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row || (int)$row['created_by'] !== $userId) {
+        rsa_jsonResponse(['error' => 'Forbidden', 'message' => 'You do not own this analysis session'], 403);
+    }
+}
+
+/**
+ * Generate a collision-safe stored filename.
+ */
+function ia_safeFilename(int $sessionId, string $originalName): string {
+    $safeName = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $originalName);
+    return $sessionId . '_' . uniqid('', true) . '_' . $safeName;
 }
 
 /**
@@ -355,8 +423,16 @@ function handleUploadDataset(PDO $pdo, int $userId): void {
     $subdir = IA_UPLOAD_DIR . '/datasets';
     if (!is_dir($subdir)) mkdir($subdir, 0755, true);
 
-    $safeName = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $file['name']);
-    $storedName = $sessionId . '_' . time() . '_' . $safeName;
+    // MIME validation via finfo
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $detectedMime = $finfo->file($file['tmp_name']);
+    $allowedCsvMimes = ['text/plain', 'text/csv', 'text/tab-separated-values', 'application/csv',
+                        'application/octet-stream']; // some systems report octet-stream for .csv
+    if (!in_array($detectedMime, $allowedCsvMimes)) {
+        rsa_jsonResponse(['error' => "File MIME type '$detectedMime' is not a recognized text/CSV format"], 400);
+    }
+
+    $storedName = ia_safeFilename($sessionId, $file['name']);
     $destPath = $subdir . '/' . $storedName;
 
     if (!move_uploaded_file($file['tmp_name'], $destPath)) {
@@ -538,15 +614,17 @@ function handleUpdateDataset(PDO $pdo, int $userId): void {
 // Body: { dataset_id }
 // ============================================================================
 
-function handleDeleteDataset(PDO $pdo): void {
+function handleDeleteDataset(PDO $pdo, int $userId, string $role): void {
     $input = rsa_getJsonInput();
     $datasetId = (int)($input['dataset_id'] ?? 0);
     if ($datasetId <= 0) rsa_jsonResponse(['error' => 'dataset_id is required'], 400);
 
-    $stmt = $pdo->prepare("SELECT file_path FROM incident_analysis_datasets WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT file_path, session_id FROM incident_analysis_datasets WHERE id = ?");
     $stmt->execute([$datasetId]);
     $ds = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$ds) rsa_jsonResponse(['error' => 'Dataset not found'], 404);
+
+    ia_requireSessionAccess($pdo, (int)$ds['session_id'], $userId, $role);
 
     // Delete file
     $fullPath = IA_UPLOAD_DIR . '/datasets/' . $ds['file_path'];
@@ -590,8 +668,16 @@ function handleUploadVideo(PDO $pdo, int $userId): void {
     $subdir = IA_UPLOAD_DIR . '/videos';
     if (!is_dir($subdir)) mkdir($subdir, 0755, true);
 
-    $safeName = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $file['name']);
-    $storedName = $sessionId . '_' . time() . '_' . $safeName;
+    // MIME validation via finfo
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $detectedMime = $finfo->file($file['tmp_name']);
+    $allowedVideoMimes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+                          'video/x-matroska', 'video/ogg', 'application/octet-stream'];
+    if (!in_array($detectedMime, $allowedVideoMimes)) {
+        rsa_jsonResponse(['error' => "File MIME type '$detectedMime' is not a recognized video format"], 400);
+    }
+
+    $storedName = ia_safeFilename($sessionId, $file['name']);
     $destPath = $subdir . '/' . $storedName;
 
     if (!move_uploaded_file($file['tmp_name'], $destPath)) {
@@ -677,6 +763,11 @@ function handleGetVideoFile(PDO $pdo): void {
             $start = (int)$m[1];
             $end = $m[2] !== '' ? (int)$m[2] : $size - 1;
             $end = min($end, $size - 1);
+            if ($start > $end || $start >= $size) {
+                http_response_code(416);
+                header("Content-Range: bytes */$size");
+                exit;
+            }
             $length = $end - $start + 1;
 
             http_response_code(206);
@@ -706,9 +797,6 @@ function handleGetVideoFile(PDO $pdo): void {
     readfile($fullPath);
     exit;
 }
-
-// Add getVideoFile to the switch (handle it before auth for streaming)
-// Actually, we need auth for video too, so add it to the switch:
 
 // ============================================================================
 // POST ?action=updateVideo
@@ -750,15 +838,17 @@ function handleUpdateVideo(PDO $pdo, int $userId): void {
 // Body: { video_id }
 // ============================================================================
 
-function handleDeleteVideo(PDO $pdo): void {
+function handleDeleteVideo(PDO $pdo, int $userId, string $role): void {
     $input = rsa_getJsonInput();
     $videoId = (int)($input['video_id'] ?? 0);
     if ($videoId <= 0) rsa_jsonResponse(['error' => 'video_id is required'], 400);
 
-    $stmt = $pdo->prepare("SELECT file_path FROM incident_analysis_videos WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT file_path, session_id FROM incident_analysis_videos WHERE id = ?");
     $stmt->execute([$videoId]);
     $v = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$v) rsa_jsonResponse(['error' => 'Video not found'], 404);
+
+    ia_requireSessionAccess($pdo, (int)$v['session_id'], $userId, $role);
 
     $fullPath = IA_UPLOAD_DIR . '/videos/' . $v['file_path'];
     if (file_exists($fullPath)) unlink($fullPath);
@@ -843,12 +933,137 @@ function handleListMeasurements(PDO $pdo): void {
 // Body: { measurement_id }
 // ============================================================================
 
-function handleDeleteMeasurement(PDO $pdo): void {
+function handleDeleteMeasurement(PDO $pdo, int $userId, string $role): void {
     $input = rsa_getJsonInput();
     $id = (int)($input['measurement_id'] ?? 0);
     if ($id <= 0) rsa_jsonResponse(['error' => 'measurement_id is required'], 400);
 
+    // Verify ownership via session
+    $stmt = $pdo->prepare("SELECT session_id FROM incident_analysis_measurements WHERE id = ?");
+    $stmt->execute([$id]);
+    $m = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$m) rsa_jsonResponse(['error' => 'Measurement not found'], 404);
+    ia_requireSessionAccess($pdo, (int)$m['session_id'], $userId, $role);
+
     $pdo->prepare("DELETE FROM incident_analysis_measurements WHERE id = ?")->execute([$id]);
 
     rsa_jsonResponse(['ok' => true, 'deleted_id' => $id]);
+}
+
+// ============================================================================
+// GET ?action=diagnose — Production readiness check
+// Returns pass/fail for every prerequisite the module needs
+// ============================================================================
+
+function handleDiagnose(PDO $pdo, int $userId, string $role): void {
+    $checks = [];
+
+    // 1. Auth — if we got here, auth passed. Only expose role, not userId.
+    $checks['auth'] = ['pass' => true, 'role' => $role];
+
+    // 2. Required tables
+    $requiredTables = [
+        'run_incidents',
+        'incident_analysis_sessions',
+        'incident_analysis_datasets',
+        'incident_analysis_channels',
+        'incident_analysis_videos',
+        'incident_analysis_measurements',
+    ];
+    $missingTables = [];
+    foreach ($requiredTables as $table) {
+        try {
+            $pdo->query("SELECT 1 FROM $table LIMIT 0");
+            $checks["table:$table"] = ['pass' => true];
+        } catch (Throwable $e) {
+            $checks["table:$table"] = ['pass' => false, 'error' => 'Table does not exist'];
+            $missingTables[] = $table;
+        }
+    }
+
+    // 3. Quick data health: count incidents and sessions
+    try {
+        $incCount = (int)$pdo->query("SELECT COUNT(*) FROM run_incidents")->fetchColumn();
+        $checks['data:run_incidents_count'] = ['value' => $incCount, 'pass' => $incCount > 0];
+    } catch (Throwable $e) {
+        $checks['data:run_incidents_count'] = ['pass' => false, 'error' => 'Cannot query run_incidents'];
+    }
+    if (!in_array('incident_analysis_sessions', $missingTables)) {
+        try {
+            $sesCount = (int)$pdo->query("SELECT COUNT(*) FROM incident_analysis_sessions")->fetchColumn();
+            $checks['data:sessions_count'] = ['value' => $sesCount];
+        } catch (Throwable $e) {
+            // Already caught above
+        }
+    }
+
+    // 4. Upload directories — do NOT expose absolute server paths
+    $uploadBase = __DIR__ . '/../uploads/incident_analysis';
+    $checks['dir:uploads/incident_analysis'] = [
+        'pass' => is_dir($uploadBase),
+        'writable' => is_dir($uploadBase) ? is_writable($uploadBase) : false,
+    ];
+    $datasetDir = $uploadBase . '/datasets';
+    $checks['dir:datasets'] = [
+        'pass' => is_dir($datasetDir),
+        'writable' => is_dir($datasetDir) ? is_writable($datasetDir) : false,
+    ];
+    $videoDir = $uploadBase . '/videos';
+    $checks['dir:videos'] = [
+        'pass' => is_dir($videoDir),
+        'writable' => is_dir($videoDir) ? is_writable($videoDir) : false,
+    ];
+
+    // 5. Capabilities
+    $canRead = rsa_hasCap($pdo, $userId, $role, 'incidents.read');
+    $canCreate = rsa_hasCap($pdo, $userId, $role, 'incidents.create');
+    $checks['cap:incidents.read'] = ['pass' => $canRead];
+    $checks['cap:incidents.create'] = ['pass' => $canCreate];
+
+    // 6. Upload security — .htaccess in upload dir
+    $htaccess = $uploadBase . '/.htaccess';
+    $checks['dir:htaccess'] = [
+        'pass' => file_exists($htaccess),
+        'detail' => file_exists($htaccess) ? 'Deny from all — direct access blocked' : 'Missing — uploads may be directly accessible',
+    ];
+
+    // 7. PHP config relevant to uploads — flag if too low for video
+    $uploadMax = ini_get('upload_max_filesize');
+    $postMax = ini_get('post_max_size');
+    $uploadBytes = (int)$uploadMax * (stripos($uploadMax, 'G') !== false ? 1073741824 : (stripos($uploadMax, 'M') !== false ? 1048576 : 1));
+    $checks['php:upload_max_filesize'] = [
+        'value' => $uploadMax,
+        'warn' => $uploadBytes < 512 * 1048576 ? 'Below 512M — large video uploads will fail. Set in api/.user.ini or PHP settings.' : null,
+    ];
+    $checks['php:post_max_size'] = ['value' => $postMax];
+
+    // Summary with actionable fix
+    $allPass = true;
+    $warnings = [];
+    foreach ($checks as $key => $c) {
+        if (isset($c['pass']) && !$c['pass']) { $allPass = false; }
+        if (!empty($c['warn'])) { $warnings[] = $key . ': ' . $c['warn']; }
+    }
+
+    $response = [
+        'ok' => $allPass,
+        'checks' => $checks,
+    ];
+
+    if (!empty($missingTables)) {
+        $ia = count($missingTables);
+        $response['summary'] = "$ia table(s) missing — run migration v16";
+        $response['fix'] = 'Run migration: GET /api/migrate-v16-incident-analysis.php (requires admin auth)';
+        $response['missing_tables'] = $missingTables;
+    } elseif (!$allPass) {
+        $response['summary'] = 'FAILED — see checks for details';
+    } else {
+        $response['summary'] = 'All checks passed — module is ready';
+    }
+
+    if (!empty($warnings)) {
+        $response['warnings'] = $warnings;
+    }
+
+    rsa_jsonResponse($response);
 }
