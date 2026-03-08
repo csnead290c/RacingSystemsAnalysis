@@ -25,6 +25,9 @@ src/domain/physics/_legacy/archive/
 # node artifacts
 # package-lock.json is tracked for CI (npm ci requires it)
 
+# Uploaded files (incident analysis telemetry + video)
+uploads/
+
 # reference artifacts (local only)
 Reference Files/**/*.log
 Reference Files/**/.DS_Store

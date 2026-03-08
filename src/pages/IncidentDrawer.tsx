@@ -486,10 +486,15 @@ export default function IncidentDrawer({ runId, driverName, canCreate, onClose, 
                   </div>
                   <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>{inc.summary}</div>
                   {inc.details && <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>{inc.details}</div>}
-                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', ...DS.muted }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', ...DS.muted }}>
                     {inc.lane && <span>Lane: {inc.lane}</span>}
                     {inc.track_segment && <span>Segment: {inc.track_segment}</span>}
                     <span>{inc.occurred_at_utc ? `At: ${inc.occurred_at_utc}` : `Created: ${inc.created_at}`}</span>
+                    <button
+                      style={{ ...DS.btn('primary'), fontSize: '0.6rem', padding: '0.15rem 0.4rem', marginLeft: 'auto' }}
+                      onClick={() => navigate(`/parity/analysis/${inc.id}`)}
+                      data-testid="incident-analyze-btn"
+                    >Analyze</button>
                   </div>
 
                   {/* ── Links section ── */}

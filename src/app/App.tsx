@@ -54,6 +54,7 @@ const DevPortal = lazy(() => import('../pages/DevPortal'));
 const AdminPortal = lazy(() => import('../pages/AdminPortal'));
 const ParityPortal = lazy(() => import('../pages/ParityPortal'));
 const ParityIdrViewer = lazy(() => import('../pages/ParityIdrViewer'));
+const IncidentAnalysis = lazy(() => import('../pages/IncidentAnalysis'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -632,6 +633,17 @@ function App() {
                 <InternalRoute>
                   <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
                     <DevPortal />
+                  </Suspense>
+                </InternalRoute>
+              </ProtectedRoute>
+            } />
+
+            {/* Incident Analysis — telemetry + video review workspace */}
+            <Route path="/parity/analysis/:incidentId" element={
+              <ProtectedRoute>
+                <InternalRoute>
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                    <IncidentAnalysis />
                   </Suspense>
                 </InternalRoute>
               </ProtectedRoute>
