@@ -374,13 +374,18 @@ describe('Narrative generation', () => {
   });
 
   it('mentions weak baseline when applicable', () => {
-    const small = makePopulation(4);
-    // Make one run an outlier to trigger baseline flags
-    const outlier = makeRun({ id: 999, ft1320: 8.0, mph1320: 200.0 });
-    const result = analyzeRuns([outlier], [...small, outlier]);
+    // Create 3 peers (category-only match) — gives weak baseline (3 ≥ 3 but < 5)
+    const peers = [
+      makeRun({ id: 101, category: 'Pro Stock', class_index: 'PS', driver_name: 'A' }),
+      makeRun({ id: 102, category: 'Pro Stock', class_index: 'PS', driver_name: 'B' }),
+      makeRun({ id: 103, category: 'Pro Stock', class_index: 'PS', driver_name: 'C' }),
+    ];
+    // outlier is same category but very different values
+    const outlier = makeRun({ id: 999, category: 'Pro Stock', class_index: 'PS', driver_name: 'X', ft1320: 12.0, mph1320: 100.0 });
+    const result = analyzeRuns([outlier], [...peers, outlier]);
     const r = result.runs[0];
-    // narrative should mention baseline quality since it's weak
-    expect(r.narrative.toLowerCase()).toMatch(/baseline|peer|historical/);
+    // With only 3 peers, baseline is weak — narrative should mention it
+    expect(r.narrative.toLowerCase()).toMatch(/baseline|peer|historical|no suitable|no historical/);
   });
 });
 

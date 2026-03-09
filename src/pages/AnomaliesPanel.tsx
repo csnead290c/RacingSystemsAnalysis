@@ -1,31 +1,29 @@
 /**
- * AnomaliesPanel — Timing-data confidence & anomaly detection dashboard
+ * AnomaliesPanel — Run Integrity Review
  *
- * Analyzes parity run data to identify:
- *   - Runs with suspicious or unreliable timing data
- *   - Individual splits/increments that may be wrong while the rest is trustworthy
- *   - Patterns suggesting timing system issues vs unusual vehicle performance
+ * Server-backed timing-data confidence and anomaly detection dashboard.
+ * Data is computed by the backend anomaly engine (api/parity.php → anomalyAnalysis)
+ * and rendered here with rollup/system-level views and per-run detail inspection.
  *
- * Uses the deterministic anomaly engine (src/domain/parity/anomalyEngine.ts).
+ * Distinguishes between:
+ *   - Unusual but plausible performance
+ *   - Isolated suspicious increments
+ *   - Probable timing-data issues
+ *   - Incomplete/corrupt records
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   parityApi,
-  type RunWithWeather,
   type EventWithStats,
+  type AnomalyAnalysisResponse,
+  type AnomalyRunSummary,
+  type AnomalyRollups,
+  type AnomalyFieldScore,
+  type AnomalyDetailResponse,
+  type AnomalyClassification,
 } from '../services/parityApi';
-import {
-  analyzeRuns,
-  confidenceBand,
-  BAND_COLORS,
-  INTERVAL_SEGMENTS,
-  type RunAnomalyResult,
-  type AnomalyBatchResult,
-  type ConfidenceBand,
-  type FieldConfidence,
-  type Severity,
-} from '../domain/parity/anomalyEngine';
+import { BAND_COLORS } from '../domain/parity/anomalyEngine';
 import { formatET, formatMPH } from '../domain/parity/format';
 
 // ── Styles (matches ParityPortal conventions) ────────────────────────────
@@ -101,22 +99,56 @@ const S = {
   } as React.CSSProperties,
 };
 
-// ── Confidence chip ──────────────────────────────────────────────────────
+// ── Classification labels & colors ───────────────────────────────────────
 
-function ConfidenceChip({ score, band }: { score: number; band: ConfidenceBand }) {
+const CLASSIFICATION_LABELS: Record<AnomalyClassification, string> = {
+  clean: 'Clean',
+  unusual_but_plausible: 'Unusual — Plausible',
+  isolated_suspicious_increment: 'Suspicious Increment',
+  probable_timing_issue: 'Probable Timing Issue',
+  incomplete_record: 'Incomplete Record',
+  review_recommended: 'Review Recommended',
+};
+
+const CLASSIFICATION_COLORS: Record<AnomalyClassification, string> = {
+  clean: '#27ae60',
+  unusual_but_plausible: '#3498db',
+  isolated_suspicious_increment: '#e67e22',
+  probable_timing_issue: '#c0392b',
+  incomplete_record: '#95a5a6',
+  review_recommended: '#f39c12',
+};
+
+function ClassificationBadge({ classification }: { classification: AnomalyClassification }) {
   return (
     <span style={{
-      ...S.badge(BAND_COLORS[band]),
-      minWidth: 36,
-      textAlign: 'center',
+      ...S.badge(CLASSIFICATION_COLORS[classification] || '#95a5a6'),
+      fontSize: '0.63rem',
+      whiteSpace: 'nowrap',
     }}>
+      {CLASSIFICATION_LABELS[classification] || classification}
+    </span>
+  );
+}
+
+// ── Band helpers ─────────────────────────────────────────────────────────
+
+type BandKey = 'High' | 'Medium' | 'Low' | 'Critical';
+
+function bandColor(band: string): string {
+  return BAND_COLORS[band as BandKey] ?? '#95a5a6';
+}
+
+function ConfidenceChip({ score, band }: { score: number; band: string }) {
+  return (
+    <span style={{ ...S.badge(bandColor(band)), minWidth: 36, textAlign: 'center' }}>
       {score}
     </span>
   );
 }
 
-function BandBadge({ band }: { band: ConfidenceBand }) {
-  return <span style={S.badge(BAND_COLORS[band])}>{band}</span>;
+function BandBadge({ band }: { band: string }) {
+  return <span style={S.badge(bandColor(band))}>{band}</span>;
 }
 
 // ── Field health chips (compact per-row visualization) ───────────────────
@@ -132,21 +164,21 @@ const DISPLAY_FIELDS = [
   { key: 'mph1320', label: 'MPH' },
 ];
 
-function FieldHealthChips({ fieldScores, compact }: { fieldScores: FieldConfidence[]; compact?: boolean }) {
+function FieldHealthChips({ fieldScores, compact }: { fieldScores: AnomalyFieldScore[]; compact?: boolean }) {
   const scoreMap = new Map(fieldScores.map(f => [f.field, f]));
 
   return (
     <span style={{ display: 'inline-flex', gap: 2 }}>
       {DISPLAY_FIELDS.map(df => {
         const fs = scoreMap.get(df.key);
-        const band = fs ? fs.band : 'High';
-        const score = fs ? fs.score : 100;
-        const color = BAND_COLORS[band];
+        const band = fs?.band || 'High';
+        const score = fs?.score ?? 100;
+        const color = bandColor(band);
         const opacity = band === 'High' ? 0.25 : 1;
         return (
           <span
             key={df.key}
-            title={`${df.label}: ${score} (${band})${fs?.flags.length ? ' — ' + fs.flags.map(f => f.explanation).join('; ') : ''}`}
+            title={`${df.label}: ${score} (${band})`}
             style={{
               display: 'inline-block',
               width: compact ? 8 : 10,
@@ -164,7 +196,7 @@ function FieldHealthChips({ fieldScores, compact }: { fieldScores: FieldConfiden
 
 // ── Severity badge ───────────────────────────────────────────────────────
 
-const SEV_COLORS: Record<Severity, string> = {
+const SEV_COLORS: Record<string, string> = {
   critical: '#c0392b',
   high: '#e67e22',
   medium: '#f39c12',
@@ -172,21 +204,40 @@ const SEV_COLORS: Record<Severity, string> = {
   info: '#3498db',
 };
 
-function SeverityBadge({ severity }: { severity: Severity }) {
-  return <span style={{ ...S.badge(SEV_COLORS[severity]), fontSize: '0.65rem' }}>{severity}</span>;
+function SeverityBadge({ severity }: { severity: string }) {
+  return <span style={{ ...S.badge(SEV_COLORS[severity] || '#95a5a6'), fontSize: '0.65rem' }}>{severity}</span>;
+}
+
+function severityRank(s: string): number {
+  return ({ critical: 0, high: 1, medium: 2, low: 3, info: 4 } as Record<string, number>)[s] ?? 5;
+}
+
+// ── Interval segment labels ──────────────────────────────────────────────
+
+const INTERVAL_LABELS: { key: string; label: string }[] = [
+  { key: 't_0_60',      label: '0–60 ft' },
+  { key: 't_60_330',    label: '60–330 ft' },
+  { key: 't_330_660',   label: '330–660 ft' },
+  { key: 't_660_1000',  label: '660–1000 ft' },
+  { key: 't_1000_1320', label: '1000–ET' },
+];
+
+// ── Baseline quality color helper ────────────────────────────────────────
+
+function baselineQualityColor(q: string): string {
+  return q === 'strong' ? '#27ae60' : q === 'moderate' ? '#f39c12' : q === 'weak' ? '#e67e22' : '#95a5a6';
 }
 
 // ── Detail Panel ─────────────────────────────────────────────────────────
 
-function RunDetailPanel({ result, run, onClose }: {
-  result: RunAnomalyResult;
-  run: RunWithWeather;
+function RunDetailPanel({ result, onClose }: {
+  result: AnomalyRunSummary & { flags?: AnomalyDetailResponse['analysis']['flags'] };
   onClose: () => void;
 }) {
   return (
     <div style={{
       ...S.card,
-      border: `2px solid ${BAND_COLORS[result.band]}`,
+      border: `2px solid ${bandColor(result.band)}`,
       position: 'relative',
     }}>
       <button
@@ -200,10 +251,11 @@ function RunDetailPanel({ result, run, onClose }: {
 
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
         <h3 style={{ margin: 0, fontSize: '1rem' }}>
-          Run #{run.id} — {run.driver_name || 'Unknown'}
+          Run #{result.runId} — {result.driverName || 'Unknown'}
         </h3>
         <ConfidenceChip score={result.overallScore} band={result.band} />
         <BandBadge band={result.band} />
+        <ClassificationBadge classification={result.classification} />
         <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
           {result.flagCount} flag(s) · {result.suspectFields.length} suspect field(s)
         </span>
@@ -213,31 +265,24 @@ function RunDetailPanel({ result, run, onClose }: {
       <div style={{
         background: 'var(--color-bg)', borderRadius: 6, padding: '0.6rem 0.8rem',
         fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '0.75rem',
-        borderLeft: `3px solid ${BAND_COLORS[result.band]}`,
+        borderLeft: `3px solid ${bandColor(result.band)}`,
       }}>
         {result.narrative}
       </div>
 
       {/* Run values + Intervals side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        {/* Raw run values */}
+        {/* Run context + values */}
         <div style={S.card}>
           <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>Run Values</h4>
           <table style={S.table}>
             <tbody>
               {[
-                { label: 'Category', value: run.category || '—' },
-                { label: 'Event', value: run.race_lookup },
-                { label: 'Round', value: run.round || '—' },
-                { label: 'Lane', value: run.lane || '—' },
-                { label: 'RT', value: formatET(run.rt) },
-                { label: '60 ft', value: formatET(run.ft60) },
-                { label: '330 ft', value: formatET(run.ft330) },
-                { label: '660 ft', value: formatET(run.ft660) },
-                { label: '660 mph', value: formatMPH(run.mph660) },
-                { label: '1000 ft', value: formatET(run.ft1000) },
-                { label: 'ET', value: formatET(run.ft1320) },
-                { label: 'MPH', value: formatMPH(run.mph1320) },
+                { label: 'Category', value: result.category || '—' },
+                { label: 'Round', value: result.round || '—' },
+                { label: 'Lane', value: result.lane || '—' },
+                { label: 'ET', value: formatET(result.ft1320) },
+                { label: 'MPH', value: formatMPH(result.mph1320) },
               ].map(r => (
                 <tr key={r.label}>
                   <td style={{ ...S.td, fontWeight: 600, width: '40%' }}>{r.label}</td>
@@ -253,10 +298,10 @@ function RunDetailPanel({ result, run, onClose }: {
           <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>Derived Intervals</h4>
           <table style={S.table}>
             <tbody>
-              {INTERVAL_SEGMENTS.map(seg => {
+              {INTERVAL_LABELS.map(seg => {
                 const val = result.intervals[seg.key];
                 const fs = result.fieldScores.find(f => f.field === seg.key);
-                const isSuspect = fs && fs.score < 70;
+                const isSuspect = fs && fs.score < 80;
                 return (
                   <tr key={seg.key}>
                     <td style={{ ...S.td, fontWeight: 600, width: '45%' }}>{seg.label}</td>
@@ -265,7 +310,7 @@ function RunDetailPanel({ result, run, onClose }: {
                       color: isSuspect ? BAND_COLORS.Critical : undefined,
                       fontWeight: isSuspect ? 700 : undefined,
                     }}>
-                      {val !== null ? val.toFixed(4) + 's' : '—'}
+                      {val !== null && val !== undefined ? val.toFixed(4) + 's' : '—'}
                     </td>
                     <td style={{ ...S.td, width: 40 }}>
                       {fs && <ConfidenceChip score={fs.score} band={fs.band} />}
@@ -285,16 +330,16 @@ function RunDetailPanel({ result, run, onClose }: {
           {DISPLAY_FIELDS.map(df => {
             const fs = result.fieldScores.find(f => f.field === df.key);
             const score = fs?.score ?? 100;
-            const band = fs ? fs.band : confidenceBand(100);
+            const band = fs?.band || 'High';
             return (
               <div key={df.key} style={{
                 ...S.stat,
-                borderColor: BAND_COLORS[band],
-                borderWidth: score < 70 ? 2 : 1,
+                borderColor: bandColor(band),
+                borderWidth: score < 80 ? 2 : 1,
                 minWidth: 60,
               }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginBottom: 2 }}>{df.label}</div>
-                <div style={{ fontWeight: 700, color: BAND_COLORS[band] }}>{score}</div>
+                <div style={{ fontWeight: 700, color: bandColor(band) }}>{score}</div>
               </div>
             );
           })}
@@ -308,13 +353,10 @@ function RunDetailPanel({ result, run, onClose }: {
           <span><strong>Scope:</strong> {result.baseline.scope}</span>
           <span><strong>Sample size:</strong> {result.baseline.sampleSize}</span>
           <span><strong>Quality:</strong> <span style={{
-            color: result.baseline.quality === 'strong' ? '#27ae60'
-                 : result.baseline.quality === 'moderate' ? '#f39c12'
-                 : result.baseline.quality === 'weak' ? '#e67e22'
-                 : '#95a5a6',
+            color: baselineQualityColor(result.baseline.quality),
             fontWeight: 600,
           }}>{result.baseline.quality}</span></span>
-          <span><strong>Hard-fail runs excluded:</strong> {result.baseline.hardFailsExcluded}</span>
+          <span><strong>Excluded from baseline:</strong> {result.baseline.hardFailsExcluded}</span>
         </div>
         {result.baseline.warning && (
           <div style={{ fontSize: '0.75rem', color: '#e67e22', marginTop: '0.25rem' }}>
@@ -323,8 +365,8 @@ function RunDetailPanel({ result, run, onClose }: {
         )}
       </div>
 
-      {/* Anomaly flags */}
-      {result.flags.length > 0 && (
+      {/* Anomaly flags (from detail endpoint or inline) */}
+      {result.flags && result.flags.length > 0 && (
         <div style={S.card}>
           <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
             Anomaly Flags ({result.flags.length})
@@ -339,7 +381,7 @@ function RunDetailPanel({ result, run, onClose }: {
               </tr>
             </thead>
             <tbody>
-              {result.flags
+              {[...result.flags]
                 .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
                 .map((flag, i) => (
                 <tr key={i}>
@@ -357,14 +399,10 @@ function RunDetailPanel({ result, run, onClose }: {
   );
 }
 
-function severityRank(s: Severity): number {
-  return { critical: 0, high: 1, medium: 2, low: 3, info: 4 }[s];
-}
-
 // ── Summary Tiles ────────────────────────────────────────────────────────
 
-function SummaryTiles({ result }: { result: AnomalyBatchResult }) {
-  const { summary } = result;
+function SummaryTiles({ data }: { data: AnomalyAnalysisResponse }) {
+  const { summary } = data;
   return (
     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
       <div style={S.stat}>
@@ -387,6 +425,12 @@ function SummaryTiles({ result }: { result: AnomalyBatchResult }) {
         <div style={{ fontSize: '0.65rem', color: BAND_COLORS.Critical }}>Critical</div>
         <div style={{ fontWeight: 700, fontSize: '1.1rem', color: BAND_COLORS.Critical }}>{summary.criticalCount}</div>
       </div>
+      {summary.baselineExcluded > 0 && (
+        <div style={S.stat}>
+          <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)' }}>Baseline Excluded</div>
+          <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{summary.baselineExcluded}</div>
+        </div>
+      )}
       {summary.mostFlaggedField && (
         <div style={S.stat}>
           <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)' }}>Most Flagged</div>
@@ -399,34 +443,162 @@ function SummaryTiles({ result }: { result: AnomalyBatchResult }) {
   );
 }
 
+// ── Rollup Cards ─────────────────────────────────────────────────────────
+
+function RollupCards({ rollups }: { rollups: AnomalyRollups }) {
+  const lanes = Object.entries(rollups.byLane);
+  const rounds = Object.entries(rollups.byRound);
+  const fields = Object.entries(rollups.byField).slice(0, 8);
+  const classifications = Object.entries(rollups.classifications).filter(([, v]) => v > 0);
+
+  const hasLaneData = lanes.length > 1;
+  const hasRoundData = rounds.length > 1;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+      {/* Lane rollup */}
+      {hasLaneData && (
+        <div style={S.card}>
+          <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>By Lane</h4>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>Lane</th>
+                <th style={S.th}>Runs</th>
+                <th style={S.th}>Avg Score</th>
+                <th style={S.th}>Issues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lanes.map(([lane, d]) => (
+                <tr key={lane}>
+                  <td style={{ ...S.td, fontWeight: 600 }}>{lane}</td>
+                  <td style={S.td}>{d.total}</td>
+                  <td style={S.td}>
+                    <span style={{ fontWeight: 600, color: bandColor(d.avgScore >= 80 ? 'High' : d.avgScore >= 55 ? 'Medium' : d.avgScore >= 30 ? 'Low' : 'Critical') }}>
+                      {d.avgScore}
+                    </span>
+                  </td>
+                  <td style={S.td}>
+                    {d.criticalOrLow > 0 ? (
+                      <span style={{ ...S.badge('#c0392b'), fontSize: '0.63rem' }}>{d.criticalOrLow}</span>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Round rollup */}
+      {hasRoundData && (
+        <div style={S.card}>
+          <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>By Session/Round</h4>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>Round</th>
+                <th style={S.th}>Runs</th>
+                <th style={S.th}>Avg Score</th>
+                <th style={S.th}>Issues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rounds.map(([round, d]) => (
+                <tr key={round}>
+                  <td style={{ ...S.td, fontWeight: 600 }}>{round}</td>
+                  <td style={S.td}>{d.total}</td>
+                  <td style={S.td}>
+                    <span style={{ fontWeight: 600, color: bandColor(d.avgScore >= 80 ? 'High' : d.avgScore >= 55 ? 'Medium' : d.avgScore >= 30 ? 'Low' : 'Critical') }}>
+                      {d.avgScore}
+                    </span>
+                  </td>
+                  <td style={S.td}>
+                    {d.criticalOrLow > 0 ? (
+                      <span style={{ ...S.badge('#c0392b'), fontSize: '0.63rem' }}>{d.criticalOrLow}</span>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Most flagged fields */}
+      {fields.length > 0 && (
+        <div style={S.card}>
+          <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>Frequently Flagged Fields</h4>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>Field</th>
+                <th style={S.th}>Runs Affected</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fields.map(([field, count]) => (
+                <tr key={field}>
+                  <td style={{ ...S.td, fontWeight: 600, fontFamily: 'monospace' }}>{field}</td>
+                  <td style={S.td}>{count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Classification breakdown */}
+      {classifications.length > 0 && (
+        <div style={S.card}>
+          <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>Run Classifications</h4>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>Classification</th>
+                <th style={S.th}>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {classifications.map(([cls, count]) => (
+                <tr key={cls}>
+                  <td style={S.td}>
+                    <ClassificationBadge classification={cls as AnomalyClassification} />
+                  </td>
+                  <td style={S.td}>{count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Sort helper ──────────────────────────────────────────────────────────
 
-type SortKey = 'score' | 'driver' | 'et' | 'mph' | 'flags' | 'band' | 'category';
+type SortKey = 'score' | 'driver' | 'et' | 'mph' | 'flags' | 'band' | 'classification';
 type SortDir = 'asc' | 'desc';
 
 function sortRuns(
-  results: RunAnomalyResult[],
-  runMap: Map<number, RunWithWeather>,
+  results: AnomalyRunSummary[],
   sortKey: SortKey,
   sortDir: SortDir,
-): RunAnomalyResult[] {
+): AnomalyRunSummary[] {
   const sorted = [...results];
+  const bandOrder: Record<string, number> = { Critical: 0, Low: 1, Medium: 2, High: 3 };
   sorted.sort((a, b) => {
     let cmp = 0;
-    const ra = runMap.get(a.runId);
-    const rb = runMap.get(b.runId);
     switch (sortKey) {
       case 'score': cmp = a.overallScore - b.overallScore; break;
       case 'flags': cmp = a.flagCount - b.flagCount; break;
-      case 'driver': cmp = (ra?.driver_name || '').localeCompare(rb?.driver_name || ''); break;
-      case 'et': cmp = (ra?.ft1320 ?? 999) - (rb?.ft1320 ?? 999); break;
-      case 'mph': cmp = (ra?.mph1320 ?? 0) - (rb?.mph1320 ?? 0); break;
-      case 'category': cmp = (ra?.category || '').localeCompare(rb?.category || ''); break;
-      case 'band': {
-        const order: Record<ConfidenceBand, number> = { Critical: 0, Low: 1, Medium: 2, High: 3 };
-        cmp = order[a.band] - order[b.band];
-        break;
-      }
+      case 'driver': cmp = (a.driverName || '').localeCompare(b.driverName || ''); break;
+      case 'et': cmp = (a.ft1320 ?? 999) - (b.ft1320 ?? 999); break;
+      case 'mph': cmp = (a.mph1320 ?? 0) - (b.mph1320 ?? 0); break;
+      case 'classification': cmp = (a.classification || '').localeCompare(b.classification || ''); break;
+      case 'band': cmp = (bandOrder[a.band] ?? 5) - (bandOrder[b.band] ?? 5); break;
     }
     return sortDir === 'asc' ? cmp : -cmp;
   });
@@ -444,68 +616,80 @@ interface AnomaliesPanelProps {
 }
 
 export default function AnomaliesPanel({ event, category, refreshKey }: AnomaliesPanelProps) {
-  const [runs, setRuns] = useState<RunWithWeather[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<AnomalyBatchResult | null>(null);
+  const [data, setData] = useState<AnomalyAnalysisResponse | null>(null);
+  const [detail, setDetail] = useState<AnomalyDetailResponse | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [filterBand, setFilterBand] = useState<ConfidenceBand | 'all'>('all');
+  const [filterBand, setFilterBand] = useState<string>('all');
+  const [filterClassification, setFilterClassification] = useState<string>('all');
   const [driverSearch, setDriverSearch] = useState('');
 
-  // Fetch runs for the selected event + category
-  const fetchRuns = useCallback(async () => {
+  // Fetch anomaly analysis from backend
+  const fetchAnalysis = useCallback(async () => {
     if (!event?.race_lookup) return;
     setLoading(true);
     setError('');
-    setResult(null);
+    setData(null);
+    setDetail(null);
     setSelectedRunId(null);
     try {
-      const res = await parityApi.runsWithWeather({
+      const res = await parityApi.anomalyAnalysis({
         raceLookup: event.race_lookup,
         category: category || undefined,
-        limit: 2000,
       });
-      setRuns(res.runs);
-      // Run anomaly analysis
-      const analysis = analyzeRuns(res.runs);
-      setResult(analysis);
+      setData(res);
     } catch (e: any) {
-      setError(e.message || 'Failed to load runs');
+      setError(e.message || 'Failed to load anomaly analysis');
     } finally {
       setLoading(false);
     }
   }, [event?.race_lookup, category]);
 
-  useEffect(() => { fetchRuns(); }, [fetchRuns, refreshKey]);
+  useEffect(() => { fetchAnalysis(); }, [fetchAnalysis, refreshKey]);
 
-  // Build run lookup map
-  const runMap = useMemo(() => {
-    const m = new Map<number, RunWithWeather>();
-    for (const r of runs) m.set(r.id, r);
-    return m;
-  }, [runs]);
+  // Fetch detail when a run is selected
+  const selectRun = useCallback(async (runId: number | null) => {
+    setSelectedRunId(runId);
+    setDetail(null);
+    if (runId && event?.race_lookup) {
+      try {
+        const res = await parityApi.anomalyDetail({
+          runId,
+          raceLookup: event.race_lookup,
+        });
+        setDetail(res);
+      } catch {
+        // Fall back to summary-level data from the list
+      }
+    }
+  }, [event?.race_lookup]);
 
   // Sort and filter
   const displayRuns = useMemo(() => {
-    if (!result) return [];
-    let filtered = result.runs;
+    if (!data) return [];
+    let filtered = data.runs;
     if (filterBand !== 'all') {
       filtered = filtered.filter(r => r.band === filterBand);
     }
+    if (filterClassification !== 'all') {
+      filtered = filtered.filter(r => r.classification === filterClassification);
+    }
     if (driverSearch) {
       const q = driverSearch.toLowerCase();
-      filtered = filtered.filter(r => {
-        const run = runMap.get(r.runId);
-        return run?.driver_name?.toLowerCase().includes(q);
-      });
+      filtered = filtered.filter(r => r.driverName?.toLowerCase().includes(q));
     }
-    return sortRuns(filtered, runMap, sortKey, sortDir);
-  }, [result, filterBand, driverSearch, sortKey, sortDir, runMap]);
+    return sortRuns(filtered, sortKey, sortDir);
+  }, [data, filterBand, filterClassification, driverSearch, sortKey, sortDir]);
 
-  const selectedResult = result?.runs.find(r => r.runId === selectedRunId) ?? null;
-  const selectedRun = selectedRunId ? runMap.get(selectedRunId) ?? null : null;
+  // Build detail result for the detail panel
+  const detailResult = useMemo(() => {
+    if (detail) return detail.analysis;
+    if (!selectedRunId || !data) return null;
+    return data.runs.find(r => r.runId === selectedRunId) ?? null;
+  }, [detail, selectedRunId, data]);
 
   // Sort toggle handler
   const toggleSort = (key: SortKey) => {
@@ -521,23 +705,27 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
     sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   if (!event) {
-    return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Select an event to analyze run integrity.</p></div>;
+    return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Select an event to review run integrity.</p></div>;
   }
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <h2 style={{ margin: 0, fontSize: '1rem' }}>
-          Anomalies — {event.event_name}
-          {category && <span style={{ color: 'var(--color-muted)', fontWeight: 400 }}> · {category}</span>}
+      <div style={{ marginBottom: '0.75rem' }}>
+        <h2 style={{ margin: '0 0 0.15rem', fontSize: '1.05rem' }}>
+          Run Integrity Review
         </h2>
+        <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
+          {event.event_name}
+          {category && <> · {category}</>}
+          {' — '}Timing-data confidence analysis. Identifies probable timing issues, suspicious increments, and unusual performance.
+        </div>
       </div>
 
       {/* Loading / Error */}
       {loading && (
         <div style={S.card}>
-          <span style={{ color: 'var(--color-muted)' }}>Analyzing {category || 'all'} runs…</span>
+          <span style={{ color: 'var(--color-muted)' }}>Analyzing {category || 'all'} runs (server-side)…</span>
         </div>
       )}
       {error && (
@@ -547,23 +735,26 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
           border: '1px solid rgba(220,50,50,0.3)',
         }}>
           <strong>Error:</strong> {error}
-          <button style={{ ...S.btn('secondary'), marginLeft: '0.5rem', fontSize: '0.7rem' }} onClick={fetchRuns}>
+          <button style={{ ...S.btn('secondary'), marginLeft: '0.5rem', fontSize: '0.7rem' }} onClick={fetchAnalysis}>
             Retry
           </button>
         </div>
       )}
 
       {/* Results */}
-      {result && !loading && (
+      {data && !loading && (
         <>
           {/* Summary tiles */}
-          <SummaryTiles result={result} />
+          <SummaryTiles data={data} />
+
+          {/* Rollup cards */}
+          <RollupCards rollups={data.rollups} />
 
           {/* Filters */}
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
             <select
               value={filterBand}
-              onChange={e => setFilterBand(e.target.value as ConfidenceBand | 'all')}
+              onChange={e => setFilterBand(e.target.value)}
               style={{ ...S.input, width: 130 }}
             >
               <option value="all">All Bands</option>
@@ -571,6 +762,19 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
               <option value="Low">Low Only</option>
               <option value="Medium">Medium Only</option>
               <option value="High">High Only</option>
+            </select>
+            <select
+              value={filterClassification}
+              onChange={e => setFilterClassification(e.target.value)}
+              style={{ ...S.input, width: 180 }}
+            >
+              <option value="all">All Classifications</option>
+              <option value="probable_timing_issue">Probable Timing Issue</option>
+              <option value="isolated_suspicious_increment">Suspicious Increment</option>
+              <option value="unusual_but_plausible">Unusual — Plausible</option>
+              <option value="incomplete_record">Incomplete Record</option>
+              <option value="review_recommended">Review Recommended</option>
+              <option value="clean">Clean</option>
             </select>
             <input
               type="text"
@@ -580,7 +784,7 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
               style={{ ...S.input, width: 160 }}
             />
             <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-              Showing {displayRuns.length} of {result.runs.length} runs
+              Showing {displayRuns.length} of {data.runs.length} runs
             </span>
             {/* Field legend */}
             <span style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginLeft: 'auto' }}>
@@ -589,11 +793,10 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
           </div>
 
           {/* Detail panel (shown above table when a run is selected) */}
-          {selectedResult && selectedRun && (
+          {detailResult && (
             <RunDetailPanel
-              result={selectedResult}
-              run={selectedRun}
-              onClose={() => setSelectedRunId(null)}
+              result={detailResult}
+              onClose={() => selectRun(null)}
             />
           )}
 
@@ -604,8 +807,8 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
                 <tr>
                   <th style={S.th} onClick={() => toggleSort('score')}>Score{sortIndicator('score')}</th>
                   <th style={S.th} onClick={() => toggleSort('band')}>Band{sortIndicator('band')}</th>
+                  <th style={S.th} onClick={() => toggleSort('classification')}>Classification{sortIndicator('classification')}</th>
                   <th style={S.th} onClick={() => toggleSort('driver')}>Driver{sortIndicator('driver')}</th>
-                  <th style={S.th} onClick={() => toggleSort('category')}>Category{sortIndicator('category')}</th>
                   <th style={S.th}>Lane</th>
                   <th style={S.th} onClick={() => toggleSort('et')}>ET{sortIndicator('et')}</th>
                   <th style={S.th} onClick={() => toggleSort('mph')}>MPH{sortIndicator('mph')}</th>
@@ -618,13 +821,11 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
               </thead>
               <tbody>
                 {displayRuns.map(r => {
-                  const run = runMap.get(r.runId);
-                  if (!run) return null;
                   const isSelected = selectedRunId === r.runId;
                   return (
                     <tr
                       key={r.runId}
-                      onClick={() => setSelectedRunId(isSelected ? null : r.runId)}
+                      onClick={() => selectRun(isSelected ? null : r.runId)}
                       style={{
                         cursor: 'pointer',
                         background: isSelected ? 'rgba(52,152,219,0.08)' : undefined,
@@ -632,13 +833,13 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
                     >
                       <td style={S.td}><ConfidenceChip score={r.overallScore} band={r.band} /></td>
                       <td style={S.td}><BandBadge band={r.band} /></td>
+                      <td style={S.td}><ClassificationBadge classification={r.classification} /></td>
                       <td style={{ ...S.td, fontWeight: 600, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {run.driver_name || '—'}
+                        {r.driverName || '—'}
                       </td>
-                      <td style={S.td}>{run.category || '—'}</td>
-                      <td style={S.td}>{run.lane || '—'}</td>
-                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatET(run.ft1320)}</td>
-                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatMPH(run.mph1320)}</td>
+                      <td style={S.td}>{r.lane || '—'}</td>
+                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatET(r.ft1320)}</td>
+                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatMPH(r.mph1320)}</td>
                       <td style={S.td}>
                         {r.flagCount > 0 ? (
                           <span style={{
@@ -659,11 +860,7 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
                         {r.primaryReasonCode !== null ? r.primaryReasonText : '—'}
                       </td>
                       <td style={{ ...S.td, fontSize: '0.68rem' }}>
-                        <span style={{
-                          color: r.baseline.quality === 'strong' ? '#27ae60'
-                               : r.baseline.quality === 'moderate' ? '#f39c12'
-                               : r.baseline.quality === 'weak' ? '#e67e22' : '#95a5a6',
-                        }}>
+                        <span style={{ color: baselineQualityColor(r.baseline.quality) }}>
                           {r.baseline.quality} ({r.baseline.sampleSize})
                         </span>
                       </td>
@@ -674,7 +871,7 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
             </table>
             {displayRuns.length === 0 && (
               <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-muted)' }}>
-                {result.runs.length === 0 ? 'No runs found for this event/category.' : 'No runs match the current filter.'}
+                {data.runs.length === 0 ? 'No runs found for this event/category.' : 'No runs match the current filter.'}
               </div>
             )}
           </div>

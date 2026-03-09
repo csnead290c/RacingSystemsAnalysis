@@ -1229,12 +1229,12 @@ describe('Anomalies tab is wired into portal', () => {
 });
 
 describe('AnomaliesPanel component structure', () => {
-  it('imports analyzeRuns from anomalyEngine', () => {
-    expect(anomaliesPanelSource).toContain('analyzeRuns');
+  it('fetches analysis from backend anomalyAnalysis endpoint', () => {
+    expect(anomaliesPanelSource).toContain('parityApi.anomalyAnalysis');
   });
 
-  it('fetches runs via parityApi.runsWithWeather', () => {
-    expect(anomaliesPanelSource).toContain('parityApi.runsWithWeather');
+  it('fetches detail from backend anomalyDetail endpoint', () => {
+    expect(anomaliesPanelSource).toContain('parityApi.anomalyDetail');
   });
 
   it('has summary tiles for confidence bands', () => {
@@ -1287,6 +1287,25 @@ describe('AnomaliesPanel component structure', () => {
     expect(anomaliesPanelSource).toContain('baseline.sampleSize');
     expect(anomaliesPanelSource).toContain('baseline.quality');
     expect(anomaliesPanelSource).toContain('baseline.hardFailsExcluded');
+  });
+
+  it('has classification filter and badges', () => {
+    expect(anomaliesPanelSource).toContain('filterClassification');
+    expect(anomaliesPanelSource).toContain('ClassificationBadge');
+    expect(anomaliesPanelSource).toContain('CLASSIFICATION_LABELS');
+  });
+
+  it('has rollup cards for lane, round, field, and classification', () => {
+    expect(anomaliesPanelSource).toContain('RollupCards');
+    expect(anomaliesPanelSource).toContain('By Lane');
+    expect(anomaliesPanelSource).toContain('By Session/Round');
+    expect(anomaliesPanelSource).toContain('Frequently Flagged Fields');
+    expect(anomaliesPanelSource).toContain('Run Classifications');
+  });
+
+  it('uses refined header language', () => {
+    expect(anomaliesPanelSource).toContain('Run Integrity Review');
+    expect(anomaliesPanelSource).toContain('Timing-data confidence analysis');
   });
 });
 

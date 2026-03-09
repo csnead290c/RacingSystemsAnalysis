@@ -152,11 +152,20 @@ export function computeIntervals(run: ParityRun): DerivedIntervals {
 
 // ── Run Analysis Result ──────────────────────────────────────────────────
 
+export type RunClassification =
+  | 'clean'
+  | 'unusual_but_plausible'
+  | 'isolated_suspicious_increment'
+  | 'probable_timing_issue'
+  | 'incomplete_record'
+  | 'review_recommended';
+
 export interface RunAnomalyResult {
   runId: number;
   runUuid: string;
   overallScore: number;        // 0–100
   band: ConfidenceBand;
+  classification: RunClassification;
   flagCount: number;
   suspectFields: string[];
   primaryReasonCode: ReasonCode | null;
@@ -176,6 +185,7 @@ export interface AnomalySummary {
   mediumCount: number;
   lowCount: number;
   criticalCount: number;
+  baselineExcluded: number;
   mostFlaggedField: string | null;
   mostFlaggedFieldCount: number;
 }
@@ -422,16 +432,16 @@ interface BaselineStats {
   n: number;
 }
 
-/** Build baselines from a clean population (hard-fail runs already excluded) */
+/** Build baselines from a clean population (hard-fail and medium-suspect runs excluded) */
 function buildBaselines(cleanRuns: ParityRun[]): Map<string, BaselineStats> {
   const stats = new Map<string, BaselineStats>();
 
-  // Build baselines for each timing field
+  // Build baselines for each timing field — require min 5 samples for robustness
   for (const f of TIMING_FIELDS) {
     const values = cleanRuns
       .map(r => r[f as keyof ParityRun])
       .filter((v): v is number => typeof v === 'number' && v > 0);
-    if (values.length < 3) continue;
+    if (values.length < 5) continue;
 
     const m = mad(values);
     const bounds = iqrBounds(values, 2.0); // 2x IQR for wider tolerance
@@ -450,7 +460,7 @@ function buildBaselines(cleanRuns: ParityRun[]): Map<string, BaselineStats> {
     const values = allIntervals
       .map(iv => (iv as Record<string, number | null>)[seg.key])
       .filter((v): v is number => v !== null && v > 0);
-    if (values.length < 3) continue;
+    if (values.length < 5) continue;
 
     const m = mad(values);
     const bounds = iqrBounds(values, 2.0);
@@ -721,6 +731,60 @@ function generateNarrative(result: Omit<RunAnomalyResult, 'narrative'>): string 
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// CLASSIFICATION
+// ══════════════════════════════════════════════════════════════════════════
+
+const HARD_INTEGRITY_CODES: ReasonCode[] = [
+  'MISSING_SPLIT_VALUE', 'NON_MONOTONIC_SPLITS', 'INVALID_INTERVAL',
+  'ZERO_OR_NEGATIVE_TIMING', 'DUPLICATE_SPLIT_VALUES', 'ET_LESS_THAN_SPLIT',
+];
+
+const SHAPE_CODES: ReasonCode[] = [
+  'SEGMENT_SHAPE_INCONSISTENT', 'MPH_ET_INCONSISTENT', 'ISOLATED_SPLIT_SUSPECT',
+];
+
+function classifyRun(
+  band: ConfidenceBand,
+  flags: ReasonFlag[],
+  suspectFields: string[],
+): RunClassification {
+  if (band === 'High' && flags.length === 0) return 'clean';
+
+  const hardFails = flags.filter(f => HARD_INTEGRITY_CODES.includes(f.code as ReasonCode));
+  const shapeIssues = flags.filter(f => SHAPE_CODES.includes(f.code as ReasonCode));
+  const outliers = flags.filter(f => f.code === 'OUTLIER_FIELD' || f.code === 'OUTLIER_INTERVAL');
+
+  // Missing data → incomplete record
+  const hasMissing = hardFails.some(f => f.code === 'MISSING_SPLIT_VALUE');
+  if (hasMissing && hardFails.length >= 2) return 'incomplete_record';
+
+  // Multiple hard integrity issues → probable timing issue
+  if (hardFails.some(f => f.severity === 'critical')) return 'probable_timing_issue';
+  if (hardFails.length >= 2) return 'probable_timing_issue';
+
+  // Isolated suspicious increment: one suspect field, rest clean
+  if (suspectFields.length === 1 && (shapeIssues.length > 0 || outliers.length > 0)) {
+    return 'isolated_suspicious_increment';
+  }
+
+  // Only outliers, no integrity/shape issues → unusual but plausible
+  if (outliers.length > 0 && hardFails.length === 0 && shapeIssues.length === 0) {
+    return 'unusual_but_plausible';
+  }
+
+  // High band with minor flags → clean
+  if (band === 'High') return 'clean';
+
+  // Medium band with some flags → review recommended
+  if (band === 'Medium') return 'review_recommended';
+
+  // Low/Critical with shape issues
+  if (shapeIssues.length > 0 || hardFails.length > 0) return 'probable_timing_issue';
+
+  return 'review_recommended';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // MAIN ENTRY POINT
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -762,11 +826,24 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     }
   }
 
-  // ── Phase 2: Build clean population for baselines ──
+  // ── Phase 1b: Run Layer 2 on population to identify medium-suspect runs ──
+  const mediumSuspectIds = new Set<number>();
+  for (const run of population) {
+    if (hardFailIds.has(run.id)) continue;
+    const intervals = runIntervals.get(run.id) ?? computeIntervals(run);
+    const l2 = layer2ShapeConsistency(run, intervals);
+    // If any medium+ severity shape flag, exclude from baseline
+    if (l2.some(f => f.severity === 'critical' || f.severity === 'high' || f.severity === 'medium')) {
+      mediumSuspectIds.add(run.id);
+    }
+  }
+
+  // ── Phase 2: Build clean population for baselines (exclude hard-fails + medium-suspects) ──
   const cleanRunIds = new Set<number>();
   for (const run of population) {
-    if (!hardFailIds.has(run.id)) cleanRunIds.add(run.id);
+    if (!hardFailIds.has(run.id) && !mediumSuspectIds.has(run.id)) cleanRunIds.add(run.id);
   }
+  const baselineExcludedCount = hardFailIds.size + mediumSuspectIds.size;
 
   // ── Phase 3: Analyze each target run ──
   const results: RunAnomalyResult[] = [];
@@ -784,7 +861,7 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     const baselineInfo: BaselineInfo = {
       scope,
       sampleSize: peers.length,
-      hardFailsExcluded: hardFailIds.size,
+      hardFailsExcluded: baselineExcludedCount,
       quality: peers.length >= 15 ? 'strong'
              : peers.length >= 5  ? 'moderate'
              : peers.length >= 3  ? 'weak'
@@ -835,11 +912,15 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     const primaryFlag = allFlags
       .sort((a, b) => SEVERITY_PENALTY[b.severity] - SEVERITY_PENALTY[a.severity])[0] ?? null;
 
+    const band = confidenceBand(overallScore);
+    const classification = classifyRun(band, allFlags, suspectFields);
+
     const partial: Omit<RunAnomalyResult, 'narrative'> = {
       runId: run.id,
       runUuid: run.uuid,
       overallScore,
-      band: confidenceBand(overallScore),
+      band,
+      classification,
       flagCount: allFlags.length,
       suspectFields,
       primaryReasonCode: primaryFlag?.code ?? null,
@@ -875,6 +956,7 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
       mediumCount,
       lowCount,
       criticalCount,
+      baselineExcluded: baselineExcludedCount,
       mostFlaggedField,
       mostFlaggedFieldCount,
     },

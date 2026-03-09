@@ -1082,6 +1082,93 @@ export interface TimeDiagnosticsSampleResponse {
   samples: TimeDiagnosticsSampleRow[];
 }
 
+// ── Anomaly Analysis Types ──────────────────────────────────────────────
+
+export type AnomalyClassification =
+  | 'clean'
+  | 'unusual_but_plausible'
+  | 'isolated_suspicious_increment'
+  | 'probable_timing_issue'
+  | 'incomplete_record'
+  | 'review_recommended';
+
+export interface AnomalyFieldScore {
+  field: string;
+  score: number;
+  band: string;
+  flagCount: number;
+}
+
+export interface AnomalyFlag {
+  code: string;
+  severity: string;
+  field?: string;
+  explanation: string;
+  value?: number;
+  expected?: string;
+  zScore?: number;
+}
+
+export interface AnomalyBaselineInfo {
+  scope: string;
+  sampleSize: number;
+  quality: string;
+  hardFailsExcluded: number;
+  warning?: string;
+}
+
+export interface AnomalyRunSummary {
+  runId: number;
+  runUuid: string;
+  overallScore: number;
+  band: string;
+  classification: AnomalyClassification;
+  flagCount: number;
+  suspectFields: string[];
+  primaryReasonCode: string | null;
+  primaryReasonText: string;
+  fieldScores: AnomalyFieldScore[];
+  intervals: Record<string, number | null>;
+  baseline: AnomalyBaselineInfo;
+  narrative: string;
+  // Run context fields
+  driverName: string | null;
+  category: string | null;
+  lane: string | null;
+  round: string | null;
+  ft1320: number | null;
+  mph1320: number | null;
+}
+
+export interface AnomalyRollups {
+  byLane: Record<string, { total: number; flagged: number; criticalOrLow: number; avgScore: number }>;
+  byRound: Record<string, { total: number; flagged: number; criticalOrLow: number; avgScore: number }>;
+  byField: Record<string, number>;
+  classifications: Record<AnomalyClassification, number>;
+}
+
+export interface AnomalySummaryTotals {
+  runsAnalyzed: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  criticalCount: number;
+  mostFlaggedField: string | null;
+  mostFlaggedFieldCount: number;
+  baselineExcluded: number;
+}
+
+export interface AnomalyAnalysisResponse {
+  summary: AnomalySummaryTotals;
+  rollups: AnomalyRollups;
+  runs: AnomalyRunSummary[];
+}
+
+export interface AnomalyDetailResponse {
+  run: ParityRun;
+  analysis: AnomalyRunSummary & { flags: AnomalyFlag[] };
+}
+
 // ── Weather Timeseries Types ────────────────────────────────────────────
 
 export interface WeatherTimeseriesPoint {
@@ -2350,5 +2437,33 @@ export const parityApi = {
       method: 'POST',
       body: JSON.stringify({ runId, fields }),
     });
+  },
+
+  // ── Anomaly Analysis ────────────────────────────────────────────────
+
+  async anomalyAnalysis(params: {
+    raceLookup: string;
+    category?: string;
+    classIndex?: string;
+    limit?: number;
+  }): Promise<AnomalyAnalysisResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'anomalyAnalysis');
+    qs.set('raceLookup', params.raceLookup);
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return parityRequest<AnomalyAnalysisResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async anomalyDetail(params: {
+    runId: number;
+    raceLookup: string;
+  }): Promise<AnomalyDetailResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'anomalyDetail');
+    qs.set('runId', String(params.runId));
+    qs.set('raceLookup', params.raceLookup);
+    return parityRequest<AnomalyDetailResponse>(`/parity.php?${qs.toString()}`);
   },
 };
