@@ -9,10 +9,90 @@
  * All scoring is explainable — every deduction traces to a structured reason flag.
  *
  * IMPORTANT: Historical baselines exclude runs that fail hard integrity checks
- * to prevent "learning bad data as normal."
+ * and off-pace runs to prevent "learning bad data as normal."
+ *
+ * NITRO CLASS CONVENTION:
+ * Top Fuel and Funny Car run to 1000 ft, not 1320 ft. The timing system often
+ * reports the effective finish time/mph in the ft1320/mph1320 fields with ft1000
+ * blank. This is a known convention, NOT corrupt data. The engine normalizes
+ * this via an "effective finish" model so every class uses:
+ *   early segments → 660–finish → finish ET → finish MPH
  */
 
 import type { ParityRun } from '../../services/parityApi';
+
+// ── Nitro Class Detection ────────────────────────────────────────────────
+
+/** Categories that run to 1000 ft with timing reported in 1320 fields */
+const NITRO_CATEGORIES = ['Top Fuel', 'Funny Car'] as const;
+const NITRO_CLASS_INDICES = ['TF', 'FC', 'TFD'] as const;
+
+export function isNitroClass(run: ParityRun): boolean {
+  const cat = run.category?.trim() ?? '';
+  const cls = run.class_index?.trim().toUpperCase() ?? '';
+  return (NITRO_CATEGORIES as readonly string[]).includes(cat)
+      || (NITRO_CLASS_INDICES as readonly string[]).includes(cls);
+}
+
+// ── Normalized Finish Model ──────────────────────────────────────────────
+
+export interface NormalizedFinish {
+  effectiveFinishDistance: 1000 | 1320;
+  effectiveFinishTime: number | null;   // from the populated final ET field
+  effectiveFinishMph: number | null;    // from the populated final MPH field
+  finishTimeField: string;              // raw field name used (ft1000 or ft1320)
+  finishMphField: string;               // raw field name used (mph1000 or mph1320)
+  isNitro: boolean;
+}
+
+export function resolveFinish(run: ParityRun): NormalizedFinish {
+  const nitro = isNitroClass(run);
+  const g = (f: keyof ParityRun) => {
+    const v = run[f];
+    return typeof v === 'number' && v > 0 ? v : null;
+  };
+
+  if (nitro) {
+    // Nitro: effective finish is 1000 ft.
+    // Timing system convention: final time/mph often in ft1320/mph1320 fields.
+    // Use ft1000/mph1000 if populated, otherwise fall back to ft1320/mph1320.
+    const ft1000 = g('ft1000');
+    const mph1000 = g('mph1000');
+    const ft1320 = g('ft1320');
+    const mph1320 = g('mph1320');
+
+    // If ft1000 is populated, use it directly
+    if (ft1000 !== null) {
+      return {
+        effectiveFinishDistance: 1000,
+        effectiveFinishTime: ft1000,
+        effectiveFinishMph: mph1000 ?? mph1320,
+        finishTimeField: 'ft1000',
+        finishMphField: mph1000 !== null ? 'mph1000' : 'mph1320',
+        isNitro: true,
+      };
+    }
+    // Convention: ft1320 holds the 1000-ft finish time
+    return {
+      effectiveFinishDistance: 1000,
+      effectiveFinishTime: ft1320,
+      effectiveFinishMph: mph1320,
+      finishTimeField: 'ft1320',
+      finishMphField: 'mph1320',
+      isNitro: true,
+    };
+  }
+
+  // Full-quarter classes: standard 1320 ft
+  return {
+    effectiveFinishDistance: 1320,
+    effectiveFinishTime: g('ft1320'),
+    effectiveFinishMph: g('mph1320'),
+    finishTimeField: 'ft1320',
+    finishMphField: 'mph1320',
+    isNitro: false,
+  };
+}
 
 // ── Timing Fields ────────────────────────────────────────────────────────
 
@@ -28,8 +108,8 @@ export type SpeedField = typeof SPEED_FIELDS[number];
 export const TIMING_FIELDS = [...CUMULATIVE_FIELDS, ...SPEED_FIELDS, 'rt'] as const;
 export type TimingField = typeof TIMING_FIELDS[number];
 
-/** Derived interval segments (computed from cumulative splits) */
-export const INTERVAL_SEGMENTS = [
+/** Full-quarter interval segments */
+const INTERVAL_SEGMENTS_FULL = [
   { key: 't_0_60',      label: '0–60 ft',     from: null,     to: 'ft60'   },
   { key: 't_60_330',     label: '60–330 ft',   from: 'ft60',   to: 'ft330'  },
   { key: 't_330_660',    label: '330–660 ft',  from: 'ft330',  to: 'ft660'  },
@@ -37,7 +117,26 @@ export const INTERVAL_SEGMENTS = [
   { key: 't_1000_1320',  label: '1000–ET',     from: 'ft1000', to: 'ft1320' },
 ] as const;
 
-export type IntervalKey = typeof INTERVAL_SEGMENTS[number]['key'];
+/** Nitro class interval segments — uses 660–finish instead of 660–1000/1000–1320 */
+const INTERVAL_SEGMENTS_NITRO = [
+  { key: 't_0_60',        label: '0–60 ft',       from: null,    to: 'ft60'  },
+  { key: 't_60_330',      label: '60–330 ft',     from: 'ft60',  to: 'ft330' },
+  { key: 't_330_660',     label: '330–660 ft',    from: 'ft330', to: 'ft660' },
+  { key: 't_660_finish',  label: '660–Finish',    from: 'ft660', to: '_finish' },
+] as const;
+
+export type IntervalSegment = { key: string; label: string; from: string | null; to: string };
+
+/** Get the applicable interval segments for a run */
+export function getIntervalSegments(run: ParityRun): IntervalSegment[] {
+  return isNitroClass(run)
+    ? INTERVAL_SEGMENTS_NITRO as unknown as IntervalSegment[]
+    : INTERVAL_SEGMENTS_FULL as unknown as IntervalSegment[];
+}
+
+/** Default export for backward compat — full-quarter segments */
+export const INTERVAL_SEGMENTS = INTERVAL_SEGMENTS_FULL;
+export type IntervalKey = string;
 
 // ── Reason Codes ─────────────────────────────────────────────────────────
 
@@ -62,6 +161,8 @@ export type ReasonCode =
   // Baseline quality
   | 'BASELINE_SAMPLE_TOO_SMALL'
   | 'BASELINE_QUALITY_WEAK'
+  // Off-pace / representative
+  | 'OFF_PACE_RUN'
   // Composite
   | 'PROBABLE_TIMING_ISSUE'
   | 'INCOMPLETE_RUN_DATA';
@@ -130,6 +231,7 @@ export interface DerivedIntervals {
   t_330_660:   number | null;
   t_660_1000:  number | null;
   t_1000_1320: number | null;
+  t_660_finish: number | null;
   [key: string]: number | null;
 }
 
@@ -141,12 +243,15 @@ export function computeIntervals(run: ParityRun): DerivedIntervals {
   const sub = (a: number | null, b: number | null) =>
     a !== null && b !== null && a > b ? +(a - b).toFixed(6) : null;
 
+  const finish = resolveFinish(run);
+
   return {
-    t_0_60:      g('ft60'),
-    t_60_330:    sub(g('ft330'), g('ft60')),
-    t_330_660:   sub(g('ft660'), g('ft330')),
-    t_660_1000:  sub(g('ft1000'), g('ft660')),
-    t_1000_1320: sub(g('ft1320'), g('ft1000')),
+    t_0_60:       g('ft60'),
+    t_60_330:     sub(g('ft330'), g('ft60')),
+    t_330_660:    sub(g('ft660'), g('ft330')),
+    t_660_1000:   sub(g('ft1000'), g('ft660')),
+    t_1000_1320:  sub(g('ft1320'), g('ft1000')),
+    t_660_finish: sub(finish.effectiveFinishTime, g('ft660')),
   };
 }
 
@@ -175,6 +280,11 @@ export interface RunAnomalyResult {
   intervals: DerivedIntervals;
   baseline: BaselineInfo;
   narrative: string;
+  finish: NormalizedFinish;
+  representativeRun: boolean;
+  representativeRunReason: string | null;
+  excludedFromBaseline: boolean;
+  baselineExclusionReason: string | null;
 }
 
 // ── Batch Analysis Result ────────────────────────────────────────────────
@@ -186,6 +296,8 @@ export interface AnomalySummary {
   lowCount: number;
   criticalCount: number;
   baselineExcluded: number;
+  representativeCount: number;
+  offPaceCount: number;
   mostFlaggedField: string | null;
   mostFlaggedFieldCount: number;
 }
@@ -239,19 +351,29 @@ function modifiedZScore(value: number, med: number, madVal: number): number {
 
 function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): ReasonFlag[] {
   const flags: ReasonFlag[] = [];
+  const nitro = isNitroClass(run);
+  const finish = resolveFinish(run);
   const g = (f: keyof ParityRun): number | null => {
     const v = run[f];
     return typeof v === 'number' ? v : null;
   };
 
   // ── Missing split values (later splits exist but earlier ones are missing) ──
-  const splits: { field: CumulativeField; val: number | null }[] = CUMULATIVE_FIELDS.map(f => ({
+  // For nitro: expected chain is ft60→ft330→ft660→finish (ft1000 blank is OK)
+  // For quarter: expected chain is ft60→ft330→ft660→ft1000→ft1320
+  const expectedChain: CumulativeField[] = nitro
+    ? ['ft60', 'ft330', 'ft660']  // ft1000 allowed blank for nitro
+    : ['ft60', 'ft330', 'ft660', 'ft1000', 'ft1320'];
+
+  const splits: { field: CumulativeField; val: number | null }[] = expectedChain.map(f => ({
     field: f, val: g(f),
   }));
   let lastPresent = -1;
   for (let i = splits.length - 1; i >= 0; i--) {
     if (splits[i].val !== null) { lastPresent = i; break; }
   }
+  // Also check if the effective finish is present (beyond the chain)
+  if (finish.effectiveFinishTime !== null && lastPresent < 0) lastPresent = 0;
   if (lastPresent > 0) {
     for (let i = 0; i < lastPresent; i++) {
       if (splits[i].val === null) {
@@ -280,12 +402,27 @@ function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): Reaso
   }
 
   // ── Non-monotonic cumulative splits ──
-  const pairs: [CumulativeField, CumulativeField][] = [
-    ['ft60', 'ft330'], ['ft330', 'ft660'], ['ft660', 'ft1000'], ['ft1000', 'ft1320'],
-  ];
+  // For nitro: only check pairs that exist in the expected chain + finish
+  const pairs: [string, string][] = nitro
+    ? [['ft60', 'ft330'], ['ft330', 'ft660']]
+    : [['ft60', 'ft330'], ['ft330', 'ft660'], ['ft660', 'ft1000'], ['ft1000', 'ft1320']];
+  // For nitro, also check ft660 < finish if finish is populated
+  if (nitro && finish.effectiveFinishTime !== null && g('ft660') !== null) {
+    const ft660 = g('ft660')!;
+    if (finish.effectiveFinishTime <= ft660) {
+      flags.push({
+        code: 'NON_MONOTONIC_SPLITS',
+        severity: 'critical',
+        field: finish.finishTimeField,
+        value: finish.effectiveFinishTime,
+        expected: `> ${ft660} (ft660)`,
+        explanation: `Finish time (${finish.effectiveFinishTime}) in ${finish.finishTimeField} is not greater than ft660 (${ft660})`,
+      });
+    }
+  }
   for (const [earlier, later] of pairs) {
-    const vE = g(earlier);
-    const vL = g(later);
+    const vE = g(earlier as keyof ParityRun);
+    const vL = g(later as keyof ParityRun);
     if (vE !== null && vL !== null && vL <= vE) {
       flags.push({
         code: 'NON_MONOTONIC_SPLITS',
@@ -299,9 +436,9 @@ function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): Reaso
   }
 
   // ── Invalid derived intervals (negative or zero) ──
-  const ivMap = intervals;
-  for (const seg of INTERVAL_SEGMENTS) {
-    const v = ivMap[seg.key];
+  const segments = getIntervalSegments(run);
+  for (const seg of segments) {
+    const v = intervals[seg.key];
     if (v !== null && v <= 0) {
       flags.push({
         code: 'INVALID_INTERVAL',
@@ -314,10 +451,17 @@ function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): Reaso
   }
 
   // ── Duplicate suspicious split values ──
-  const presentSplits = splits.filter(s => s.val !== null);
+  // Use the expected chain + finish field for duplicate check
+  const dupFields: { field: string; val: number | null }[] = expectedChain.map(f => ({
+    field: f, val: g(f),
+  }));
+  if (finish.effectiveFinishTime !== null) {
+    dupFields.push({ field: finish.finishTimeField, val: finish.effectiveFinishTime });
+  }
+  const presentSplits = dupFields.filter(s => s.val !== null);
   for (let i = 0; i < presentSplits.length; i++) {
     for (let j = i + 1; j < presentSplits.length; j++) {
-      if (presentSplits[i].val === presentSplits[j].val) {
+      if (presentSplits[i].val === presentSplits[j].val && presentSplits[i].field !== presentSplits[j].field) {
         flags.push({
           code: 'DUPLICATE_SPLIT_VALUES',
           severity: 'high',
@@ -329,12 +473,12 @@ function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): Reaso
     }
   }
 
-  // ── Incomplete run: no ET at all ──
-  if (g('ft1320') === null && g('ft60') === null) {
+  // ── Incomplete run: no finish ET and no 60 ft ──
+  if (finish.effectiveFinishTime === null && g('ft60') === null) {
     flags.push({
       code: 'INCOMPLETE_RUN_DATA',
       severity: 'medium',
-      explanation: 'Run has no timing data (no 60 ft, no ET)',
+      explanation: 'Run has no timing data (no 60 ft, no finish ET)',
     });
   }
 
@@ -347,19 +491,18 @@ function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): Reaso
 
 function layer2ShapeConsistency(run: ParityRun, intervals: DerivedIntervals): ReasonFlag[] {
   const flags: ReasonFlag[] = [];
-  const ivs = intervals;
+  const segments = getIntervalSegments(run);
 
-  // Collect present intervals
-  const present: { key: string; val: number }[] = [];
-  for (const seg of INTERVAL_SEGMENTS) {
-    const v = ivs[seg.key];
-    if (v !== null && v > 0) present.push({ key: seg.key, val: v });
+  // Collect present intervals using class-aware segments
+  const present: { key: string; val: number; label: string }[] = [];
+  for (const seg of segments) {
+    const v = intervals[seg.key];
+    if (v !== null && v > 0) present.push({ key: seg.key, val: v, label: seg.label });
   }
 
   if (present.length < 3) return flags; // not enough data for shape analysis
 
   // ── Check each interval against neighbors for wild inconsistency ──
-  // A segment that is >3x or <0.2x the average of its neighbors is suspect
   for (let i = 0; i < present.length; i++) {
     const neighbors: number[] = [];
     if (i > 0) neighbors.push(present[i - 1].val);
@@ -370,46 +513,43 @@ function layer2ShapeConsistency(run: ParityRun, intervals: DerivedIntervals): Re
     const ratio = present[i].val / avgNeighbor;
 
     if (ratio > 3.0 || ratio < 0.15) {
-      const segInfo = INTERVAL_SEGMENTS.find(s => s.key === present[i].key);
       flags.push({
         code: 'SEGMENT_SHAPE_INCONSISTENT',
         severity: 'high',
         field: present[i].key,
         value: present[i].val,
         expected: `~${avgNeighbor.toFixed(4)}s based on adjacent segments`,
-        explanation: `${segInfo?.label || present[i].key} (${present[i].val.toFixed(4)}s) is ${ratio.toFixed(1)}x the average of adjacent segments — likely isolated timing error`,
+        explanation: `${present[i].label} (${present[i].val.toFixed(4)}s) is ${ratio.toFixed(1)}x the average of adjacent segments — likely isolated timing error`,
       });
     } else if (ratio > 2.2 || ratio < 0.25) {
-      const segInfo = INTERVAL_SEGMENTS.find(s => s.key === present[i].key);
       flags.push({
         code: 'SEGMENT_SHAPE_INCONSISTENT',
         severity: 'medium',
         field: present[i].key,
         value: present[i].val,
         expected: `~${avgNeighbor.toFixed(4)}s based on adjacent segments`,
-        explanation: `${segInfo?.label || present[i].key} (${present[i].val.toFixed(4)}s) is ${ratio.toFixed(1)}x the average of adjacent segments — somewhat unusual`,
+        explanation: `${present[i].label} (${present[i].val.toFixed(4)}s) is ${ratio.toFixed(1)}x the average of adjacent segments — somewhat unusual`,
       });
     }
   }
 
   // ── mph vs ET consistency ──
-  // For Top Fuel / Funny Car, 660 mph and 1320 mph should be loosely correlated
-  // with their respective cumulative times. We use a simple check:
-  // if 660 mph exists and 660 ft exists, faster time should mean higher speed
+  // Use normalized finish model: compare 660 mph to finish mph
+  const finish = resolveFinish(run);
   const mph660 = typeof run.mph660 === 'number' ? run.mph660 : null;
-  const mph1320 = typeof run.mph1320 === 'number' ? run.mph1320 : null;
-  if (mph660 !== null && mph1320 !== null && mph660 > 0 && mph1320 > 0) {
-    // 1320 mph should generally be >= 660 mph for a full pass
-    // (vehicle accelerates from 660 to 1320). Exception: cars that shut off.
-    // We only flag if 1320 mph is dramatically less (>30% less) — could be valid shutoff
-    if (mph1320 < mph660 * 0.5) {
+  const finishMph = finish.effectiveFinishMph;
+  if (mph660 !== null && finishMph !== null && mph660 > 0 && finishMph > 0) {
+    // For full-quarter: finish mph should generally be >= 660 mph
+    // For nitro: finish mph is at 1000 ft, so may be >= 660 mph (still accelerating)
+    // Flag only if dramatically less (>50% drop) — could be valid shutoff
+    if (finishMph < mph660 * 0.5) {
       flags.push({
         code: 'MPH_ET_INCONSISTENT',
         severity: 'medium',
-        field: 'mph1320',
-        value: mph1320,
+        field: finish.finishMphField,
+        value: finishMph,
         expected: `>= ~${(mph660 * 0.7).toFixed(1)} mph based on 660 mph`,
-        explanation: `Finish mph (${mph1320.toFixed(1)}) is less than half of 660 mph (${mph660.toFixed(1)}) — possible timing/recording issue or mid-track shutoff`,
+        explanation: `Finish mph (${finishMph.toFixed(1)}) is less than half of 660 mph (${mph660.toFixed(1)}) — possible timing/recording issue or mid-track shutoff`,
       });
     }
   }
@@ -432,7 +572,7 @@ interface BaselineStats {
   n: number;
 }
 
-/** Build baselines from a clean population (hard-fail and medium-suspect runs excluded) */
+/** Build baselines from a clean population (hard-fail, medium-suspect, and off-pace runs excluded) */
 function buildBaselines(cleanRuns: ParityRun[]): Map<string, BaselineStats> {
   const stats = new Map<string, BaselineStats>();
 
@@ -454,9 +594,18 @@ function buildBaselines(cleanRuns: ParityRun[]): Map<string, BaselineStats> {
     });
   }
 
-  // Build baselines for derived intervals
+  // Build baselines for ALL interval keys (both full-quarter and nitro)
+  // This ensures t_660_finish baseline is built alongside t_660_1000 / t_1000_1320
+  const allKeys = new Set<string>();
+  for (const seg of INTERVAL_SEGMENTS_FULL) allKeys.add(seg.key);
+  for (const seg of INTERVAL_SEGMENTS_NITRO) allKeys.add(seg.key);
+
   const allIntervals = cleanRuns.map(r => computeIntervals(r));
-  for (const seg of INTERVAL_SEGMENTS) {
+  const allSegments = [...INTERVAL_SEGMENTS_FULL, ...INTERVAL_SEGMENTS_NITRO];
+  const seenKeys = new Set<string>();
+  for (const seg of allSegments) {
+    if (seenKeys.has(seg.key)) continue;
+    seenKeys.add(seg.key);
     const values = allIntervals
       .map(iv => (iv as Record<string, number | null>)[seg.key])
       .filter((v): v is number => v !== null && v > 0);
@@ -573,10 +722,10 @@ function layer3HistoricalBaseline(
     }
   }
 
-  // Check derived intervals against baseline
-  const ivMap = intervals;
-  for (const seg of INTERVAL_SEGMENTS) {
-    const v = ivMap[seg.key];
+  // Check derived intervals against baseline — use class-aware segments
+  const segments = getIntervalSegments(run);
+  for (const seg of segments) {
+    const v = intervals[seg.key];
     if (v === null || v <= 0) continue;
     const bl = baselines.get(seg.key);
     if (!bl) continue;
@@ -785,6 +934,86 @@ function classifyRun(
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// OFF-PACE / REPRESENTATIVE RUN DETECTION
+// ══════════════════════════════════════════════════════════════════════════
+
+interface OffPaceResult {
+  representative: boolean;
+  reason: string | null;
+  excludedFromBaseline: boolean;
+  exclusionReason: string | null;
+}
+
+/**
+ * Determine if a run is "off-pace" (non-representative) relative to its peers.
+ * Uses robust statistics on finish ET and finish MPH from the clean peer population.
+ * A run is off-pace if it is far slower or far lower mph than the peer median,
+ * but internally coherent (no hard integrity failures).
+ *
+ * Off-pace threshold: finish ET > peer median + 3 × MAD  (much slower)
+ *                  OR finish MPH < peer median - 3 × MAD  (much slower speed)
+ */
+function detectOffPace(
+  run: ParityRun,
+  baselines: Map<string, BaselineStats>,
+  hardFailFlags: ReasonFlag[],
+): OffPaceResult {
+  // If the run has hard integrity failures, it's not off-pace — it's broken data
+  const hasHardFails = hardFailFlags.some(f =>
+    f.severity === 'critical' || f.severity === 'high'
+  );
+  if (hasHardFails) {
+    return { representative: true, reason: null, excludedFromBaseline: true, exclusionReason: 'integrity failure' };
+  }
+
+  const finish = resolveFinish(run);
+  const finishET = finish.effectiveFinishTime;
+  const finishMph = finish.effectiveFinishMph;
+
+  // Need baselines to compare against
+  const etField = finish.finishTimeField;
+  const mphField = finish.finishMphField;
+  const etBl = baselines.get(etField);
+  const mphBl = baselines.get(mphField);
+
+  // If no baselines available, assume representative
+  if (!etBl && !mphBl) {
+    return { representative: true, reason: null, excludedFromBaseline: false, exclusionReason: null };
+  }
+
+  const reasons: string[] = [];
+
+  // Check ET: off-pace if much slower (higher ET) than peers
+  if (finishET !== null && etBl) {
+    const z = modifiedZScore(finishET, etBl.median, etBl.mad);
+    // Positive z = slower than median. Use threshold of 4.0 for off-pace (generous)
+    if (z > 4.0) {
+      reasons.push(`Finish ET ${finishET.toFixed(3)}s is ${z.toFixed(1)}σ slower than peer median ${etBl.median.toFixed(3)}s`);
+    }
+  }
+
+  // Check MPH: off-pace if much slower (lower MPH) than peers
+  if (finishMph !== null && mphBl) {
+    const z = modifiedZScore(finishMph, mphBl.median, mphBl.mad);
+    // Negative z = slower speed. Use threshold of -4.0
+    if (z < -4.0) {
+      reasons.push(`Finish MPH ${finishMph.toFixed(1)} is ${Math.abs(z).toFixed(1)}σ below peer median ${mphBl.median.toFixed(1)}`);
+    }
+  }
+
+  if (reasons.length > 0) {
+    return {
+      representative: false,
+      reason: reasons.join('; '),
+      excludedFromBaseline: true,
+      exclusionReason: 'off-pace run — not representative of competitive field',
+    };
+  }
+
+  return { representative: true, reason: null, excludedFromBaseline: false, exclusionReason: null };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // MAIN ENTRY POINT
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -832,18 +1061,46 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     if (hardFailIds.has(run.id)) continue;
     const intervals = runIntervals.get(run.id) ?? computeIntervals(run);
     const l2 = layer2ShapeConsistency(run, intervals);
-    // If any medium+ severity shape flag, exclude from baseline
     if (l2.some(f => f.severity === 'critical' || f.severity === 'high' || f.severity === 'medium')) {
       mediumSuspectIds.add(run.id);
     }
   }
 
-  // ── Phase 2: Build clean population for baselines (exclude hard-fails + medium-suspects) ──
+  // ── Phase 2: Build initial clean population (exclude hard-fails + medium-suspects) ──
+  const initialCleanIds = new Set<number>();
+  for (const run of population) {
+    if (!hardFailIds.has(run.id) && !mediumSuspectIds.has(run.id)) initialCleanIds.add(run.id);
+  }
+
+  // ── Phase 2b: Off-pace detection ──
+  // Build preliminary baselines from the initial clean population to detect off-pace runs
+  const offPaceIds = new Set<number>();
+  const offPaceReasons = new Map<number, string>();
+  {
+    // Build a preliminary baseline from all initial-clean runs (category-level)
+    const initialCleanRuns = population.filter(r => initialCleanIds.has(r.id));
+    const prelimBaselines = initialCleanRuns.length >= 5
+      ? buildBaselines(initialCleanRuns) : new Map<string, BaselineStats>();
+
+    for (const run of population) {
+      if (hardFailIds.has(run.id) || mediumSuspectIds.has(run.id)) continue;
+      const l1 = runL1Flags.get(run.id) ?? [];
+      const result = detectOffPace(run, prelimBaselines, l1);
+      if (!result.representative) {
+        offPaceIds.add(run.id);
+        if (result.reason) offPaceReasons.set(run.id, result.reason);
+      }
+    }
+  }
+
+  // ── Phase 2c: Final clean population (exclude hard-fails + medium-suspects + off-pace) ──
   const cleanRunIds = new Set<number>();
   for (const run of population) {
-    if (!hardFailIds.has(run.id) && !mediumSuspectIds.has(run.id)) cleanRunIds.add(run.id);
+    if (!hardFailIds.has(run.id) && !mediumSuspectIds.has(run.id) && !offPaceIds.has(run.id)) {
+      cleanRunIds.add(run.id);
+    }
   }
-  const baselineExcludedCount = hardFailIds.size + mediumSuspectIds.size;
+  const baselineExcludedCount = hardFailIds.size + mediumSuspectIds.size + offPaceIds.size;
 
   // ── Phase 3: Analyze each target run ──
   const results: RunAnomalyResult[] = [];
@@ -853,6 +1110,7 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     const intervals = runIntervals.get(run.id) ?? computeIntervals(run);
     const l1Flags = runL1Flags.get(run.id) ?? layer1HardIntegrity(run, intervals);
     const l2Flags = layer2ShapeConsistency(run, intervals);
+    const finish = resolveFinish(run);
 
     // Select peers and build baselines for this run
     const { peers, scope } = selectPeers(run, population, cleanRunIds);
@@ -873,6 +1131,20 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
 
     const l3Flags = layer3HistoricalBaseline(run, intervals, baselines, baselineInfo);
 
+    // Off-pace detection for this specific run
+    const offPace = detectOffPace(run, baselines, l1Flags);
+    const isOffPace = offPaceIds.has(run.id) || !offPace.representative;
+
+    // Off-pace flag (info severity — does not penalize score)
+    const offPaceFlags: ReasonFlag[] = [];
+    if (isOffPace) {
+      offPaceFlags.push({
+        code: 'OFF_PACE_RUN',
+        severity: 'info',
+        explanation: offPace.reason || offPaceReasons.get(run.id) || 'Run is significantly off the competitive pace',
+      });
+    }
+
     // Baseline quality flags
     const qualityFlags: ReasonFlag[] = [];
     if (baselineInfo.quality === 'weak' && l3Flags.length > 0) {
@@ -891,13 +1163,23 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     }
 
     // Combine all flags
-    const allFlags = [...l1Flags, ...l2Flags, ...l3Flags, ...qualityFlags];
+    const allFlags = [...l1Flags, ...l2Flags, ...l3Flags, ...offPaceFlags, ...qualityFlags];
 
     // Compute scores
-    const overallScore = computeOverallScore(allFlags);
+    let overallScore = computeOverallScore(allFlags);
+
+    // If off-pace but internally coherent, boost score toward Medium minimum
+    // to avoid false-positive "Critical" on slow but valid runs
+    if (isOffPace && !hardFailIds.has(run.id)) {
+      const hardIntegFlags = l1Flags.filter(f => f.severity === 'critical' || f.severity === 'high');
+      if (hardIntegFlags.length === 0) {
+        overallScore = Math.max(overallScore, 55); // Floor at Medium band
+      }
+    }
+
     const fieldScores = computeFieldScores(allFlags);
 
-    // Identify suspect fields (fields with score < 80 — any significant flag)
+    // Identify suspect fields (fields with score < 80)
     const suspectFields = fieldScores
       .filter(f => f.score < 80)
       .sort((a, b) => a.score - b.score)
@@ -913,7 +1195,22 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
       .sort((a, b) => SEVERITY_PENALTY[b.severity] - SEVERITY_PENALTY[a.severity])[0] ?? null;
 
     const band = confidenceBand(overallScore);
-    const classification = classifyRun(band, allFlags, suspectFields);
+
+    // Classification: off-pace + coherent → unusual_but_plausible (not probable_timing_issue)
+    let classification = classifyRun(band, allFlags, suspectFields);
+    if (isOffPace && classification === 'probable_timing_issue') {
+      const hasRealIntegrityIssue = l1Flags.some(f => f.severity === 'critical');
+      if (!hasRealIntegrityIssue) {
+        classification = 'unusual_but_plausible';
+      }
+    }
+
+    // Determine baseline exclusion reason
+    const isExcluded = hardFailIds.has(run.id) || mediumSuspectIds.has(run.id) || isOffPace;
+    let exclusionReason: string | null = null;
+    if (hardFailIds.has(run.id)) exclusionReason = 'integrity failure';
+    else if (mediumSuspectIds.has(run.id)) exclusionReason = 'medium-suspect shape flags';
+    else if (isOffPace) exclusionReason = offPace.exclusionReason || 'off-pace run';
 
     const partial: Omit<RunAnomalyResult, 'narrative'> = {
       runId: run.id,
@@ -929,6 +1226,11 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
       fieldScores,
       intervals,
       baseline: baselineInfo,
+      finish,
+      representativeRun: !isOffPace,
+      representativeRunReason: isOffPace ? (offPace.reason || offPaceReasons.get(run.id) || 'Off competitive pace') : null,
+      excludedFromBaseline: isExcluded,
+      baselineExclusionReason: exclusionReason,
     };
 
     results.push({ ...partial, narrative: generateNarrative(partial) });
@@ -939,6 +1241,8 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
   const mediumCount = results.filter(r => r.band === 'Medium').length;
   const lowCount = results.filter(r => r.band === 'Low').length;
   const criticalCount = results.filter(r => r.band === 'Critical').length;
+  const representativeCount = results.filter(r => r.representativeRun).length;
+  const offPaceCount = results.filter(r => !r.representativeRun).length;
 
   let mostFlaggedField: string | null = null;
   let mostFlaggedFieldCount = 0;
@@ -957,6 +1261,8 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
       lowCount,
       criticalCount,
       baselineExcluded: baselineExcludedCount,
+      representativeCount,
+      offPaceCount,
       mostFlaggedField,
       mostFlaggedFieldCount,
     },

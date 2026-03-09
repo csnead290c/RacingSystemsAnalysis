@@ -1117,6 +1117,15 @@ export interface AnomalyBaselineInfo {
   warning?: string;
 }
 
+export interface AnomalyNormalizedFinish {
+  effectiveFinishDistance: number;
+  effectiveFinishTime: number | null;
+  effectiveFinishMph: number | null;
+  finishTimeField: string;
+  finishMphField: string;
+  isNitro: boolean;
+}
+
 export interface AnomalyRunSummary {
   runId: number;
   runUuid: string;
@@ -1131,6 +1140,11 @@ export interface AnomalyRunSummary {
   intervals: Record<string, number | null>;
   baseline: AnomalyBaselineInfo;
   narrative: string;
+  finish: AnomalyNormalizedFinish;
+  representativeRun: boolean;
+  representativeRunReason: string | null;
+  excludedFromBaseline: boolean;
+  baselineExclusionReason: string | null;
   // Run context fields
   driverName: string | null;
   category: string | null;
@@ -1156,6 +1170,8 @@ export interface AnomalySummaryTotals {
   mostFlaggedField: string | null;
   mostFlaggedFieldCount: number;
   baselineExcluded: number;
+  representativeCount: number;
+  offPaceCount: number;
 }
 
 export interface AnomalyAnalysisResponse {

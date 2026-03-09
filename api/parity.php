@@ -9387,7 +9387,68 @@ function handleUpdateRun(PDO $pdo, ?array $auth): void {
 //
 // Mirrors the TypeScript engine in src/domain/parity/anomalyEngine.ts but
 // runs server-side as the authoritative source of truth.
+//
+// NITRO CLASS CONVENTION:
+// Top Fuel and Funny Car run to 1000 ft. The timing system often reports
+// the effective finish time/mph in ft1320/mph1320 fields with ft1000 blank.
+// This is a known convention, NOT corrupt data.
 // ============================================================================
+
+// ── Nitro Class Detection ────────────────────────────────────────────────
+
+function anomaly_isNitroClass(array $run): bool {
+    $cat = trim($run['category'] ?? '');
+    $cls = strtoupper(trim($run['class_index'] ?? ''));
+    return in_array($cat, ['Top Fuel', 'Funny Car'], true)
+        || in_array($cls, ['TF', 'FC', 'TFD'], true);
+}
+
+// ── Normalized Finish Model ──────────────────────────────────────────────
+
+function anomaly_resolveFinish(array $run): array {
+    $nitro = anomaly_isNitroClass($run);
+    $g = function(string $f) use ($run): ?float {
+        $v = $run[$f] ?? null;
+        return ($v !== null && (float)$v > 0) ? (float)$v : null;
+    };
+
+    if ($nitro) {
+        $ft1000 = $g('ft1000');
+        $mph1000 = $g('mph1000');
+        $ft1320 = $g('ft1320');
+        $mph1320 = $g('mph1320');
+
+        if ($ft1000 !== null) {
+            return [
+                'effectiveFinishDistance' => 1000,
+                'effectiveFinishTime' => $ft1000,
+                'effectiveFinishMph' => $mph1000 ?? $mph1320,
+                'finishTimeField' => 'ft1000',
+                'finishMphField' => $mph1000 !== null ? 'mph1000' : 'mph1320',
+                'isNitro' => true,
+            ];
+        }
+        return [
+            'effectiveFinishDistance' => 1000,
+            'effectiveFinishTime' => $ft1320,
+            'effectiveFinishMph' => $mph1320,
+            'finishTimeField' => 'ft1320',
+            'finishMphField' => 'mph1320',
+            'isNitro' => true,
+        ];
+    }
+
+    return [
+        'effectiveFinishDistance' => 1320,
+        'effectiveFinishTime' => $g('ft1320'),
+        'effectiveFinishMph' => $g('mph1320'),
+        'finishTimeField' => 'ft1320',
+        'finishMphField' => 'mph1320',
+        'isNitro' => false,
+    ];
+}
+
+// ── Timing Fields & Intervals ────────────────────────────────────────────
 
 /** Cumulative split field names in track-distance order */
 function anomaly_cumulativeFields(): array {
@@ -9399,8 +9460,8 @@ function anomaly_timingFields(): array {
     return ['ft60', 'ft330', 'ft660', 'ft1000', 'ft1320', 'mph660', 'mph1320', 'rt'];
 }
 
-/** Interval segment definitions */
-function anomaly_intervalSegments(): array {
+/** Full-quarter interval segments */
+function anomaly_intervalSegmentsFull(): array {
     return [
         ['key' => 't_0_60',      'label' => '0–60 ft',     'from' => null,     'to' => 'ft60'],
         ['key' => 't_60_330',    'label' => '60–330 ft',   'from' => 'ft60',   'to' => 'ft330'],
@@ -9408,6 +9469,26 @@ function anomaly_intervalSegments(): array {
         ['key' => 't_660_1000',  'label' => '660–1000 ft', 'from' => 'ft660',  'to' => 'ft1000'],
         ['key' => 't_1000_1320', 'label' => '1000–ET',     'from' => 'ft1000', 'to' => 'ft1320'],
     ];
+}
+
+/** Nitro class interval segments — uses 660–finish */
+function anomaly_intervalSegmentsNitro(): array {
+    return [
+        ['key' => 't_0_60',       'label' => '0–60 ft',     'from' => null,    'to' => 'ft60'],
+        ['key' => 't_60_330',     'label' => '60–330 ft',   'from' => 'ft60',  'to' => 'ft330'],
+        ['key' => 't_330_660',    'label' => '330–660 ft',  'from' => 'ft330', 'to' => 'ft660'],
+        ['key' => 't_660_finish', 'label' => '660–Finish',  'from' => 'ft660', 'to' => '_finish'],
+    ];
+}
+
+/** Get class-aware interval segments for a run */
+function anomaly_getIntervalSegments(array $run): array {
+    return anomaly_isNitroClass($run) ? anomaly_intervalSegmentsNitro() : anomaly_intervalSegmentsFull();
+}
+
+/** Backward-compat alias */
+function anomaly_intervalSegments(): array {
+    return anomaly_intervalSegmentsFull();
 }
 
 /** Penalty weights by severity */
@@ -9431,12 +9512,14 @@ function anomaly_computeIntervals(array $run): array {
     $sub = function(?float $a, ?float $b): ?float {
         return ($a !== null && $b !== null && $a > $b) ? round($a - $b, 6) : null;
     };
+    $finish = anomaly_resolveFinish($run);
     return [
-        't_0_60'      => $g('ft60'),
-        't_60_330'    => $sub($g('ft330'), $g('ft60')),
-        't_330_660'   => $sub($g('ft660'), $g('ft330')),
-        't_660_1000'  => $sub($g('ft1000'), $g('ft660')),
-        't_1000_1320' => $sub($g('ft1320'), $g('ft1000')),
+        't_0_60'       => $g('ft60'),
+        't_60_330'     => $sub($g('ft330'), $g('ft60')),
+        't_330_660'    => $sub($g('ft660'), $g('ft330')),
+        't_660_1000'   => $sub($g('ft1000'), $g('ft660')),
+        't_1000_1320'  => $sub($g('ft1320'), $g('ft1000')),
+        't_660_finish' => $sub($finish['effectiveFinishTime'], $g('ft660')),
     ];
 }
 
@@ -9476,7 +9559,8 @@ function anomaly_modifiedZScore(float $value, float $med, float $madVal): float 
 
 function anomaly_layer1(array $run, array $intervals): array {
     $flags = [];
-    $cumFields = anomaly_cumulativeFields();
+    $nitro = anomaly_isNitroClass($run);
+    $finish = anomaly_resolveFinish($run);
     $timingFields = anomaly_timingFields();
 
     $g = function(string $f) use ($run): ?float {
@@ -9484,15 +9568,20 @@ function anomaly_layer1(array $run, array $intervals): array {
         return ($v !== null) ? (float)$v : null;
     };
 
-    // Missing intermediate splits
+    // Missing intermediate splits — nitro: ft1000 blank is OK
+    $expectedChain = $nitro
+        ? ['ft60', 'ft330', 'ft660']
+        : ['ft60', 'ft330', 'ft660', 'ft1000', 'ft1320'];
+
     $splits = [];
-    foreach ($cumFields as $f) {
+    foreach ($expectedChain as $f) {
         $splits[] = ['field' => $f, 'val' => $g($f)];
     }
     $lastPresent = -1;
     for ($i = count($splits) - 1; $i >= 0; $i--) {
         if ($splits[$i]['val'] !== null) { $lastPresent = $i; break; }
     }
+    if ($finish['effectiveFinishTime'] !== null && $lastPresent < 0) $lastPresent = 0;
     if ($lastPresent > 0) {
         for ($i = 0; $i < $lastPresent; $i++) {
             if ($splits[$i]['val'] === null) {
@@ -9518,8 +9607,24 @@ function anomaly_layer1(array $run, array $intervals): array {
         }
     }
 
-    // Non-monotonic cumulative splits
-    $pairs = [['ft60','ft330'],['ft330','ft660'],['ft660','ft1000'],['ft1000','ft1320']];
+    // Non-monotonic cumulative splits — class-aware pairs
+    $pairs = $nitro
+        ? [['ft60','ft330'],['ft330','ft660']]
+        : [['ft60','ft330'],['ft330','ft660'],['ft660','ft1000'],['ft1000','ft1320']];
+
+    // For nitro, also check ft660 < finish
+    if ($nitro && $finish['effectiveFinishTime'] !== null && $g('ft660') !== null) {
+        $ft660 = $g('ft660');
+        if ($finish['effectiveFinishTime'] <= $ft660) {
+            $flags[] = [
+                'code' => 'NON_MONOTONIC_SPLITS', 'severity' => 'critical',
+                'field' => $finish['finishTimeField'],
+                'value' => $finish['effectiveFinishTime'],
+                'expected' => "> $ft660 (ft660)",
+                'explanation' => "Finish time ({$finish['effectiveFinishTime']}) in {$finish['finishTimeField']} is not greater than ft660 ($ft660)",
+            ];
+        }
+    }
     foreach ($pairs as [$earlier, $later]) {
         $vE = $g($earlier);
         $vL = $g($later);
@@ -9533,8 +9638,8 @@ function anomaly_layer1(array $run, array $intervals): array {
         }
     }
 
-    // Invalid derived intervals
-    foreach (anomaly_intervalSegments() as $seg) {
+    // Invalid derived intervals — class-aware segments
+    foreach (anomaly_getIntervalSegments($run) as $seg) {
         $v = $intervals[$seg['key']] ?? null;
         if ($v !== null && $v <= 0) {
             $flags[] = [
@@ -9545,12 +9650,18 @@ function anomaly_layer1(array $run, array $intervals): array {
         }
     }
 
-    // Duplicate split values
-    $presentSplits = array_filter($splits, fn($s) => $s['val'] !== null);
-    $presentSplits = array_values($presentSplits);
+    // Duplicate split values — use expected chain + finish
+    $dupFields = [];
+    foreach ($expectedChain as $f) {
+        $dupFields[] = ['field' => $f, 'val' => $g($f)];
+    }
+    if ($finish['effectiveFinishTime'] !== null) {
+        $dupFields[] = ['field' => $finish['finishTimeField'], 'val' => $finish['effectiveFinishTime']];
+    }
+    $presentSplits = array_values(array_filter($dupFields, fn($s) => $s['val'] !== null));
     for ($i = 0; $i < count($presentSplits); $i++) {
         for ($j = $i + 1; $j < count($presentSplits); $j++) {
-            if ($presentSplits[$i]['val'] == $presentSplits[$j]['val']) {
+            if ($presentSplits[$i]['val'] == $presentSplits[$j]['val'] && $presentSplits[$i]['field'] !== $presentSplits[$j]['field']) {
                 $flags[] = [
                     'code' => 'DUPLICATE_SPLIT_VALUES', 'severity' => 'high',
                     'field' => "{$presentSplits[$i]['field']}/{$presentSplits[$j]['field']}",
@@ -9561,11 +9672,11 @@ function anomaly_layer1(array $run, array $intervals): array {
         }
     }
 
-    // Incomplete run
-    if ($g('ft1320') === null && $g('ft60') === null) {
+    // Incomplete run — use normalized finish
+    if ($finish['effectiveFinishTime'] === null && $g('ft60') === null) {
         $flags[] = [
             'code' => 'INCOMPLETE_RUN_DATA', 'severity' => 'medium',
-            'explanation' => 'Run has no timing data (no 60 ft, no ET)',
+            'explanation' => 'Run has no timing data (no 60 ft, no finish ET)',
         ];
     }
 
@@ -9576,7 +9687,7 @@ function anomaly_layer1(array $run, array $intervals): array {
 
 function anomaly_layer2(array $run, array $intervals): array {
     $flags = [];
-    $segments = anomaly_intervalSegments();
+    $segments = anomaly_getIntervalSegments($run);
 
     $present = [];
     foreach ($segments as $seg) {
@@ -9615,16 +9726,17 @@ function anomaly_layer2(array $run, array $intervals): array {
         }
     }
 
-    // mph660 vs mph1320 consistency
+    // mph vs finish mph consistency — use normalized finish
+    $finish = anomaly_resolveFinish($run);
     $mph660 = isset($run['mph660']) ? (float)$run['mph660'] : null;
-    $mph1320 = isset($run['mph1320']) ? (float)$run['mph1320'] : null;
-    if ($mph660 !== null && $mph1320 !== null && $mph660 > 0 && $mph1320 > 0) {
-        if ($mph1320 < $mph660 * 0.5) {
+    $finishMph = $finish['effectiveFinishMph'];
+    if ($mph660 !== null && $finishMph !== null && $mph660 > 0 && $finishMph > 0) {
+        if ($finishMph < $mph660 * 0.5) {
             $flags[] = [
                 'code' => 'MPH_ET_INCONSISTENT', 'severity' => 'medium',
-                'field' => 'mph1320', 'value' => $mph1320,
+                'field' => $finish['finishMphField'], 'value' => $finishMph,
                 'expected' => '>= ~' . round($mph660 * 0.7, 1) . ' mph based on 660 mph',
-                'explanation' => "Finish mph ($mph1320) is less than half of 660 mph ($mph660) — possible timing/recording issue or mid-track shutoff",
+                'explanation' => "Finish mph ($finishMph) is less than half of 660 mph ($mph660) — possible timing/recording issue or mid-track shutoff",
             ];
         }
     }
@@ -9651,9 +9763,13 @@ function anomaly_buildBaselines(array $cleanRuns): array {
         $stats[$f] = array_merge(['field' => $f, 'n' => count($values)], $m, $bounds);
     }
 
-    // Derived interval baselines
+    // Derived interval baselines — build for ALL interval keys (full + nitro)
     $allIntervals = array_map('anomaly_computeIntervals', $cleanRuns);
-    foreach (anomaly_intervalSegments() as $seg) {
+    $allSegments = array_merge(anomaly_intervalSegmentsFull(), anomaly_intervalSegmentsNitro());
+    $seenKeys = [];
+    foreach ($allSegments as $seg) {
+        if (isset($seenKeys[$seg['key']])) continue;
+        $seenKeys[$seg['key']] = true;
         $values = [];
         foreach ($allIntervals as $iv) {
             $v = $iv[$seg['key']] ?? null;
@@ -9758,8 +9874,8 @@ function anomaly_layer3(array $run, array $intervals, array $baselines, array $b
         }
     }
 
-    // Interval baselines
-    foreach (anomaly_intervalSegments() as $seg) {
+    // Interval baselines — class-aware segments
+    foreach (anomaly_getIntervalSegments($run) as $seg) {
         $v = $intervals[$seg['key']] ?? null;
         if ($v === null || $v <= 0) continue;
         $bl = $baselines[$seg['key']] ?? null;
@@ -9801,7 +9917,12 @@ function anomaly_computeScore(array $flags): int {
 function anomaly_computeFieldScores(array $flags): array {
     $fieldMap = [];
     foreach (anomaly_timingFields() as $f) $fieldMap[$f] = [];
-    foreach (anomaly_intervalSegments() as $seg) $fieldMap[$seg['key']] = [];
+    // Include all interval keys (both full-quarter and nitro)
+    $allSegs = array_merge(anomaly_intervalSegmentsFull(), anomaly_intervalSegmentsNitro());
+    $seen = [];
+    foreach ($allSegs as $seg) {
+        if (!isset($seen[$seg['key']])) { $fieldMap[$seg['key']] = []; $seen[$seg['key']] = true; }
+    }
 
     foreach ($flags as $flag) {
         $field = $flag['field'] ?? null;
@@ -9830,6 +9951,58 @@ function anomaly_computeFieldScores(array $flags): array {
         }
     }
     return $results;
+}
+
+// ── Off-Pace / Representative Run Detection ──────────────────────────────
+
+function anomaly_detectOffPace(array $run, array $baselines, array $l1Flags): array {
+    // If the run has hard integrity failures, it's not off-pace — it's broken
+    $hasHardFails = false;
+    foreach ($l1Flags as $f) {
+        if ($f['severity'] === 'critical' || $f['severity'] === 'high') { $hasHardFails = true; break; }
+    }
+    if ($hasHardFails) {
+        return ['representative' => true, 'reason' => null, 'excludedFromBaseline' => true, 'exclusionReason' => 'integrity failure'];
+    }
+
+    $finish = anomaly_resolveFinish($run);
+    $finishET = $finish['effectiveFinishTime'];
+    $finishMph = $finish['effectiveFinishMph'];
+    $etField = $finish['finishTimeField'];
+    $mphField = $finish['finishMphField'];
+    $etBl = $baselines[$etField] ?? null;
+    $mphBl = $baselines[$mphField] ?? null;
+
+    if (!$etBl && !$mphBl) {
+        return ['representative' => true, 'reason' => null, 'excludedFromBaseline' => false, 'exclusionReason' => null];
+    }
+
+    $reasons = [];
+
+    if ($finishET !== null && $etBl) {
+        $z = anomaly_modifiedZScore($finishET, $etBl['median'], $etBl['mad']);
+        if ($z > 4.0) {
+            $reasons[] = "Finish ET " . round($finishET, 3) . "s is " . round($z, 1) . "σ slower than peer median " . round($etBl['median'], 3) . "s";
+        }
+    }
+
+    if ($finishMph !== null && $mphBl) {
+        $z = anomaly_modifiedZScore($finishMph, $mphBl['median'], $mphBl['mad']);
+        if ($z < -4.0) {
+            $reasons[] = "Finish MPH " . round($finishMph, 1) . " is " . round(abs($z), 1) . "σ below peer median " . round($mphBl['median'], 1);
+        }
+    }
+
+    if (!empty($reasons)) {
+        return [
+            'representative' => false,
+            'reason' => implode('; ', $reasons),
+            'excludedFromBaseline' => true,
+            'exclusionReason' => 'off-pace run — not representative of competitive field',
+        ];
+    }
+
+    return ['representative' => true, 'reason' => null, 'excludedFromBaseline' => false, 'exclusionReason' => null];
 }
 
 function anomaly_classify(array $flags, string $band, array $baselineInfo): string {
@@ -9905,8 +10078,9 @@ function anomaly_generateNarrative(array $partial): string {
 
 // ── Full single-run analysis ─────────────────────────────────────────────
 
-function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $hardFailCount): array {
+function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $hardFailCount, array $offPaceIds = [], array $offPaceReasons = [], array $hardFailIds = []): array {
     $intervals = anomaly_computeIntervals($run);
+    $finish = anomaly_resolveFinish($run);
     $l1 = anomaly_layer1($run, $intervals);
     $l2 = anomaly_layer2($run, $intervals);
 
@@ -9930,6 +10104,20 @@ function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $ha
 
     $l3 = anomaly_layer3($run, $intervals, $baselines, $baselineInfo);
 
+    // Off-pace detection
+    $runId = (int)$run['id'];
+    $offPace = anomaly_detectOffPace($run, $baselines, $l1);
+    $isOffPace = isset($offPaceIds[$runId]) || !$offPace['representative'];
+
+    // Off-pace flag (info severity)
+    $offPaceFlags = [];
+    if ($isOffPace) {
+        $offPaceFlags[] = [
+            'code' => 'OFF_PACE_RUN', 'severity' => 'info',
+            'explanation' => $offPace['reason'] ?? ($offPaceReasons[$runId] ?? 'Run is significantly off the competitive pace'),
+        ];
+    }
+
     // Baseline quality flags
     $qualityFlags = [];
     if ($quality === 'weak' && !empty($l3)) {
@@ -9945,8 +10133,20 @@ function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $ha
         ];
     }
 
-    $allFlags = array_merge($l1, $l2, $l3, $qualityFlags);
+    $allFlags = array_merge($l1, $l2, $l3, $offPaceFlags, $qualityFlags);
     $score = anomaly_computeScore($allFlags);
+
+    // Off-pace but internally coherent → floor score at Medium band
+    if ($isOffPace && !isset($hardFailIds[$runId])) {
+        $hasHardInteg = false;
+        foreach ($l1 as $f) {
+            if ($f['severity'] === 'critical' || $f['severity'] === 'high') { $hasHardInteg = true; break; }
+        }
+        if (!$hasHardInteg) {
+            $score = max($score, 55);
+        }
+    }
+
     $band = anomaly_confidenceBand($score);
     $fieldScores = anomaly_computeFieldScores($allFlags);
 
@@ -9970,8 +10170,22 @@ function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $ha
 
     $classification = anomaly_classify($allFlags, $band, $baselineInfo);
 
+    // Off-pace + coherent → unusual_but_plausible (not probable_timing_issue)
+    if ($isOffPace && $classification === 'probable_timing_issue') {
+        $hasRealInteg = false;
+        foreach ($l1 as $f) { if ($f['severity'] === 'critical') { $hasRealInteg = true; break; } }
+        if (!$hasRealInteg) $classification = 'unusual_but_plausible';
+    }
+
+    // Baseline exclusion reason
+    $isExcluded = isset($hardFailIds[$runId]) || !isset($cleanIds[$runId]) || $isOffPace;
+    $exclusionReason = null;
+    if (isset($hardFailIds[$runId])) $exclusionReason = 'integrity failure';
+    elseif (!isset($cleanIds[$runId]) && !$isOffPace) $exclusionReason = 'medium-suspect shape flags';
+    elseif ($isOffPace) $exclusionReason = $offPace['exclusionReason'] ?? 'off-pace run';
+
     $partial = [
-        'runId' => (int)$run['id'],
+        'runId' => $runId,
         'runUuid' => $run['uuid'] ?? '',
         'overallScore' => $score,
         'band' => $band,
@@ -9984,6 +10198,11 @@ function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $ha
         'fieldScores' => $fieldScores,
         'intervals' => $intervals,
         'baseline' => $baselineInfo,
+        'finish' => $finish,
+        'representativeRun' => !$isOffPace,
+        'representativeRunReason' => $isOffPace ? ($offPace['reason'] ?? ($offPaceReasons[$runId] ?? 'Off competitive pace')) : null,
+        'excludedFromBaseline' => $isExcluded,
+        'baselineExclusionReason' => $exclusionReason,
     ];
 
     $partial['narrative'] = anomaly_generateNarrative($partial);
@@ -10126,27 +10345,55 @@ function handleAnomalyAnalysis(PDO $pdo): void {
         }
     }
 
-    // Clean population: exclude hard fails AND medium-suspect runs
-    $cleanIds = [];
+    // Initial clean population: exclude hard fails AND medium-suspect runs
+    $initialCleanIds = [];
     foreach ($runs as $r) {
         $rid = (int)$r['id'];
         if (!isset($hardFailIds[$rid]) && !isset($suspectIds[$rid])) {
+            $initialCleanIds[$rid] = true;
+        }
+    }
+
+    // Phase 2b: Off-pace detection
+    $offPaceIds = [];
+    $offPaceReasons = [];
+    $initialCleanRuns = array_filter($runs, fn($r) => isset($initialCleanIds[(int)$r['id']]));
+    $prelimBaselines = count($initialCleanRuns) >= 5 ? anomaly_buildBaselines(array_values($initialCleanRuns)) : [];
+    foreach ($runs as $r) {
+        $rid = (int)$r['id'];
+        if (isset($hardFailIds[$rid]) || isset($suspectIds[$rid])) continue;
+        $l1 = $allL1Flags[$rid] ?? [];
+        $op = anomaly_detectOffPace($r, $prelimBaselines, $l1);
+        if (!$op['representative']) {
+            $offPaceIds[$rid] = true;
+            if ($op['reason']) $offPaceReasons[$rid] = $op['reason'];
+        }
+    }
+
+    // Phase 2c: Final clean population (exclude hard-fails + medium-suspects + off-pace)
+    $cleanIds = [];
+    foreach ($runs as $r) {
+        $rid = (int)$r['id'];
+        if (!isset($hardFailIds[$rid]) && !isset($suspectIds[$rid]) && !isset($offPaceIds[$rid])) {
             $cleanIds[$rid] = true;
         }
     }
-    $totalExcluded = count($hardFailIds) + count($suspectIds);
+    $totalExcluded = count($hardFailIds) + count($suspectIds) + count($offPaceIds);
 
-    // Phase 2: Analyze each run
+    // Phase 3: Analyze each run
     $results = [];
     foreach ($runs as $r) {
-        $results[] = anomaly_analyzeRun($r, $runs, $cleanIds, $totalExcluded);
+        $results[] = anomaly_analyzeRun($r, $runs, $cleanIds, $totalExcluded, $offPaceIds, $offPaceReasons, $hardFailIds);
     }
 
     // Summary
     $bandCounts = ['High' => 0, 'Medium' => 0, 'Low' => 0, 'Critical' => 0];
     $fieldFlagCounts = [];
+    $representativeCount = 0;
+    $offPaceCount = 0;
     foreach ($results as $r) {
         $bandCounts[$r['band']]++;
+        if ($r['representativeRun']) $representativeCount++; else $offPaceCount++;
         foreach ($r['suspectFields'] as $f) {
             $fieldFlagCounts[$f] = ($fieldFlagCounts[$f] ?? 0) + 1;
         }
@@ -10174,7 +10421,12 @@ function handleAnomalyAnalysis(PDO $pdo): void {
             'intervals' => $r['intervals'],
             'baseline' => $r['baseline'],
             'narrative' => $r['narrative'],
-            // Include run context for display
+            'finish' => $r['finish'],
+            'representativeRun' => $r['representativeRun'],
+            'representativeRunReason' => $r['representativeRunReason'],
+            'excludedFromBaseline' => $r['excludedFromBaseline'],
+            'baselineExclusionReason' => $r['baselineExclusionReason'],
+            // Run context for display
             'driverName' => null,
             'category' => null,
             'lane' => null,
@@ -10208,6 +10460,8 @@ function handleAnomalyAnalysis(PDO $pdo): void {
             'mostFlaggedField' => $mostFlaggedField,
             'mostFlaggedFieldCount' => $mostFlaggedCount,
             'baselineExcluded' => $totalExcluded,
+            'representativeCount' => $representativeCount,
+            'offPaceCount' => $offPaceCount,
         ],
         'rollups' => $rollups,
         'runs' => $runsSummary,
@@ -10275,28 +10529,55 @@ function handleAnomalyDetail(PDO $pdo): void {
     // Identify hard failures across population
     $hardFailIds = [];
     $suspectIds = [];
+    $allL1Flags = [];
     foreach ($allRuns as $r) {
+        $rid = (int)$r['id'];
         $iv = anomaly_computeIntervals($r);
         $l1 = anomaly_layer1($r, $iv);
+        $allL1Flags[$rid] = $l1;
         $hasCritHigh = false;
         foreach ($l1 as $f) {
             if ($f['severity'] === 'critical' || $f['severity'] === 'high') { $hasCritHigh = true; break; }
         }
-        if ($hasCritHigh) { $hardFailIds[(int)$r['id']] = true; continue; }
+        if ($hasCritHigh) { $hardFailIds[$rid] = true; continue; }
         $l2 = anomaly_layer2($r, $iv);
         $combined = array_merge($l1, $l2);
         $medCount = count(array_filter($combined, fn($f) => $f['severity'] === 'medium'));
-        if ($medCount >= 2 || count($combined) >= 3) $suspectIds[(int)$r['id']] = true;
+        if ($medCount >= 2 || count($combined) >= 3) $suspectIds[$rid] = true;
     }
+
+    // Initial clean
+    $initialCleanIds = [];
+    foreach ($allRuns as $r) {
+        $rid = (int)$r['id'];
+        if (!isset($hardFailIds[$rid]) && !isset($suspectIds[$rid])) $initialCleanIds[$rid] = true;
+    }
+
+    // Off-pace detection
+    $offPaceIds = [];
+    $offPaceReasons = [];
+    $initialCleanRuns = array_filter($allRuns, fn($r) => isset($initialCleanIds[(int)$r['id']]));
+    $prelimBaselines = count($initialCleanRuns) >= 5 ? anomaly_buildBaselines(array_values($initialCleanRuns)) : [];
+    foreach ($allRuns as $r) {
+        $rid = (int)$r['id'];
+        if (isset($hardFailIds[$rid]) || isset($suspectIds[$rid])) continue;
+        $op = anomaly_detectOffPace($r, $prelimBaselines, $allL1Flags[$rid] ?? []);
+        if (!$op['representative']) {
+            $offPaceIds[$rid] = true;
+            if ($op['reason']) $offPaceReasons[$rid] = $op['reason'];
+        }
+    }
+
+    // Final clean population
     $cleanIds = [];
     foreach ($allRuns as $r) {
         $rid = (int)$r['id'];
-        if (!isset($hardFailIds[$rid]) && !isset($suspectIds[$rid])) $cleanIds[$rid] = true;
+        if (!isset($hardFailIds[$rid]) && !isset($suspectIds[$rid]) && !isset($offPaceIds[$rid])) $cleanIds[$rid] = true;
     }
-    $totalExcluded = count($hardFailIds) + count($suspectIds);
+    $totalExcluded = count($hardFailIds) + count($suspectIds) + count($offPaceIds);
 
     // Full analysis
-    $result = anomaly_analyzeRun($targetRun, $allRuns, $cleanIds, $totalExcluded);
+    $result = anomaly_analyzeRun($targetRun, $allRuns, $cleanIds, $totalExcluded, $offPaceIds, $offPaceReasons, $hardFailIds);
 
     rsa_jsonResponse([
         'run' => $targetRun,

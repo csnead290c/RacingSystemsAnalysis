@@ -215,11 +215,12 @@ function severityRank(s: string): number {
 // ── Interval segment labels ──────────────────────────────────────────────
 
 const INTERVAL_LABELS: { key: string; label: string }[] = [
-  { key: 't_0_60',      label: '0–60 ft' },
-  { key: 't_60_330',    label: '60–330 ft' },
-  { key: 't_330_660',   label: '330–660 ft' },
-  { key: 't_660_1000',  label: '660–1000 ft' },
-  { key: 't_1000_1320', label: '1000–ET' },
+  { key: 't_0_60',       label: '0–60 ft' },
+  { key: 't_60_330',     label: '60–330 ft' },
+  { key: 't_330_660',    label: '330–660 ft' },
+  { key: 't_660_1000',   label: '660–1000 ft' },
+  { key: 't_1000_1320',  label: '1000–ET' },
+  { key: 't_660_finish', label: '660–Finish' },
 ];
 
 // ── Baseline quality color helper ────────────────────────────────────────
@@ -256,6 +257,12 @@ function RunDetailPanel({ result, onClose }: {
         <ConfidenceChip score={result.overallScore} band={result.band} />
         <BandBadge band={result.band} />
         <ClassificationBadge classification={result.classification} />
+        {result.finish?.isNitro && (
+          <span style={{ ...S.badge('#8e44ad'), fontSize: '0.63rem' }}>1000 ft Finish</span>
+        )}
+        {!result.representativeRun && (
+          <span style={{ ...S.badge('#7f8c8d'), fontSize: '0.63rem' }}>Off-Pace</span>
+        )}
         <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
           {result.flagCount} flag(s) · {result.suspectFields.length} suspect field(s)
         </span>
@@ -268,6 +275,16 @@ function RunDetailPanel({ result, onClose }: {
         borderLeft: `3px solid ${bandColor(result.band)}`,
       }}>
         {result.narrative}
+        {result.finish?.isNitro && (
+          <div style={{ fontSize: '0.72rem', color: '#8e44ad', marginTop: '0.3rem' }}>
+            Nitro class: finish interpreted at {result.finish.effectiveFinishDistance} ft ({result.finish.finishTimeField}). This is a known timing convention — not a data error.
+          </div>
+        )}
+        {!result.representativeRun && result.representativeRunReason && (
+          <div style={{ fontSize: '0.72rem', color: '#7f8c8d', marginTop: '0.3rem' }}>
+            Off-pace: {result.representativeRunReason}. Excluded from baseline calculations.
+          </div>
+        )}
       </div>
 
       {/* Run values + Intervals side by side */}
@@ -281,8 +298,9 @@ function RunDetailPanel({ result, onClose }: {
                 { label: 'Category', value: result.category || '—' },
                 { label: 'Round', value: result.round || '—' },
                 { label: 'Lane', value: result.lane || '—' },
-                { label: 'ET', value: formatET(result.ft1320) },
-                { label: 'MPH', value: formatMPH(result.mph1320) },
+                { label: result.finish?.isNitro ? 'Finish ET' : 'ET', value: formatET(result.finish?.effectiveFinishTime ?? result.ft1320) },
+                { label: result.finish?.isNitro ? 'Finish MPH' : 'MPH', value: formatMPH(result.finish?.effectiveFinishMph ?? result.mph1320) },
+                ...(result.finish?.isNitro ? [{ label: 'Finish Distance', value: `${result.finish.effectiveFinishDistance} ft` }] : []),
               ].map(r => (
                 <tr key={r.label}>
                   <td style={{ ...S.td, fontWeight: 600, width: '40%' }}>{r.label}</td>
@@ -429,6 +447,12 @@ function SummaryTiles({ data }: { data: AnomalyAnalysisResponse }) {
         <div style={S.stat}>
           <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)' }}>Baseline Excluded</div>
           <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{summary.baselineExcluded}</div>
+        </div>
+      )}
+      {summary.offPaceCount > 0 && (
+        <div style={{ ...S.stat, borderColor: '#7f8c8d' }}>
+          <div style={{ fontSize: '0.65rem', color: '#7f8c8d' }}>Off-Pace</div>
+          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#7f8c8d' }}>{summary.offPaceCount}</div>
         </div>
       )}
       {summary.mostFlaggedField && (
@@ -671,7 +695,11 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
   const displayRuns = useMemo(() => {
     if (!data) return [];
     let filtered = data.runs;
-    if (filterBand !== 'all') {
+    if (filterBand === 'representative') {
+      filtered = filtered.filter(r => r.representativeRun);
+    } else if (filterBand === 'off-pace') {
+      filtered = filtered.filter(r => !r.representativeRun);
+    } else if (filterBand !== 'all') {
       filtered = filtered.filter(r => r.band === filterBand);
     }
     if (filterClassification !== 'all') {
@@ -755,13 +783,15 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
             <select
               value={filterBand}
               onChange={e => setFilterBand(e.target.value)}
-              style={{ ...S.input, width: 130 }}
+              style={{ ...S.input, width: 150 }}
             >
               <option value="all">All Bands</option>
               <option value="Critical">Critical Only</option>
               <option value="Low">Low Only</option>
               <option value="Medium">Medium Only</option>
               <option value="High">High Only</option>
+              <option value="representative">Representative Only</option>
+              <option value="off-pace">Off-Pace Only</option>
             </select>
             <select
               value={filterClassification}
@@ -833,7 +863,13 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
                     >
                       <td style={S.td}><ConfidenceChip score={r.overallScore} band={r.band} /></td>
                       <td style={S.td}><BandBadge band={r.band} /></td>
-                      <td style={S.td}><ClassificationBadge classification={r.classification} /></td>
+                      <td style={S.td}>
+                        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+                          <ClassificationBadge classification={r.classification} />
+                          {r.finish?.isNitro && <span title="1000 ft finish" style={{ fontSize: '0.6rem', color: '#8e44ad', fontWeight: 700 }}>N</span>}
+                          {!r.representativeRun && <span title="Off-pace" style={{ fontSize: '0.6rem', color: '#7f8c8d', fontWeight: 700 }}>OP</span>}
+                        </span>
+                      </td>
                       <td style={{ ...S.td, fontWeight: 600, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {r.driverName || '—'}
                       </td>

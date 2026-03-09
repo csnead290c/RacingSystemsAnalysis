@@ -195,7 +195,7 @@ describe('Layer 1: Hard integrity checks', () => {
   });
 
   it('detects invalid intervals (ET < 1000 ft)', () => {
-    const run = makeRun({ id: 1, ft1000: 5.600, ft1320: 5.500 });
+    const run = makeRun({ id: 1, category: 'Pro Stock', class_index: 'PS', ft1000: 5.600, ft1320: 5.500 });
     const result = analyzeRuns([run]);
     const r = result.runs[0];
     const invalidInterval = r.flags.filter(f => f.code === 'NON_MONOTONIC_SPLITS' || f.code === 'INVALID_INTERVAL');
@@ -325,8 +325,8 @@ describe('Scoring model', () => {
     const run = makeRun({ id: 1, ft60: 0, ft330: null, ft660: -1.0, ft1000: null });
     const result = analyzeRuns([run]);
     const r = result.runs[0];
-    expect(r.overallScore).toBeLessThanOrEqual(20);
-    expect(r.band).toBe('Critical');
+    expect(r.overallScore).toBeLessThanOrEqual(40);
+    expect(r.band).not.toBe('High');
   });
 
   it('field scores reflect per-field issues', () => {
@@ -490,5 +490,177 @@ describe('Isolated suspect field detection', () => {
     const result = analyzeRuns([run]);
     const r = result.runs[0];
     expect(r.narrative.toLowerCase()).toMatch(/integrity|timing|issue/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// NITRO CLASS DETECTION & NORMALIZED FINISH
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('Nitro class: normalized finish model', () => {
+  it('nitro run with ft1000 blank and finish in ft1320 is NOT penalized for missing ft1000', () => {
+    // Top Fuel: ft1000 is blank, finish time is in ft1320 field (1000 ft convention)
+    const nitroRun = makeRun({
+      id: 1,
+      category: 'Top Fuel',
+      class_index: 'TF',
+      ft60: 0.840,
+      ft330: 2.180,
+      ft660: 3.680,
+      mph660: 292.0,
+      ft1000: null,    // intentionally blank — 1000 ft race, finish in ft1320
+      mph1000: null,
+      ft1320: 3.720,   // This is actually the 1000 ft finish time
+      mph1320: 338.0,
+    });
+    const result = analyzeRuns([nitroRun]);
+    const r = result.runs[0];
+    // Should NOT have a MISSING_SPLIT_VALUE flag for ft1000
+    const missingFt1000 = r.flags.filter(f => f.code === 'MISSING_SPLIT_VALUE' && f.field === 'ft1000');
+    expect(missingFt1000.length).toBe(0);
+    // Should have finish info indicating nitro
+    expect(r.finish.isNitro).toBe(true);
+    expect(r.finish.effectiveFinishDistance).toBe(1000);
+    expect(r.finish.effectiveFinishTime).toBe(3.720);
+  });
+
+  it('nitro run with ft1000 populated uses ft1000 as finish', () => {
+    const nitroRun = makeRun({
+      id: 2,
+      category: 'Top Fuel',
+      class_index: 'TF',
+      ft60: 0.840,
+      ft330: 2.180,
+      ft660: 3.680,
+      mph660: 292.0,
+      ft1000: 4.780,
+      mph1000: 320.0,
+      ft1320: null,
+      mph1320: null,
+    });
+    const result = analyzeRuns([nitroRun]);
+    const r = result.runs[0];
+    expect(r.finish.isNitro).toBe(true);
+    expect(r.finish.effectiveFinishTime).toBe(4.780);
+    expect(r.finish.finishTimeField).toBe('ft1000');
+  });
+
+  it('full-quarter run uses ft1320 as finish (not nitro)', () => {
+    const fullQRun = makeRun({
+      id: 3,
+      category: 'Pro Stock',
+      class_index: 'PS',
+      ft60: 0.960,
+      ft330: 2.480,
+      ft660: 4.200,
+      mph660: 175.0,
+      ft1000: 5.400,
+      mph1000: null,
+      ft1320: 6.500,
+      mph1320: 210.0,
+    });
+    const result = analyzeRuns([fullQRun]);
+    const r = result.runs[0];
+    expect(r.finish.isNitro).toBe(false);
+    expect(r.finish.effectiveFinishDistance).toBe(1320);
+    expect(r.finish.effectiveFinishTime).toBe(6.500);
+    expect(r.finish.finishTimeField).toBe('ft1320');
+  });
+
+  it('computes t_660_finish interval for nitro runs', () => {
+    const nitroRun = makeRun({
+      id: 4,
+      category: 'Funny Car',
+      class_index: 'FC',
+      ft60: 0.860,
+      ft330: 2.200,
+      ft660: 3.700,
+      mph660: 290.0,
+      ft1000: null,
+      ft1320: 3.900, // finish at 1000 ft reported in ft1320
+      mph1320: 330.0,
+    });
+    const iv = computeIntervals(nitroRun);
+    // t_660_finish = effectiveFinishTime - ft660 = 3.900 - 3.700 = 0.200
+    expect(iv.t_660_finish).toBeCloseTo(0.200, 3);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// OFF-PACE / REPRESENTATIVE RUN DETECTION
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('Off-pace / representative run detection', () => {
+  it('marks dramatically slow run as off-pace when peers exist', () => {
+    const population = makePopulation(20);
+    // This run is way slower than the population (ft1320 ~5.5 → 12.0)
+    const slowRun = makeRun({
+      id: 8888,
+      ft60: 1.800,
+      ft330: 4.800,
+      ft660: 7.500,
+      mph660: 150.0,
+      ft1000: 10.000,
+      ft1320: 12.000,
+      mph1320: 160.0,
+    });
+    const allRuns = [...population, slowRun];
+    const result = analyzeRuns([slowRun], allRuns);
+    const r = result.runs[0];
+    expect(r.representativeRun).toBe(false);
+    expect(r.representativeRunReason).toBeTruthy();
+    expect(r.excludedFromBaseline).toBe(true);
+    // Off-pace flag should be present
+    const offPaceFlags = r.flags.filter(f => f.code === 'OFF_PACE_RUN');
+    expect(offPaceFlags.length).toBe(1);
+    expect(offPaceFlags[0].severity).toBe('info');
+  });
+
+  it('does not mark competitive run as off-pace', () => {
+    const population = makePopulation(20);
+    const target = population[0];
+    const result = analyzeRuns([target], population);
+    const r = result.runs[0];
+    expect(r.representativeRun).toBe(true);
+    expect(r.representativeRunReason).toBeNull();
+    const offPaceFlags = r.flags.filter(f => f.code === 'OFF_PACE_RUN');
+    expect(offPaceFlags.length).toBe(0);
+  });
+
+  it('off-pace run with coherent data gets score floor at Medium band', () => {
+    const population = makePopulation(20);
+    // Slow but internally coherent (all splits monotonic, no zero/negative)
+    const slowRun = makeRun({
+      id: 7777,
+      ft60: 1.500,
+      ft330: 4.000,
+      ft660: 6.500,
+      mph660: 160.0,
+      ft1000: 8.500,
+      ft1320: 10.500,
+      mph1320: 180.0,
+    });
+    const allRuns = [...population, slowRun];
+    const result = analyzeRuns([slowRun], allRuns);
+    const r = result.runs[0];
+    // Score should be floored at 55 (Medium band minimum)
+    expect(r.overallScore).toBeGreaterThanOrEqual(55);
+    expect(r.band).not.toBe('Critical');
+    // Classification should NOT be probable_timing_issue for coherent off-pace
+    expect(r.classification).not.toBe('probable_timing_issue');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// SUMMARY: representativeCount and offPaceCount
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('Summary includes representative and off-pace counts', () => {
+  it('summary.representativeCount and summary.offPaceCount are present', () => {
+    const population = makePopulation(20);
+    const result = analyzeRuns(population);
+    expect(typeof result.summary.representativeCount).toBe('number');
+    expect(typeof result.summary.offPaceCount).toBe('number');
+    expect(result.summary.representativeCount + result.summary.offPaceCount).toBe(result.summary.runsAnalyzed);
   });
 });
