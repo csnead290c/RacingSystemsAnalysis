@@ -503,10 +503,15 @@ function layer2ShapeConsistency(run: ParityRun, intervals: DerivedIntervals): Re
   if (present.length < 3) return flags; // not enough data for shape analysis
 
   // ── Check each interval against neighbors for wild inconsistency ──
+  const nitro = isNitroClass(run);
   for (let i = 0; i < present.length; i++) {
+    // Skip shape ratio for nitro's final segment — the 660→finish gap is
+    // structurally much shorter than earlier segments (1000 ft race vs 1320 ft)
+    if (nitro && present[i].key === 't_660_finish') continue;
+
     const neighbors: number[] = [];
-    if (i > 0) neighbors.push(present[i - 1].val);
-    if (i < present.length - 1) neighbors.push(present[i + 1].val);
+    if (i > 0 && !(nitro && present[i - 1].key === 't_660_finish')) neighbors.push(present[i - 1].val);
+    if (i < present.length - 1 && !(nitro && present[i + 1].key === 't_660_finish')) neighbors.push(present[i + 1].val);
     if (neighbors.length === 0) continue;
 
     const avgNeighbor = neighbors.reduce((a, b) => a + b, 0) / neighbors.length;

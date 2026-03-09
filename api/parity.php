@@ -9700,10 +9700,15 @@ function anomaly_layer2(array $run, array $intervals): array {
     if (count($present) < 3) return $flags;
 
     // Check each interval against neighbors
+    $nitro = anomaly_isNitroClass($run);
     for ($i = 0; $i < count($present); $i++) {
+        // Skip shape ratio for nitro's final segment — the 660→finish gap is
+        // structurally much shorter than earlier segments (1000 ft race vs 1320 ft)
+        if ($nitro && $present[$i]['key'] === 't_660_finish') continue;
+
         $neighbors = [];
-        if ($i > 0) $neighbors[] = $present[$i - 1]['val'];
-        if ($i < count($present) - 1) $neighbors[] = $present[$i + 1]['val'];
+        if ($i > 0 && !($nitro && $present[$i - 1]['key'] === 't_660_finish')) $neighbors[] = $present[$i - 1]['val'];
+        if ($i < count($present) - 1 && !($nitro && $present[$i + 1]['key'] === 't_660_finish')) $neighbors[] = $present[$i + 1]['val'];
         if (empty($neighbors)) continue;
 
         $avgNeighbor = array_sum($neighbors) / count($neighbors);
