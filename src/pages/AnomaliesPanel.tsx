@@ -311,12 +311,16 @@ function RunDetailPanel({ result, onClose }: {
           </table>
         </div>
 
-        {/* Derived intervals */}
+        {/* Derived intervals — show only class-relevant segments */}
         <div style={S.card}>
           <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>Derived Intervals</h4>
           <table style={S.table}>
             <tbody>
-              {INTERVAL_LABELS.map(seg => {
+              {INTERVAL_LABELS.filter(seg => {
+                // For nitro, skip 660–1000 and 1000–ET (structurally absent)
+                if (result.finish?.isNitro && (seg.key === 't_660_1000' || seg.key === 't_1000_1320')) return false;
+                return true;
+              }).map(seg => {
                 const val = result.intervals[seg.key];
                 const fs = result.fieldScores.find(f => f.field === seg.key);
                 const isSuspect = fs && fs.score < 80;
@@ -874,8 +878,8 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
                         {r.driverName || '—'}
                       </td>
                       <td style={S.td}>{r.lane || '—'}</td>
-                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatET(r.ft1320)}</td>
-                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatMPH(r.mph1320)}</td>
+                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatET(r.finish?.effectiveFinishTime ?? r.ft1320)}</td>
+                      <td style={{ ...S.td, fontFamily: 'monospace' }}>{formatMPH(r.finish?.effectiveFinishMph ?? r.mph1320)}</td>
                       <td style={S.td}>
                         {r.flagCount > 0 ? (
                           <span style={{
