@@ -56,6 +56,7 @@ import BatchBackfillPanel from './BatchBackfillPanel';
 import ParityDashPanel from './ParityDashPanel';
 void ParityDashPanel;
 import ParityReport from './ParityReport';
+import AnomaliesPanel from './AnomaliesPanel';
 import {
   computeWeather,
   computeHPC,
@@ -232,7 +233,7 @@ const S = {
 } as const;
 
 type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash' | 'parityDash' | 'parityReport'
-  | 'liveTiming'
+  | 'liveTiming' | 'anomalies'
   | 'parity' | 'ladder' | 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'backfill'
   | 'adminTracks' | 'adminEvents' | 'classAliases' | 'engineCombos' | 'driverCombos' | 'assignCombos'
   | 'weatherCorrection' | 'backfillWeather' | 'weatherHealth' | 'importStationCsv'
@@ -247,6 +248,7 @@ const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'driverHistory', label: 'Driver History' },
   { key: 'weatherDash', label: 'Weather' },
   { key: 'parityReport', label: 'Parity Report' },
+  { key: 'anomalies', label: 'Anomalies' },
   { key: 'trends', label: 'Trends' },
 ];
 
@@ -620,6 +622,7 @@ export default function ParityPortal() {
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
       {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} onDriverClick={goToDriverHistory} />}
+      {tab === 'anomalies' && <AnomaliesPanel event={selectedEvent} category={category} refreshKey={refreshKey} />}
 
       {/* ── Admin Panels ── */}
       {tab === 'adminTracks' && <AdminTracksPanel />}

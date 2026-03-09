@@ -1194,6 +1194,159 @@ describe('Fix: useCategoryPreset uses case-insensitive classIndex derivation', (
   });
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// Anomalies Tab
+// ══════════════════════════════════════════════════════════════════════════
+
+const anomaliesPanelSource = readFileSync(
+  resolve(__dirname, '../AnomaliesPanel.tsx'),
+  'utf-8',
+);
+
+const anomalyEngineSource = readFileSync(
+  resolve(__dirname, '../../domain/parity/anomalyEngine.ts'),
+  'utf-8',
+);
+
+describe('Anomalies tab is wired into portal', () => {
+  it('DASHBOARD_TABS includes anomalies', () => {
+    expect(portalSource).toContain("key: 'anomalies'");
+    expect(portalSource).toContain("label: 'Anomalies'");
+  });
+
+  it('Tab type includes anomalies', () => {
+    expect(portalSource).toContain("'anomalies'");
+  });
+
+  it('tab rendering dispatches to AnomaliesPanel', () => {
+    expect(portalSource).toContain("tab === 'anomalies'");
+    expect(portalSource).toContain('<AnomaliesPanel');
+  });
+
+  it('imports AnomaliesPanel', () => {
+    expect(portalSource).toContain("import AnomaliesPanel from './AnomaliesPanel'");
+  });
+});
+
+describe('AnomaliesPanel component structure', () => {
+  it('imports analyzeRuns from anomalyEngine', () => {
+    expect(anomaliesPanelSource).toContain('analyzeRuns');
+  });
+
+  it('fetches runs via parityApi.runsWithWeather', () => {
+    expect(anomaliesPanelSource).toContain('parityApi.runsWithWeather');
+  });
+
+  it('has summary tiles for confidence bands', () => {
+    expect(anomaliesPanelSource).toContain('SummaryTiles');
+    expect(anomaliesPanelSource).toContain('Runs Analyzed');
+    expect(anomaliesPanelSource).toContain('High Confidence');
+    expect(anomaliesPanelSource).toContain('Critical');
+  });
+
+  it('has sortable table with confidence columns', () => {
+    expect(anomaliesPanelSource).toContain('Score');
+    expect(anomaliesPanelSource).toContain('Band');
+    expect(anomaliesPanelSource).toContain('Suspect Fields');
+    expect(anomaliesPanelSource).toContain('Field Health');
+    expect(anomaliesPanelSource).toContain('Primary Reason');
+    expect(anomaliesPanelSource).toContain('Baseline');
+  });
+
+  it('has driver search filter', () => {
+    expect(anomaliesPanelSource).toContain('driverSearch');
+    expect(anomaliesPanelSource).toContain('Driver search');
+  });
+
+  it('has band filter dropdown', () => {
+    expect(anomaliesPanelSource).toContain('filterBand');
+    expect(anomaliesPanelSource).toContain('All Bands');
+    expect(anomaliesPanelSource).toContain('Critical Only');
+  });
+
+  it('has detail panel with run values and intervals', () => {
+    expect(anomaliesPanelSource).toContain('RunDetailPanel');
+    expect(anomaliesPanelSource).toContain('Run Values');
+    expect(anomaliesPanelSource).toContain('Derived Intervals');
+    expect(anomaliesPanelSource).toContain('Field Confidence');
+    expect(anomaliesPanelSource).toContain('Historical Baseline');
+    expect(anomaliesPanelSource).toContain('Anomaly Flags');
+  });
+
+  it('has field health chips visualization', () => {
+    expect(anomaliesPanelSource).toContain('FieldHealthChips');
+    expect(anomaliesPanelSource).toContain('DISPLAY_FIELDS');
+  });
+
+  it('renders narrative in detail panel', () => {
+    expect(anomaliesPanelSource).toContain('narrative');
+  });
+
+  it('shows baseline scope, quality, and sample size', () => {
+    expect(anomaliesPanelSource).toContain('baseline.scope');
+    expect(anomaliesPanelSource).toContain('baseline.sampleSize');
+    expect(anomaliesPanelSource).toContain('baseline.quality');
+    expect(anomaliesPanelSource).toContain('baseline.hardFailsExcluded');
+  });
+});
+
+describe('Anomaly engine structure', () => {
+  it('defines 3-layer architecture', () => {
+    expect(anomalyEngineSource).toContain('LAYER 1: HARD INTEGRITY');
+    expect(anomalyEngineSource).toContain('LAYER 2: LOCAL SHAPE');
+    expect(anomalyEngineSource).toContain('LAYER 3: HISTORICAL BASELINE');
+  });
+
+  it('defines reason codes', () => {
+    expect(anomalyEngineSource).toContain('MISSING_SPLIT_VALUE');
+    expect(anomalyEngineSource).toContain('NON_MONOTONIC_SPLITS');
+    expect(anomalyEngineSource).toContain('INVALID_INTERVAL');
+    expect(anomalyEngineSource).toContain('OUTLIER_FIELD');
+    expect(anomalyEngineSource).toContain('SEGMENT_SHAPE_INCONSISTENT');
+    expect(anomalyEngineSource).toContain('BASELINE_QUALITY_WEAK');
+    expect(anomalyEngineSource).toContain('PROBABLE_TIMING_ISSUE');
+  });
+
+  it('defines confidence bands', () => {
+    expect(anomalyEngineSource).toContain("'High'");
+    expect(anomalyEngineSource).toContain("'Medium'");
+    expect(anomalyEngineSource).toContain("'Low'");
+    expect(anomalyEngineSource).toContain("'Critical'");
+  });
+
+  it('uses robust statistics (MAD, IQR)', () => {
+    expect(anomalyEngineSource).toContain('function mad');
+    expect(anomalyEngineSource).toContain('function iqrBounds');
+    expect(anomalyEngineSource).toContain('modifiedZScore');
+  });
+
+  it('defines interval segments', () => {
+    expect(anomalyEngineSource).toContain('t_0_60');
+    expect(anomalyEngineSource).toContain('t_60_330');
+    expect(anomalyEngineSource).toContain('t_330_660');
+    expect(anomalyEngineSource).toContain('t_660_1000');
+    expect(anomalyEngineSource).toContain('t_1000_1320');
+  });
+
+  it('excludes hard-fail runs from baselines', () => {
+    expect(anomalyEngineSource).toContain('hardFailIds');
+    expect(anomalyEngineSource).toContain('cleanRunIds');
+  });
+
+  it('uses hierarchical peer selection', () => {
+    expect(anomalyEngineSource).toContain('combo+category+event');
+    expect(anomalyEngineSource).toContain('combo+category');
+    expect(anomalyEngineSource).toContain('category+event');
+    expect(anomalyEngineSource).toContain("scope: 'category'");
+  });
+
+  it('generates narratives', () => {
+    expect(anomalyEngineSource).toContain('function generateNarrative');
+    expect(anomalyEngineSource).toContain('consistent and reliable');
+    expect(anomalyEngineSource).toContain('integrity issue');
+  });
+});
+
 describe('Fix: allEventCategories dedup uses normalizeCategory', () => {
   it('imports normalizeCategory in ParityPortal', () => {
     expect(portalSource).toContain('normalizeCategory');
