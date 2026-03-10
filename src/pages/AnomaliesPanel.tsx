@@ -260,6 +260,9 @@ function RunDetailPanel({ result, onClose }: {
         {result.finish?.isNitro && (
           <span style={{ ...S.badge('#8e44ad'), fontSize: '0.63rem' }}>1000 ft Finish</span>
         )}
+        {result.competitiveRun && (
+          <span style={{ ...S.badge('#2980b9'), fontSize: '0.63rem' }}>Competitive</span>
+        )}
         {!result.representativeRun && (
           <span style={{ ...S.badge('#7f8c8d'), fontSize: '0.63rem' }}>Off-Pace</span>
         )}
@@ -451,6 +454,18 @@ function SummaryTiles({ data }: { data: AnomalyAnalysisResponse }) {
         <div style={S.stat}>
           <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)' }}>Baseline Excluded</div>
           <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{summary.baselineExcluded}</div>
+        </div>
+      )}
+      {summary.competitiveCount > 0 && (
+        <div style={{ ...S.stat, borderColor: '#2980b9' }}>
+          <div style={{ fontSize: '0.65rem', color: '#2980b9' }}>Competitive</div>
+          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#2980b9' }}>{summary.competitiveCount}</div>
+        </div>
+      )}
+      {summary.competitiveIssueCount > 0 && (
+        <div style={{ ...S.stat, borderColor: '#c0392b' }}>
+          <div style={{ fontSize: '0.65rem', color: '#c0392b' }}>Competitive w/ Issues</div>
+          <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#c0392b' }}>{summary.competitiveIssueCount}</div>
         </div>
       )}
       {summary.offPaceCount > 0 && (
@@ -699,7 +714,9 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
   const displayRuns = useMemo(() => {
     if (!data) return [];
     let filtered = data.runs;
-    if (filterBand === 'representative') {
+    if (filterBand === 'competitive') {
+      filtered = filtered.filter(r => r.competitiveRun);
+    } else if (filterBand === 'representative') {
       filtered = filtered.filter(r => r.representativeRun);
     } else if (filterBand === 'off-pace') {
       filtered = filtered.filter(r => !r.representativeRun);
@@ -794,6 +811,7 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
               <option value="Low">Low Only</option>
               <option value="Medium">Medium Only</option>
               <option value="High">High Only</option>
+              <option value="competitive">Competitive Only</option>
               <option value="representative">Representative Only</option>
               <option value="off-pace">Off-Pace Only</option>
             </select>
@@ -871,6 +889,7 @@ export default function AnomaliesPanel({ event, category, refreshKey }: Anomalie
                         <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
                           <ClassificationBadge classification={r.classification} />
                           {r.finish?.isNitro && <span title="1000 ft finish" style={{ fontSize: '0.6rem', color: '#8e44ad', fontWeight: 700 }}>N</span>}
+                          {r.competitiveRun && <span title="Competitive-pace run" style={{ fontSize: '0.6rem', color: '#2980b9', fontWeight: 700 }}>C</span>}
                           {!r.representativeRun && <span title="Off-pace" style={{ fontSize: '0.6rem', color: '#7f8c8d', fontWeight: 700 }}>OP</span>}
                         </span>
                       </td>

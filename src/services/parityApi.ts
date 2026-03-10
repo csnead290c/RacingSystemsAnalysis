@@ -1145,6 +1145,15 @@ export interface AnomalyRunSummary {
   representativeRunReason: string | null;
   excludedFromBaseline: boolean;
   baselineExclusionReason: string | null;
+  competitiveRun: boolean;
+  competitiveWeight: number;
+  trapDerived?: {
+    t_594: number | null;
+    delta_594_660: number | null;
+    t_finish_minus_66: number | null;
+    delta_finishMinus66_finish: number | null;
+    trapConsistencyFlags: { segment: string; issue: string; severity: string }[];
+  };
   // Run context fields
   driverName: string | null;
   category: string | null;
@@ -1172,6 +1181,8 @@ export interface AnomalySummaryTotals {
   baselineExcluded: number;
   representativeCount: number;
   offPaceCount: number;
+  competitiveCount: number;
+  competitiveIssueCount: number;
 }
 
 export interface AnomalyAnalysisResponse {

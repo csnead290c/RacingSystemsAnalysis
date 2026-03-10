@@ -235,6 +235,91 @@ export interface DerivedIntervals {
   [key: string]: number | null;
 }
 
+// ── Trap-Speed Derived Timestamps ─────────────────────────────────────
+
+/** MPH-derived micro-segment timestamps.
+ *  The reported MPH is based on the last 66 ft before each timing point.
+ *  660 MPH → delta for 594→660 ft;  finish MPH → delta for (finish-66)→finish.
+ */
+export interface TrapSpeedDerived {
+  t_594: number | null;              // estimated timestamp at 594 ft
+  delta_594_660: number | null;      // estimated time for 594→660 ft segment
+  t_finish_minus_66: number | null;  // estimated timestamp at (finishDist - 66) ft
+  delta_finishMinus66_finish: number | null; // estimated time for last 66 ft to finish
+  trapConsistencyFlags: TrapFlag[];  // any consistency issues found
+}
+
+export interface TrapFlag {
+  segment: string;
+  issue: string;
+  severity: 'info' | 'low';
+}
+
+/** Convert MPH to feet per second */
+function mphToFps(mph: number): number {
+  return mph * 5280 / 3600;
+}
+
+export function computeTrapDerived(run: ParityRun): TrapSpeedDerived {
+  const finish = resolveFinish(run);
+  const g = (f: keyof ParityRun) => {
+    const v = run[f];
+    return typeof v === 'number' && v > 0 ? v : null;
+  };
+  const flags: TrapFlag[] = [];
+  let t_594: number | null = null;
+  let delta_594_660: number | null = null;
+  let t_finish_minus_66: number | null = null;
+  let delta_finishMinus66_finish: number | null = null;
+
+  // ── 660 trap speed → 594→660 micro-segment ──
+  const mph660 = g('mph660');
+  const ft660 = g('ft660');
+  if (mph660 !== null && mph660 > 10 && ft660 !== null) {
+    const fps = mphToFps(mph660);
+    delta_594_660 = +(66 / fps).toFixed(6);
+    t_594 = +(ft660 - delta_594_660).toFixed(6);
+
+    // Light consistency: compare delta_594_660 against the 330→660 interval
+    const ft330 = g('ft330');
+    if (ft330 !== null && ft660 > ft330) {
+      const t_330_660 = ft660 - ft330;
+      // 594→660 is 66 ft out of 330 ft (20%), so expect ~20% of the 330→660 time
+      // but car is accelerating, so 594→660 should be < 20%. Flag if > 35%.
+      const ratio = delta_594_660 / t_330_660;
+      if (ratio > 0.35) {
+        flags.push({ segment: '594→660', issue: `Trap-derived 594→660 (${delta_594_660.toFixed(4)}s) is ${(ratio*100).toFixed(0)}% of the 330→660 interval — mph660 may be implausibly low`, severity: 'low' });
+      }
+    }
+  }
+
+  // ── Finish trap speed → (finish-66)→finish micro-segment ──
+  const finishMph = finish.effectiveFinishMph;
+  const finishET = finish.effectiveFinishTime;
+  if (finishMph !== null && finishMph > 10 && finishET !== null) {
+    const fps = mphToFps(finishMph);
+    delta_finishMinus66_finish = +(66 / fps).toFixed(6);
+    t_finish_minus_66 = +(finishET - delta_finishMinus66_finish).toFixed(6);
+
+    // Light consistency: compare against the 660→finish interval
+    const ft660 = g('ft660');
+    if (ft660 !== null && finishET > ft660) {
+      const t_660_finish = finishET - ft660;
+      // The last 66 ft should be a small fraction of 660→finish
+      const finishDist = finish.effectiveFinishDistance; // 1000 or 1320
+      const segmentDist = finishDist - 660; // 340 or 660
+      const expectedRatio = 66 / segmentDist; // ~0.19 for nitro, ~0.10 for full
+      const actualRatio = delta_finishMinus66_finish / t_660_finish;
+      // Flag if the actual ratio is more than 2x the expected (car decelerating hard)
+      if (actualRatio > expectedRatio * 2.5) {
+        flags.push({ segment: `${finishDist-66}→${finishDist}`, issue: `Trap-derived last-66ft (${delta_finishMinus66_finish.toFixed(4)}s) is ${(actualRatio*100).toFixed(0)}% of 660→finish — finish mph may be implausibly low`, severity: 'low' });
+      }
+    }
+  }
+
+  return { t_594, delta_594_660, t_finish_minus_66, delta_finishMinus66_finish, trapConsistencyFlags: flags };
+}
+
 export function computeIntervals(run: ParityRun): DerivedIntervals {
   const g = (f: keyof ParityRun) => {
     const v = run[f];
@@ -278,6 +363,7 @@ export interface RunAnomalyResult {
   flags: ReasonFlag[];
   fieldScores: FieldConfidence[];
   intervals: DerivedIntervals;
+  trapDerived: TrapSpeedDerived;
   baseline: BaselineInfo;
   narrative: string;
   finish: NormalizedFinish;
@@ -285,6 +371,8 @@ export interface RunAnomalyResult {
   representativeRunReason: string | null;
   excludedFromBaseline: boolean;
   baselineExclusionReason: string | null;
+  competitiveRun: boolean;     // representative + top-half finish ET
+  competitiveWeight: number;   // 1.0 competitive, 0.5 representative-slow, 0.0 off-pace
 }
 
 // ── Batch Analysis Result ────────────────────────────────────────────────
@@ -298,6 +386,8 @@ export interface AnomalySummary {
   baselineExcluded: number;
   representativeCount: number;
   offPaceCount: number;
+  competitiveCount: number;
+  competitiveIssueCount: number;  // competitive runs with band < High
   mostFlaggedField: string | null;
   mostFlaggedFieldCount: number;
 }
@@ -837,6 +927,7 @@ function generateNarrative(result: Omit<RunAnomalyResult, 'narrative'>): string 
 
   if (result.band === 'High') {
     parts.push('Run data appears consistent and reliable.');
+    if (result.competitiveRun) parts.push('Competitive-pace run.');
     if (result.flags.length > 0) {
       parts.push(`${result.flags.length} minor note(s) found.`);
     }
@@ -853,6 +944,11 @@ function generateNarrative(result: Omit<RunAnomalyResult, 'narrative'>): string 
   const outliers = result.flags.filter(f =>
     ['OUTLIER_FIELD', 'OUTLIER_INTERVAL'].includes(f.code)
   );
+
+  // Competitive run context — issues in fast runs are more significant
+  if (result.competitiveRun && (hardFails.length > 0 || shapeIssues.length > 0)) {
+    parts.push('⚠ Competitive-pace run with data concerns — higher priority for review.');
+  }
 
   if (hardFails.length > 0) {
     parts.push(`${hardFails.length} integrity issue(s) detected: probable timing-data problem.`);
@@ -877,7 +973,16 @@ function generateNarrative(result: Omit<RunAnomalyResult, 'narrative'>): string 
   }
 
   if (outliers.length > 0 && hardFails.length === 0 && shapeIssues.length === 0) {
-    parts.push('Run is unusual but may reflect genuine performance rather than timing error.');
+    if (!result.representativeRun) {
+      parts.push('Run values are unusual compared to peers but may reflect genuine performance rather than a timing error.');
+    } else {
+      parts.push('Run is unusual but may reflect genuine performance rather than timing error.');
+    }
+  }
+
+  // Trap-speed consistency notes
+  if (result.trapDerived.trapConsistencyFlags.length > 0) {
+    parts.push(`Trap-speed check: ${result.trapDerived.trapConsistencyFlags[0].issue.split('—')[0].trim()}.`);
   }
 
   // Baseline quality caveat
@@ -1117,6 +1222,17 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
   }
   const baselineExcludedCount = hardFailIds.size + mediumSuspectIds.size + offPaceIds.size;
 
+  // ── Phase 2d: Compute competitive median from representative runs ──
+  const repFinishETs: number[] = [];
+  for (const run of population) {
+    if (!cleanRunIds.has(run.id) && !offPaceIds.has(run.id)) continue;
+    if (offPaceIds.has(run.id)) continue;
+    const f = resolveFinish(run);
+    if (f.effectiveFinishTime !== null) repFinishETs.push(f.effectiveFinishTime);
+  }
+  repFinishETs.sort((a, b) => a - b);
+  const competitiveMedianET = repFinishETs.length > 0 ? median(repFinishETs) : null;
+
   // ── Phase 3: Analyze each target run ──
   const results: RunAnomalyResult[] = [];
   const fieldFlagCounts = new Map<string, number>();
@@ -1126,6 +1242,7 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     const l1Flags = runL1Flags.get(run.id) ?? layer1HardIntegrity(run, intervals);
     const l2Flags = layer2ShapeConsistency(run, intervals);
     const finish = resolveFinish(run);
+    const trapDerived = computeTrapDerived(run);
 
     // Select peers and build baselines for this run
     const { peers, scope } = selectPeers(run, population, cleanRunIds);
@@ -1227,6 +1344,19 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
     else if (mediumSuspectIds.has(run.id)) exclusionReason = 'medium-suspect shape flags';
     else if (isOffPace) exclusionReason = offPace.exclusionReason || 'off-pace run';
 
+    // Competitive run determination: representative + finish ET <= competitive median
+    const isRepresentative = !isOffPace;
+    let competitiveRun = false;
+    let competitiveWeight = 0.0;
+    if (isRepresentative && finish.effectiveFinishTime !== null && competitiveMedianET !== null) {
+      competitiveRun = finish.effectiveFinishTime <= competitiveMedianET;
+      competitiveWeight = competitiveRun ? 1.0 : 0.5;
+    } else if (isRepresentative) {
+      // No finish ET or no median — treat as representative but not confirmed competitive
+      competitiveWeight = 0.5;
+    }
+    // Off-pace runs get weight 0
+
     const partial: Omit<RunAnomalyResult, 'narrative'> = {
       runId: run.id,
       runUuid: run.uuid,
@@ -1240,12 +1370,15 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
       flags: allFlags,
       fieldScores,
       intervals,
+      trapDerived,
       baseline: baselineInfo,
       finish,
-      representativeRun: !isOffPace,
+      representativeRun: isRepresentative,
       representativeRunReason: isOffPace ? (offPace.reason || offPaceReasons.get(run.id) || 'Off competitive pace') : null,
       excludedFromBaseline: isExcluded,
       baselineExclusionReason: exclusionReason,
+      competitiveRun,
+      competitiveWeight,
     };
 
     results.push({ ...partial, narrative: generateNarrative(partial) });
@@ -1258,6 +1391,8 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
   const criticalCount = results.filter(r => r.band === 'Critical').length;
   const representativeCount = results.filter(r => r.representativeRun).length;
   const offPaceCount = results.filter(r => !r.representativeRun).length;
+  const competitiveCount = results.filter(r => r.competitiveRun).length;
+  const competitiveIssueCount = results.filter(r => r.competitiveRun && r.band !== 'High').length;
 
   let mostFlaggedField: string | null = null;
   let mostFlaggedFieldCount = 0;
@@ -1278,6 +1413,8 @@ export function analyzeRuns(runs: ParityRun[], allRuns?: ParityRun[]): AnomalyBa
       baselineExcluded: baselineExcludedCount,
       representativeCount,
       offPaceCount,
+      competitiveCount,
+      competitiveIssueCount,
       mostFlaggedField,
       mostFlaggedFieldCount,
     },

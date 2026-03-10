@@ -10019,6 +10019,69 @@ function anomaly_detectOffPace(array $run, array $baselines, array $l1Flags): ar
     return ['representative' => true, 'reason' => null, 'excludedFromBaseline' => false, 'exclusionReason' => null];
 }
 
+// ── Trap-Speed Derived Timestamps ─────────────────────────────────────────
+// The reported MPH is based on the last 66 ft before the timing point.
+// 660 MPH → delta for 594→660 ft;  finish MPH → delta for (finish-66)→finish.
+
+function anomaly_computeTrapDerived(array $run): array {
+    $finish = anomaly_resolveFinish($run);
+    $g = function($f) use ($run) { return isset($run[$f]) && $run[$f] > 0 ? (float)$run[$f] : null; };
+    $mphToFps = function($mph) { return $mph * 5280 / 3600; };
+    $flags = [];
+
+    $t_594 = null;
+    $delta_594_660 = null;
+    $t_finish_minus_66 = null;
+    $delta_finishMinus66_finish = null;
+
+    // 660 trap speed → 594→660 micro-segment
+    $mph660 = $g('mph660');
+    $ft660 = $g('ft660');
+    if ($mph660 !== null && $mph660 > 10 && $ft660 !== null) {
+        $fps = $mphToFps($mph660);
+        $delta_594_660 = round(66 / $fps, 6);
+        $t_594 = round($ft660 - $delta_594_660, 6);
+
+        $ft330 = $g('ft330');
+        if ($ft330 !== null && $ft660 > $ft330) {
+            $t_330_660 = $ft660 - $ft330;
+            $ratio = $delta_594_660 / $t_330_660;
+            if ($ratio > 0.35) {
+                $flags[] = ['segment' => '594→660', 'issue' => "Trap-derived 594→660 (" . round($delta_594_660,4) . "s) is " . round($ratio*100) . "% of the 330→660 interval — mph660 may be implausibly low", 'severity' => 'low'];
+            }
+        }
+    }
+
+    // Finish trap speed → (finish-66)→finish micro-segment
+    $finishMph = $finish['effectiveFinishMph'];
+    $finishET = $finish['effectiveFinishTime'];
+    if ($finishMph !== null && $finishMph > 10 && $finishET !== null) {
+        $fps = $mphToFps($finishMph);
+        $delta_finishMinus66_finish = round(66 / $fps, 6);
+        $t_finish_minus_66 = round($finishET - $delta_finishMinus66_finish, 6);
+
+        $ft660v = $g('ft660');
+        if ($ft660v !== null && $finishET > $ft660v) {
+            $t_660_finish = $finishET - $ft660v;
+            $finishDist = $finish['effectiveFinishDistance'];
+            $segmentDist = $finishDist - 660;
+            $expectedRatio = 66 / $segmentDist;
+            $actualRatio = $delta_finishMinus66_finish / $t_660_finish;
+            if ($actualRatio > $expectedRatio * 2.5) {
+                $flags[] = ['segment' => ($finishDist-66) . '→' . $finishDist, 'issue' => "Trap-derived last-66ft (" . round($delta_finishMinus66_finish,4) . "s) is " . round($actualRatio*100) . "% of 660→finish — finish mph may be implausibly low", 'severity' => 'low'];
+            }
+        }
+    }
+
+    return [
+        't_594' => $t_594,
+        'delta_594_660' => $delta_594_660,
+        't_finish_minus_66' => $t_finish_minus_66,
+        'delta_finishMinus66_finish' => $delta_finishMinus66_finish,
+        'trapConsistencyFlags' => $flags,
+    ];
+}
+
 function anomaly_classify(array $flags, string $band, array $baselineInfo): string {
     // Classify the run into one of four trust categories
     $hardCodes = ['MISSING_SPLIT_VALUE','NON_MONOTONIC_SPLITS','INVALID_INTERVAL','ZERO_OR_NEGATIVE_TIMING','DUPLICATE_SPLIT_VALUES'];
@@ -10041,9 +10104,11 @@ function anomaly_classify(array $flags, string $band, array $baselineInfo): stri
 function anomaly_generateNarrative(array $partial): string {
     $parts = [];
     $classification = $partial['classification'];
+    $isCompetitive = $partial['competitiveRun'] ?? false;
 
     if ($classification === 'clean') {
         $parts[] = 'Run data appears consistent and reliable.';
+        if ($isCompetitive) $parts[] = 'Competitive-pace run.';
         if ($partial['flagCount'] > 0) $parts[] = "{$partial['flagCount']} minor note(s) found.";
         return implode(' ', $parts);
     }
@@ -10053,9 +10118,18 @@ function anomaly_generateNarrative(array $partial): string {
         return implode(' ', $parts);
     }
 
+    $hardCodes = ['MISSING_SPLIT_VALUE','NON_MONOTONIC_SPLITS','INVALID_INTERVAL','ZERO_OR_NEGATIVE_TIMING','DUPLICATE_SPLIT_VALUES'];
+    $shapeCodes = ['SEGMENT_SHAPE_INCONSISTENT','MPH_ET_INCONSISTENT'];
+    $hardFlags = array_filter($partial['flags'], fn($f) => in_array($f['code'], $hardCodes));
+    $shapeFlags = array_filter($partial['flags'], fn($f) => in_array($f['code'], $shapeCodes));
+
+    // Competitive run context — issues in fast runs are more significant
+    if ($isCompetitive && (!empty($hardFlags) || !empty($shapeFlags))) {
+        $parts[] = '⚠ Competitive-pace run with data concerns — higher priority for review.';
+    }
+
     if ($classification === 'probable_timing_issue') {
-        $hardCount = count(array_filter($partial['flags'], fn($f) =>
-            in_array($f['code'], ['MISSING_SPLIT_VALUE','NON_MONOTONIC_SPLITS','INVALID_INTERVAL','ZERO_OR_NEGATIVE_TIMING','DUPLICATE_SPLIT_VALUES'])));
+        $hardCount = count($hardFlags);
         $parts[] = "$hardCount integrity issue(s) detected: probable timing-data problem.";
     }
 
@@ -10064,7 +10138,11 @@ function anomaly_generateNarrative(array $partial): string {
     }
 
     if ($classification === 'unusual_but_plausible') {
-        $parts[] = 'Run values are unusual compared to peers but may reflect genuine performance rather than a timing error.';
+        if (!($partial['representativeRun'] ?? true)) {
+            $parts[] = 'Run values are unusual compared to peers but may reflect genuine performance rather than a timing error.';
+        } else {
+            $parts[] = 'Run is unusual but may reflect genuine performance rather than timing error.';
+        }
     }
 
     if ($classification === 'review_recommended') {
@@ -10077,6 +10155,13 @@ function anomaly_generateNarrative(array $partial): string {
         $parts[] = "Issue appears isolated to {$suspects[0]}.";
     } elseif (count($suspects) > 1 && count($suspects) <= 3) {
         $parts[] = "Suspect fields: " . implode(', ', $suspects) . ".";
+    }
+
+    // Trap-speed consistency notes
+    $trapFlags = $partial['trapDerived']['trapConsistencyFlags'] ?? [];
+    if (!empty($trapFlags)) {
+        $issue = explode('—', $trapFlags[0]['issue'])[0];
+        $parts[] = "Trap-speed check: " . trim($issue) . ".";
     }
 
     // Baseline quality caveat
@@ -10092,9 +10177,10 @@ function anomaly_generateNarrative(array $partial): string {
 
 // ── Full single-run analysis ─────────────────────────────────────────────
 
-function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $hardFailCount, array $offPaceIds = [], array $offPaceReasons = [], array $hardFailIds = []): array {
+function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $hardFailCount, array $offPaceIds = [], array $offPaceReasons = [], array $hardFailIds = [], ?float $competitiveMedianET = null): array {
     $intervals = anomaly_computeIntervals($run);
     $finish = anomaly_resolveFinish($run);
+    $trapDerived = anomaly_computeTrapDerived($run);
     $l1 = anomaly_layer1($run, $intervals);
     $l2 = anomaly_layer2($run, $intervals);
 
@@ -10198,6 +10284,17 @@ function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $ha
     elseif (!isset($cleanIds[$runId]) && !$isOffPace) $exclusionReason = 'medium-suspect shape flags';
     elseif ($isOffPace) $exclusionReason = $offPace['exclusionReason'] ?? 'off-pace run';
 
+    // Competitive run determination: representative + finish ET <= competitive median
+    $isRepresentative = !$isOffPace;
+    $competitiveRun = false;
+    $competitiveWeight = 0.0;
+    if ($isRepresentative && $finish['effectiveFinishTime'] !== null && $competitiveMedianET !== null) {
+        $competitiveRun = $finish['effectiveFinishTime'] <= $competitiveMedianET;
+        $competitiveWeight = $competitiveRun ? 1.0 : 0.5;
+    } elseif ($isRepresentative) {
+        $competitiveWeight = 0.5;
+    }
+
     $partial = [
         'runId' => $runId,
         'runUuid' => $run['uuid'] ?? '',
@@ -10211,12 +10308,15 @@ function anomaly_analyzeRun(array $run, array $allRuns, array $cleanIds, int $ha
         'flags' => $allFlags,
         'fieldScores' => $fieldScores,
         'intervals' => $intervals,
+        'trapDerived' => $trapDerived,
         'baseline' => $baselineInfo,
         'finish' => $finish,
-        'representativeRun' => !$isOffPace,
+        'representativeRun' => $isRepresentative,
         'representativeRunReason' => $isOffPace ? ($offPace['reason'] ?? ($offPaceReasons[$runId] ?? 'Off competitive pace')) : null,
         'excludedFromBaseline' => $isExcluded,
         'baselineExclusionReason' => $exclusionReason,
+        'competitiveRun' => $competitiveRun,
+        'competitiveWeight' => $competitiveWeight,
     ];
 
     $partial['narrative'] = anomaly_generateNarrative($partial);
@@ -10394,10 +10494,21 @@ function handleAnomalyAnalysis(PDO $pdo): void {
     }
     $totalExcluded = count($hardFailIds) + count($suspectIds) + count($offPaceIds);
 
+    // Phase 2d: Compute competitive median from representative (clean, non-off-pace) runs
+    $repFinishETs = [];
+    foreach ($runs as $r) {
+        $rid = (int)$r['id'];
+        if (!isset($cleanIds[$rid])) continue;
+        $f = anomaly_resolveFinish($r);
+        if ($f['effectiveFinishTime'] !== null) $repFinishETs[] = $f['effectiveFinishTime'];
+    }
+    sort($repFinishETs);
+    $competitiveMedianET = !empty($repFinishETs) ? anomaly_median($repFinishETs) : null;
+
     // Phase 3: Analyze each run
     $results = [];
     foreach ($runs as $r) {
-        $results[] = anomaly_analyzeRun($r, $runs, $cleanIds, $totalExcluded, $offPaceIds, $offPaceReasons, $hardFailIds);
+        $results[] = anomaly_analyzeRun($r, $runs, $cleanIds, $totalExcluded, $offPaceIds, $offPaceReasons, $hardFailIds, $competitiveMedianET);
     }
 
     // Summary
@@ -10405,9 +10516,15 @@ function handleAnomalyAnalysis(PDO $pdo): void {
     $fieldFlagCounts = [];
     $representativeCount = 0;
     $offPaceCount = 0;
+    $competitiveCount = 0;
+    $competitiveIssueCount = 0;
     foreach ($results as $r) {
         $bandCounts[$r['band']]++;
         if ($r['representativeRun']) $representativeCount++; else $offPaceCount++;
+        if ($r['competitiveRun']) {
+            $competitiveCount++;
+            if ($r['band'] !== 'High') $competitiveIssueCount++;
+        }
         foreach ($r['suspectFields'] as $f) {
             $fieldFlagCounts[$f] = ($fieldFlagCounts[$f] ?? 0) + 1;
         }
@@ -10440,6 +10557,9 @@ function handleAnomalyAnalysis(PDO $pdo): void {
             'representativeRunReason' => $r['representativeRunReason'],
             'excludedFromBaseline' => $r['excludedFromBaseline'],
             'baselineExclusionReason' => $r['baselineExclusionReason'],
+            'competitiveRun' => $r['competitiveRun'],
+            'competitiveWeight' => $r['competitiveWeight'],
+            'trapDerived' => $r['trapDerived'],
             // Run context for display
             'driverName' => null,
             'category' => null,
@@ -10476,6 +10596,8 @@ function handleAnomalyAnalysis(PDO $pdo): void {
             'baselineExcluded' => $totalExcluded,
             'representativeCount' => $representativeCount,
             'offPaceCount' => $offPaceCount,
+            'competitiveCount' => $competitiveCount,
+            'competitiveIssueCount' => $competitiveIssueCount,
         ],
         'rollups' => $rollups,
         'runs' => $runsSummary,
@@ -10590,8 +10712,19 @@ function handleAnomalyDetail(PDO $pdo): void {
     }
     $totalExcluded = count($hardFailIds) + count($suspectIds) + count($offPaceIds);
 
+    // Competitive median
+    $repFinishETs = [];
+    foreach ($allRuns as $r) {
+        $rid = (int)$r['id'];
+        if (!isset($cleanIds[$rid])) continue;
+        $f = anomaly_resolveFinish($r);
+        if ($f['effectiveFinishTime'] !== null) $repFinishETs[] = $f['effectiveFinishTime'];
+    }
+    sort($repFinishETs);
+    $competitiveMedianET = !empty($repFinishETs) ? anomaly_median($repFinishETs) : null;
+
     // Full analysis
-    $result = anomaly_analyzeRun($targetRun, $allRuns, $cleanIds, $totalExcluded, $offPaceIds, $offPaceReasons, $hardFailIds);
+    $result = anomaly_analyzeRun($targetRun, $allRuns, $cleanIds, $totalExcluded, $offPaceIds, $offPaceReasons, $hardFailIds, $competitiveMedianET);
 
     rsa_jsonResponse([
         'run' => $targetRun,
