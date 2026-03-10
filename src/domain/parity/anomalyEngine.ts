@@ -24,13 +24,13 @@ import type { ParityRun } from '../../services/parityApi';
 // ── Nitro Class Detection ────────────────────────────────────────────────
 
 /** Categories that run to 1000 ft with timing reported in 1320 fields */
-const NITRO_CATEGORIES = ['Top Fuel', 'Funny Car'] as const;
+const NITRO_CATEGORIES_UC = ['TOP FUEL', 'FUNNY CAR'] as const;
 const NITRO_CLASS_INDICES = ['TF', 'FC', 'TFD'] as const;
 
 export function isNitroClass(run: ParityRun): boolean {
-  const cat = run.category?.trim() ?? '';
+  const cat = run.category?.trim().toUpperCase() ?? '';
   const cls = run.class_index?.trim().toUpperCase() ?? '';
-  return (NITRO_CATEGORIES as readonly string[]).includes(cat)
+  return (NITRO_CATEGORIES_UC as readonly string[]).includes(cat)
       || (NITRO_CLASS_INDICES as readonly string[]).includes(cls);
 }
 
@@ -995,19 +995,23 @@ function detectOffPace(
   const reasons: string[] = [];
 
   // Check ET: off-pace if much slower (higher ET) than peers
+  // Require BOTH: z > 4.0 AND at least 2% slower than median (absolute floor).
+  // The absolute floor prevents false positives in very tight fields (e.g. Pro Stock
+  // where MAD ≈ 0.012s and even 0.07s deviation produces z > 4).
   if (finishET !== null && etBl) {
     const z = modifiedZScore(finishET, etBl.median, etBl.mad);
-    // Positive z = slower than median. Use threshold of 4.0 for off-pace (generous)
-    if (z > 4.0) {
+    const pctSlower = (finishET - etBl.median) / etBl.median;
+    if (z > 4.0 && pctSlower > 0.02) {
       reasons.push(`Finish ET ${finishET.toFixed(3)}s is ${z.toFixed(1)}σ slower than peer median ${etBl.median.toFixed(3)}s`);
     }
   }
 
   // Check MPH: off-pace if much slower (lower MPH) than peers
+  // Require BOTH: z < -4.0 AND at least 3% lower than median.
   if (finishMph !== null && mphBl) {
     const z = modifiedZScore(finishMph, mphBl.median, mphBl.mad);
-    // Negative z = slower speed. Use threshold of -4.0
-    if (z < -4.0) {
+    const pctLower = (mphBl.median - finishMph) / mphBl.median;
+    if (z < -4.0 && pctLower > 0.03) {
       reasons.push(`Finish MPH ${finishMph.toFixed(1)} is ${Math.abs(z).toFixed(1)}σ below peer median ${mphBl.median.toFixed(1)}`);
     }
   }

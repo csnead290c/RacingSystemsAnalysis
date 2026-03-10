@@ -9397,9 +9397,9 @@ function handleUpdateRun(PDO $pdo, ?array $auth): void {
 // ── Nitro Class Detection ────────────────────────────────────────────────
 
 function anomaly_isNitroClass(array $run): bool {
-    $cat = trim($run['category'] ?? '');
+    $cat = strtoupper(trim($run['category'] ?? ''));
     $cls = strtoupper(trim($run['class_index'] ?? ''));
-    return in_array($cat, ['Top Fuel', 'Funny Car'], true)
+    return in_array($cat, ['TOP FUEL', 'FUNNY CAR'], true)
         || in_array($cls, ['TF', 'FC', 'TFD'], true);
 }
 
@@ -9989,16 +9989,20 @@ function anomaly_detectOffPace(array $run, array $baselines, array $l1Flags): ar
 
     $reasons = [];
 
+    // Require BOTH z-score AND absolute % deviation to prevent false positives
+    // in very tight fields (e.g. Pro Stock where MAD ≈ 0.012s)
     if ($finishET !== null && $etBl) {
         $z = anomaly_modifiedZScore($finishET, $etBl['median'], $etBl['mad']);
-        if ($z > 4.0) {
+        $pctSlower = ($finishET - $etBl['median']) / $etBl['median'];
+        if ($z > 4.0 && $pctSlower > 0.02) {
             $reasons[] = "Finish ET " . round($finishET, 3) . "s is " . round($z, 1) . "σ slower than peer median " . round($etBl['median'], 3) . "s";
         }
     }
 
     if ($finishMph !== null && $mphBl) {
         $z = anomaly_modifiedZScore($finishMph, $mphBl['median'], $mphBl['mad']);
-        if ($z < -4.0) {
+        $pctLower = ($mphBl['median'] - $finishMph) / $mphBl['median'];
+        if ($z < -4.0 && $pctLower > 0.03) {
             $reasons[] = "Finish MPH " . round($finishMph, 1) . " is " . round(abs($z), 1) . "σ below peer median " . round($mphBl['median'], 1);
         }
     }
