@@ -473,12 +473,18 @@ function layer1HardIntegrity(run: ParityRun, intervals: DerivedIntervals): Reaso
     }
   }
 
-  // ── Incomplete run: no finish ET and no 60 ft ──
+  // ── Incomplete run: missing finish ET or nearly all splits ──
   if (finish.effectiveFinishTime === null && g('ft60') === null) {
     flags.push({
       code: 'INCOMPLETE_RUN_DATA',
       severity: 'medium',
       explanation: 'Run has no timing data (no 60 ft, no finish ET)',
+    });
+  } else if (finish.effectiveFinishTime === null) {
+    flags.push({
+      code: 'INCOMPLETE_RUN_DATA',
+      severity: 'medium',
+      explanation: 'Run has no finish ET — likely an aborted or partial run',
     });
   }
 

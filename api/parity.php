@@ -9678,6 +9678,11 @@ function anomaly_layer1(array $run, array $intervals): array {
             'code' => 'INCOMPLETE_RUN_DATA', 'severity' => 'medium',
             'explanation' => 'Run has no timing data (no 60 ft, no finish ET)',
         ];
+    } elseif ($finish['effectiveFinishTime'] === null) {
+        $flags[] = [
+            'code' => 'INCOMPLETE_RUN_DATA', 'severity' => 'medium',
+            'explanation' => 'Run has no finish ET — likely an aborted or partial run',
+        ];
     }
 
     return $flags;
