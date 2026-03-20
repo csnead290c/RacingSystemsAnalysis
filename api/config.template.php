@@ -39,6 +39,20 @@ define('STRIPE_SUCCESS_URL', FRONTEND_URL . '/account?checkout=success');
 define('STRIPE_CANCEL_URL', FRONTEND_URL . '/account?checkout=canceled');
 
 // =============================================================================
+// NHRA Parity — Tempest Weather Stations
+// Get station IDs from https://tempestwx.com/ (Settings > Stations > Station ID)
+// Get API key from https://tempestwx.com/settings/tokens
+//
+// Multi-station: list all station IDs comma-separated. The canonical weather
+// rebuild cross-validates readings and uses median consensus when stations
+// disagree (especially humidity). Stations may be offline independently.
+// =============================================================================
+define('TEMPEST_STATION_IDS', '');          // Comma-separated station IDs (e.g. '156136,187092,136782')
+define('TEMPEST_STATION_ID', '');           // Legacy single station ID (used if TEMPEST_STATION_IDS is empty)
+define('TEMPEST_API_KEY', '');              // WeatherFlow personal access token
+define('TEMPEST_BUCKET_MINUTES', 30);       // Observation bucketing interval (default 30)
+
+// =============================================================================
 // Bootstrap Tools (CLI-only recovery tool)
 // Enable only when needed, disable after use.
 // =============================================================================

@@ -647,23 +647,96 @@ function parity_mbToInhg(?float $mb): ?float {
 
 /**
  * Get Tempest config from environment variables.
- * @return array [ 'station_id' => string, 'api_key' => string, 'bucket_minutes' => int ]
+ *
+ * Supports multi-station via TEMPEST_STATION_IDS (comma-separated).
+ * Falls back to legacy single TEMPEST_STATION_ID for backward compat.
+ *
+ * @return array [ 'station_id' => string, 'station_ids' => string[], 'api_key' => string, 'bucket_minutes' => int ]
  * @throws RuntimeException if required vars are missing
  */
 function parity_getTempestConfig(): array {
+    $stationIdsRaw = defined('TEMPEST_STATION_IDS') ? TEMPEST_STATION_IDS : (getenv('TEMPEST_STATION_IDS') ?: ($_ENV['TEMPEST_STATION_IDS'] ?? ''));
     $stationId = defined('TEMPEST_STATION_ID') ? TEMPEST_STATION_ID : (getenv('TEMPEST_STATION_ID') ?: ($_ENV['TEMPEST_STATION_ID'] ?? ''));
     $apiKey = defined('TEMPEST_API_KEY') ? TEMPEST_API_KEY : (getenv('TEMPEST_API_KEY') ?: ($_ENV['TEMPEST_API_KEY'] ?? ''));
     $bucket = defined('TEMPEST_BUCKET_MINUTES') ? (int)TEMPEST_BUCKET_MINUTES : (int)(getenv('TEMPEST_BUCKET_MINUTES') ?: ($_ENV['TEMPEST_BUCKET_MINUTES'] ?? 30));
 
-    if (empty($stationId) || empty($apiKey)) {
-        throw new RuntimeException('TEMPEST_STATION_ID and TEMPEST_API_KEY must be defined in config.php or environment');
+    // Build station IDs array: prefer TEMPEST_STATION_IDS, fall back to single TEMPEST_STATION_ID
+    $stationIds = [];
+    if (!empty($stationIdsRaw)) {
+        $stationIds = array_filter(array_map('trim', explode(',', $stationIdsRaw)));
+    }
+    if (empty($stationIds) && !empty($stationId)) {
+        $stationIds = [$stationId];
+    }
+
+    if (empty($stationIds) || empty($apiKey)) {
+        throw new RuntimeException('TEMPEST_STATION_IDS (or TEMPEST_STATION_ID) and TEMPEST_API_KEY must be defined in config.php or environment');
     }
 
     return [
-        'station_id' => $stationId,
+        'station_id' => $stationIds[0],          // Legacy: primary station for backward compat
+        'station_ids' => $stationIds,             // All stations for multi-station fetch
         'api_key' => $apiKey,
         'bucket_minutes' => $bucket ?: 30,
     ];
+}
+
+/**
+ * Fetch weather data from ALL configured Tempest stations for a time range.
+ *
+ * Each station's samples are tagged with source = "tempest_{stationId}" so they
+ * can coexist in parity_weather_samples and be cross-validated during canonical rebuild.
+ *
+ * Stations that are offline or return errors are logged but don't block the others.
+ *
+ * @param int    $startEpoch     Unix epoch start
+ * @param int    $endEpoch       Unix epoch end
+ * @param array  $config         From parity_getTempestConfig()
+ * @param int    $throttleMs     Delay between station fetches (default 300ms)
+ * @return array [ 'stations' => [ stationId => [ 'samples' => [...], 'error' => null|string ] ], 'totalSamples' => int ]
+ */
+function parity_fetchAllTempestStations(int $startEpoch, int $endEpoch, array $config, int $throttleMs = 300): array {
+    $stationIds = $config['station_ids'];
+    $apiKey = $config['api_key'];
+    $bucketMinutes = $config['bucket_minutes'];
+
+    $stations = [];
+    $totalSamples = 0;
+    $isFirst = true;
+
+    foreach ($stationIds as $sid) {
+        if (!$isFirst && $throttleMs > 0) {
+            usleep($throttleMs * 1000);
+        }
+        $isFirst = false;
+
+        try {
+            $result = parity_fetchTempest($startEpoch, $endEpoch, $bucketMinutes, $sid, $apiKey);
+            $stations[$sid] = ['samples' => $result['samples'], 'error' => null];
+            $totalSamples += count($result['samples']);
+        } catch (RuntimeException $e) {
+            $stations[$sid] = ['samples' => [], 'error' => $e->getMessage()];
+            error_log("parity_fetchAllTempestStations: station $sid failed: " . $e->getMessage());
+        }
+    }
+
+    return ['stations' => $stations, 'totalSamples' => $totalSamples];
+}
+
+/**
+ * Compute median of a numeric array. Returns null for empty arrays.
+ */
+function parity_median(array $values): ?float {
+    $values = array_filter($values, function($v) { return $v !== null && is_numeric($v); });
+    $values = array_values($values);
+    $n = count($values);
+    if ($n === 0) return null;
+    sort($values);
+    $mid = (int)floor($n / 2);
+    if ($n % 2 === 0) {
+        return ($values[$mid - 1] + $values[$mid]) / 2.0;
+    }
+    return (float)$values[$mid];
 }
 
 // ============================================================================

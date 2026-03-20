@@ -1471,11 +1471,11 @@ function handleWeatherBackfill(PDO $pdo): void {
         rsa_jsonResponse(['error' => $e->getMessage()], 500);
     }
 
-    // Prepare insert statement
+    // Prepare insert with parameterized source
     $stmtInsert = $pdo->prepare("
         INSERT INTO parity_weather_samples
             (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tempest')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $daysChecked = 0;
@@ -1484,6 +1484,7 @@ function handleWeatherBackfill(PDO $pdo): void {
     $rowsInserted = 0;
     $rowsDeduped = 0;
     $errors = [];
+    $stationStats = array_fill_keys($config['station_ids'], ['inserted' => 0, 'deduped' => 0, 'errors' => []]);
 
     // Iterate each day in range
     $current = new DateTime($fromDate);
@@ -1494,7 +1495,7 @@ function handleWeatherBackfill(PDO $pdo): void {
         $daysChecked++;
         $dateStr = $current->format('Y-m-d');
 
-        // Check existing rows for this day
+        // Check existing rows for this day (count across all tempest sources)
         $range = parity_localDateToUtcRange($dateStr, $tz);
         $utcStart = gmdate('Y-m-d H:i:s', $range['start_epoch']);
         $utcEnd = gmdate('Y-m-d H:i:s', $range['end_epoch']);
@@ -1502,75 +1503,71 @@ function handleWeatherBackfill(PDO $pdo): void {
         $countStmt = $pdo->prepare("
             SELECT COUNT(*) FROM parity_weather_samples
             WHERE event_id = ? AND timestamp_utc BETWEEN ? AND ?
+              AND source LIKE 'tempest%'
         ");
         $countStmt->execute([$eventId, $utcStart, $utcEnd]);
         $existing = (int)$countStmt->fetchColumn();
 
-        if ($existing >= $minRowsPerDay) {
+        // Require minRowsPerDay * number of stations to consider the day fully covered
+        $stationCount = count($config['station_ids']);
+        if ($existing >= $minRowsPerDay * $stationCount) {
             $current->modify('+1 day');
             continue;
         }
 
-        // Throttle between Tempest API calls (skip delay on first fetch)
+        // Throttle between day fetches (skip delay on first fetch)
         if (!$isFirstFetch) {
             usleep($throttleMs * 1000);
         }
         $isFirstFetch = false;
 
-        // Fetch from Tempest (now returns {samples, httpCode, attempts})
+        // Fetch from ALL stations for this day
         $daysFetched++;
-        try {
-            $result = parity_fetchTempest(
-                $range['start_epoch'],
-                $range['end_epoch'],
-                $config['bucket_minutes'],
-                $config['station_id'],
-                $config['api_key']
-            );
-            $samples = $result['samples'];
-        } catch (RuntimeException $e) {
-            $errors[] = "$dateStr: " . $e->getMessage();
-            $current->modify('+1 day');
-            continue;
-        }
+        $allStations = parity_fetchAllTempestStations(
+            $range['start_epoch'],
+            $range['end_epoch'],
+            $config,
+            300 // 300ms between station fetches
+        );
 
-        if (empty($samples)) {
-            $daysNoData++;
-            $current->modify('+1 day');
-            continue;
-        }
+        $dayHadData = false;
+        foreach ($allStations['stations'] as $sid => $stationData) {
+            if ($stationData['error']) {
+                $errors[] = "station $sid $dateStr: " . $stationData['error'];
+                $stationStats[$sid]['errors'][] = "$dateStr: " . $stationData['error'];
+                continue;
+            }
 
-        foreach ($samples as $s) {
-            $tsUtc = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
+            if (!empty($stationData['samples'])) $dayHadData = true;
+            $sourceTag = "tempest_$sid";
 
-            // Compute local time for this event
-            $utcDt = new DateTimeImmutable("@{$s['timestamp_epoch']}");
-            $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
-            $localStr = $localDt->format('Y-m-d H:i:s');
+            foreach ($stationData['samples'] as $s) {
+                $tsUtc = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
+                $utcDt = new DateTimeImmutable("@{$s['timestamp_epoch']}");
+                $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
+                $localStr = $localDt->format('Y-m-d H:i:s');
+                $tempF = parity_cToF($s['temp_c']);
 
-            $tempF = parity_cToF($s['temp_c']);
-
-            try {
-                $stmtInsert->execute([
-                    $tsUtc,
-                    $eventId,
-                    (int)$event['track_id'],
-                    $localStr,
-                    $s['temp_c'],
-                    $tempF,
-                    $s['rh_pct'],
-                    $s['station_pressure_raw'],
-                ]);
-                $rowsInserted++;
-            } catch (PDOException $e) {
-                if (strpos($e->getMessage(), 'Duplicate') !== false) {
-                    $rowsDeduped++;
-                } else {
-                    throw $e;
+                try {
+                    $stmtInsert->execute([
+                        $tsUtc, $eventId, (int)$event['track_id'], $localStr,
+                        $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
+                        $sourceTag,
+                    ]);
+                    $rowsInserted++;
+                    $stationStats[$sid]['inserted']++;
+                } catch (PDOException $e) {
+                    if (strpos($e->getMessage(), 'Duplicate') !== false) {
+                        $rowsDeduped++;
+                        $stationStats[$sid]['deduped']++;
+                    } else {
+                        throw $e;
+                    }
                 }
             }
         }
 
+        if (!$dayHadData) $daysNoData++;
         $current->modify('+1 day');
     }
 
@@ -1584,6 +1581,7 @@ function handleWeatherBackfill(PDO $pdo): void {
         'daysNoData' => $daysNoData,
         'rowsInserted' => $rowsInserted,
         'rowsDeduped' => $rowsDeduped,
+        'stationStats' => $stationStats,
         'errors' => $errors,
     ]);
 }
@@ -2614,42 +2612,54 @@ function handleRefreshEventData(PDO $pdo, int $userId, array $auth): void {
         $timingResult['errors'][] = 'No valid race_lookup on event — skipping timing ingest';
     }
 
-    // ── Step 2: Tempest weather backfill ─────────────────────────────────
-    $tempestResult = ['daysFetched' => 0, 'inserted' => 0, 'deduped' => 0, 'errors' => []];
+    // ── Step 2: Tempest weather backfill (multi-station) ────────────────
+    $tempestResult = ['daysFetched' => 0, 'inserted' => 0, 'deduped' => 0, 'errors' => [], 'stations' => []];
     try {
         $config = parity_getTempestConfig();
+        $stationIds = $config['station_ids'];
+        $tempestResult['stations'] = array_fill_keys($stationIds, ['inserted' => 0, 'deduped' => 0, 'errors' => []]);
 
+        // Prepare insert with parameterized source
         $stmtInsert = $pdo->prepare("
             INSERT INTO parity_weather_samples
                 (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tempest')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $current = new DateTime($startLocal);
         $end = new DateTime($endLocal);
-        $isFirstFetch = true;
+        $isFirstDay = true;
 
         while ($current <= $end) {
             $dateStr = $current->format('Y-m-d');
             $range = parity_localDateToUtcRange($dateStr, $tz);
 
-            // Throttle between Tempest API calls (skip delay on first fetch)
-            if (!$isFirstFetch) {
-                usleep(500 * 1000); // 500ms
+            // Throttle between day fetches (skip delay on first day)
+            if (!$isFirstDay) {
+                usleep(300 * 1000); // 300ms between days
             }
-            $isFirstFetch = false;
+            $isFirstDay = false;
 
             $tempestResult['daysFetched']++;
-            try {
-                $result = parity_fetchTempest(
-                    $range['start_epoch'],
-                    $range['end_epoch'],
-                    $config['bucket_minutes'],
-                    $config['station_id'],
-                    $config['api_key']
-                );
 
-                foreach ($result['samples'] as $s) {
+            // Fetch from ALL stations for this day
+            $allStations = parity_fetchAllTempestStations(
+                $range['start_epoch'],
+                $range['end_epoch'],
+                $config,
+                300 // 300ms between station fetches
+            );
+
+            foreach ($allStations['stations'] as $sid => $stationData) {
+                if ($stationData['error']) {
+                    $tempestResult['stations'][$sid]['errors'][] = "$dateStr: " . $stationData['error'];
+                    $tempestResult['errors'][] = "station $sid $dateStr: " . $stationData['error'];
+                    continue;
+                }
+
+                $sourceTag = "tempest_$sid";
+
+                foreach ($stationData['samples'] as $s) {
                     $tsUtc = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
                     $utcDt = new DateTimeImmutable("@{$s['timestamp_epoch']}");
                     $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
@@ -2660,18 +2670,20 @@ function handleRefreshEventData(PDO $pdo, int $userId, array $auth): void {
                         $stmtInsert->execute([
                             $tsUtc, $eventId, (int)$event['track_id'], $localStr,
                             $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
+                            $sourceTag,
                         ]);
                         $tempestResult['inserted']++;
+                        $tempestResult['stations'][$sid]['inserted']++;
                     } catch (PDOException $e) {
                         if (strpos($e->getMessage(), 'Duplicate') !== false) {
                             $tempestResult['deduped']++;
+                            $tempestResult['stations'][$sid]['deduped']++;
                         } else {
                             $tempestResult['errors'][] = $e->getMessage();
+                            $tempestResult['stations'][$sid]['errors'][] = $e->getMessage();
                         }
                     }
                 }
-            } catch (RuntimeException $e) {
-                $tempestResult['errors'][] = "$dateStr: " . $e->getMessage();
             }
 
             $current->modify('+1 day');
@@ -3772,7 +3784,7 @@ function processWeatherBackfillItems(PDO $pdo, int $jobId, array $params): void 
     $stmtInsert = $pdo->prepare("
         INSERT INTO parity_weather_samples
             (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tempest')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $stmtPending = $pdo->prepare("
@@ -3806,7 +3818,7 @@ function processWeatherBackfillItems(PDO $pdo, int $jobId, array $params): void 
         $dateStr = $item['item_key'];
         $stmtUpdateJob->execute([$dateStr, null, $jobId]);
 
-        // Check existing rows
+        // Check existing rows (count across all tempest sources)
         $range = parity_localDateToUtcRange($dateStr, $tz);
         $utcStart = gmdate('Y-m-d H:i:s', $range['start_epoch']);
         $utcEnd = gmdate('Y-m-d H:i:s', $range['end_epoch']);
@@ -3814,12 +3826,14 @@ function processWeatherBackfillItems(PDO $pdo, int $jobId, array $params): void 
         $countStmt = $pdo->prepare("
             SELECT COUNT(*) FROM parity_weather_samples
             WHERE event_id = ? AND timestamp_utc BETWEEN ? AND ?
+              AND source LIKE 'tempest%'
         ");
         $countStmt->execute([$eventId, $utcStart, $utcEnd]);
         $existing = (int)$countStmt->fetchColumn();
 
-        if ($existing >= $minRowsPerDay) {
-            $stmtUpdateItem->execute(['skipped', 0, "Already has $existing rows", 0, 0, 0, $item['id']]);
+        $stationCount = count($config['station_ids']);
+        if ($existing >= $minRowsPerDay * $stationCount) {
+            $stmtUpdateItem->execute(['skipped', 0, "Already has $existing rows across $stationCount stations", 0, 0, 0, $item['id']]);
             continue;
         }
 
@@ -3829,52 +3843,61 @@ function processWeatherBackfillItems(PDO $pdo, int $jobId, array $params): void 
         }
         $isFirst = false;
 
-        try {
-            $result = parity_fetchTempest(
-                $range['start_epoch'],
-                $range['end_epoch'],
-                $config['bucket_minutes'],
-                $config['station_id'],
-                $config['api_key']
-            );
-            $samples = $result['samples'];
-            $httpCode = $result['httpCode'];
-        } catch (RuntimeException $e) {
-            $stmtUpdateItem->execute(['error', 0, $e->getMessage(), 0, 0, 0, $item['id']]);
-            $stmtUpdateJob->execute([$dateStr, $e->getMessage(), $jobId]);
-            continue;
-        }
+        // Fetch from ALL stations
+        $allStations = parity_fetchAllTempestStations(
+            $range['start_epoch'],
+            $range['end_epoch'],
+            $config,
+            300 // 300ms between station fetches
+        );
 
-        if (empty($samples)) {
-            $stmtUpdateItem->execute(['no_data', $httpCode, null, 0, 0, 0, $item['id']]);
-            continue;
-        }
-
+        $totalFetched = 0;
         $inserted = 0;
         $deduped = 0;
-        foreach ($samples as $s) {
-            $tsUtc = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
-            $utcDt = new DateTimeImmutable("@{$s['timestamp_epoch']}");
-            $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
-            $localStr = $localDt->format('Y-m-d H:i:s');
-            $tempF = parity_cToF($s['temp_c']);
+        $itemErrors = [];
 
-            try {
-                $stmtInsert->execute([
-                    $tsUtc, $eventId, (int)$event['track_id'], $localStr,
-                    $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
-                ]);
-                $inserted++;
-            } catch (PDOException $e) {
-                if (strpos($e->getMessage(), 'Duplicate') !== false) {
-                    $deduped++;
-                } else {
-                    throw $e;
+        foreach ($allStations['stations'] as $sid => $stationData) {
+            if ($stationData['error']) {
+                $itemErrors[] = "station $sid: " . $stationData['error'];
+                continue;
+            }
+
+            $totalFetched += count($stationData['samples']);
+            $sourceTag = "tempest_$sid";
+
+            foreach ($stationData['samples'] as $s) {
+                $tsUtc = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
+                $utcDt = new DateTimeImmutable("@{$s['timestamp_epoch']}");
+                $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
+                $localStr = $localDt->format('Y-m-d H:i:s');
+                $tempF = parity_cToF($s['temp_c']);
+
+                try {
+                    $stmtInsert->execute([
+                        $tsUtc, $eventId, (int)$event['track_id'], $localStr,
+                        $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
+                        $sourceTag,
+                    ]);
+                    $inserted++;
+                } catch (PDOException $e) {
+                    if (strpos($e->getMessage(), 'Duplicate') !== false) {
+                        $deduped++;
+                    } else {
+                        throw $e;
+                    }
                 }
             }
         }
 
-        $stmtUpdateItem->execute(['ok', $httpCode, null, count($samples), $inserted, $deduped, $item['id']]);
+        if ($totalFetched === 0 && empty($itemErrors)) {
+            $stmtUpdateItem->execute(['no_data', 200, null, 0, 0, 0, $item['id']]);
+        } elseif ($totalFetched === 0 && !empty($itemErrors)) {
+            $stmtUpdateItem->execute(['error', 0, implode('; ', $itemErrors), 0, 0, 0, $item['id']]);
+            $stmtUpdateJob->execute([$dateStr, implode('; ', $itemErrors), $jobId]);
+        } else {
+            $errorNote = !empty($itemErrors) ? implode('; ', $itemErrors) : null;
+            $stmtUpdateItem->execute(['ok', 200, $errorNote, $totalFetched, $inserted, $deduped, $item['id']]);
+        }
     }
 
     // Finalize
@@ -5858,8 +5881,10 @@ function handleWeatherHealthRebuild(PDO $pdo, array $auth): void {
 }
 
 // ============================================================================
-// Shared: Rebuild canonical for a UTC time range with best-available logic
-// Station preferred, backup fallback, sanity checks, delta tracking.
+// Shared: Rebuild canonical for a UTC time range with best-available logic.
+// Multi-station cross-validation: fetches ALL tempest station samples per bucket,
+// uses MEDIAN consensus when multiple stations report, flags outliers.
+// Falls back to Open-Meteo only when no tempest stations have data.
 // ============================================================================
 
 function weatherRebuildCanonicalRange(PDO $pdo, string $startUtc, string $endUtc, int $bucketMinutes = 30): array {
@@ -5893,24 +5918,28 @@ function weatherRebuildCanonicalRange(PDO $pdo, string $startUtc, string $endUtc
     $RH_MAX = 100.0;
     $PRESS_MIN_INHG = 20.0;
     $PRESS_MAX_INHG = 35.0;
-    // Delta thresholds for suspect flagging
+    // Outlier thresholds: when a station deviates from median by more than this, it's excluded
+    $OUTLIER_TEMP_F = 5.0;     // °F — tighter than old 10°F suspect threshold
+    $OUTLIER_RH_PCT = 10.0;    // % — tighter than old 20% (catches the humidity drift)
+    $OUTLIER_PRESS_INHG = 0.3; // inHg — tighter than old 0.5
+    // Delta thresholds for suspect flagging (max spread across all stations)
     $DELTA_TEMP_SUSPECT = 10.0;    // °F
-    $DELTA_RH_SUSPECT = 20.0;      // %
+    $DELTA_RH_SUSPECT = 15.0;     // % — lowered from 20 to catch humidity issues earlier
     $DELTA_PRESS_SUSPECT = 0.5;    // inHg
 
     // Prepare queries
-    // Get station samples (tempest) nearest to bucket
-    $stmtStation = $pdo->prepare("
+    // Get ALL tempest station samples nearest to bucket (one per source, closest in time)
+    // This picks up tempest, tempest_156136, tempest_187092, tempest_136782, station, etc.
+    $stmtStations = $pdo->prepare("
         SELECT temp_f, rh_pct, station_pressure_raw, timestamp_utc, source,
                ABS(TIMESTAMPDIFF(SECOND, timestamp_utc, ?)) AS delta_s
         FROM parity_weather_samples
         WHERE timestamp_utc BETWEEN DATE_SUB(?, INTERVAL ? MINUTE) AND DATE_ADD(?, INTERVAL ? MINUTE)
-          AND source IN ('tempest', 'station')
+          AND (source LIKE 'tempest%' OR source = 'station')
         ORDER BY delta_s ASC
-        LIMIT 1
     ");
 
-    // Get backup samples nearest to bucket
+    // Get backup samples (Open-Meteo, CSV) nearest to bucket
     $stmtBackup = $pdo->prepare("
         SELECT temp_f, rh_pct, station_pressure_raw, timestamp_utc, source,
                ABS(TIMESTAMPDIFF(SECOND, timestamp_utc, ?)) AS delta_s
@@ -5968,97 +5997,166 @@ function weatherRebuildCanonicalRange(PDO $pdo, string $startUtc, string $endUtc
 
     $bucketsProcessed = 0;
     $stationUsed = 0;
+    $consensusUsed = 0;
     $backupUsed = 0;
     $suspectCount = 0;
     $sanityFailed = 0;
+    $outlierExcluded = 0;
+
+    // Sanity check for a single reading
+    $passesSanity = function($tf, $rh, $pi) use ($TEMP_MIN, $TEMP_MAX, $RH_MIN, $RH_MAX, $PRESS_MIN_INHG, $PRESS_MAX_INHG) {
+        if ($tf === null || $rh === null || $pi === null) return false;
+        if ($tf < $TEMP_MIN || $tf > $TEMP_MAX) return false;
+        if ($rh < $RH_MIN || $rh > $RH_MAX) return false;
+        if ($pi < $PRESS_MIN_INHG || $pi > $PRESS_MAX_INHG) return false;
+        return true;
+    };
 
     for ($epoch = $startEpoch; $epoch <= $endEpoch; $epoch += $bucketSeconds) {
         $bucketTs = gmdate('Y-m-d H:i:s', $epoch);
 
-        // Fetch station sample
-        $stmtStation->execute([$bucketTs, $bucketTs, $tolerance, $bucketTs, $tolerance]);
-        $stationSample = $stmtStation->fetch(PDO::FETCH_ASSOC);
+        // ── Fetch ALL tempest/station samples near this bucket ──
+        $stmtStations->execute([$bucketTs, $bucketTs, $tolerance, $bucketTs, $tolerance]);
+        $allStationRows = $stmtStations->fetchAll(PDO::FETCH_ASSOC);
 
-        // Fetch backup sample
+        // Dedupe: keep only the closest sample per source
+        $bestPerSource = [];
+        foreach ($allStationRows as $row) {
+            $src = $row['source'];
+            if (!isset($bestPerSource[$src]) || (int)$row['delta_s'] < (int)$bestPerSource[$src]['delta_s']) {
+                $bestPerSource[$src] = $row;
+            }
+        }
+
+        // Parse each station's readings and apply per-station sanity
+        $stationReadings = []; // [ ['source'=>..., 'tempF'=>..., 'rhPct'=>..., 'pressInhg'=>..., 'ok'=>bool], ... ]
+        foreach ($bestPerSource as $src => $row) {
+            $tf = ($row['temp_f'] !== null) ? (float)$row['temp_f'] : null;
+            $rh = ($row['rh_pct'] !== null) ? (float)$row['rh_pct'] : null;
+            $pm = ($row['station_pressure_raw'] !== null) ? (float)$row['station_pressure_raw'] : null;
+            $pi = $pm !== null ? round($pm * 0.02953, 4) : null;
+            $ok = $passesSanity($tf, $rh, $pi);
+            $stationReadings[] = ['source' => $src, 'tempF' => $tf, 'rhPct' => $rh, 'pressInhg' => $pi, 'ok' => $ok];
+        }
+
+        // Filter to sane station readings
+        $saneStations = array_filter($stationReadings, function($r) { return $r['ok']; });
+        $saneStations = array_values($saneStations);
+
+        // ── Fetch backup (Open-Meteo / CSV) ──
         $stmtBackup->execute([$bucketTs, $bucketTs, $tolerance, $bucketTs, $tolerance]);
         $backupSample = $stmtBackup->fetch(PDO::FETCH_ASSOC);
-
-        if (!$stationSample && !$backupSample) continue;
-
-        // Parse values
-        $stTempF = $stationSample ? ($stationSample['temp_f'] !== null ? (float)$stationSample['temp_f'] : null) : null;
-        $stRhPct = $stationSample ? ($stationSample['rh_pct'] !== null ? (float)$stationSample['rh_pct'] : null) : null;
-        $stPressMb = $stationSample ? ($stationSample['station_pressure_raw'] !== null ? (float)$stationSample['station_pressure_raw'] : null) : null;
-        $stPressInhg = $stPressMb !== null ? round($stPressMb * 0.02953, 4) : null;
-
         $buTempF = $backupSample ? ($backupSample['temp_f'] !== null ? (float)$backupSample['temp_f'] : null) : null;
         $buRhPct = $backupSample ? ($backupSample['rh_pct'] !== null ? (float)$backupSample['rh_pct'] : null) : null;
         $buPressMb = $backupSample ? ($backupSample['station_pressure_raw'] !== null ? (float)$backupSample['station_pressure_raw'] : null) : null;
         $buPressInhg = $buPressMb !== null ? round($buPressMb * 0.02953, 4) : null;
-
-        // Sanity check function
-        $passesSanity = function($tf, $rh, $pi) use ($TEMP_MIN, $TEMP_MAX, $RH_MIN, $RH_MAX, $PRESS_MIN_INHG, $PRESS_MAX_INHG) {
-            if ($tf === null || $rh === null || $pi === null) return false;
-            if ($tf < $TEMP_MIN || $tf > $TEMP_MAX) return false;
-            if ($rh < $RH_MIN || $rh > $RH_MAX) return false;
-            if ($pi < $PRESS_MIN_INHG || $pi > $PRESS_MAX_INHG) return false;
-            return true;
-        };
-
-        $stationOk = $stationSample && $passesSanity($stTempF, $stRhPct, $stPressInhg);
         $backupOk = $backupSample && $passesSanity($buTempF, $buRhPct, $buPressInhg);
 
-        // Decide canonical values
-        $useTempF = null;
-        $useRhPct = null;
-        $usePressInhg = null;
-        $sourceKind = 'unknown';
-
-        if ($stationOk) {
-            $useTempF = $stTempF;
-            $useRhPct = $stRhPct;
-            $usePressInhg = $stPressInhg;
-            $sourceKind = 'station';
-            $stationUsed++;
-        } elseif ($backupOk) {
-            $useTempF = $buTempF;
-            $useRhPct = $buRhPct;
-            $usePressInhg = $buPressInhg;
-            $sourceKind = 'backup';
-            $backupUsed++;
-        } else {
-            // Neither passes sanity — use whichever is available (station first)
-            if ($stationSample && $stTempF !== null) {
-                $useTempF = $stTempF;
-                $useRhPct = $stRhPct;
-                $usePressInhg = $stPressInhg;
+        if (count($saneStations) === 0 && !$backupOk) {
+            // Try any station reading even if partially sane
+            $anyStation = !empty($stationReadings) ? $stationReadings[0] : null;
+            if ($anyStation && $anyStation['tempF'] !== null) {
+                // Use it as suspect
+                $useTempF = $anyStation['tempF'];
+                $useRhPct = $anyStation['rhPct'];
+                $usePressInhg = $anyStation['pressInhg'];
                 $sourceKind = 'station_suspect';
+                $sanityFailed++;
             } elseif ($backupSample && $buTempF !== null) {
                 $useTempF = $buTempF;
                 $useRhPct = $buRhPct;
                 $usePressInhg = $buPressInhg;
                 $sourceKind = 'backup_suspect';
+                $sanityFailed++;
             } else {
                 continue; // nothing usable
             }
-            $sanityFailed++;
+        } elseif (count($saneStations) === 0 && $backupOk) {
+            // No tempest data, use backup
+            $useTempF = $buTempF;
+            $useRhPct = $buRhPct;
+            $usePressInhg = $buPressInhg;
+            $sourceKind = 'backup';
+            $backupUsed++;
+        } elseif (count($saneStations) === 1) {
+            // Single station — use it directly
+            $s = $saneStations[0];
+            $useTempF = $s['tempF'];
+            $useRhPct = $s['rhPct'];
+            $usePressInhg = $s['pressInhg'];
+            $sourceKind = 'station';
+            $stationUsed++;
+        } else {
+            // ── MULTI-STATION CONSENSUS (2+ stations) ──
+            // Step 1: Compute median for each field across all sane stations
+            $allTemp = array_map(function($r) { return $r['tempF']; }, $saneStations);
+            $allRh = array_map(function($r) { return $r['rhPct']; }, $saneStations);
+            $allPress = array_map(function($r) { return $r['pressInhg']; }, $saneStations);
+
+            $medianTemp = parity_median($allTemp);
+            $medianRh = parity_median($allRh);
+            $medianPress = parity_median($allPress);
+
+            // Step 2: Exclude outliers — stations that deviate from median beyond threshold
+            $filteredStations = [];
+            foreach ($saneStations as $s) {
+                $isOutlier = false;
+                if ($medianTemp !== null && abs($s['tempF'] - $medianTemp) > $OUTLIER_TEMP_F) $isOutlier = true;
+                if ($medianRh !== null && abs($s['rhPct'] - $medianRh) > $OUTLIER_RH_PCT) $isOutlier = true;
+                if ($medianPress !== null && abs($s['pressInhg'] - $medianPress) > $OUTLIER_PRESS_INHG) $isOutlier = true;
+
+                if (!$isOutlier) {
+                    $filteredStations[] = $s;
+                } else {
+                    $outlierExcluded++;
+                }
+            }
+
+            // If all stations were excluded as outliers, fall back to the full set median
+            if (empty($filteredStations)) {
+                $filteredStations = $saneStations;
+            }
+
+            // Step 3: Compute final values from filtered set
+            $finalTemp = array_map(function($r) { return $r['tempF']; }, $filteredStations);
+            $finalRh = array_map(function($r) { return $r['rhPct']; }, $filteredStations);
+            $finalPress = array_map(function($r) { return $r['pressInhg']; }, $filteredStations);
+
+            $useTempF = round(parity_median($finalTemp), 2);
+            $useRhPct = round(parity_median($finalRh), 2);
+            $usePressInhg = round(parity_median($finalPress), 4);
+            $sourceKind = 'consensus';
+            $consensusUsed++;
+
+            // Step 4: Check if the spread across stations is suspect
+            $spreadTemp = max($allTemp) - min($allTemp);
+            $spreadRh = max($allRh) - min($allRh);
+            $spreadPress = max($allPress) - min($allPress);
+
+            if ($spreadTemp > $DELTA_TEMP_SUSPECT ||
+                $spreadRh > $DELTA_RH_SUSPECT ||
+                $spreadPress > $DELTA_PRESS_SUSPECT) {
+                $sourceKind = 'consensus_suspect';
+                $suspectCount++;
+            }
         }
 
-        // Check for suspect deltas when both present
+        // Compute deltas (max spread across tempest stations, or station-vs-backup)
         $deltaTempF = null;
         $deltaRhPct = null;
         $deltaPressInhg = null;
-        if ($stationOk && $backupOk) {
-            $deltaTempF = round($stTempF - $buTempF, 2);
-            $deltaRhPct = round($stRhPct - $buRhPct, 2);
-            $deltaPressInhg = round($stPressInhg - $buPressInhg, 4);
-
-            if (abs($deltaTempF) > $DELTA_TEMP_SUSPECT ||
-                abs($deltaRhPct) > $DELTA_RH_SUSPECT ||
-                abs($deltaPressInhg) > $DELTA_PRESS_SUSPECT) {
-                $sourceKind = 'station_suspect';
-                $suspectCount++;
-            }
+        if (count($saneStations) >= 2) {
+            $allTemp = array_map(function($r) { return $r['tempF']; }, $saneStations);
+            $allRh = array_map(function($r) { return $r['rhPct']; }, $saneStations);
+            $allPress = array_map(function($r) { return $r['pressInhg']; }, $saneStations);
+            $deltaTempF = round(max($allTemp) - min($allTemp), 2);
+            $deltaRhPct = round(max($allRh) - min($allRh), 2);
+            $deltaPressInhg = round(max($allPress) - min($allPress), 4);
+        } elseif (count($saneStations) === 1 && $backupOk) {
+            $s = $saneStations[0];
+            $deltaTempF = round($s['tempF'] - $buTempF, 2);
+            $deltaRhPct = round($s['rhPct'] - $buRhPct, 2);
+            $deltaPressInhg = round($s['pressInhg'] - $buPressInhg, 4);
         }
 
         // Provenance
@@ -6101,8 +6199,10 @@ function weatherRebuildCanonicalRange(PDO $pdo, string $startUtc, string $endUtc
         'bucketMinutes' => $bucketMinutes,
         'bucketsProcessed' => $bucketsProcessed,
         'stationUsed' => $stationUsed,
+        'consensusUsed' => $consensusUsed,
         'backupUsed' => $backupUsed,
         'suspectCount' => $suspectCount,
+        'outlierExcluded' => $outlierExcluded,
         'sanityFailed' => $sanityFailed,
     ];
 }
