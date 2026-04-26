@@ -2018,15 +2018,24 @@ export function vb6SimulationStep(
     
     // VB6 lines 1223-1227: Traction limit clamp (AMax)
     // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
+    // NOTE: When AGS > 2*AMax the reflected value is negative, which then falls through
+    // to the AMin clamp and produces a near-zero PQWT → huge time estimate (BUG FIX).
+    // Guard: when AGS_reflected <= 0 (i.e. AGS_computed > 2*AMax), clamp directly to
+    // AMax so the car accelerates at the traction limit as physically expected.
     SLIP = false;
     if (AGS_g > AMax_g) {
       // VB6 line 1225: SLIP(L) = 1
       SLIP = true;
-      // VB6 line 1226: PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L)
-      // All are Single → Single expression, PQWT is Single → truncated on assignment
-      PQWT = vb6AssignSingle(PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g);
-      // VB6 line 1226: AGS(L) = AMAX - (AGS(L) - AMAX)
-      AGS_g = vb6AssignSingle(AMax_g - (AGS_g - AMax_g));
+      const AGS_reflected_pre = vb6AssignSingle(AMax_g - (AGS_g - AMax_g));
+      if (AGS_reflected_pre <= 0) {
+        // AGS_computed > 2*AMax: heavily traction-limited, clamp directly to AMax
+        AGS_g = vb6AssignSingle(AMax_g);
+        PQWT = vb6AssignSingle(AMax_g * gc * Vel_L);
+      } else {
+        // VB6 line 1226: PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L)
+        PQWT = vb6AssignSingle(PQWT * AGS_reflected_pre / AGS_g);
+        AGS_g = AGS_reflected_pre;
+      }
     }
     
     // VB6 line 1228: If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
@@ -2277,15 +2286,21 @@ export function vb6SimulationStep(
       
       // VB6 lines 1261-1266: AMin/AMax clamps
       // VB6 uses reflection formula: AGS = AMAX - (AGS - AMAX) = 2*AMAX - AGS
+      // Guard: same as pre-iteration – when reflected AGS <= 0, clamp to AMax directly.
       SLIP = false;
       if (AGS_g > AMax_g) {
         // VB6 line 1263: SLIP(L) = 1
         SLIP = true;
-        // VB6 line 1264: PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L)
-        // All are Single → Single expression, PQWT is Single → truncated on assignment
-        PQWT = vb6AssignSingle(PQWT * (AMax_g - (AGS_g - AMax_g)) / AGS_g);
-        // VB6 line 1264: AGS(L) = AMAX - (AGS(L) - AMAX)
-        AGS_g = vb6AssignSingle(AMax_g - (AGS_g - AMax_g));
+        const AGS_reflected_iter = vb6AssignSingle(AMax_g - (AGS_g - AMax_g));
+        if (AGS_reflected_iter <= 0) {
+          // AGS_computed > 2*AMax: heavily traction-limited, clamp directly to AMax
+          AGS_g = vb6AssignSingle(AMax_g);
+          PQWT = vb6AssignSingle(AMax_g * gc * Vel_L);
+        } else {
+          // VB6 line 1264: PQWT = PQWT * (AMAX - (AGS(L) - AMAX)) / AGS(L)
+          PQWT = vb6AssignSingle(PQWT * AGS_reflected_iter / AGS_g);
+          AGS_g = AGS_reflected_iter;
+        }
       }
       
       // VB6 line 1266: If AGS(L) < AMin Then PQWT = PQWT * AMin / AGS(L): AGS(L) = AMin
@@ -2921,7 +2936,7 @@ export function vb6InitState(
     RPM0: vb6AssignSingle(launchRPM),
     Time0_s: vb6AssignSingle(0),
     
-    AgsMax_g: vb6AssignSingle(Ags0_g),
+    AgsMax_g: vb6AssignSingle(Ags0_unclamped),  // VB6 line 1028: AgsMax = Ags0 (before clamp)
     TireGrowth: vb6AssignSingle(tireResult.TireGrowth),
     TireCirFt: vb6AssignSingle(tireResult.TireCirFt),
     
