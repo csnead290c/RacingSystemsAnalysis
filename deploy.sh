@@ -74,7 +74,7 @@ trap "rm -rf $TEMP_DIR" EXIT
 
 # Prepare deployment package
 log "Preparing deployment package..."
-cp -r "$BUILD_DIR" "$TEMP_DIR/"
+cp -r "$BUILD_DIR"/* "$TEMP_DIR/"
 cp -r "$API_DIR" "$TEMP_DIR/"
 cp "$PUBLIC_DIR/.htaccess" "$TEMP_DIR/"
 
