@@ -14,7 +14,7 @@ PUBLIC_DIR="public"
 # Server details
 SERVER="u488-nj6h9i3qcmud@ssh.racingsystemsanalysis.com"
 PORT="18765"
-WEBROOT="$HOME/www/racingsystemsanalysis.com/public_html"
+WEBROOT="~/www/racingsystemsanalysis.com/public_html"
 
 # Colors for output
 RED='\033[0;31m'
