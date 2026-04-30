@@ -960,6 +960,47 @@ export interface WeatherCoverageResponse {
   }>;
 }
 
+// ── Performance Prediction Types ───────────────────────────────────────────
+
+export interface PerformancePredictionParams {
+  category: string;
+  trackId?: number;
+  useTrackHistory?: boolean;
+}
+
+export interface PerformancePredictionResponse {
+  category: string;
+  trackId: number | null;
+  trackName: string | null;
+  currentWeather: {
+    temp_f: number;
+    rh_pct: number;
+    pressure_inhg: number;
+    densityAltitude: number;
+    correctionFactor: number;
+    timestamp: string;
+  } | null;
+  baseline: {
+    method: 'best_run' | 'top_3_average' | 'track_history';
+    baseET: number;
+    baseMPH: number;
+    sampleCount: number;
+    description: string;
+  } | null;
+  prediction: {
+    predictedET: number;
+    predictedMPH: number;
+    adjustmentET: number;
+    adjustmentMPH: number;
+  } | null;
+  trackHistory: {
+    averageET: number;
+    averageMPH: number;
+    sampleCount: number;
+  } | null;
+  error?: string;
+}
+
 export interface WeatherHealthBackfillResponse {
   ok: boolean;
   inserted: number;
