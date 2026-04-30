@@ -633,7 +633,7 @@ export default function ParityPortal() {
       {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
-      {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
+      {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} category={category} />}
       {tab === 'parityReport' && <ParityReport event={selectedEvent} events={events} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} onDriverClick={goToDriverHistory} />}
       {tab === 'incrementalComparison' && <IncrementalComparisonPanel event={selectedEvent} category={category} classIndex={classIndex} />}
       {tab === 'anomalies' && <AnomaliesPanel event={selectedEvent} category={category} refreshKey={refreshKey} />}
@@ -4555,13 +4555,7 @@ function WeatherPanel() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
-  // Performance prediction state
-  const [predictionCategory, setPredictionCategory] = useState('');
-  const [predictionTrackId, setPredictionTrackId] = useState(0);
-  const [useTrackHistory, setUseTrackHistory] = useState(false);
-  const [predictionLoading, setPredictionLoading] = useState(false);
-  const [predictionResult, setPredictionResult] = useState<any>(null);
-
+  
   // Create track form
   const [newTrackName, setNewTrackName] = useState('');
   const [newTrackTz, setNewTrackTz] = useState('America/New_York');
@@ -4640,20 +4634,7 @@ function WeatherPanel() {
     setCnLoading(false);
   }, []);
 
-  const doPerformancePrediction = useCallback(async () => {
-    if (!predictionCategory.trim()) return;
-    setPredictionLoading(true); setError(''); setPredictionResult(null);
-    try {
-      const r = await parityApi.performancePrediction({
-        category: predictionCategory.trim(),
-        trackId: predictionTrackId || undefined,
-        useTrackHistory: useTrackHistory && predictionTrackId > 0,
-      });
-      setPredictionResult(r);
-    } catch (e: any) { setError(e.message); }
-    setPredictionLoading(false);
-  }, [predictionCategory, predictionTrackId, useTrackHistory]);
-
+  
   return (
     <div>
       {error && <div style={S.error}>{error}</div>}
@@ -4763,126 +4744,7 @@ function WeatherPanel() {
         )}
       </div>
 
-      {/* Performance Prediction */}
-      <div style={S.card}>
-        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Performance Prediction</h3>
-        <div style={{ marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-          Predict expected performance based on current weather conditions and historical data
-        </div>
-        <div style={S.row}>
-          <input 
-            style={S.inputWide} 
-            placeholder="Category (e.g., Comp, Top Fuel, Pro Stock)" 
-            value={predictionCategory} 
-            onChange={e => setPredictionCategory(e.target.value)} 
-          />
-          <select 
-            style={{ ...S.input, width: 150 }} 
-            value={predictionTrackId} 
-            onChange={e => setPredictionTrackId(Number(e.target.value))}
-          >
-            <option value={0}>All tracks</option>
-            {tracks.map(t => <option key={t.id} value={t.id}>{t.track_name}</option>)}
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}>
-            <input 
-              type="checkbox" 
-              checked={useTrackHistory} 
-              onChange={e => setUseTrackHistory(e.target.checked)}
-              disabled={predictionTrackId === 0}
-            />
-            Use track history
-          </label>
-          <button 
-            style={S.btn('primary')} 
-            onClick={doPerformancePrediction} 
-            disabled={predictionLoading || !predictionCategory.trim()}
-          >
-            {predictionLoading ? 'Predicting...' : 'Predict'}
-          </button>
-        </div>
-        
-        {predictionResult && (
-          <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 4 }}>
-            {predictionResult.error ? (
-              <div style={{ color: '#dc2626', fontSize: '0.8rem' }}>{predictionResult.error}</div>
-            ) : (
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-                  {predictionResult.category}{predictionResult.trackName ? ` at ${predictionResult.trackName}` : ''}
-                </div>
-                
-                {predictionResult.currentWeather && (
-                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem' }}>
-                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Current Weather:</div>
-                    <div style={S.stat}>
-                      Temp: <b>{predictionResult.currentWeather.temp_f.toFixed(1)}°F</b>
-                    </div>
-                    <div style={S.stat}>
-                      RH: <b>{predictionResult.currentWeather.rh_pct.toFixed(0)}%</b>
-                    </div>
-                    <div style={S.stat}>
-                      Pressure: <b>{predictionResult.currentWeather.pressure_inhg.toFixed(2)} inHg</b>
-                    </div>
-                    <div style={S.stat}>
-                      DA: <b>{predictionResult.currentWeather.densityAltitude.toFixed(0)} ft</b>
-                    </div>
-                    <div style={S.stat}>
-                      CF: <b>{predictionResult.currentWeather.correctionFactor.toFixed(4)}</b>
-                    </div>
-                  </div>
-                )}
-                
-                {predictionResult.baseline && (
-                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem' }}>
-                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Baseline ({predictionResult.baseline.description}):</div>
-                    <div style={S.stat}>
-                      ET: <b>{formatET(predictionResult.baseline.baseET)}</b>
-                    </div>
-                    <div style={S.stat}>
-                      MPH: <b>{formatMPH(predictionResult.baseline.baseMPH)}</b>
-                    </div>
-                    <div style={S.stat}>
-                      Samples: <b>{predictionResult.baseline.sampleCount}</b>
-                    </div>
-                  </div>
-                )}
-                
-                {predictionResult.prediction && (
-                  <div style={{ fontSize: '0.75rem' }}>
-                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Predicted Performance:</div>
-                    <div style={S.stat}>
-                      ET: <b style={{ color: '#2563eb' }}>{formatET(predictionResult.prediction.predictedET)}</b>
-                      <span style={{ marginLeft: '0.5rem', color: predictionResult.prediction.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
-                        ({predictionResult.prediction.adjustmentET > 0 ? '+' : ''}{predictionResult.prediction.adjustmentET.toFixed(4)})
-                      </span>
-                    </div>
-                    <div style={S.stat}>
-                      MPH: <b style={{ color: '#2563eb' }}>{formatMPH(predictionResult.prediction.predictedMPH)}</b>
-                      <span style={{ marginLeft: '0.5rem', color: predictionResult.prediction.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
-                        ({predictionResult.prediction.adjustmentMPH > 0 ? '+' : ''}{predictionResult.prediction.adjustmentMPH.toFixed(2)})
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {predictionResult.trackHistory && (
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Track History Average:</div>
-                    <div style={S.stat}>
-                      ET: <b>{formatET(predictionResult.trackHistory.averageET)}</b>
-                    </div>
-                    <div style={S.stat}>
-                      MPH: <b>{formatMPH(predictionResult.trackHistory.averageMPH)}</b>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -7205,7 +7067,7 @@ const wxFmt = {
   grains: (v: number) => v.toFixed(1),                                         // gr/lb — 1 decimal
 };
 
-function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
+function WeatherDashPanel({ event, category }: { event: EventWithStats | null; category: string }) {
   const [data, setData] = useState<WeatherTimeseriesResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -7222,6 +7084,11 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     new Set(['temp_f', 'rh', 'press', 'da', 'cf', 'grains', 'updated'])
   );
 
+  // Performance prediction state
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionResult, setPredictionResult] = useState<any>(null);
+  const [predictionError, setPredictionError] = useState('');
+
   const fetchLiveWeather = useCallback(async () => {
     setLiveLoading(true); setLiveError('');
     try {
@@ -7233,6 +7100,23 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     setLiveLoading(false);
   }, []);
 
+  // Performance prediction function
+  const doPerformancePrediction = useCallback(async () => {
+    if (!category.trim()) return;
+    setPredictionLoading(true); setPredictionError(''); setPredictionResult(null);
+    try {
+      const r = await parityApi.performancePrediction({
+        category: category.trim(),
+        trackId: event?.track_id || undefined,
+        useTrackHistory: false, // Use overall baseline for dashboard
+      });
+      setPredictionResult(r);
+    } catch (e: any) { 
+      setPredictionError(e.message); 
+    }
+    setPredictionLoading(false);
+  }, [category, event?.track_id]);
+
   useEffect(() => {
     if (!event) { setData(null); return; }
     let cancelled = false;
@@ -7243,12 +7127,18 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     ]).then(([ts, live]) => {
       if (!cancelled) { setData(ts); setLiveWx(live); }
     }).catch((e: any) => {
-      if (!cancelled) setError(e.message || 'Failed to load weather timeseries');
+      if (!cancelled) setError(e.message || 'Failed to load weather data');
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [event?.id]);
+  }, [event]);
+
+  useEffect(() => {
+    if (category.trim() && event) {
+      doPerformancePrediction();
+    }
+  }, [category, doPerformancePrediction, event]);
 
   // Resolve timezone: prefer timeseries response, fall back to event prop
   const tz = data?.event?.timezone || event?.timezone_iana || 'UTC';
@@ -7435,6 +7325,77 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
             <CondCard label="Corr Factor" value={liveConsensus.cf != null ? wxFmt.cf(liveConsensus.cf) : '—'} unit="" color="#16a34a" />
             <CondCard label="Water Grains" value={liveConsensus.waterGrains != null ? wxFmt.grains(liveConsensus.waterGrains) : '—'} unit="gr/lb" color="#84cc16" />
           </div>
+        </div>
+      )}
+
+      {/* Performance Prediction */}
+      {category && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.2rem' }}>
+            Performance Prediction for <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{category}</span>
+            {predictionLoading && <span style={{ marginLeft: '0.5rem', color: '#3b82f6' }}>Calculating...</span>}
+          </div>
+          {predictionError && (
+            <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.2rem' }}>{predictionError}</div>
+          )}
+          {predictionResult && (
+            <div style={{ 
+              background: 'rgba(59,130,246,0.05)', 
+              border: '1px solid rgba(59,130,246,0.2)', 
+              borderRadius: 6, 
+              padding: '0.5rem',
+              fontSize: '0.75rem'
+            }}>
+              {predictionResult.error ? (
+                <div style={{ color: '#dc2626' }}>{predictionResult.error}</div>
+              ) : (
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: '0.3rem', color: '#2563eb' }}>
+                    Predicted Performance (Current Conditions)
+                  </div>
+                  
+                  {predictionResult.currentWeather && (
+                    <div style={{ marginBottom: '0.3rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.3rem' }}>
+                      <div><span style={{ color: '#888' }}>Temp:</span> <b>{predictionResult.currentWeather.temp_f.toFixed(1)}°F</b></div>
+                      <div><span style={{ color: '#888' }}>RH:</span> <b>{predictionResult.currentWeather.rh_pct.toFixed(0)}%</b></div>
+                      <div><span style={{ color: '#888' }}>DA:</span> <b>{predictionResult.currentWeather.densityAltitude.toFixed(0)}ft</b></div>
+                      <div><span style={{ color: '#888' }}>CF:</span> <b>{predictionResult.currentWeather.correctionFactor.toFixed(4)}</b></div>
+                    </div>
+                  )}
+                  
+                  {predictionResult.prediction && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.3rem' }}>
+                      <div>
+                        <span style={{ color: '#888' }}>ET:</span>{' '}
+                        <b style={{ color: '#2563eb' }}>
+                          {formatET(predictionResult.prediction.predictedET)}
+                        </b>
+                        <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: predictionResult.prediction.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
+                          ({predictionResult.prediction.adjustmentET > 0 ? '+' : ''}{predictionResult.prediction.adjustmentET.toFixed(4)})
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ color: '#888' }}>MPH:</span>{' '}
+                        <b style={{ color: '#2563eb' }}>
+                          {formatMPH(predictionResult.prediction.predictedMPH)}
+                        </b>
+                        <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: predictionResult.prediction.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
+                          ({predictionResult.prediction.adjustmentMPH > 0 ? '+' : ''}{predictionResult.prediction.adjustmentMPH.toFixed(2)})
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {predictionResult.baseline && (
+                    <div style={{ marginTop: '0.2rem', fontSize: '0.65rem', color: '#888' }}>
+                      Baseline: {formatET(predictionResult.baseline.baseET)} / {formatMPH(predictionResult.baseline.baseMPH)} 
+                      ({predictionResult.baseline.description})
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
