@@ -69,12 +69,27 @@ function handleBackfillWeatherProvider(PDO $pdo, array $auth): void {
         return;
     }
     
+    // Detect wind columns
+    $hasWindCols = false;
+    try {
+        $colCheck = $pdo->query("SHOW COLUMNS FROM parity_weather_samples LIKE 'wind_speed_mph'");
+        $hasWindCols = $colCheck->rowCount() > 0;
+    } catch (Exception $e) { /* ignore */ }
+
     // Insert samples
-    $stmtInsert = $pdo->prepare("
-        INSERT INTO parity_weather_samples
-            (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
+    if ($hasWindCols) {
+        $stmtInsert = $pdo->prepare("
+            INSERT INTO parity_weather_samples
+                (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, wind_speed_mph, wind_dir_deg, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+    } else {
+        $stmtInsert = $pdo->prepare("
+            INSERT INTO parity_weather_samples
+                (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+    }
     
     $inserted = 0;
     $deduped = 0;
@@ -86,6 +101,8 @@ function handleBackfillWeatherProvider(PDO $pdo, array $auth): void {
         $tempF = $sample['tempF'];
         $humPct = $sample['humidityPct'];
         $baroInHg = $sample['baroInHg'];
+        $windSpeedMph = $sample['windSpeedMph'] ?? null;
+        $windDirDeg = isset($sample['windDirDeg']) ? (int)$sample['windDirDeg'] : null;
         $source = $sample['source'];
         
         // Convert tempF → tempC
@@ -112,21 +129,27 @@ function handleBackfillWeatherProvider(PDO $pdo, array $auth): void {
                 'tempF' => round($tempF, 2),
                 'humidityPct' => round($humPct, 1),
                 'baroInHg' => round($baroInHg, 3),
+                'windSpeedMph' => $windSpeedMph !== null ? round($windSpeedMph, 1) : null,
+                'windDirDeg' => $windDirDeg,
             ];
         }
         
         try {
-            $stmtInsert->execute([
-                $tsUtcFmt,
-                $eventId,
-                $trackId,
-                $localStr,
-                round($tempC, 4),
-                round($tempF, 4),
-                round($humPct, 2),
-                round($pressureMbar, 4),
-                $source,
-            ]);
+            if ($hasWindCols) {
+                $stmtInsert->execute([
+                    $tsUtcFmt, $eventId, $trackId, $localStr,
+                    round($tempC, 4), round($tempF, 4), round($humPct, 2), round($pressureMbar, 4),
+                    $windSpeedMph !== null ? round($windSpeedMph, 2) : null,
+                    $windDirDeg,
+                    $source,
+                ]);
+            } else {
+                $stmtInsert->execute([
+                    $tsUtcFmt, $eventId, $trackId, $localStr,
+                    round($tempC, 4), round($tempF, 4), round($humPct, 2), round($pressureMbar, 4),
+                    $source,
+                ]);
+            }
             $inserted++;
         } catch (PDOException $e) {
             if (strpos($e->getMessage(), 'Duplicate') !== false) {
@@ -173,8 +196,9 @@ function fetchOpenMeteoWeather(float $lat, float $lon, string $startUtc, string 
         'longitude' => $lon,
         'start_date' => $startDate,
         'end_date' => $endDate,
-        'hourly' => 'temperature_2m,relative_humidity_2m,surface_pressure',
+        'hourly' => 'temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m',
         'temperature_unit' => 'fahrenheit',
+        'wind_speed_unit' => 'mph',
         'timezone' => 'UTC',
     ];
     
@@ -203,6 +227,8 @@ function fetchOpenMeteoWeather(float $lat, float $lon, string $startUtc, string 
     $temps = $hourly['temperature_2m'] ?? [];
     $humidity = $hourly['relative_humidity_2m'] ?? [];
     $pressure = $hourly['surface_pressure'] ?? [];
+    $windSpeeds = $hourly['wind_speed_10m'] ?? [];   // already in mph (wind_speed_unit=mph)
+    $windDirs = $hourly['wind_direction_10m'] ?? []; // degrees
     
     $samples = [];
     for ($i = 0; $i < count($times); $i++) {
@@ -230,6 +256,10 @@ function fetchOpenMeteoWeather(float $lat, float $lon, string $startUtc, string 
         // Convert pressure from hPa to inHg (1 hPa = 0.02953 inHg)
         $baroInHg = $pressureHPa * 0.02953;
         
+        // Wind (optional — may be null if API doesn't return)
+        $windSpeedMph = (isset($windSpeeds[$i]) && is_numeric($windSpeeds[$i])) ? round((float)$windSpeeds[$i], 2) : null;
+        $windDirDeg = (isset($windDirs[$i]) && is_numeric($windDirs[$i])) ? (int)$windDirs[$i] : null;
+        
         // Ensure timestamp is ISO UTC format
         $timestampUtc = strpos($timestamp, 'Z') !== false ? $timestamp : $timestamp . ':00Z';
         
@@ -238,6 +268,8 @@ function fetchOpenMeteoWeather(float $lat, float $lon, string $startUtc, string 
             'tempF' => $tempF,
             'humidityPct' => $humPct,
             'baroInHg' => $baroInHg,
+            'windSpeedMph' => $windSpeedMph,
+            'windDirDeg' => $windDirDeg,
             'source' => 'open_meteo_backfill',
         ];
     }

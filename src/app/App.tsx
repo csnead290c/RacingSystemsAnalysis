@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { lazy, useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { ThemeProvider } from '../shared/ui/theme';
 import { Vb6FixtureProvider } from '../shared/state/vb6FixtureStore';
@@ -6,10 +6,10 @@ import { FlagsProvider } from '../domain/flags/store.tsx';
 import { VehicleProvider } from '../state/vehicleStore';
 import { AuthProvider } from '../domain/auth';
 import {
-  canAccessEtSim, ET_SIM_FEATURE,
+  ET_SIM_FEATURE,
   RACE_TOOLS_FEATURE,
-  canAccessRunLogging, RUN_LOGGING_FEATURE,
-  canAccessVehicles, VEHICLES_FEATURE,
+  RUN_LOGGING_FEATURE,
+  VEHICLES_FEATURE,
 } from '../domain/config/guards';
 import { RunHistoryProvider } from '../shared/state/runHistoryStore';
 import { PreferencesProvider } from '../shared/state/preferences';
@@ -42,6 +42,7 @@ import NotFound from '../pages/NotFound';
 import Help from '../pages/Help';
 import ThemeToggle from '../shared/components/ThemeToggle';
 import ProtectedRoute from '../shared/components/ProtectedRoute';
+import CapabilityRoute from '../shared/components/CapabilityRoute';
 import InternalRoute from '../shared/components/InternalRoute';
 import { useAuth } from '../domain/auth';
 import { useCapabilities } from '../domain/config/useCapabilities';
@@ -55,6 +56,7 @@ const AdminPortal = lazy(() => import('../pages/AdminPortal'));
 const ParityPortal = lazy(() => import('../pages/ParityPortal'));
 const ParityIdrViewer = lazy(() => import('../pages/ParityIdrViewer'));
 const IncidentAnalysis = lazy(() => import('../pages/IncidentAnalysis'));
+const TechMasterShell = lazy(() => import('../pages/TechMasterShell'));
 
 function UserMenu() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -173,7 +175,7 @@ function UserMenu() {
 
 function Navigation() {
   const location = useLocation();
-  const { isAuthenticated, hasFeature, user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { can } = useCapabilities();
   const [menuOpen, setMenuOpen] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -230,18 +232,33 @@ function Navigation() {
   const visCtxNav = buildVisibilityContext(user?.roleId);
   const isDevOrOwner = isInternalUser(visCtxNav);
 
-  // Check access for each nav item (centralized guards)
-  const canAccessVehiclesNav = isLoggedIn && canAccessVehicles({ hasFeature });
-  const canAccessETSim = isLoggedIn && canAccessEtSim({ hasFeature });
-  const canAccessEngineSim = isLoggedIn;
-  const canAccessHistory = isLoggedIn && canAccessRunLogging({ hasFeature });
-  const { features } = useSubscription();
-  const canAccessTeam = isLoggedIn && features.teamManagement;
+  // Check access for each nav item using capability system
+  // NHRA-only users have 'nhra.parity' but NOT 'data.vehicles', 'sim.et', etc.
+  const canAccessVehiclesNav = isLoggedIn && can('data.vehicles');
+  const canAccessETSim = isLoggedIn && can('sim.et');
+  const canAccessEngineSim = isLoggedIn && can('sim.basic');
+  const canAccessHistory = isLoggedIn && can('data.runLog');
+  const canAccessTeam = isLoggedIn && can('team.enabled');
+  
+  // NHRA-specific navigation
+  const canAccessParity = isLoggedIn && can('nhra.parity');
+  const canAccessTechMaster = isLoggedIn && can('nhra.tech.read');
+
+  // NHRA-only users have parity access but no general RSA tools (vehicles, sims, etc.)
+  const isNhraOnlyUser = canAccessParity && !canAccessVehiclesNav && !canAccessETSim && !canAccessEngineSim;
 
   const close = useCallback(() => setMenuOpen(false), []);
 
   // ── Primary links: always visible in desktop top bar ──
-  const primaryLinks = (
+  const primaryLinks = isNhraOnlyUser ? (
+    // NHRA users: Parity is the home — no general RSA nav
+    <>
+      <Link to="/parity" style={navLinkStyle(isActive('/parity'))} onClick={close}>Parity</Link>
+      {canAccessTechMaster && (
+        <Link to="/tech" style={navLinkStyle(isActive('/tech'))} onClick={close}>Tech Master</Link>
+      )}
+    </>
+  ) : (
     <>
       <Link to="/" style={navLinkStyle(isActive('/'))} onClick={close}>Home</Link>
       {canAccessVehiclesNav && (
@@ -261,7 +278,21 @@ function Navigation() {
   );
 
   // ── Secondary links: hamburger menu only ──
-  const secondaryLinks = (
+  const secondaryLinks = isNhraOnlyUser ? (
+    // NHRA users: only parity-related links + help
+    <>
+      {canAccessTechMaster && (
+        <Link to="/tech" style={navLinkStyle(isActive('/tech'))} onClick={close}>Tech Master</Link>
+      )}
+      <Link to="/help" style={navLinkStyle(isActive('/help'))} onClick={close}>Help</Link>
+      {isDevOrOwner && (
+        <>
+          <AdminNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
+          <DevNavLink isActive={isActive} navLinkStyle={navLinkStyle} />
+        </>
+      )}
+    </>
+  ) : (
     <>
       <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))} onClick={close}>Calculators</Link>
       {canAccessHistory && isDevOrOwner && (
@@ -269,6 +300,13 @@ function Navigation() {
       )}
       {canAccessTeam && isDevOrOwner && (
         <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={close}>Team</Link>
+      )}
+      {/* NHRA-specific links */}
+      {canAccessParity && (
+        <Link to="/parity" style={navLinkStyle(isActive('/parity'))} onClick={close}>Parity</Link>
+      )}
+      {canAccessTechMaster && (
+        <Link to="/tech" style={navLinkStyle(isActive('/tech'))} onClick={close}>Tech Master</Link>
       )}
       <Link to="/help" style={navLinkStyle(isActive('/help'))} onClick={close}>Help</Link>
       <Link to="/about" style={navLinkStyle(isActive('/about'))} onClick={close}>About</Link>
@@ -417,6 +455,76 @@ function DevNavLink({ isActive, navLinkStyle }: { isActive: (path: string) => bo
   );
 }
 
+function NhraHomeRedirect() {
+  const { isAuthenticated, user } = useAuth();
+  const { can } = useCapabilities();
+  // Redirect NHRA-only users (have parity but no general RSA tools) straight to /parity
+  if (isAuthenticated && user && can('nhra.parity') && !can('data.vehicles') && !can('sim.et') && !can('sim.basic')) {
+    return <Navigate to="/parity" replace />;
+  }
+  return <Home />;
+}
+
+function AppShell({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+
+  // NHRA-mode: hide RSA branding on parity/tech pages for all users.
+  const nhraMode = location.pathname.startsWith('/parity') || location.pathname.startsWith('/tech');
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <header
+        style={{
+          position: 'relative',
+          backgroundColor: 'var(--color-header-bg)',
+          color: 'var(--color-header-text)',
+          padding: '0.75rem 1.5rem',
+          boxShadow: 'var(--shadow-md)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+        }}
+      >
+        {nhraMode ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-header-text)', letterSpacing: '0.02em' }}>
+              Tech Parity Portal
+            </span>
+          </div>
+        ) : (
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none' }}>
+            <img src="/rsa-logo.png" alt="RSA Logo" style={{ height: '40px', width: 'auto' }} />
+          </Link>
+        )}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', overflow: 'hidden' }}>
+          <Navigation />
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <ThemeToggle />
+          <UserMenu />
+        </div>
+      </header>
+
+      <main style={{ flex: 1 }}>{children}</main>
+
+      <footer
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          padding: 'var(--space-4) var(--space-6)',
+          textAlign: 'center',
+          color: 'var(--color-muted)',
+          fontSize: '0.875rem',
+          borderTop: '1px solid var(--color-border)',
+        }}
+      >
+        {nhraMode ? 'Tech Parity Portal © 2026' : 'Racing Systems Analysis © 2026'}
+      </footer>
+      <ViewAsBanner />
+    </div>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider>
@@ -427,46 +535,10 @@ function App() {
             <RunHistoryProvider>
             <Vb6FixtureProvider>
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-        <header
-          style={{
-            position: 'relative',
-            backgroundColor: 'var(--color-header-bg)',
-            color: 'var(--color-header-text)',
-            padding: '0.75rem 1.5rem',
-            boxShadow: 'var(--shadow-md)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1rem',
-          }}
-        >
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none' }}>
-            <img 
-              src="/rsa-logo.png" 
-              alt="RSA Logo" 
-              style={{ height: '40px', width: 'auto' }}
-            />
-          </Link>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', overflow: 'hidden' }}>
-            <Navigation />
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </header>
-
-        <main style={{ flex: 1 }}>
+        <AppShell>
           <Routes>
             {/* Public routes */}
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<NhraHomeRedirect />} />
             <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -640,55 +712,43 @@ function App() {
 
             {/* Incident Analysis — telemetry + video review workspace */}
             <Route path="/parity/analysis/:incidentId" element={
-              <ProtectedRoute>
-                <InternalRoute>
-                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
-                    <IncidentAnalysis />
-                  </Suspense>
-                </InternalRoute>
-              </ProtectedRoute>
+              <CapabilityRoute requireCap="incidents.read">
+                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                  <IncidentAnalysis />
+                </Suspense>
+              </CapabilityRoute>
             } />
 
             {/* IDR Viewer — reached from incident links */}
             <Route path="/parity/idr" element={
-              <ProtectedRoute>
-                <InternalRoute>
-                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
-                    <ParityIdrViewer />
-                  </Suspense>
-                </InternalRoute>
-              </ProtectedRoute>
+              <CapabilityRoute requireCap="nhra.parity">
+                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                  <ParityIdrViewer />
+                </Suspense>
+              </CapabilityRoute>
             } />
 
-            {/* NHRA Tech Parity - capability-gated by nhra.parity inside ParityPortal */}
+            {/* NHRA Tech Master - capability-gated at route level */}
+            <Route path="/tech" element={
+              <CapabilityRoute requireCap="nhra.tech.read">
+                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                  <TechMasterShell />
+                </Suspense>
+              </CapabilityRoute>
+            } />
+
+            {/* NHRA Tech Parity - capability-gated at route level */}
             <Route path="/parity" element={
-              <ProtectedRoute>
-                <InternalRoute>
-                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
-                    <ParityPortal />
-                  </Suspense>
-                </InternalRoute>
-              </ProtectedRoute>
+              <CapabilityRoute requireCap="nhra.parity">
+                <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+                  <ParityPortal />
+                </Suspense>
+              </CapabilityRoute>
             } />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </main>
-
-        <footer
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            padding: 'var(--space-4) var(--space-6)',
-            textAlign: 'center',
-            color: 'var(--color-muted)',
-            fontSize: '0.875rem',
-            borderTop: '1px solid var(--color-border)',
-          }}
-        >
-          Racing Systems Analysis © 2026
-        </footer>
-        <ViewAsBanner />
-      </div>
+        </AppShell>
             </BrowserRouter>
             </Vb6FixtureProvider>
             </RunHistoryProvider>

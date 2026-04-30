@@ -31,6 +31,8 @@ import {
   VehicleRolloutWorksheet,
 } from './WorksheetModal';
 import { TOOLTIPS } from '../../domain/config/tooltips';
+import { VB6NumericInput } from './VB6NumericInput';
+import { VB6ProNumericInput } from './VB6ProNumericInput';
 
 // ============================================================================
 // Types
@@ -491,11 +493,11 @@ export default function VehicleEditor({
       >
         <div style={styles.grid}>
           <Field label="Weight - lbs" required>
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.weightLb}
+              onChange={(val) => updateField('weightLb', val)}
+              limitKey="weight"
               style={styles.input}
-              value={vehicle.weightLb ?? ''}
-              onChange={(e) => updateField('weightLb', parseFloat(e.target.value))}
             />
           </Field>
           <Field 
@@ -504,30 +506,30 @@ export default function VehicleEditor({
             hint={TOOLTIPS.rollout}
             worksheetButton={<WorksheetButton onClick={() => setShowVehicleRolloutWorksheet(true)} tooltip="Staging rollout worksheet" />}
           >
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.rolloutIn ?? 12}
+              onChange={(val) => updateField('rolloutIn', val)}
+              limitKey="rollout"
               step="0.1"
               style={styles.input}
-              value={vehicle.rolloutIn ?? 12}
-              onChange={(e) => updateField('rolloutIn', parseFloat(e.target.value))}
             />
           </Field>
           <Field label="Wheelbase - inches">
-            <input
-              type="number"
-              style={styles.input}
+            <VB6NumericInput
               value={vehicle.wheelbaseIn ?? 108}
-              onChange={(e) => updateField('wheelbaseIn', parseFloat(e.target.value))}
+              onChange={(val) => updateField('wheelbaseIn', val)}
+              limitKey="wheelbase"
+              style={styles.input}
             />
           </Field>
           {/* Pro only: Overhang */}
           {isPro && (
             <Field label="Overhang - inches">
-              <input
-                type="number"
-                style={styles.input}
+              <VB6ProNumericInput
                 value={vehicle.overhangIn ?? 40}
-                onChange={(e) => updateField('overhangIn', parseFloat(e.target.value))}
+                onChange={(val) => updateField('overhangIn', val)}
+                limitKey="overhang"
+                style={styles.input}
               />
             </Field>
           )}
@@ -547,23 +549,23 @@ export default function VehicleEditor({
             required
             worksheetButton={<WorksheetButton onClick={() => setShowGearRatioWorksheet(true)} tooltip="Calculate gear ratio from ring & pinion teeth" />}
           >
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.rearGear ?? 4.10}
+              onChange={(val) => updateField('rearGear', val)}
+              limitKey="finalDriveRatio"
               step="0.01"
               style={styles.input}
-              value={vehicle.rearGear ?? 4.10}
-              onChange={(e) => updateField('rearGear', parseFloat(e.target.value))}
             />
           </Field>
           {/* Pro only: Efficiency */}
           {isPro && (
             <Field label="Efficiency">
-              <input
-                type="number"
+              <VB6ProNumericInput
+                value={vehicle.finalDriveEfficiency ?? 0.975}
+                onChange={(val) => updateField('finalDriveEfficiency', val)}
+                limitKey="finalDriveEfficiency"
                 step="0.005"
                 style={styles.input}
-                value={vehicle.finalDriveEfficiency ?? 0.975}
-                onChange={(e) => updateField('finalDriveEfficiency', parseFloat(e.target.value))}
               />
             </Field>
           )}
@@ -595,12 +597,12 @@ export default function VehicleEditor({
             </Field>
           ) : (
             <Field label="Tire Diameter - inches" required>
-              <input
-                type="number"
+              <VB6NumericInput
+                value={vehicle.tireDiaIn ?? 28}
+                onChange={(val) => updateField('tireDiaIn', val)}
+                limitKey="tireDiameter"
                 step="0.5"
                 style={styles.input}
-                value={vehicle.tireDiaIn ?? 28}
-                onChange={(e) => updateField('tireDiaIn', parseFloat(e.target.value))}
               />
             </Field>
           )}
@@ -608,12 +610,12 @@ export default function VehicleEditor({
             label="Tire Width - inches"
             worksheetButton={<WorksheetButton onClick={() => setShowTireWidthWorksheet(true)} tooltip={TOOLTIPS.btnTireWidth} />}
           >
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.tireWidthIn ?? 17}
+              onChange={(val) => updateField('tireWidthIn', val)}
+              limitKey="tireWidth"
               step="0.5"
               style={styles.input}
-              value={vehicle.tireWidthIn ?? 17}
-              onChange={(e) => updateField('tireWidthIn', parseFloat(e.target.value))}
             />
           </Field>
         </div>
@@ -721,11 +723,11 @@ export default function VehicleEditor({
             </select>
           </Field>
           <Field label="Displacement - CID">
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.displacementCID}
+              onChange={(val) => updateField('displacementCID', val)}
+              limitKey="displacement"
               style={styles.input}
-              value={vehicle.displacementCID ?? ''}
-              onChange={(e) => updateField('displacementCID', parseFloat(e.target.value))}
               placeholder="350"
             />
           </Field>
@@ -734,12 +736,12 @@ export default function VehicleEditor({
             required={!checkSuperseded('rpmAtPeakHP')}
             superseded={checkSuperseded('rpmAtPeakHP')}
           >
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.rpmAtPeakHP ?? 6500}
+              onChange={(val) => updateField('rpmAtPeakHP', val)}
+              limitKey="rpmAtPeakHP"
               step="100"
               style={styles.input}
-              value={vehicle.rpmAtPeakHP ?? 6500}
-              onChange={(e) => updateField('rpmAtPeakHP', parseFloat(e.target.value))}
               disabled={checkSuperseded('rpmAtPeakHP')}
             />
           </Field>
@@ -748,29 +750,30 @@ export default function VehicleEditor({
             required={!checkSuperseded('powerHP')}
             superseded={checkSuperseded('powerHP')}
           >
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.powerHP}
+              onChange={(val) => updateField('powerHP', val)}
+              limitKey="peakHP"
               style={styles.input}
-              value={vehicle.powerHP ?? ''}
-              onChange={(e) => updateField('powerHP', parseFloat(e.target.value))}
               disabled={checkSuperseded('powerHP')}
             />
           </Field>
           {/* Jr: Global Shift RPM (single value for all gears) */}
           {!isPro && (
             <Field label="Shift RPM" hint="All gears shift at this RPM">
-              <input
-                type="number"
+              <VB6NumericInput
+                value={vehicle.shiftRPMs?.[0] ?? 6500}
+                onChange={(val) => {
+                  if (val !== undefined) {
+                    // Set all shift RPMs to same value for Jr
+                    const count = vehicle.gearRatios?.length ?? 5;
+                    const shifts = Array(count).fill(val);
+                    onChange({ ...vehicle, shiftRPMs: shifts });
+                  }
+                }}
+                limitKey="shiftRPM"
                 step="100"
                 style={styles.input}
-                value={vehicle.shiftRPMs?.[0] ?? 6500}
-                onChange={(e) => {
-                  const rpm = parseFloat(e.target.value);
-                  // Set all shift RPMs to same value for Jr
-                  const count = vehicle.gearRatios?.length ?? 5;
-                  const shifts = Array(count).fill(rpm);
-                  onChange({ ...vehicle, shiftRPMs: shifts });
-                }}
               />
             </Field>
           )}
@@ -791,15 +794,52 @@ export default function VehicleEditor({
         {/* Pro only: HP/Torque Multiplier */}
         {isPro && (
           <div style={{ marginTop: '0.75rem' }}>
-            <Field label="HP/Torque Multiplier" hint="Correction factor (default 1.0)">
-              <input
-                type="number"
-                step="0.01"
-                style={styles.input}
-                value={vehicle.hpTorqueMultiplier ?? 1.0}
-                onChange={(e) => updateField('hpTorqueMultiplier', parseFloat(e.target.value))}
-              />
-            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'end' }}>
+              <Field label="HP/Torque Multiplier" hint="Correction factor (default 1.0)">
+                <VB6ProNumericInput
+                  value={vehicle.hpTorqueMultiplier ?? 1.0}
+                  onChange={(val) => updateField('hpTorqueMultiplier', val)}
+                  limitKey="hpTorqueMultiplier"
+                  step="0.01"
+                  style={styles.input}
+                />
+              </Field>
+              <button
+                type="button"
+                onClick={() => {
+                  const multiplier = vehicle.hpTorqueMultiplier ?? 1.0;
+                  if (multiplier === 1.0 || !vehicle.hpCurve || vehicle.hpCurve.length === 0) return;
+                  
+                  // Apply multiplier to HP curve and reset to 1.0 (VB6 Recalc behavior)
+                  const newCurve = vehicle.hpCurve.map(point => ({
+                    rpm: point.rpm,
+                    hp: Math.round(point.hp * multiplier),
+                  }));
+                  const newPeakHP = vehicle.powerHP ? Math.round(vehicle.powerHP * multiplier) : vehicle.powerHP;
+                  
+                  onChange({
+                    ...vehicle,
+                    hpCurve: newCurve,
+                    powerHP: newPeakHP,
+                    hpTorqueMultiplier: 1.0,
+                  });
+                }}
+                disabled={!vehicle.hpCurve || vehicle.hpCurve.length === 0 || (vehicle.hpTorqueMultiplier ?? 1.0) === 1.0}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: (vehicle.hpTorqueMultiplier ?? 1.0) !== 1.0 && vehicle.hpCurve && vehicle.hpCurve.length > 0 ? 'var(--color-primary)' : 'var(--color-muted)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: (vehicle.hpTorqueMultiplier ?? 1.0) !== 1.0 && vehicle.hpCurve && vehicle.hpCurve.length > 0 ? 'pointer' : 'not-allowed',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  opacity: (vehicle.hpTorqueMultiplier ?? 1.0) !== 1.0 && vehicle.hpCurve && vehicle.hpCurve.length > 0 ? 1 : 0.5,
+                }}
+              >
+                Recalc
+              </button>
+            </div>
           </div>
         )}
         
@@ -945,32 +985,32 @@ export default function VehicleEditor({
               {/* Jr: Slip RPM only | Pro: Launch RPM, Slip RPM, Slippage */}
               {isPro && (
                 <Field label="Launch RPM" required hint="Clutch drop RPM">
-                  <input
-                    type="number"
+                  <VB6ProNumericInput
+                    value={vehicle.clutchLaunchRPM ?? 5500}
+                    onChange={(val) => updateField('clutchLaunchRPM', val)}
+                    limitKey="clutchLaunchRPM"
                     step="100"
                     style={styles.input}
-                    value={vehicle.clutchLaunchRPM ?? 5500}
-                    onChange={(e) => updateField('clutchLaunchRPM', parseFloat(e.target.value))}
                   />
                 </Field>
               )}
               <Field label="Slip RPM" hint="RPM during slip">
-                <input
-                  type="number"
+                <VB6NumericInput
+                  value={vehicle.clutchSlipRPM ?? 6000}
+                  onChange={(val) => updateField('clutchSlipRPM', val)}
+                  limitKey="clutchSlipRPM"
                   step="100"
                   style={styles.input}
-                  value={vehicle.clutchSlipRPM ?? 6000}
-                  onChange={(e) => updateField('clutchSlipRPM', parseFloat(e.target.value))}
                 />
               </Field>
               {isPro && (
                 <Field label="Slippage" hint="Slip factor (1.0-1.02)">
-                  <input
-                    type="number"
+                  <VB6ProNumericInput
+                    value={vehicle.clutchSlippage ?? 1.004}
+                    onChange={(val) => updateField('clutchSlippage', val)}
+                    limitKey="clutchSlippage"
                     step="0.001"
                     style={styles.input}
-                    value={vehicle.clutchSlippage ?? 1.004}
-                    onChange={(e) => updateField('clutchSlippage', parseFloat(e.target.value))}
                   />
                 </Field>
               )}
@@ -989,42 +1029,42 @@ export default function VehicleEditor({
         ) : (
           <div style={styles.grid}>
             <Field label="Stall RPM" required hint="Converter stall speed">
-              <input
-                type="number"
+              <VB6NumericInput
+                value={vehicle.converterStallRPM ?? 3500}
+                onChange={(val) => updateField('converterStallRPM', val)}
+                limitKey="converterStallRPM"
                 step="100"
                 style={styles.input}
-                value={vehicle.converterStallRPM ?? 3500}
-                onChange={(e) => updateField('converterStallRPM', parseFloat(e.target.value))}
               />
             </Field>
             <Field label="Launch RPM" hint="RPM at launch (defaults to Stall RPM)">
-              <input
-                type="number"
+              <VB6ProNumericInput
+                value={vehicle.converterLaunchRPM ?? vehicle.converterStallRPM ?? 3500}
+                onChange={(val) => updateField('converterLaunchRPM', val)}
+                limitKey="converterLaunchRPM"
                 step="100"
                 style={styles.input}
-                value={vehicle.converterLaunchRPM ?? vehicle.converterStallRPM ?? 3500}
-                onChange={(e) => updateField('converterLaunchRPM', parseFloat(e.target.value))}
               />
             </Field>
             {/* Pro only: Torque Mult, Slippage */}
             {isPro && (
               <>
                 <Field label="Torque Mult" hint="Stall ratio (1.8-2.5)">
-                  <input
-                    type="number"
+                  <VB6ProNumericInput
+                    value={vehicle.converterTorqueMult ?? 2.0}
+                    onChange={(val) => updateField('converterTorqueMult', val)}
+                    limitKey="converterTorqueMult"
                     step="0.1"
                     style={styles.input}
-                    value={vehicle.converterTorqueMult ?? 2.0}
-                    onChange={(e) => updateField('converterTorqueMult', parseFloat(e.target.value))}
                   />
                 </Field>
                 <Field label="Slippage" hint="Slip factor">
-                  <input
-                    type="number"
+                  <VB6ProNumericInput
+                    value={vehicle.converterSlippage ?? 1.0}
+                    onChange={(val) => updateField('converterSlippage', val)}
+                    limitKey="converterSlippage"
                     step="0.001"
                     style={styles.input}
-                    value={vehicle.converterSlippage ?? 1.0}
-                    onChange={(e) => updateField('converterSlippage', parseFloat(e.target.value))}
                   />
                 </Field>
               </>
@@ -1041,12 +1081,12 @@ export default function VehicleEditor({
             </Field>
             {/* Jr and Pro: Converter Diameter */}
             <Field label="Diameter - inches" hint="Converter diameter">
-              <input
-                type="number"
+              <VB6NumericInput
+                value={vehicle.converterDiameterIn}
+                onChange={(val) => updateField('converterDiameterIn', val)}
+                limitKey="converterDiameter"
                 step="0.25"
                 style={styles.input}
-                value={vehicle.converterDiameterIn ?? ''}
-                onChange={(e) => updateField('converterDiameterIn', parseFloat(e.target.value))}
               />
             </Field>
           </div>
@@ -1136,19 +1176,19 @@ export default function VehicleEditor({
                     value={vehicle.gearRatios?.[i] ?? ''}
                     onChange={(e) => updateGearAt('gearRatios', i, parseFloat(e.target.value))}
                   />
-                  <input
-                    type="number"
+                  <VB6ProNumericInput
+                    value={vehicle.gearEfficiencies?.[i] ?? 0.990}
+                    onChange={(val) => updateGearAt('gearEfficiencies', i, val ?? 0.990)}
+                    limitKey="gearEfficiency"
                     step="0.001"
                     style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
-                    value={vehicle.gearEfficiencies?.[i] ?? 0.990}
-                    onChange={(e) => updateGearAt('gearEfficiencies', i, parseFloat(e.target.value))}
                   />
-                  <input
-                    type="number"
+                  <VB6ProNumericInput
+                    value={vehicle.shiftRPMs?.[i] ?? 9400}
+                    onChange={(val) => updateGearAt('shiftRPMs', i, val ?? 9400)}
+                    limitKey="shiftRPM"
                     step="100"
                     style={{ ...styles.input, padding: '0.25rem 0.375rem', fontSize: '0.8rem' }}
-                    value={vehicle.shiftRPMs?.[i] ?? 9400}
-                    onChange={(e) => updateGearAt('shiftRPMs', i, parseFloat(e.target.value))}
                   />
                 </div>
               ))}
@@ -1202,33 +1242,33 @@ export default function VehicleEditor({
             label="Frontal Area - sq ft"
             worksheetButton={<WorksheetButton onClick={() => setShowFrontalAreaWorksheet(true)} tooltip={TOOLTIPS.btnFrontalArea} />}
           >
-            <input
-              type="number"
+            <VB6NumericInput
+              value={vehicle.frontalAreaFt2 ?? 22}
+              onChange={(val) => updateField('frontalAreaFt2', val)}
+              limitKey="frontalArea"
               step="0.5"
               style={styles.input}
-              value={vehicle.frontalAreaFt2 ?? 22}
-              onChange={(e) => updateField('frontalAreaFt2', parseFloat(e.target.value))}
             />
           </Field>
           {/* Pro only: Cd and Lift Coeff */}
           {isPro && (
             <>
               <Field label="Drag Coeff (Cd)" hint="0.3-0.5 typical">
-                <input
-                  type="number"
+                <VB6ProNumericInput
+                  value={vehicle.cd ?? 0.35}
+                  onChange={(val) => updateField('cd', val)}
+                  limitKey="dragCoefficient"
                   step="0.01"
                   style={styles.input}
-                  value={vehicle.cd ?? 0.35}
-                  onChange={(e) => updateField('cd', parseFloat(e.target.value))}
                 />
               </Field>
               <Field label="Lift Coeff" hint="Positive = lift">
-                <input
-                  type="number"
+                <VB6ProNumericInput
+                  value={vehicle.liftCoeff ?? 0.1}
+                  onChange={(val) => updateField('liftCoeff', val)}
+                  limitKey="liftCoefficient"
                   step="0.01"
                   style={styles.input}
-                  value={vehicle.liftCoeff ?? 0.1}
-                  onChange={(e) => updateField('liftCoeff', parseFloat(e.target.value))}
                 />
               </Field>
             </>
@@ -1249,12 +1289,12 @@ export default function VehicleEditor({
             label="Engine + Flywheel + Clutch"
             worksheetButton={<WorksheetButton onClick={() => setShowEnginePMIWorksheet(true)} tooltip="Calculate Engine PMI" />}
           >
-            <input
-              type="number"
+            <VB6ProNumericInput
+              value={vehicle.enginePMI}
+              onChange={(val) => updateField('enginePMI', val)}
+              limitKey="enginePMI"
               step="0.01"
               style={styles.input}
-              value={vehicle.enginePMI ?? ''}
-              onChange={(e) => updateField('enginePMI', parseFloat(e.target.value))}
               placeholder="3.42"
             />
           </Field>
@@ -1262,12 +1302,12 @@ export default function VehicleEditor({
             label="Transmission + Driveshaft"
             worksheetButton={<WorksheetButton onClick={() => setShowTransPMIWorksheet(true)} tooltip="Calculate Trans PMI" />}
           >
-            <input
-              type="number"
+            <VB6ProNumericInput
+              value={vehicle.transPMI}
+              onChange={(val) => updateField('transPMI', val)}
+              limitKey="transPMI"
               step="0.001"
               style={styles.input}
-              value={vehicle.transPMI ?? ''}
-              onChange={(e) => updateField('transPMI', parseFloat(e.target.value))}
               placeholder=".247"
             />
           </Field>
@@ -1275,12 +1315,12 @@ export default function VehicleEditor({
             label="Tires + Wheels + Ring Gear"
             worksheetButton={<WorksheetButton onClick={() => setShowTiresPMIWorksheet(true)} tooltip="Calculate Tire PMI" />}
           >
-            <input
-              type="number"
+            <VB6ProNumericInput
+              value={vehicle.tiresPMI}
+              onChange={(val) => updateField('tiresPMI', val)}
+              limitKey="tiresPMI"
               step="0.1"
               style={styles.input}
-              value={vehicle.tiresPMI ?? ''}
-              onChange={(e) => updateField('tiresPMI', parseFloat(e.target.value))}
               placeholder="50.8"
             />
           </Field>

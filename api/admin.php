@@ -5,12 +5,36 @@
  * All endpoints require admin.access capability (server-enforced).
  * Mutation endpoints require admin.userManagement.
  *
- * Actions:
+ * User Lifecycle:
+ *   - create-user:        POST — create user manually
+ *   - invite-user:        POST — send invite email
+ *   - suspend-user:       POST — suspend user account
+ *   - reactivate-user:    POST — reactivate suspended user
+ *   - delete-user:        POST — soft/hard delete user
+ *   - update-user-role:   POST — change user role
+ *
+ * Plan Management:
+ *   - assign-plan:        POST — manually assign plan to user
+ *   - remove-plan:        POST — remove manual plan assignment
+ *   - get-plan-history:   GET  — plan assignment history
+ *   - list-plans:         GET  — list all plans with metadata
+ *   - update-plan:        POST — update plan metadata
+ *
+ * User Management:
  *   - search-users:       GET  — search users by email/name
  *   - user-details:       GET  — full user details + subscription + capabilities
  *   - grant-capability:   POST — add time-limited capability override
  *   - revoke-capability:  POST — remove capability override
  *   - audit-log:          GET  — paginated audit log with filters
+ *
+ * Plan Capabilities:
+ *   - get-plan-capabilities: GET  — list plan capabilities
+ *   - set-plan-capabilities: POST — update plan capabilities
+ *
+ * Database:
+ *   - db-footprint:       GET  — database size audit
+ *   - db-snapshot-capture: POST — capture size snapshot
+ *   - db-snapshot-list:   GET  — list snapshots
  */
 
 // Suppress any stray warnings from corrupting JSON output
@@ -22,6 +46,7 @@ require_once 'config.php';
 require_once 'functions.php';
 require_once __DIR__ . '/lib/capabilities.php';
 require_once __DIR__ . '/lib/audit.php';
+require_once __DIR__ . '/lib/admin-user-lifecycle.php';
 
 rsa_setCorsHeaders();
 
@@ -34,6 +59,47 @@ $adminUserId = rsa_requireAuthAndCap($pdo, $auth, 'admin.access');
 $action = $_GET['action'] ?? '';
 
 switch ($action) {
+    // User Lifecycle
+    case 'create-user':
+        handleCreateUser($pdo, $adminUserId);
+        break;
+    case 'invite-user':
+        handleInviteUser($pdo, $adminUserId);
+        break;
+    case 'suspend-user':
+        handleSuspendUser($pdo, $adminUserId);
+        break;
+    case 'reactivate-user':
+        handleReactivateUser($pdo, $adminUserId);
+        break;
+    case 'delete-user':
+        handleDeleteUser($pdo, $adminUserId);
+        break;
+    case 'update-user-role':
+        handleUpdateUserRole($pdo, $adminUserId);
+        break;
+    case 'reset-user-password':
+        handleResetUserPassword($pdo, $adminUserId);
+        break;
+    
+    // Plan Management
+    case 'assign-plan':
+        handleAssignPlan($pdo, $adminUserId);
+        break;
+    case 'remove-plan':
+        handleRemovePlan($pdo, $adminUserId);
+        break;
+    case 'get-plan-history':
+        handleGetPlanHistory($pdo, $adminUserId);
+        break;
+    case 'list-plans':
+        handleListPlans($pdo);
+        break;
+    case 'update-plan':
+        handleUpdatePlan($pdo, $adminUserId);
+        break;
+    
+    // User Management
     case 'search-users':
         handleSearchUsers($pdo, $adminUserId);
         break;
@@ -49,12 +115,16 @@ switch ($action) {
     case 'audit-log':
         handleAuditLog($pdo, $adminUserId);
         break;
+    
+    // Plan Capabilities
     case 'get-plan-capabilities':
         handleGetPlanCapabilities($pdo);
         break;
     case 'set-plan-capabilities':
         handleSetPlanCapabilities($pdo, $adminUserId);
         break;
+    
+    // Database
     case 'db-footprint':
         handleDbFootprint($pdo);
         break;
@@ -64,6 +134,7 @@ switch ($action) {
     case 'db-snapshot-list':
         handleDbSnapshotList($pdo);
         break;
+    
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -79,29 +150,75 @@ function handleSearchUsers(PDO $pdo, int $adminUserId): void {
     $query = trim($_GET['q'] ?? '');
     $limit = min((int)($_GET['limit'] ?? 25), 100);
     $offset = max((int)($_GET['offset'] ?? 0), 0);
+    $statusFilter = $_GET['status'] ?? '';
+    $roleFilter = $_GET['role'] ?? '';
+    $planFilter = $_GET['plan'] ?? '';
+    $billingSourceFilter = $_GET['billingSource'] ?? '';
+
+    $where = [];
+    $params = [];
 
     if ($query) {
         $like = "%$query%";
-        $stmt = $pdo->prepare("
-            SELECT id, email, name, role, subscription_plan, subscription_status, created_at
-            FROM users
-            WHERE email LIKE ? OR name LIKE ?
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        ");
-        $stmt->execute([$like, $like, $limit, $offset]);
-    } else {
-        $stmt = $pdo->prepare("
-            SELECT id, email, name, role, subscription_plan, subscription_status, created_at
-            FROM users
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        ");
-        $stmt->execute([$limit, $offset]);
+        $where[] = "(email LIKE ? OR name LIKE ?)";
+        $params[] = $like;
+        $params[] = $like;
+    }
+    
+    if ($statusFilter && in_array($statusFilter, ['invited', 'active', 'suspended', 'deleted'])) {
+        $where[] = "status = ?";
+        $params[] = $statusFilter;
+    }
+    
+    if ($roleFilter && in_array($roleFilter, ['user', 'admin', 'beta', 'owner'])) {
+        $where[] = "role = ?";
+        $params[] = $roleFilter;
+    }
+    
+    if ($planFilter) {
+        $where[] = "(assigned_plan = ? OR subscription_plan = ?)";
+        $params[] = $planFilter;
+        $params[] = $planFilter;
+    }
+    
+    if ($billingSourceFilter && in_array($billingSourceFilter, ['none', 'manual', 'stripe'])) {
+        $where[] = "billing_source = ?";
+        $params[] = $billingSourceFilter;
     }
 
+    $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    $params[] = $limit;
+    $params[] = $offset;
+
+    $stmt = $pdo->prepare("
+        SELECT id, email, name, role, status, billing_source,
+               assigned_plan, subscription_plan, subscription_status,
+               suspended_at, deleted_at, created_at
+        FROM users
+        $whereClause
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+    ");
+    $stmt->execute($params);
+
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    rsa_jsonResponse(['users' => $users, 'limit' => $limit, 'offset' => $offset]);
+    
+    // Get total count for pagination
+    $countParams = array_slice($params, 0, -2); // Remove limit and offset
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as total
+        FROM users
+        $whereClause
+    ");
+    $stmt->execute($countParams);
+    $total = (int)$stmt->fetchColumn();
+    
+    rsa_jsonResponse([
+        'users' => $users,
+        'limit' => $limit,
+        'offset' => $offset,
+        'total' => $total,
+    ]);
 }
 
 /**
@@ -113,11 +230,15 @@ function handleUserDetails(PDO $pdo, int $adminUserId): void {
         rsa_jsonResponse(['error' => 'User ID required'], 400);
     }
 
-    // Basic user info
+    // Basic user info with new lifecycle fields
     $stmt = $pdo->prepare("
-        SELECT id, email, name, role, products, preferences,
+        SELECT id, email, name, role, status, products, preferences,
                stripe_customer_id, clerk_user_id,
                subscription_plan, subscription_status, subscription_period_end,
+               billing_source, assigned_plan, assigned_plan_expires_at, assigned_by,
+               suspended_at, suspended_by, suspended_reason,
+               deleted_at, deleted_by,
+               invite_token, invite_expires_at, invited_by,
                created_at, updated_at
         FROM users WHERE id = ?
     ");
@@ -130,6 +251,36 @@ function handleUserDetails(PDO $pdo, int $adminUserId): void {
 
     $user['products'] = json_decode($user['products'] ?? '[]', true);
     $user['preferences'] = json_decode($user['preferences'] ?? '{}', true);
+    
+    // Get names for assigned_by, suspended_by, etc.
+    if ($user['assigned_by']) {
+        $stmt = $pdo->prepare("SELECT name, email FROM users WHERE id = ?");
+        $stmt->execute([$user['assigned_by']]);
+        $assignedBy = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user['assigned_by_name'] = $assignedBy ? $assignedBy['name'] : null;
+        $user['assigned_by_email'] = $assignedBy ? $assignedBy['email'] : null;
+    }
+    if ($user['suspended_by']) {
+        $stmt = $pdo->prepare("SELECT name, email FROM users WHERE id = ?");
+        $stmt->execute([$user['suspended_by']]);
+        $suspendedBy = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user['suspended_by_name'] = $suspendedBy ? $suspendedBy['name'] : null;
+        $user['suspended_by_email'] = $suspendedBy ? $suspendedBy['email'] : null;
+    }
+    if ($user['deleted_by']) {
+        $stmt = $pdo->prepare("SELECT name, email FROM users WHERE id = ?");
+        $stmt->execute([$user['deleted_by']]);
+        $deletedBy = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user['deleted_by_name'] = $deletedBy ? $deletedBy['name'] : null;
+        $user['deleted_by_email'] = $deletedBy ? $deletedBy['email'] : null;
+    }
+    if ($user['invited_by']) {
+        $stmt = $pdo->prepare("SELECT name, email FROM users WHERE id = ?");
+        $stmt->execute([$user['invited_by']]);
+        $invitedBy = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user['invited_by_name'] = $invitedBy ? $invitedBy['name'] : null;
+        $user['invited_by_email'] = $invitedBy ? $invitedBy['email'] : null;
+    }
 
     // Active subscription from subscriptions table (if exists)
     $subscription = null;
@@ -323,7 +474,7 @@ function handleAuditLog(PDO $pdo, int $adminUserId): void {
  */
 function handleGetPlanCapabilities(PDO $pdo): void {
     try {
-        $planIds = ['free', 'basic', 'pro', 'team'];
+        $planIds = ['free', 'basic', 'pro', 'team', 'nhra'];
         $plans = [];
         $dbBacked = false;
 
@@ -785,4 +936,306 @@ function handleDbSnapshotList(PDO $pdo): void {
     rsa_jsonResponse([
         'snapshots' => $stmt->fetchAll(PDO::FETCH_ASSOC),
     ]);
+}
+
+// ============================================================================
+// User Lifecycle Handlers
+// ============================================================================
+
+function handleCreateUser(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_createUser($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleInviteUser(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_inviteUser($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleSuspendUser(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_suspendUser($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleReactivateUser(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_reactivateUser($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleDeleteUser(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_deleteUser($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleUpdateUserRole(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_updateUserRole($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleResetUserPassword(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    $targetUserId = $input['user_id'] ?? null;
+    $newPassword = $input['password'] ?? null;
+    
+    if (!$targetUserId) {
+        rsa_jsonResponse(['error' => 'user_id required'], 400);
+    }
+    
+    if (!$newPassword || strlen($newPassword) < 6) {
+        rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+    }
+    
+    // Check target user exists
+    $stmt = $pdo->prepare("SELECT id, email FROM users WHERE id = ?");
+    $stmt->execute([$targetUserId]);
+    $targetUser = $stmt->fetch();
+    
+    if (!$targetUser) {
+        rsa_jsonResponse(['error' => 'User not found'], 404);
+    }
+    
+    // Update password
+    $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?");
+    $stmt->execute([$hash, $targetUserId]);
+    
+    // Log the action
+    error_log("Admin password reset: admin=$adminUserId reset password for user=$targetUserId ({$targetUser['email']})");
+    
+    rsa_jsonResponse([
+        'success' => true,
+        'message' => "Password reset for {$targetUser['email']}"
+    ]);
+}
+
+// ============================================================================
+// Plan Management Handlers
+// ============================================================================
+
+function handleAssignPlan(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_assignPlan($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleRemovePlan(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    try {
+        $result = admin_removePlan($pdo, $adminUserId, $input);
+        rsa_jsonResponse($result);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleGetPlanHistory(PDO $pdo, int $adminUserId): void {
+    $userId = (int)($_GET['userId'] ?? 0);
+    if (!$userId) {
+        rsa_jsonResponse(['error' => 'userId required'], 400);
+    }
+    
+    try {
+        $history = admin_getUserPlanHistory($pdo, $userId);
+        rsa_jsonResponse(['history' => $history]);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 400);
+    }
+}
+
+function handleListPlans(PDO $pdo): void {
+    try {
+        $stmt = $pdo->query("
+            SELECT plan_id, display_name, description, visibility, 
+                   stripe_product_id, stripe_price_id, monthly_price_cents,
+                   sort_order, is_active, created_at, updated_at
+            FROM plans
+            ORDER BY sort_order ASC, plan_id ASC
+        ");
+        $plans = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Get user counts per plan
+        foreach ($plans as &$plan) {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) as count
+                FROM users
+                WHERE (assigned_plan = ? OR subscription_plan = ?)
+                  AND status != 'deleted'
+            ");
+            $stmt->execute([$plan['plan_id'], $plan['plan_id']]);
+            $plan['user_count'] = (int)$stmt->fetchColumn();
+        }
+        
+        rsa_jsonResponse(['plans' => $plans]);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 500);
+    }
+}
+
+function handleUpdatePlan(PDO $pdo, int $adminUserId): void {
+    $role = rsa_getUserRole($pdo, $adminUserId);
+    rsa_requireCapability($pdo, $adminUserId, $role, 'admin.userManagement');
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        rsa_jsonResponse(['error' => 'POST required'], 405);
+    }
+    
+    $input = rsa_getJsonInput();
+    $planId = trim($input['planId'] ?? '');
+    
+    if (!$planId) {
+        rsa_jsonResponse(['error' => 'planId required'], 400);
+    }
+    
+    try {
+        $updates = [];
+        $params = [];
+        
+        if (isset($input['displayName'])) {
+            $updates[] = "display_name = ?";
+            $params[] = trim($input['displayName']);
+        }
+        if (isset($input['description'])) {
+            $updates[] = "description = ?";
+            $params[] = trim($input['description']);
+        }
+        if (isset($input['visibility'])) {
+            $updates[] = "visibility = ?";
+            $params[] = $input['visibility'];
+        }
+        if (isset($input['stripeProductId'])) {
+            $updates[] = "stripe_product_id = ?";
+            $params[] = $input['stripeProductId'] ?: null;
+        }
+        if (isset($input['stripePriceId'])) {
+            $updates[] = "stripe_price_id = ?";
+            $params[] = $input['stripePriceId'] ?: null;
+        }
+        if (isset($input['monthlyPriceCents'])) {
+            $updates[] = "monthly_price_cents = ?";
+            $params[] = (int)$input['monthlyPriceCents'];
+        }
+        if (isset($input['sortOrder'])) {
+            $updates[] = "sort_order = ?";
+            $params[] = (int)$input['sortOrder'];
+        }
+        if (isset($input['isActive'])) {
+            $updates[] = "is_active = ?";
+            $params[] = $input['isActive'] ? 1 : 0;
+        }
+        
+        if (empty($updates)) {
+            rsa_jsonResponse(['error' => 'No fields to update'], 400);
+        }
+        
+        $params[] = $planId;
+        $sql = "UPDATE plans SET " . implode(', ', $updates) . " WHERE plan_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        
+        admin_auditLog($pdo, $adminUserId, 'plan.updated', 'plan', 0, [
+            'plan_id' => $planId,
+            'updates' => array_keys($input),
+        ]);
+        
+        rsa_jsonResponse(['success' => true, 'planId' => $planId]);
+    } catch (Exception $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 500);
+    }
 }

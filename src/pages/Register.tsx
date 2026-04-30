@@ -50,7 +50,11 @@ export default function Register() {
   // Get tier from URL params if provided
   const tierParam = searchParams.get('tier') as SelectedTier | null;
   
-  const [step, setStep] = useState<'tier' | 'account' | 'complete'>(tierParam ? 'account' : 'tier');
+  // Get invite code from URL params (for NHRA registration)
+  const inviteCode = searchParams.get('invite');
+  const isNhraInvite = inviteCode?.startsWith('nhra_');
+  
+  const [step, setStep] = useState<'tier' | 'account' | 'complete'>(tierParam || isNhraInvite ? 'account' : 'tier');
   const [selectedTier, setSelectedTier] = useState<SelectedTier>(tierParam || 'free');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -91,7 +95,7 @@ export default function Register() {
     setIsLoading(true);
     
     try {
-      const success = await register(email, password, name, selectedTier);
+      const success = await register(email, password, name, selectedTier, inviteCode || undefined);
       if (success) {
         setStep('complete');
       } else {

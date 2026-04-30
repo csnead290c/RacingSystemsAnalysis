@@ -211,11 +211,11 @@ describe('incidentAnalysisApi', () => {
     }
   });
 
-  it('has exactly 16 API methods', () => {
+  it('has exactly 26 API methods', () => {
     const methods = Object.keys(incidentAnalysisApi).filter(
       k => typeof (incidentAnalysisApi as any)[k] === 'function'
     );
-    expect(methods).toHaveLength(16);
+    expect(methods).toHaveLength(26);
   });
 
   it('getDatasetDataUrl does NOT leak auth token in URL', () => {

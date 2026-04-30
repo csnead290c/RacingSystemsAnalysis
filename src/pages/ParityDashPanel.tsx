@@ -826,15 +826,15 @@ function DeltaMatrixSection({ matrices, topN, triggers, metric }: {
 function QualOrderTable({ qualOrder }: { qualOrder: ParityComboRun[] }) {
   if (qualOrder.length === 0) return <p style={S.hint}>No qualifying runs found.</p>;
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div style={{ overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
       <table style={{ ...S.table, fontSize: '0.7rem' }}>
-        <thead><tr>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>#</th>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>Driver</th>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>Combo</th>
-          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>ET</th>
-          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right' }}>MPH</th>
-          <th style={{ ...S.th, fontSize: '0.6rem' }}>Round</th>
+        <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}><tr>
+          <th style={{ ...S.th, fontSize: '0.6rem', background: 'var(--color-surface, #1a1a2e)' }}>#</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', background: 'var(--color-surface, #1a1a2e)' }}>Driver</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', background: 'var(--color-surface, #1a1a2e)' }}>Combo</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right', background: 'var(--color-surface, #1a1a2e)' }}>ET</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', textAlign: 'right', background: 'var(--color-surface, #1a1a2e)' }}>MPH</th>
+          <th style={{ ...S.th, fontSize: '0.6rem', background: 'var(--color-surface, #1a1a2e)' }}>Round</th>
         </tr></thead>
         <tbody>
           {qualOrder.map(r => (

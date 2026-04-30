@@ -7,15 +7,21 @@ export default defineConfig({
     hmr: { overlay: false }, // Disable noisy overlay, errors still in console
     proxy: {
       '/api': {
-        target: 'https://racingsystemsanalysis.com',
+        target: process.env.VITE_API_BASE_URL || 'https://racingsystemsanalysis.com',
         changeOrigin: true,
-        secure: true,
+        secure: process.env.VITE_API_BASE_URL ? false : true,
       },
     },
   },
   build: { 
     sourcemap: true,
     rollupOptions: {
+      output: {
+        // Include timestamp in filenames to bust SiteGround CDN cache on each deploy
+        entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
+        chunkFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
+        assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`,
+      },
       onwarn(warning, warn) {
         // Silence known external sourcemap noise
         if (warning.code === 'SOURCEMAP_ERROR') return;

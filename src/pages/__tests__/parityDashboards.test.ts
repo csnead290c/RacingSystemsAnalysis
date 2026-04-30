@@ -39,8 +39,8 @@ describe('Dashboard tabs are wired into portal', () => {
     expect(portalSource).toContain('<WeatherDashPanel');
   });
 
-  it('ParityDashPanel import kept but tab removed from dashboard', () => {
-    expect(portalSource).toContain('ParityDashPanel');
+  it('ParityDashPanel import removed (dead code cleanup)', () => {
+    expect(portalSource).not.toContain("import ParityDashPanel from './ParityDashPanel'");
   });
 });
 

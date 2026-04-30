@@ -384,26 +384,24 @@ function parity_localToUtc(?string $localDatetime, string $tzIana): ?string {
 
 /**
  * Compute a deterministic row hash for de-duplication.
- *
- * If source_ref exists, use it. Otherwise hash STABLE identity fields only
- * (no timing values like ft1320/mph1320/rt which change when a partial run completes).
  */
 function parity_computeRowHash(string $raceLookup, array $normalized, array $raw): string {
-    $sourceRef = $normalized['source_ref'] ?? null;
-
-    if ($sourceRef !== null && $sourceRef !== '') {
-        return hash('sha256', $raceLookup . '|' . $sourceRef);
-    }
-
-    // Build stable key from identity fields only — timing values excluded
-    // so partial and complete versions of the same run produce the same hash.
+    // IMPORTANT: We do NOT use source_ref (NHRA DumbyID) as the dedup key.
+    // NHRA reassigns DumbyIDs when new entries are inserted mid-event (e.g.,
+    // late additions shift all subsequent IDs), causing hash collisions that
+    // corrupt existing rows on re-import.  Identity fields are stable.
     $parts = [
         $raceLookup,
-        $normalized['driver_name'] ?? '',
-        $normalized['lane'] ?? '',
-        $normalized['round'] ?? '',
-        $normalized['class_index'] ?? '',
-        $normalized['run_timestamp_utc'] ?? '',  // local time string (stable identity)
+        strtolower(trim($normalized['driver_name'] ?? '')),
+        strtolower(trim($normalized['round'] ?? '')),
+        strtolower(trim($normalized['class_index'] ?? '')),
+        strtolower(trim($normalized['lane'] ?? '')),
+        // ET as tiebreaker — same driver+round+class+lane is normally unique,
+        // but include ft1320 to distinguish DQ/re-runs.  Fall back to
+        // timestamp when ET is absent (aborted / red-light run).
+        $normalized['ft1320'] !== null
+            ? number_format((float)$normalized['ft1320'], 4, '.', '')
+            : ($normalized['run_timestamp_utc'] ?? ''),
     ];
 
     return hash('sha256', implode('|', $parts));
@@ -453,7 +451,7 @@ function parity_upsertRun(PDO $pdo, array $normalized, string $rowHash, int $imp
     $stmtFind = $pdo->prepare("
         SELECT id, rt, ft60, ft330, ft660, mph660, ft1000, mph1000, ft1320, mph1320,
                dial_in, car_number, win_flag, dq_flag, mov, place, source_ref,
-               run_timestamp_utc, run_time_local, category, class_index
+               run_timestamp_utc, run_time_local, category, class_index, driver_name, round, lane
         FROM parity_runs
         WHERE race_lookup = ? AND row_hash = ?
         LIMIT 1
@@ -597,6 +595,8 @@ function parity_parseTempestResponse(array $json): array {
     $tempIdx = $fieldMap['air_temperature'] ?? $fieldMap['air_temp'] ?? $fieldMap['temperature'] ?? null;
     $rhIdx = $fieldMap['relative_humidity'] ?? $fieldMap['rh'] ?? null;
     $pressIdx = $fieldMap['station_pressure'] ?? $fieldMap['pressure'] ?? $fieldMap['barometric_pressure'] ?? null;
+    $windSpeedIdx = $fieldMap['wind_avg'] ?? $fieldMap['wind_average'] ?? $fieldMap['wind_speed'] ?? null;
+    $windDirIdx = $fieldMap['wind_dir'] ?? $fieldMap['wind_direction'] ?? $fieldMap['wind_bearing'] ?? null;
 
     if ($tsIdx === null) {
         throw new RuntimeException("Tempest response missing timestamp field. Fields: " . implode(', ', $fields));
@@ -618,11 +618,21 @@ function parity_parseTempestResponse(array $json): array {
         $press = ($pressIdx !== null && isset($row[$pressIdx]) && $row[$pressIdx] !== null)
             ? (float)$row[$pressIdx] : null;
 
+        // Wind speed: Tempest obs_st uses m/s → convert to mph
+        $windMps = ($windSpeedIdx !== null && isset($row[$windSpeedIdx]) && $row[$windSpeedIdx] !== null)
+            ? (float)$row[$windSpeedIdx] : null;
+        $windMph = $windMps !== null ? round($windMps * 2.23694, 2) : null;
+
+        $windDir = ($windDirIdx !== null && isset($row[$windDirIdx]) && $row[$windDirIdx] !== null)
+            ? (int)$row[$windDirIdx] : null;
+
         $samples[] = [
             'timestamp_epoch' => $epoch,
             'temp_c' => $tempC,
             'rh_pct' => $rh,
             'station_pressure_raw' => $press,
+            'wind_speed_mph' => $windMph,
+            'wind_dir_deg' => $windDir,
         ];
     }
 

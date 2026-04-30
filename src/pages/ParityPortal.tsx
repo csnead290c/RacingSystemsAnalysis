@@ -6,13 +6,22 @@
  * Server-side enforcement via api/parity.php; client check is UX-only.
  */
 
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  loadCorrectionContext,
+  formatBulkUpsertDriverCombosResult,
+  type CorrectionContextData,
+  type BulkUpsertResult as BulkResultType,
+} from '../components/parity/assignmentUtils';
+import { AssignmentPanel } from '../components/parity/AssignmentPanel';
 import { useCapabilities } from '../domain/config/useCapabilities';
 import './ParityPortal.css';
 import {
   parityApi,
   type PeekResponse,
   type IngestResponse,
+  type ProbeODataResponse,
+  type PurgeEventRunsResponse,
   type RunsResponse,
   type ParityRun,
   type ImportsResponse,
@@ -21,6 +30,9 @@ import {
   type RunWithWeather,
   type TopByEventResponse,
   type TopByEventRow,
+  type TopByTrackRow,
+  type TopByTrackResponse,
+  type TrendMetricKey,
   type BackfillJob,
   type BackfillStatusResponse,
   type EventWithStats,
@@ -34,6 +46,8 @@ import {
   type TrackWithStats,
   type ClassAlias,
   type EngineComboRow,
+  type BodyStyleRow,
+  type DriverBodyStyleRow,
   type DriverComboRow,
   type ClassDefaultRow,
   type WeatherCoverageResponse,
@@ -41,6 +55,8 @@ import {
   type StationCsvImportResponse,
   type StationCsvMappedRow,
   type WeatherTimeseriesResponse,
+  type TempestCurrentWeatherResponse,
+  type TempestCurrentStation,
   type TimeDiagnosticsSampleResponse,
   type RefreshEventDataResponse,
   type RefreshStepResult,
@@ -52,10 +68,8 @@ import {
 } from '../domain/parity/format';
 import TrackCoordCoveragePanel from './TrackCoordCoveragePanel';
 import BatchBackfillPanel from './BatchBackfillPanel';
-// ParityDashPanel kept in admin tools only
-import ParityDashPanel from './ParityDashPanel';
-void ParityDashPanel;
 import ParityReport from './ParityReport';
+import IncrementalComparisonPanel from './IncrementalComparisonPanel';
 import AnomaliesPanel from './AnomaliesPanel';
 import {
   computeWeather,
@@ -67,11 +81,11 @@ import {
   type WeatherResult,
   type ClassDefaultComboRow,
 } from '../domain/parity/weatherCorrection';
-import { correctRunClientSide, type CorrectionContext } from '../domain/parity/correctRunClient';
+import { correctRunClientSide } from '../domain/parity/correctRunClient';
 import { parseCsvWeatherData, WEATHER_PROVIDERS, type WeatherSampleRow } from '../domain/parity/weatherBackfill';
 import { parseBulkCsv, normalizeTrackName } from '../domain/parity/eventImport';
 import { formatLocalTimeLabel, formatLocalDateTime } from '../domain/parity/formatLocalTime';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
 import { useCategoryPreset, CLASS_TO_CATEGORY, normalizeCategory } from '../domain/parity/useClassPreset';
@@ -233,11 +247,11 @@ const S = {
 } as const;
 
 type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash' | 'parityDash' | 'parityReport'
-  | 'liveTiming' | 'anomalies'
+  | 'liveTiming' | 'anomalies' | 'incrementalComparison'
   | 'parity' | 'ladder' | 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'backfill'
   | 'adminTracks' | 'adminEvents' | 'classAliases' | 'engineCombos' | 'driverCombos' | 'assignCombos'
   | 'weatherCorrection' | 'backfillWeather' | 'weatherHealth' | 'importStationCsv'
-  | 'trackCoords' | 'batchBackfill' | 'timeDiagnostics';
+  | 'trackCoords' | 'batchBackfill' | 'timeDiagnostics' | 'bodyStyleDefs' | 'driverBodyStyles' | 'slopeAnalysis';
 
 // Recommended categories shown at the top of the category selector (human-readable names)
 const RECOMMENDED_CATEGORIES = ['Top Fuel', 'Funny Car', 'Pro Stock', 'Pro Stock Motorcycle', 'Pro Mod', 'Top Alcohol Dragster', 'Top Alcohol Funny Car'] as const;
@@ -248,13 +262,14 @@ const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'driverHistory', label: 'Driver History' },
   { key: 'weatherDash', label: 'Weather' },
   { key: 'parityReport', label: 'Parity Report' },
-  { key: 'anomalies', label: 'Anomalies' },
+  { key: 'incrementalComparison', label: 'Incremental Comparison' },
   { key: 'trends', label: 'Trends' },
 ];
 
 // resolveDefaultEvent imported from domain/parity/resolveDefaultEvent.ts
 
 const ADMIN_TABS: { key: Tab; label: string }[] = [
+  { key: 'anomalies', label: 'Anomalies' },
   { key: 'trackCoords', label: 'Track Coords' },
   { key: 'batchBackfill', label: 'Batch Backfill' },
   { key: 'adminTracks', label: 'Tracks' },
@@ -276,7 +291,10 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'weatherHealth', label: 'Weather Health' },
   { key: 'timeDiagnostics', label: 'Time Diagnostics' },
   { key: 'importStationCsv', label: 'Import Station CSV' },
-  { key: 'ladder', label: 'Ladder (exp.)' },
+  { key: 'ladder', label: 'Ladder' },
+  { key: 'bodyStyleDefs', label: 'Body Styles' },
+  { key: 'driverBodyStyles', label: 'Driver Body Styles' },
+  { key: 'slopeAnalysis', label: 'Slope Analysis' },
 ];
 
 // ── Refresh Result Banner ────────────────────────────────────────────────
@@ -364,8 +382,8 @@ function RefreshResultBanner({ result, onDismiss }: { result: RefreshEventDataRe
 // ── Component ───────────────────────────────────────────────────────────
 
 export default function ParityPortal() {
-  const { can } = useCapabilities();
-  const isParityAdmin = can('nhra.parity.admin' as any);
+  const { role } = useCapabilities();
+  const isAdmin = role === 'owner' || role === 'admin';
   const [tab, setTab] = useState<Tab>('eventRuns');
   const [showAdminTools, setShowAdminTools] = useState(false);
   const [raceLookup, setRaceLookup] = useState('');
@@ -397,17 +415,26 @@ export default function ParityPortal() {
   const loadEvents = useCallback(async (year: number) => {
     setEventsLoading(true);
     try {
-      const res = await parityApi.eventsWithStats(year);
-      setEvents(res.events);
-      if (res.events.length > 0 && !res.events.find(e => e.id === selectedEventId)) {
-        // Use unified default event resolver on first load
-        const best = resolveDefaultEvent(res.events);
+      // Load current year AND previous year to support multi-event parity spanning years
+      const [currentYearRes, prevYearRes] = await Promise.all([
+        parityApi.eventsWithStats(year),
+        parityApi.eventsWithStats(year - 1),
+      ]);
+      // Combine and sort by date descending
+      const allEvents = [...currentYearRes.events, ...prevYearRes.events]
+        .sort((a, b) => b.start_date_local.localeCompare(a.start_date_local));
+      setEvents(allEvents);
+      const yearEvents = allEvents.filter(e => e.start_date_local.startsWith(String(year)));
+      const selectedIsInYear = yearEvents.some(e => e.id === selectedEventId);
+      if (!selectedIsInYear && allEvents.length > 0) {
+        // Selected event is not in the chosen year — pick best from this year (or all if none)
+        const best = resolveDefaultEvent(yearEvents.length > 0 ? yearEvents : allEvents);
         if (best) {
           setSelectedEventId(best.id);
           setRaceLookup(best.race_lookup || '');
         }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.error('[loadEvents] Failed to load events:', e); }
     setEventsLoading(false);
     setDefaultResolved(true);
   }, [selectedEventId]);
@@ -479,14 +506,7 @@ export default function ParityPortal() {
     return [...new Set(extra)].sort();
   }, [eventCategories]);
 
-  if (!can('nhra.parity' as any)) {
-    return (
-      <div style={S.page}>
-        <h1 style={S.h1}>Access Denied</h1>
-        <p>You need the <code>nhra.parity</code> capability to access this page.</p>
-      </div>
-    );
-  }
+  // Route now enforces nhra.parity capability via CapabilityRoute
 
   const years = Array.from({ length: 2027 - 2010 }, (_, i) => 2010 + i).reverse();
 
@@ -501,25 +521,6 @@ export default function ParityPortal() {
 
   return (
     <div style={S.page}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-        <h1 style={{ ...S.h1, marginBottom: 0 }}>NHRA Tech Parity</h1>
-        {isParityAdmin && !showAdminTools && (
-          <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', opacity: 0.7, padding: '0.25rem 0.5rem' }}
-            onClick={() => { setShowAdminTools(true); setTab('adminTracks'); }}>
-            Admin Tools
-          </button>
-        )}
-        {showAdminTools && (
-          <button style={{ ...S.btn('primary'), fontSize: '0.65rem', padding: '0.25rem 0.5rem' }}
-            onClick={() => { setShowAdminTools(false); setTab('eventRuns'); }}>
-            ◀ Dashboard
-          </button>
-        )}
-      </div>
-      <p style={S.subtitle}>
-        {showAdminTools ? 'Admin — Ingest, backfill, and manage parity data' : 'Event results, qualifying, driver analysis, and trends'}
-      </p>
-
       {/* ── Event Picker (compact single row) ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
         <select style={{ ...S.input, width: 72, fontSize: '0.8rem' }} value={selectedYear}
@@ -530,7 +531,7 @@ export default function ParityPortal() {
           onChange={e => handleEventChange(Number(e.target.value))}
           disabled={eventsLoading || events.length === 0}>
           {events.length === 0 && <option value="">—{eventsLoading ? ' Loading...' : ' No events'}—</option>}
-          {events.map(ev => (
+          {events.filter(ev => ev.start_date_local.startsWith(String(selectedYear))).map(ev => (
             <option key={ev.id} value={ev.id}>
               {ev.event_name} ({ev.start_date_local})
             </option>
@@ -547,7 +548,7 @@ export default function ParityPortal() {
             </optgroup>
           )}
         </select>
-        {isParityAdmin && selectedEventId && (
+        {isAdmin && selectedEventId && (
           <button
             style={{ ...S.btn, fontSize: '0.75rem', padding: '0.25rem 0.6rem', opacity: refreshing ? 0.6 : 1, whiteSpace: 'nowrap' }}
             onClick={handleRefreshEventData}
@@ -564,6 +565,18 @@ export default function ParityPortal() {
             title={autoRefreshOn ? 'Auto-refresh is ON (60s). Click to pause.' : 'Auto-refresh is paused. Click to resume.'}
           >
             {autoRefreshOn ? '⟳ Auto: ON' : '⏸ Auto: OFF'}
+          </button>
+        )}
+        {isAdmin && !showAdminTools && (
+          <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', opacity: 0.6, padding: '0.2rem 0.5rem', marginLeft: 'auto', whiteSpace: 'nowrap' }}
+            onClick={() => { setShowAdminTools(true); setTab('anomalies'); }}>
+            Admin Tools
+          </button>
+        )}
+        {isAdmin && showAdminTools && (
+          <button style={{ ...S.btn('primary'), fontSize: '0.65rem', padding: '0.2rem 0.5rem', marginLeft: 'auto', whiteSpace: 'nowrap' }}
+            onClick={() => { setShowAdminTools(false); setTab('eventRuns'); }}>
+            ◄ Dashboard
           </button>
         )}
       </div>
@@ -621,7 +634,8 @@ export default function ParityPortal() {
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} />}
-      {tab === 'parityReport' && <ParityReport event={selectedEvent} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} onDriverClick={goToDriverHistory} />}
+      {tab === 'parityReport' && <ParityReport event={selectedEvent} events={events} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} onDriverClick={goToDriverHistory} />}
+      {tab === 'incrementalComparison' && <IncrementalComparisonPanel event={selectedEvent} category={category} classIndex={classIndex} />}
       {tab === 'anomalies' && <AnomaliesPanel event={selectedEvent} category={category} refreshKey={refreshKey} />}
 
       {/* ── Admin Panels ── */}
@@ -646,7 +660,10 @@ export default function ParityPortal() {
       {tab === 'timeDiagnostics' && <TimeDiagnosticsPanel event={selectedEvent} />}
       {tab === 'importStationCsv' && <StationCsvImportPanel />}
       {tab === 'trackCoords' && <TrackCoordCoveragePanel />}
+      {tab === 'slopeAnalysis' && <SlopeAnalysisPanel events={events} />}
       {tab === 'batchBackfill' && <BatchBackfillPanel />}
+      {tab === 'bodyStyleDefs' && <BodyStyleDefsPanel />}
+      {tab === 'driverBodyStyles' && <DriverBodyStylesPanel />}
     </div>
   );
 }
@@ -755,12 +772,10 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
   const [sortKey, setSortKey] = useState<RunSortKey>('ft1320');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  // View mode
-  const [showIncrementals, setShowIncrementals] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
 
-  // Column picker state — all ON by default, persisted in localStorage
-  const COL_LS_KEY = 'parity_eventRunsCols';
+  // Column picker state — defaults to 'defaultOn' columns, persisted in localStorage
+  const COL_LS_KEY = 'parity_eventRunsCols_v2';
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(COL_LS_KEY);
@@ -769,7 +784,7 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
         if (Array.isArray(arr) && arr.length > 0) return new Set(arr);
       }
     } catch { /* ignore corrupt data */ }
-    return new Set(ALL_COLUMNS.map(c => c.key));
+    return new Set(ALL_COLUMNS.filter(c => c.defaultOn).map(c => c.key));
   });
 
   // Persist column prefs whenever they change
@@ -870,14 +885,8 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
     });
   };
 
-  const toggleGroup = (group: 'slip' | 'weather' | 'extra') => {
-    const groupCols = ALL_COLUMNS.filter(c => c.group === group);
-    const allOn = groupCols.every(c => visibleCols.has(c.key));
-    setVisibleCols(prev => {
-      const next = new Set(prev);
-      groupCols.forEach(c => allOn ? next.delete(c.key) : next.add(c.key));
-      return next;
-    });
+  const toggleAllCols = (on: boolean) => {
+    setVisibleCols(on ? new Set(ALL_COLUMNS.map(c => c.key)) : new Set(ALL_COLUMNS.filter(c => c.defaultOn).map(c => c.key)));
   };
 
   // CSV export
@@ -922,15 +931,11 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
 
   return (
     <div>
-      {/* ── Toolbar Row 1: View toggle, Column picker, CSV, Include flagged ── */}
+      {/* ── Toolbar ── */}
       <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-        <button style={{ ...S.btn(showIncrementals ? 'primary' : 'secondary'), fontSize: '0.7rem' }}
-          onClick={() => setShowIncrementals(v => !v)}>
-          {showIncrementals ? '◀ Standard View' : 'Incrementals ▶'}
-        </button>
         <button style={{ ...S.btn(showColPicker ? 'primary' : 'secondary'), fontSize: '0.7rem' }}
           onClick={() => setShowColPicker(v => !v)}>
-          Columns
+          ⚙ Columns ({visibleCols.size}/{ALL_COLUMNS.length})
         </button>
         <button style={{ ...S.btn('secondary'), fontSize: '0.7rem' }} onClick={exportCsv}
           disabled={sortedRuns.length === 0}>
@@ -942,50 +947,29 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
         </label>
       </div>
 
-      {/* ── Column Picker ── */}
+      {/* ── Column Picker (flat) ── */}
       {showColPicker && (
         <div style={{ ...S.card, padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.75rem' }}>
-            <div>
-              <b>Slip Columns</b>
-              <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0 0.3rem', marginLeft: '0.4rem' }}
-                onClick={() => toggleGroup('slip')}>Toggle All</button>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                {ALL_COLUMNS.filter(c => c.group === 'slip').map(c => (
-                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <b>Weather</b>
-              <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0 0.3rem', marginLeft: '0.4rem' }}
-                onClick={() => toggleGroup('weather')}>Toggle All</button>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                {ALL_COLUMNS.filter(c => c.group === 'weather').map(c => (
-                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <b>Extra</b>
-              <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0 0.3rem', marginLeft: '0.4rem' }}
-                onClick={() => toggleGroup('extra')}>Toggle All</button>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                {ALL_COLUMNS.filter(c => c.group === 'extra').map(c => (
-                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            </div>
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>Columns</span>
+            <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.4rem' }} onClick={() => toggleAllCols(true)}>All On</button>
+            <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.4rem' }} onClick={() => toggleAllCols(false)}>Defaults</button>
           </div>
+          {(['core', 'slip', 'weather', 'extra'] as const).map(grp => (
+            <div key={grp} style={{ marginBottom: '0.4rem' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: '0.2rem', letterSpacing: '0.05em' }}>
+                {grp === 'core' ? 'Core' : grp === 'slip' ? 'Timing & Splits' : grp === 'weather' ? 'Weather' : 'Extra'}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.75rem' }}>
+                {ALL_COLUMNS.filter(c => c.group === grp).map(c => (
+                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -1035,7 +1019,7 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
       )}
 
       {/* ── Standard Table ── */}
-      {sortedRuns.length > 0 && !showIncrementals && (
+      {sortedRuns.length > 0 && (
         <div style={{ overflow: 'auto', maxHeight: 500 }}>
           <table style={S.table}>
             <thead>
@@ -1144,10 +1128,6 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
         </div>
       )}
 
-      {/* ── Incrementals View ── */}
-      {sortedRuns.length > 0 && showIncrementals && (
-        <IncrementalDrilldown runs={sortedRuns} flaggedRunIds={flaggedRunIds} classFilter={categoryFilter} total={total} onDriverClick={onDriverClick} />
-      )}
 
       {/* ── Incident Drawer ── */}
       {drawerRunId != null && (
@@ -1325,6 +1305,7 @@ function heatColor(value: number | null, min: number, max: number): string {
   return `rgba(${r}, ${g}, 60, 0.25)`;
 }
 
+// @ts-ignore unused legacy component kept for future reference
 function IncrementalDrilldown({ runs, flaggedRunIds, classFilter, total, onDriverClick }: {
   runs: (ParityRun | RunWithWeather)[];
   flaggedRunIds: Set<number>;
@@ -1408,7 +1389,6 @@ type DriverSortKey = 'race_lookup' | 'ft1320' | 'mph1320' | 'rt' | 'ft60' | 'rou
   | 'inc_0_60' | 'inc_60_330' | 'inc_330_660' | 'inc_660_1000' | 'inc_1000_1320';
 type DriverSortDir = 'asc' | 'desc';
 type SessionFilter = '' | 'qual' | 'elim';
-type ViewMode = 'standard' | 'incrementals' | 'weather';
 type ValueMode = 'raw' | 'corrected';
 
 function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: string; classIndex?: string } | null }) {
@@ -1426,6 +1406,9 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
   const [driverLoading, setDriverLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Assignment management state
+  const [showAssignments, setShowAssignments] = useState(false);
+
   // Incident drawer state
   const [drawerRunId, setDrawerRunId] = useState<number | null>(null);
   const [drawerDriverName, setDrawerDriverName] = useState<string>('');
@@ -1435,32 +1418,61 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
   }, []);
   const [sortKey, setSortKey] = useState<DriverSortKey>('race_lookup');
   const [sortDir, setSortDir] = useState<DriverSortDir>('desc');
-  const [viewMode, setViewMode] = useState<ViewMode>('standard');
   const [valueMode, setValueMode] = useState<ValueMode>('raw');
-  const [showCharts, setShowCharts] = useState(false);
+  const [showColPicker, setShowColPicker] = useState(false);
+
+  // Driver History column picker — persisted in localStorage
+  const DH_COL_LS_KEY = 'parity_driverHistoryCols_v2';
+  type DHColKey = 'event_name' | 'race_lookup' | 'round' | 'lane' | 'rt' | 'ft60' | 'ft330' | 'ft660' | 'mph660' | 'ft1000' | 'mph1000' | 'ft1320' | 'mph1320' | 'corr_et' | 'corr_mph' | 'hpc' | 'inc_0_60' | 'inc_60_330' | 'inc_330_660' | 'inc_660_1000' | 'inc_1000_1320' | 'wx_temp' | 'wx_press' | 'wx_rh' | 'win_flag' | 'dq_flag';
+  const DH_ALL_COLS: { key: DHColKey; label: string; group: 'core' | 'timing' | 'splits' | 'corrected' | 'weather' | 'extra'; defaultOn: boolean }[] = [
+    { key: 'event_name',     label: 'Event',       group: 'core',      defaultOn: true  },
+    { key: 'race_lookup',    label: 'Date',        group: 'core',      defaultOn: true  },
+    { key: 'round',          label: 'Rnd',         group: 'core',      defaultOn: true  },
+    { key: 'lane',           label: 'Ln',          group: 'core',      defaultOn: false },
+    { key: 'rt',             label: 'RT',          group: 'timing',    defaultOn: true  },
+    { key: 'ft60',           label: '60ft',        group: 'timing',    defaultOn: true  },
+    { key: 'ft330',          label: '330ft',       group: 'timing',    defaultOn: false },
+    { key: 'ft660',          label: '660ft',       group: 'timing',    defaultOn: false },
+    { key: 'mph660',         label: '660 MPH',     group: 'timing',    defaultOn: false },
+    { key: 'ft1000',         label: '1000ft',      group: 'timing',    defaultOn: false },
+    { key: 'mph1000',        label: '1000 MPH',    group: 'timing',    defaultOn: false },
+    { key: 'ft1320',         label: 'ET',          group: 'timing',    defaultOn: true  },
+    { key: 'mph1320',        label: 'MPH',         group: 'timing',    defaultOn: true  },
+    { key: 'corr_et',        label: 'Corr ET',     group: 'corrected', defaultOn: false },
+    { key: 'corr_mph',       label: 'Corr MPH',    group: 'corrected', defaultOn: false },
+    { key: 'hpc',            label: 'HPC',         group: 'corrected', defaultOn: false },
+    { key: 'inc_0_60',       label: '0-60',        group: 'splits',    defaultOn: false },
+    { key: 'inc_60_330',     label: '60-330',      group: 'splits',    defaultOn: false },
+    { key: 'inc_330_660',    label: '330-660',     group: 'splits',    defaultOn: false },
+    { key: 'inc_660_1000',   label: '660-1000',    group: 'splits',    defaultOn: false },
+    { key: 'inc_1000_1320',  label: '1000-1320',   group: 'splits',    defaultOn: false },
+    { key: 'wx_temp',        label: 'Temp °F',     group: 'weather',   defaultOn: false },
+    { key: 'wx_press',       label: 'Press inHg',  group: 'weather',   defaultOn: false },
+    { key: 'wx_rh',          label: 'RH%',         group: 'weather',   defaultOn: false },
+    { key: 'win_flag',       label: 'W',           group: 'extra',     defaultOn: false },
+    { key: 'dq_flag',        label: 'DQ',          group: 'extra',     defaultOn: false },
+  ];
+  const [dhVisibleCols, setDhVisibleCols] = useState<Set<DHColKey>>(() => {
+    try {
+      const stored = localStorage.getItem(DH_COL_LS_KEY);
+      if (stored) {
+        const arr = JSON.parse(stored) as DHColKey[];
+        if (Array.isArray(arr) && arr.length > 0) return new Set(arr);
+      }
+    } catch { /* ignore */ }
+    return new Set(DH_ALL_COLS.filter(c => c.defaultOn).map(c => c.key));
+  });
+  const toggleDhCol = (k: DHColKey) => setDhVisibleCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleAllDhCols = (on: boolean) => setDhVisibleCols(on ? new Set(DH_ALL_COLS.map(c => c.key)) : new Set(DH_ALL_COLS.filter(c => c.defaultOn).map(c => c.key)));
+  const dhActiveCols = DH_ALL_COLS.filter(c => dhVisibleCols.has(c.key));
+  useEffect(() => { localStorage.setItem(DH_COL_LS_KEY, JSON.stringify([...dhVisibleCols])); }, [dhVisibleCols]);
 
   // Correction context — loaded once, used to compute HPC client-side
-  const [corrCtx, setCorrCtx] = useState<CorrectionContext | null>(null);
+  const [corrCtx, setCorrCtx] = useState<CorrectionContextData | null>(null);
   useEffect(() => {
-    Promise.all([
-      parityApi.listEngineCombos(),
-      parityApi.listDriverCombos(),
-      parityApi.listClassDefaults(),
-    ]).then(([ec, dc, cd]) => {
-      setCorrCtx({
-        engineCombos: ec.combos,
-        driverCombos: dc.combos.map(c => ({
-          driver_name: c.driver_name, class_index: c.class_index,
-          engine_combo_id: c.engine_combo_id, engine_combo_name: c.engine_combo_name,
-          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
-        })),
-        classDefaults: cd.classDefaults.map(c => ({
-          class_index: c.class_index, engine_combo_name: c.engine_combo_name,
-          engine_combo_id: c.engine_combo_id,
-          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
-        })),
-      });
-    }).catch(() => {});
+    loadCorrectionContext()
+      .then(setCorrCtx)
+      .catch(() => {});
   }, []);
 
   // Pagination
@@ -1563,77 +1575,12 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
     background: 'var(--color-surface, #1e1e2e)', cursor: 'pointer',
   };
 
-  // Best ET / MPH for the driver
+  // Enhanced stats calculations
   const validRuns = runs.filter(r => r.ft1320 != null && r.ft1320 > 0 && !r.dq_flag);
   const bestEt = validRuns.length > 0 ? Math.min(...validRuns.map(r => getET(r)!).filter(v => v > 0)) : null;
   const bestMph = validRuns.length > 0 ? Math.max(...validRuns.map(r => getMPH(r)!).filter(v => v > 0)) : null;
   const eventCount = new Set(runs.map(r => r.race_lookup)).size;
   const weatherCount = runs.filter(r => r.weather).length;
-
-  // Chart data: runs sorted chronologically with valid ET
-  const chartRuns = useMemo(() => {
-    return [...runs]
-      .filter(r => r.run_timestamp_utc && r.ft1320 != null && r.ft1320 > 0 && !r.dq_flag)
-      .sort((a, b) => (a.run_timestamp_utc ?? '').localeCompare(b.run_timestamp_utc ?? ''));
-  }, [runs]);
-
-  // Simple SVG chart renderer
-  const renderChart = (data: { x: number; y: number; label: string }[], yLabel: string, color: string, inverted = false) => {
-    if (data.length < 2) return <div style={{ ...S.hint, fontSize: '0.7rem' }}>Not enough data points for chart.</div>;
-    const W = 600, H = 180, PAD = { t: 10, r: 15, b: 30, l: 55 };
-    const innerW = W - PAD.l - PAD.r;
-    const innerH = H - PAD.t - PAD.b;
-    const yVals = data.map(d => d.y);
-    const yMin = Math.min(...yVals);
-    const yMax = Math.max(...yVals);
-    const yRange = yMax - yMin || 1;
-    const xMin = data[0].x;
-    const xMax = data[data.length - 1].x;
-    const xRange = xMax - xMin || 1;
-    const scaleX = (v: number) => PAD.l + ((v - xMin) / xRange) * innerW;
-    const scaleY = (v: number) => inverted
-      ? PAD.t + ((v - yMin) / yRange) * innerH
-      : PAD.t + innerH - ((v - yMin) / yRange) * innerH;
-    const pts = data.map(d => `${scaleX(d.x).toFixed(1)},${scaleY(d.y).toFixed(1)}`).join(' ');
-
-    // Y-axis tick labels
-    const yTicks = 5;
-    const yTickVals = Array.from({ length: yTicks }, (_, i) => yMin + (yRange * i) / (yTicks - 1));
-
-    return (
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, height: H, display: 'block' }}>
-        {/* Grid lines */}
-        {yTickVals.map((v, i) => (
-          <g key={i}>
-            <line x1={PAD.l} y1={scaleY(v)} x2={W - PAD.r} y2={scaleY(v)} stroke="var(--color-border, #333)" strokeDasharray="3,3" />
-            <text x={PAD.l - 5} y={scaleY(v) + 3} textAnchor="end" fill="var(--color-muted, #888)" fontSize="9">{v.toFixed(inverted ? 1 : 3)}</text>
-          </g>
-        ))}
-        {/* Data line */}
-        <polyline fill="none" stroke={color} strokeWidth="1.5" points={pts} />
-        {/* Data dots */}
-        {data.map((d, i) => (
-          <circle key={i} cx={scaleX(d.x)} cy={scaleY(d.y)} r="2.5" fill={color}>
-            <title>{d.label}: {d.y.toFixed(3)}</title>
-          </circle>
-        ))}
-        {/* Y label */}
-        <text x={12} y={H / 2} textAnchor="middle" fill="var(--color-muted, #888)" fontSize="9" transform={`rotate(-90, 12, ${H / 2})`}>{yLabel}</text>
-      </svg>
-    );
-  };
-
-  const etChartData = useMemo(() => chartRuns.map((r, i) => ({
-    x: i,
-    y: getET(r) ?? r.ft1320!,
-    label: `${r.event_name || r.race_lookup} ${r.round || ''}`.trim(),
-  })), [chartRuns, valueMode, corrCtx]);
-
-  const mphChartData = useMemo(() => chartRuns.filter(r => r.mph1320 != null && r.mph1320 > 0).map((r, i) => ({
-    x: i,
-    y: getMPH(r) ?? r.mph1320!,
-    label: `${r.event_name || r.race_lookup} ${r.round || ''}`.trim(),
-  })), [chartRuns, valueMode, corrCtx]);
 
   // CSV export
   const exportCsv = useCallback(() => {
@@ -1661,10 +1608,25 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
     a.click(); URL.revokeObjectURL(url);
   }, [runs, sortedRuns, selectedDriver]);
 
+  // Determine if Pro Mod for body style display
+  const isProMod = classFilter === 'PM';
+
+  // Refresh callback for assignment changes
+  const handleAssignmentChanged = useCallback(() => {
+    // Reload correction context for engine combo assignments
+    loadCorrectionContext()
+      .then(setCorrCtx)
+      .catch(() => {});
+    // Reload runs if in corrected mode to reflect new assignment state
+    if (valueMode === 'corrected' && selectedDriver) {
+      loadRuns(selectedDriver, currentOffset);
+    }
+  }, [loadRuns, selectedDriver, currentOffset, valueMode]);
+
   return (
     <div>
       {/* Search / filter row */}
-      <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+      <div className="parity-form-row" style={{ marginBottom: '0.5rem' }}>
         <div style={{ position: 'relative' }}>
           <input style={{ ...S.input, width: 240 }} placeholder="Search driver name..."
             value={search} onChange={e => { setSearch(e.target.value); setSelectedDriver(''); }} />
@@ -1709,15 +1671,13 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
         ))}
       </div>
 
-      {/* View mode row */}
+      {/* Toolbar row */}
       {runs.length > 0 && (
-        <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.25rem' }}>
-          {(['standard', 'incrementals', 'weather'] as ViewMode[]).map(m => (
-            <button key={m} style={{ ...S.btn(viewMode === m ? 'primary' : 'secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}
-              onClick={() => setViewMode(m)}>
-              {m === 'standard' ? 'Standard' : m === 'incrementals' ? 'Incrementals' : 'Weather'}
-            </button>
-          ))}
+        <div className="parity-form-row" style={{ marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+          <button style={{ ...S.btn(showColPicker ? 'primary' : 'secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}
+            onClick={() => setShowColPicker(v => !v)}>
+            ⚙ Columns ({dhVisibleCols.size}/{DH_ALL_COLS.length})
+          </button>
 
           <span style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 0.25rem' }} />
 
@@ -1731,9 +1691,9 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
 
           <span style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 0.25rem' }} />
 
-          <button style={{ ...S.btn(showCharts ? 'primary' : 'secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}
-            onClick={() => setShowCharts(v => !v)}>
-            {showCharts ? 'Hide Charts' : 'Charts'}
+          <button style={{ ...S.btn(showAssignments ? 'primary' : 'secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}
+            onClick={() => setShowAssignments(v => !v)}>
+            {showAssignments ? 'Hide Assignments' : 'Assignments'}
           </button>
 
           <button style={{ ...S.btn('secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem', marginLeft: 'auto' }}
@@ -1743,118 +1703,159 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
         </div>
       )}
 
+      {/* Flat column picker */}
+      {showColPicker && (
+        <div style={{ ...S.card, padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>Columns</span>
+            <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.4rem' }} onClick={() => toggleAllDhCols(true)}>All On</button>
+            <button style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.4rem' }} onClick={() => toggleAllDhCols(false)}>Defaults</button>
+          </div>
+          {(['core', 'timing', 'splits', 'corrected', 'weather', 'extra'] as const).map(grp => (
+            <div key={grp} style={{ marginBottom: '0.4rem' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: '0.2rem', letterSpacing: '0.05em' }}>
+                {grp === 'core' ? 'Core' : grp === 'timing' ? 'Timing' : grp === 'splits' ? 'Splits' : grp === 'corrected' ? 'Weather Corrected' : grp === 'weather' ? 'Weather' : 'Extra'}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.75rem' }}>
+                {DH_ALL_COLS.filter(c => c.group === grp).map(c => (
+                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={dhVisibleCols.has(c.key)} onChange={() => toggleDhCol(c.key)} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading && <div style={S.hint}>Loading runs...</div>}
       {error && <div style={S.error}>{error}</div>}
 
-      {/* Driver stats header */}
-      {selectedDriver && runs.length > 0 && !loading && (
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-          <div style={S.stat}><b>{selectedDriver}</b></div>
-          <div style={S.stat}>{total} runs</div>
-          <div style={S.stat}>{eventCount} events</div>
-          {bestEt != null && <div style={S.stat}>Best ET{valueMode === 'corrected' ? ' (corr)' : ''}: <b style={{ color: '#16a34a' }}>{formatET(bestEt)}</b></div>}
-          {bestMph != null && <div style={S.stat}>Top MPH: <b style={{ color: '#2563eb' }}>{formatMPH(bestMph)}</b></div>}
-          {weatherCount > 0 && <div style={S.stat}><span style={{ color: 'var(--color-muted)' }}>{weatherCount}/{runs.length} weather-linked</span></div>}
-        </div>
+      {/* Enhanced Driver stats header */}
+      {selectedDriver && runs.length > 0 && !loading && (() => {
+        const etValues = validRuns.map(r => getET(r)!).filter(v => v > 0);
+        const avgEt = etValues.length > 0 ? etValues.reduce((a, b) => a + b, 0) / etValues.length : null;
+        const etStdDev = etValues.length > 1 
+          ? Math.sqrt(etValues.reduce((sum, v) => sum + Math.pow(v - avgEt!, 2), 0) / etValues.length)
+          : null;
+        const consistencyScore = etStdDev != null && avgEt != null ? (1 - (etStdDev / avgEt)) * 100 : null;
+        
+        const qualRuns = validRuns.filter(r => r.round?.startsWith('Q'));
+        const elimRuns = validRuns.filter(r => !r.round?.startsWith('Q'));
+        const bestQualEt = qualRuns.length > 0 ? Math.min(...qualRuns.map(r => getET(r)!).filter(v => v > 0)) : null;
+        const bestElimEt = elimRuns.length > 0 ? Math.min(...elimRuns.map(r => getET(r)!).filter(v => v > 0)) : null;
+        
+        const recentRuns = validRuns.slice(0, 10);
+        const historicalRuns = validRuns.slice(10);
+        const recentAvg = recentRuns.length > 0 
+          ? recentRuns.reduce((sum, r) => sum + getET(r)!, 0) / recentRuns.length
+          : null;
+        const historicalAvg = historicalRuns.length > 0
+          ? historicalRuns.reduce((sum, r) => sum + getET(r)!, 0) / historicalRuns.length
+          : null;
+        const improvementTrend = recentAvg != null && historicalAvg != null ? historicalAvg - recentAvg : null;
+        
+        return (
+          <>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <div style={S.stat}><b>{selectedDriver}</b></div>
+              <div style={S.stat}>{total} runs</div>
+              <div style={S.stat}>{eventCount} events</div>
+              {bestEt != null && <div style={S.stat}>Best ET{valueMode === 'corrected' ? ' (corr)' : ''}: <b style={{ color: '#16a34a' }}>{formatET(bestEt)}</b></div>}
+              {bestMph != null && <div style={S.stat}>Top MPH: <b style={{ color: '#2563eb' }}>{formatMPH(bestMph)}</b></div>}
+              {avgEt != null && <div style={S.stat}>Avg ET: {formatET(avgEt)}</div>}
+              {consistencyScore != null && (
+                <div style={S.stat}>
+                  Consistency: <b style={{ color: consistencyScore > 98 ? '#16a34a' : consistencyScore > 95 ? '#eab308' : '#ef4444' }}>
+                    {consistencyScore.toFixed(1)}%
+                  </b>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginLeft: 4 }}>
+                    (σ={etStdDev?.toFixed(3)})
+                  </span>
+                </div>
+              )}
+              {weatherCount > 0 && <div style={S.stat}><span style={{ color: 'var(--color-muted)' }}>{weatherCount}/{runs.length} weather</span></div>}
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem', fontSize: '0.75rem' }}>
+              {bestQualEt != null && <div style={S.stat}>Best Qual: <b style={{ color: '#16a34a' }}>{formatET(bestQualEt)}</b> ({qualRuns.length} runs)</div>}
+              {bestElimEt != null && <div style={S.stat}>Best Elim: <b style={{ color: '#16a34a' }}>{formatET(bestElimEt)}</b> ({elimRuns.length} runs)</div>}
+              {improvementTrend != null && (
+                <div style={S.stat}>
+                  Trend (last 10): <b style={{ color: improvementTrend > 0 ? '#16a34a' : improvementTrend < -0.02 ? '#ef4444' : '#eab308' }}>
+                    {improvementTrend > 0 ? '↓' : improvementTrend < 0 ? '↑' : '→'} {Math.abs(improvementTrend).toFixed(3)}s
+                  </b>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginLeft: 4 }}>
+                    {improvementTrend > 0 ? 'improving' : improvementTrend < -0.02 ? 'slower' : 'stable'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
+      {/* Assignment Management Panel */}
+      {showAssignments && selectedDriver && classFilter && !loading && (
+        <AssignmentPanel
+          driverName={selectedDriver}
+          classIndex={classFilter}
+          onAssignmentChanged={handleAssignmentChanged}
+          showBodyStyles={isProMod}
+        />
       )}
 
-      {/* Charts */}
-      {showCharts && selectedDriver && chartRuns.length > 0 && !loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <div style={{ ...S.card, padding: '0.5rem' }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: '0.25rem' }}>ET vs Run Order{valueMode === 'corrected' ? ' (Corrected)' : ''}</div>
-            {renderChart(etChartData, 'ET (sec)', '#16a34a', true)}
-          </div>
-          <div style={{ ...S.card, padding: '0.5rem' }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: '0.25rem' }}>MPH vs Run Order</div>
-            {renderChart(mphChartData, 'MPH', '#2563eb', false)}
-          </div>
-        </div>
-      )}
 
       {/* Runs table */}
       {selectedDriver && runs.length > 0 && !loading && (
-        <div style={{ overflow: 'auto', maxHeight: 500 }}>
+        <div className="parity-table-wrap" style={{ maxHeight: 500 }}>
           <table style={S.table}>
             <thead>
               <tr>
-                <th style={stickyTh} onClick={() => handleSort('event_name')}>Event{arrow('event_name')}</th>
-                <th style={stickyTh} onClick={() => handleSort('race_lookup')}>Date{arrow('race_lookup')}</th>
-                <th style={stickyTh} onClick={() => handleSort('round')}>Rnd{arrow('round')}</th>
-                <th style={stickyTh} onClick={() => handleSort('rt')}>RT{arrow('rt')}</th>
-                {viewMode === 'standard' && (
-                  <>
-                    <th style={stickyTh} onClick={() => handleSort('ft60')}>60ft{arrow('ft60')}</th>
-                    <th style={stickyTh} onClick={() => handleSort('ft1320')}>ET{arrow('ft1320')}</th>
-                    <th style={stickyTh} onClick={() => handleSort('mph1320')}>MPH{arrow('mph1320')}</th>
-                  </>
-                )}
-                {viewMode === 'incrementals' && (
-                  <>
-                    <th style={stickyTh} onClick={() => handleSort('ft1320')}>ET{arrow('ft1320')}</th>
-                    <th style={{ ...stickyTh, borderLeft: '2px solid var(--color-border)' }} onClick={() => handleSort('inc_0_60')}>0-60{arrow('inc_0_60')}</th>
-                    <th style={stickyTh} onClick={() => handleSort('inc_60_330')}>60-330{arrow('inc_60_330')}</th>
-                    <th style={stickyTh} onClick={() => handleSort('inc_330_660')}>330-660{arrow('inc_330_660')}</th>
-                    <th style={stickyTh} onClick={() => handleSort('inc_660_1000')}>660-1000{arrow('inc_660_1000')}</th>
-                    <th style={stickyTh} onClick={() => handleSort('inc_1000_1320')}>1000-1320{arrow('inc_1000_1320')}</th>
-                  </>
-                )}
-                {viewMode === 'weather' && (
-                  <>
-                    <th style={stickyTh} onClick={() => handleSort('ft1320')}>ET{arrow('ft1320')}</th>
-                    <th style={stickyTh}>Corr ET</th>
-                    <th style={stickyTh}>HPC</th>
-                    <th style={stickyTh}>Temp</th>
-                    <th style={stickyTh}>Pres</th>
-                    <th style={stickyTh}>RH%</th>
-                  </>
-                )}
-                <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>W</th>
-                <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)' }}>DQ</th>
+                {dhActiveCols.map(col => {
+                  const sk = (['event_name','race_lookup','round','rt','ft60','ft330','ft660','mph660','ft1000','mph1000','ft1320','mph1320','inc_0_60','inc_60_330','inc_330_660','inc_660_1000','inc_1000_1320'] as DriverSortKey[]).includes(col.key as DriverSortKey) ? col.key as DriverSortKey : null;
+                  return <th key={col.key} style={{ ...stickyTh, cursor: sk ? 'pointer' : undefined }} onClick={sk ? () => handleSort(sk) : undefined}>{col.label}{sk ? arrow(sk) : ''}</th>;
+                })}
                 {canReadIncidents && <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)', width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
               </tr>
             </thead>
             <tbody>
               {sortedRuns.map((r, i) => {
                 const dqStyle = r.dq_flag ? { opacity: 0.5, background: 'rgba(239,68,68,0.06)' } : {};
+                const c = (dhVisibleCols.has('corr_et') || dhVisibleCols.has('corr_mph') || dhVisibleCols.has('hpc')) && corrCtx ? correctRunClientSide(r, corrCtx) : null;
                 return (
                   <tr key={r.id} style={{ background: i % 2 === 1 ? 'var(--color-bg, #262636)' : undefined, ...dqStyle }}>
-                    <td style={{ ...S.td, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.event_name || r.race_lookup}</td>
-                    <td style={S.td}>{r.race_lookup ? `${r.race_lookup.slice(0,4)}-${r.race_lookup.slice(4,6)}-${r.race_lookup.slice(6)}` : '—'}</td>
-                    <td style={S.td}>{r.round || '—'}</td>
-                    <td style={S.td}>{formatET(r.rt)}</td>
-                    {viewMode === 'standard' && (
-                      <>
-                        <td style={S.td}>{formatET(get60(r))}</td>
-                        <td style={{ ...S.td, fontWeight: 600 }}>{formatET(getET(r))}</td>
-                        <td style={{ ...S.td, fontWeight: 600 }}>{formatMPH(getMPH(r))}</td>
-                      </>
-                    )}
-                    {viewMode === 'incrementals' && (
-                      <>
-                        <td style={{ ...S.td, fontWeight: 600 }}>{formatET(getET(r))}</td>
-                        <td style={{ ...S.td, fontFamily: 'monospace', borderLeft: '2px solid var(--color-border)' }}>{r.inc_0_60?.toFixed(4) ?? '—'}</td>
-                        <td style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_60_330?.toFixed(4) ?? '—'}</td>
-                        <td style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_330_660?.toFixed(4) ?? '—'}</td>
-                        <td style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_660_1000?.toFixed(4) ?? '—'}</td>
-                        <td style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_1000_1320?.toFixed(4) ?? '—'}</td>
-                      </>
-                    )}
-                    {viewMode === 'weather' && (() => {
-                      const c = corrCtx ? correctRunClientSide(r, corrCtx) : null;
-                      return (
-                        <>
-                          <td style={{ ...S.td, fontWeight: 600 }}>{formatET(r.ft1320)}</td>
-                          <td style={{ ...S.td, color: '#2563eb', fontWeight: 600 }}>{c?.correctedET != null ? formatET(c.correctedET) : '—'}</td>
-                          <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.7rem' }}>{c?.hpc != null ? c.hpc.toFixed(6) : '—'}</td>
-                          <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '—'}</td>
-                          <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '—'}</td>
-                          <td style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '—'}</td>
-                        </>
-                      );
-                    })()}
-                    <td style={S.td}>{r.win_flag ? '✓' : ''}</td>
-                    <td style={S.td}>{r.dq_flag ? '✗' : ''}</td>
+                    {dhActiveCols.map(col => {
+                      switch (col.key) {
+                        case 'event_name': return <td key={col.key} style={{ ...S.td, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.event_name || r.race_lookup}</td>;
+                        case 'race_lookup': return <td key={col.key} style={S.td}>{r.race_lookup ? `${r.race_lookup.slice(0,4)}-${r.race_lookup.slice(4,6)}-${r.race_lookup.slice(6)}` : '—'}</td>;
+                        case 'round': return <td key={col.key} style={S.td}>{r.round || '—'}</td>;
+                        case 'lane': return <td key={col.key} style={S.td}>{r.lane || '—'}</td>;
+                        case 'rt': return <td key={col.key} style={S.td}>{formatET(r.rt)}</td>;
+                        case 'ft60': return <td key={col.key} style={S.td}>{formatET(get60(r))}</td>;
+                        case 'ft330': return <td key={col.key} style={S.td}>{r.ft330 != null ? formatET(r.ft330) : '—'}</td>;
+                        case 'ft660': return <td key={col.key} style={S.td}>{r.ft660 != null ? formatET(r.ft660) : '—'}</td>;
+                        case 'mph660': return <td key={col.key} style={S.td}>{r.mph660 != null ? formatMPH(r.mph660) : '—'}</td>;
+                        case 'ft1000': return <td key={col.key} style={S.td}>{r.ft1000 != null ? formatET(r.ft1000) : '—'}</td>;
+                        case 'mph1000': return <td key={col.key} style={S.td}>{r.mph1000 != null ? formatMPH(r.mph1000) : '—'}</td>;
+                        case 'ft1320': return <td key={col.key} style={{ ...S.td, fontWeight: 600 }}>{formatET(getET(r))}</td>;
+                        case 'mph1320': return <td key={col.key} style={{ ...S.td, fontWeight: 600 }}>{formatMPH(getMPH(r))}</td>;
+                        case 'corr_et': return <td key={col.key} style={{ ...S.td, color: '#2563eb', fontWeight: 600 }}>{c?.correctedET != null ? formatET(c.correctedET) : '—'}</td>;
+                        case 'corr_mph': return <td key={col.key} style={{ ...S.td, color: '#2563eb', fontWeight: 600 }}>{c?.correctedMPH != null ? formatMPH(c.correctedMPH) : '—'}</td>;
+                        case 'hpc': return <td key={col.key} style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.7rem' }}>{c?.hpc != null ? c.hpc.toFixed(6) : '—'}</td>;
+                        case 'inc_0_60': return <td key={col.key} style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_0_60?.toFixed(4) ?? '—'}</td>;
+                        case 'inc_60_330': return <td key={col.key} style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_60_330?.toFixed(4) ?? '—'}</td>;
+                        case 'inc_330_660': return <td key={col.key} style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_330_660?.toFixed(4) ?? '—'}</td>;
+                        case 'inc_660_1000': return <td key={col.key} style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_660_1000?.toFixed(4) ?? '—'}</td>;
+                        case 'inc_1000_1320': return <td key={col.key} style={{ ...S.td, fontFamily: 'monospace' }}>{r.inc_1000_1320?.toFixed(4) ?? '—'}</td>;
+                        case 'wx_temp': return <td key={col.key} style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '—'}</td>;
+                        case 'wx_press': return <td key={col.key} style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '—'}</td>;
+                        case 'wx_rh': return <td key={col.key} style={{ ...S.td, fontSize: '0.7rem' }}>{r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '—'}</td>;
+                        case 'win_flag': return <td key={col.key} style={S.td}>{r.win_flag ? '✓' : ''}</td>;
+                        case 'dq_flag': return <td key={col.key} style={S.td}>{r.dq_flag ? '✗' : ''}</td>;
+                        default: return <td key={col.key} style={S.td}>—</td>;
+                      }
+                    })}
                     {canReadIncidents && (
                       <td style={{ ...S.td, textAlign: 'center', width: 28 }}>
                         <IncidentCell
@@ -2075,11 +2076,37 @@ function ClassAliasesPanel() {
 
 // ── Engine Combos Panel ─────────────────────────────────────────────────
 
+// Fuel type to HPC parameter mapping
+const FUEL_TYPE_TO_HPC_PARAMS: Record<string, { tPower: number; dPower: number; FF: number }> = {
+  'Gasoline': { tPower: 0.6, dPower: 1.0, FF: 15 },
+  'Gasoline Carbureted': { tPower: 0.6, dPower: 1.0, FF: 15 },
+  'Gasoline Injector': { tPower: 0.6, dPower: 1.0, FF: 14.5 },
+  'Methanol': { tPower: 0.3, dPower: 1.0, FF: 13 },
+  'Methanol Injector': { tPower: 0.3, dPower: 1.0, FF: 12.5 },
+  'Nitromethane': { tPower: 0.5, dPower: 0.85, FF: 5.5 },
+  'Supercharged Gasoline': { tPower: 0.6, dPower: 0.95, FF: 9 },
+  'Supercharged Methanol': { tPower: 0.3, dPower: 0.95, FF: 7.8 },
+  'Supercharged Nitro': { tPower: 0.5, dPower: 0.95, FF: 8.25 },
+};
+
+const ENGINE_COMBO_CATEGORIES = ['Top Fuel', 'Funny Car', 'Pro Stock', 'Pro Stock Motorcycle', 'Pro Mod', 'Top Alcohol Dragster', 'Top Alcohol Funny Car'] as const;
+
+const CATEGORY_DEFAULT_COLORS: Record<string, string> = {
+  'Top Fuel': '#ff4444',
+  'Funny Car': '#4444ff',
+  'Pro Stock': '#44bb44',
+  'Pro Stock Motorcycle': '#ffaa44',
+  'Pro Mod': '#ff44ff',
+  'Top Alcohol Dragster': '#ff8844',
+  'Top Alcohol Funny Car': '#ff44aa',
+  'Default': '#888888',
+};
+
 function EngineCombosPanel() {
   const [combos, setCombos] = useState<EngineComboRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [editRow, setEditRow] = useState<Partial<EngineComboRow> | null>(null);
+  const [editRow, setEditRow] = useState<Partial<EngineComboRow> & { manualOverride?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -2095,13 +2122,22 @@ function EngineCombosPanel() {
     if (!editRow?.name) return;
     setSaving(true); setError('');
     try {
-      await parityApi.upsertEngineCombo({
+      const params: any = {
         id: editRow.id,
         name: editRow.name,
-        tPower: editRow.t_power ?? 0,
-        dPower: editRow.d_power ?? 0,
-        FF: editRow.friction_factor ?? 0,
-      });
+        category: editRow.category || 'Default',
+        colorHex: editRow.color_hex || CATEGORY_DEFAULT_COLORS[editRow.category || 'Default'] || '#888888',
+        fuelType: editRow.fuel_type || 'Gasoline Carbureted',
+      };
+      
+      // Only include HPC params if manual override is enabled
+      if (editRow.manualOverride) {
+        params.tPower = editRow.t_power ?? 0;
+        params.dPower = editRow.d_power ?? 0;
+        params.FF = editRow.friction_factor ?? 0;
+      }
+      
+      await parityApi.upsertEngineCombo(params);
       setEditRow(null);
       await load();
     } catch (e: any) { setError(e.message); }
@@ -2115,15 +2151,47 @@ function EngineCombosPanel() {
     catch (e: any) { setError(e.message); }
   };
 
+  const handleFuelTypeChange = (fuelType: string) => {
+    const params = FUEL_TYPE_TO_HPC_PARAMS[fuelType] || FUEL_TYPE_TO_HPC_PARAMS['Gasoline Carbureted'];
+    setEditRow({ 
+      ...editRow, 
+      fuel_type: fuelType,
+      ...(editRow?.manualOverride ? {} : { t_power: params.tPower, d_power: params.dPower, friction_factor: params.FF })
+    });
+  };
+
+  const handleCategoryChange = (cat: string) => {
+    setEditRow({
+      ...editRow,
+      category: cat,
+      color_hex: CATEGORY_DEFAULT_COLORS[cat] || editRow?.color_hex || '#888888',
+    });
+  };
+
+  const toggleManualOverride = () => {
+    if (!editRow) return;
+    const manualOverride = !editRow.manualOverride;
+    if (!manualOverride && editRow.fuel_type) {
+      const params = FUEL_TYPE_TO_HPC_PARAMS[editRow.fuel_type] || FUEL_TYPE_TO_HPC_PARAMS['Gasoline Carbureted'];
+      setEditRow({ ...editRow, manualOverride, t_power: params.tPower, d_power: params.dPower, friction_factor: params.FF });
+    } else {
+      setEditRow({ ...editRow, manualOverride });
+    }
+  };
+
   return (
     <div>
       <h3 style={{ marginBottom: '0.5rem' }}>Combo Definitions</h3>
       <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1rem' }}>
-        Each combo definition specifies tPower, dPower, and FF (friction factor) used in HPC calculation.
+        Each combo specifies category, fuel type, and HPC parameters (tPower, dPower, FF). Colors are assigned per category.
       </p>
       {error && <pre style={{ color: 'salmon', marginBottom: '0.5rem' }}>{error}</pre>}
 
-      <button style={S.btn('primary')} onClick={() => setEditRow({ name: '', t_power: 0, d_power: 0, friction_factor: 0 })}>+ Add Engine Combo</button>
+      <button style={S.btn('primary')} onClick={() => setEditRow({ 
+        name: '', category: 'Default', color_hex: '#888888',
+        fuel_type: 'Gasoline Carbureted', t_power: 0.6, d_power: 1.0, friction_factor: 15,
+        manualOverride: false 
+      })}>+ Add Engine Combo</button>
 
       {editRow && (
         <div style={{ border: '1px solid var(--color-border)', padding: '0.75rem', borderRadius: 4, marginBottom: '1rem', marginTop: '0.5rem', background: 'var(--color-bg-alt, #2a2a3a)' }}>
@@ -2134,19 +2202,58 @@ function EngineCombosPanel() {
                 style={{ fontFamily: 'monospace', width: 180 }} />
             </div>
             <div className="parity-form-field">
+              <label>Category</label>
+              <select value={editRow.category ?? 'Default'} onChange={e => handleCategoryChange(e.target.value)}
+                style={{ width: 170, padding: '2px 4px' }}>
+                <option value="Default">Default</option>
+                {ENGINE_COMBO_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
+            <div className="parity-form-field">
+              <label>Color</label>
+              <input type="color" value={editRow.color_hex || '#888888'}
+                onChange={e => setEditRow({ ...editRow, color_hex: e.target.value })}
+                style={{ width: 50, height: 28, border: '1px solid #666', borderRadius: 3, cursor: 'pointer', padding: 0 }} />
+            </div>
+            <div className="parity-form-field">
+              <label>Fuel Type</label>
+              <select value={editRow.fuel_type ?? 'Gasoline Carbureted'} onChange={e => handleFuelTypeChange(e.target.value)}
+                style={{ fontFamily: 'monospace', width: 180, padding: '2px 4px' }}>
+                <option value="Gasoline Carbureted">Gasoline Carbureted</option>
+                <option value="Gasoline Injector">Gasoline Injector</option>
+                <option value="Methanol">Methanol</option>
+                <option value="Methanol Injector">Methanol Injector</option>
+                <option value="Nitromethane">Nitromethane</option>
+                <option value="Supercharged Gasoline">Supercharged Gasoline</option>
+                <option value="Supercharged Methanol">Supercharged Methanol</option>
+                <option value="Supercharged Nitro">Supercharged Nitro</option>
+              </select>
+            </div>
+            <div className="parity-form-field">
+              <label>
+                <input type="checkbox" checked={editRow.manualOverride || false} onChange={toggleManualOverride} style={{ marginRight: '4px' }} />
+                Manual Override
+              </label>
+            </div>
+          </div>
+          <div className="parity-form-row" style={{ marginTop: '0.5rem' }}>
+            <div className="parity-form-field">
               <label>tPower</label>
               <input type="number" step="0.01" value={editRow.t_power ?? 0} onChange={e => setEditRow({ ...editRow, t_power: parseFloat(e.target.value) || 0 })}
-                style={{ fontFamily: 'monospace', width: 80 }} />
+                style={{ fontFamily: 'monospace', width: 80, opacity: editRow.manualOverride ? 1 : 0.5 }}
+                disabled={!editRow.manualOverride} />
             </div>
             <div className="parity-form-field">
               <label>dPower</label>
               <input type="number" step="0.01" value={editRow.d_power ?? 0} onChange={e => setEditRow({ ...editRow, d_power: parseFloat(e.target.value) || 0 })}
-                style={{ fontFamily: 'monospace', width: 80 }} />
+                style={{ fontFamily: 'monospace', width: 80, opacity: editRow.manualOverride ? 1 : 0.5 }}
+                disabled={!editRow.manualOverride} />
             </div>
             <div className="parity-form-field">
               <label>FF</label>
               <input type="number" step="0.1" value={editRow.friction_factor ?? 0} onChange={e => setEditRow({ ...editRow, friction_factor: parseFloat(e.target.value) || 0 })}
-                style={{ fontFamily: 'monospace', width: 80 }} />
+                style={{ fontFamily: 'monospace', width: 80, opacity: editRow.manualOverride ? 1 : 0.5 }}
+                disabled={!editRow.manualOverride} />
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
               <button style={S.btn('primary')} onClick={handleSave} disabled={saving}>
@@ -2155,6 +2262,11 @@ function EngineCombosPanel() {
               <button style={S.btn('secondary')} onClick={() => setEditRow(null)}>Cancel</button>
             </div>
           </div>
+          {!editRow.manualOverride && (
+            <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem' }}>
+              HPC parameters auto-calculated from fuel type. Enable "Manual Override" to edit.
+            </div>
+          )}
         </div>
       )}
 
@@ -2165,6 +2277,8 @@ function EngineCombosPanel() {
           <thead>
             <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
               <th style={{ textAlign: 'left', padding: '0.5rem' }}>Name</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Category</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Fuel Type</th>
               <th style={{ textAlign: 'right', padding: '0.5rem' }}>tPower</th>
               <th style={{ textAlign: 'right', padding: '0.5rem' }}>dPower</th>
               <th style={{ textAlign: 'right', padding: '0.5rem' }}>FF</th>
@@ -2175,11 +2289,17 @@ function EngineCombosPanel() {
             {combos.map(c => (
               <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                 <td style={{ padding: '0.4rem 0.5rem', fontWeight: 600 }}>{c.name}</td>
+                <td style={{ padding: '0.4rem 0.5rem' }}>
+                  <span style={{ background: c.color_hex || '#888', color: 'white', padding: '2px 8px', borderRadius: 3, fontSize: '0.75rem', fontWeight: 600 }}>
+                    {c.category || 'Default'}
+                  </span>
+                </td>
+                <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', color: '#999' }}>{c.fuel_type}</td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{c.t_power}</td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{c.d_power}</td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{c.friction_factor}</td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>
-                  <button onClick={() => setEditRow(c)} style={{ cursor: 'pointer', background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.8rem', marginRight: 8 }}>Edit</button>
+                  <button onClick={() => setEditRow({ ...c, manualOverride: false })} style={{ cursor: 'pointer', background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.8rem', marginRight: 8 }}>Edit</button>
                   <button onClick={() => handleDelete(c.id)} style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'salmon', fontSize: '0.8rem' }}>Delete</button>
                 </td>
               </tr>
@@ -2537,10 +2657,11 @@ function AssignCombosPanel({ events, selectedEvent, onGoToRunsWeather }: {
         effectiveToUtc: eventDates.end,
       }));
       const res = await parityApi.bulkUpsertDriverCombos(items);
-      if (res.errors.length > 0) {
-        setError(`Saved with errors: ${res.errors.join('; ')}`);
+      const formatted = formatBulkUpsertDriverCombosResult(res as BulkResultType);
+      if (formatted.hasErrors) {
+        setError(`Saved with errors: ${formatted.errorMessage}`);
       } else {
-        setSuccess(`Saved ${res.created} new assignment(s), closed ${res.closed} previous, skipped ${res.skipped}`);
+        setSuccess(`Saved ${formatted.message}`);
       }
       await loadDrivers();
     } catch (e: any) { setError(e.message); }
@@ -2561,10 +2682,14 @@ function AssignCombosPanel({ events, selectedEvent, onGoToRunsWeather }: {
         effectiveToUtc: eventDates.end,
       }];
       const res = await parityApi.bulkUpsertDriverCombos(items);
-      if (res.errors.length > 0) {
-        setError(res.errors.join('; '));
+      const formatted = formatBulkUpsertDriverCombosResult(res as BulkResultType, { 
+        singleItem: true, 
+        driverName: d.driver_name 
+      });
+      if (formatted.hasErrors) {
+        setError(formatted.errorMessage || 'Unknown error');
       } else {
-        setSuccess(`${d.driver_name}: new assignment created${res.closed ? ', previous closed' : ''}`);
+        setSuccess(formatted.message);
       }
       setChangeAtStartIdx(null);
       setChangeAtStartComboId(0);
@@ -3084,6 +3209,7 @@ function AdminTracksPanel() {
       state: t.state || '',
       zip: t.zip || '',
       street: t.street || '',
+      slope_grade_pct: t.slope_grade_pct != null ? String(t.slope_grade_pct) : '',
     });
   };
 
@@ -3091,7 +3217,9 @@ function AdminTracksPanel() {
     if (!editId) return;
     setSaving(true);
     try {
-      await parityApi.updateTrack({ trackId: editId, ...editFields });
+      const { slope_grade_pct: slopeStr, ...restFields } = editFields;
+      const slopeVal = slopeStr.trim() !== '' ? parseFloat(slopeStr) : null;
+      await parityApi.updateTrack({ trackId: editId, ...restFields, slope_grade_pct: slopeVal } as any);
       setEditId(null);
       load();
     } catch (e: any) { setError(e.message); }
@@ -3150,6 +3278,7 @@ function AdminTracksPanel() {
               <th style={stickyTh}>City/State</th>
               <th style={stickyTh}>Timezone</th>
               <th style={stickyTh}>Zip</th>
+              <th style={{ ...stickyTh, textAlign: 'right' }}>Slope %</th>
               <th style={stickyTh}>Events</th>
               <th style={stickyTh}>Runs</th>
               <th style={stickyTh}>Weather</th>
@@ -3189,6 +3318,18 @@ function AdminTracksPanel() {
                     <input style={{ ...S.input, width: 50 }} value={editFields.zip} placeholder="Zip"
                       onChange={e => setEditFields(f => ({ ...f, zip: e.target.value }))} />
                   ) : <span style={{ fontSize: '0.7rem' }}>{t.zip || ''}</span>}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right' }}>
+                  {editId === t.id ? (
+                    <input style={{ ...S.input, width: 60, textAlign: 'right' }}
+                      value={editFields.slope_grade_pct} placeholder="e.g. 1.44"
+                      title="Slope grade %. Positive=downhill (finish lower than start). DR Pro Book p.11-2."
+                      onChange={e => setEditFields(f => ({ ...f, slope_grade_pct: e.target.value }))} />
+                  ) : (
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: t.slope_grade_pct != null ? undefined : 'var(--color-muted)' }}>
+                      {t.slope_grade_pct != null ? `${t.slope_grade_pct > 0 ? '+' : ''}${t.slope_grade_pct.toFixed(3)}` : '—'}
+                    </span>
+                  )}
                 </td>
                 <td style={S.td}>{t.event_count}</td>
                 <td style={S.td}><span style={{ color: t.total_run_count > 0 ? '#16a34a' : 'var(--color-muted)' }}>{t.total_run_count}</span></td>
@@ -3590,27 +3731,11 @@ function ParitySummaryPanel({ event }: { event: EventWithStats | null }) {
   const [error, setError] = useState('');
 
   // Correction context for PDF export — compute HPC client-side
-  const [corrCtx, setCorrCtx] = useState<CorrectionContext | null>(null);
+  const [corrCtx, setCorrCtx] = useState<CorrectionContextData | null>(null);
   useEffect(() => {
-    Promise.all([
-      parityApi.listEngineCombos(),
-      parityApi.listDriverCombos(),
-      parityApi.listClassDefaults(),
-    ]).then(([ec, dc, cd]) => {
-      setCorrCtx({
-        engineCombos: ec.combos,
-        driverCombos: dc.combos.map(c => ({
-          driver_name: c.driver_name, class_index: c.class_index,
-          engine_combo_id: c.engine_combo_id, engine_combo_name: c.engine_combo_name,
-          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
-        })),
-        classDefaults: cd.classDefaults.map(c => ({
-          class_index: c.class_index, engine_combo_name: c.engine_combo_name,
-          engine_combo_id: c.engine_combo_id,
-          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
-        })),
-      });
-    }).catch(() => {});
+    loadCorrectionContext()
+      .then(setCorrCtx)
+      .catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -3727,27 +3852,11 @@ function QualSheetPanel({ event, classIndex, onDriverClick }: { event: EventWith
   const [error, setError] = useState('');
 
   // Correction context — loaded once, used to compute HPC client-side
-  const [corrCtx, setCorrCtx] = useState<CorrectionContext | null>(null);
+  const [corrCtx, setCorrCtx] = useState<CorrectionContextData | null>(null);
   useEffect(() => {
-    Promise.all([
-      parityApi.listEngineCombos(),
-      parityApi.listDriverCombos(),
-      parityApi.listClassDefaults(),
-    ]).then(([ec, dc, cd]) => {
-      setCorrCtx({
-        engineCombos: ec.combos,
-        driverCombos: dc.combos.map(c => ({
-          driver_name: c.driver_name, class_index: c.class_index,
-          engine_combo_id: c.engine_combo_id, engine_combo_name: c.engine_combo_name,
-          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
-        })),
-        classDefaults: cd.classDefaults.map(c => ({
-          class_index: c.class_index, engine_combo_name: c.engine_combo_name,
-          engine_combo_id: c.engine_combo_id,
-          effective_from_utc: c.effective_from_utc, effective_to_utc: c.effective_to_utc,
-        })),
-      });
-    }).catch(() => {});
+    loadCorrectionContext()
+      .then(setCorrCtx)
+      .catch(() => {});
   }, []);
 
   // Client-side HPC correction for a QualSheetRow
@@ -3976,6 +4085,9 @@ function PeekPanel({ raceLookup }: { raceLookup: string }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PeekResponse | null>(null);
   const [error, setError] = useState('');
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<ProbeODataResponse | null>(null);
+  const [probeError, setProbeError] = useState('');
 
   const doPeek = useCallback(async () => {
     if (raceLookup.length !== 8) { setError('Enter 8-digit YYYYMMDD'); return; }
@@ -3985,6 +4097,16 @@ function PeekPanel({ raceLookup }: { raceLookup: string }) {
       setResult(r);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
+  }, [raceLookup]);
+
+  const doProbe = useCallback(async () => {
+    if (raceLookup.length !== 8) { setProbeError('Enter 8-digit YYYYMMDD'); return; }
+    setProbing(true); setProbeError(''); setProbeResult(null);
+    try {
+      const r = await parityApi.probeOData(raceLookup);
+      setProbeResult(r);
+    } catch (e: any) { setProbeError(e.message); }
+    setProbing(false);
   }, [raceLookup]);
 
   return (
@@ -4031,6 +4153,75 @@ function PeekPanel({ raceLookup }: { raceLookup: string }) {
           )}
         </>
       )}
+
+      {/* ── OData Probe ── */}
+      <div style={{ marginTop: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
+        <div style={S.row}>
+          <button style={S.btn('secondary')} onClick={doProbe} disabled={probing}>
+            {probing ? 'Probing…' : '⟳ OData Probe (all pages)'}
+          </button>
+          <span style={{ color: 'var(--color-muted)', fontSize: '0.75rem' }}>
+            Fetches ALL OData rows — shows per-round/class counts vs DB (identifies missing runs)
+          </span>
+        </div>
+        {probeError && <div style={S.error}>{probeError}</div>}
+        {probeResult && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <span style={S.stat}>OData total: <b>{probeResult.odataTotal}</b></span>
+              <span style={S.stat}>DB total: <b>{probeResult.dbTotal}</b></span>
+              <span style={{ ...S.stat, color: probeResult.totalMissing > 0 ? '#c0392b' : '#27ae60', fontWeight: 600 }}>
+                Missing: {probeResult.totalMissing}
+              </span>
+            </div>
+            <h4 style={{ fontSize: '0.8rem', fontWeight: 600, margin: '0.5rem 0 0.25rem' }}>By Round</h4>
+            <table style={{ fontSize: '0.75rem', borderCollapse: 'collapse', width: '100%', marginBottom: '0.75rem' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface)' }}>
+                  {['Round', 'OData', 'DB', 'Missing'].map(h => (
+                    <th key={h} style={{ padding: '0.2rem 0.5rem', textAlign: 'left', borderBottom: '1px solid var(--color-border)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {probeResult.roundComparison.map(r => (
+                  <tr key={r.round} style={{ background: r.missing > 0 ? 'rgba(192,57,43,0.08)' : undefined }}>
+                    <td style={{ padding: '0.15rem 0.5rem' }}>{r.round}</td>
+                    <td style={{ padding: '0.15rem 0.5rem' }}>{r.odata}</td>
+                    <td style={{ padding: '0.15rem 0.5rem' }}>{r.db}</td>
+                    <td style={{ padding: '0.15rem 0.5rem', color: r.missing > 0 ? '#c0392b' : '#27ae60', fontWeight: r.missing > 0 ? 700 : 400 }}>
+                      {r.missing > 0 ? `−${r.missing}` : '✓'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <h4 style={{ fontSize: '0.8rem', fontWeight: 600, margin: '0.5rem 0 0.25rem' }}>By Class (missing only)</h4>
+            <table style={{ fontSize: '0.75rem', borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface)' }}>
+                  {['Class', 'OData', 'DB', 'Missing'].map(h => (
+                    <th key={h} style={{ padding: '0.2rem 0.5rem', textAlign: 'left', borderBottom: '1px solid var(--color-border)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {probeResult.classComparison.filter(r => r.missing > 0).map(r => (
+                  <tr key={r.class} style={{ background: 'rgba(192,57,43,0.08)' }}>
+                    <td style={{ padding: '0.15rem 0.5rem' }}>{r.class}</td>
+                    <td style={{ padding: '0.15rem 0.5rem' }}>{r.odata}</td>
+                    <td style={{ padding: '0.15rem 0.5rem' }}>{r.db}</td>
+                    <td style={{ padding: '0.15rem 0.5rem', color: '#c0392b', fontWeight: 700 }}>−{r.missing}</td>
+                  </tr>
+                ))}
+                {probeResult.classComparison.every(r => r.missing === 0) && (
+                  <tr><td colSpan={4} style={{ padding: '0.25rem 0.5rem', color: '#27ae60' }}>✓ All classes match</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -4098,6 +4289,71 @@ function IngestPanel({ raceLookup }: { raceLookup: string }) {
         <div style={S.hint}>
           Already imported: {result.existingRowCount} rows on {result.existingFetchedAt}.
           Check "Force re-import" to create a new import (existing rows will be deduped).
+        </div>
+      )}
+
+      {/* ── Purge & Re-fetch ── */}
+      <PurgeSection raceLookup={raceLookup} />
+    </div>
+  );
+}
+
+function PurgeSection({ raceLookup }: { raceLookup: string }) {
+  const [dryRun, setDryRun] = useState<PurgeEventRunsResponse | null>(null);
+  const [result, setResult] = useState<PurgeEventRunsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+
+  const doDryRun = useCallback(async () => {
+    if (raceLookup.length !== 8) { setError('Enter 8-digit YYYYMMDD'); return; }
+    setLoading(true); setError(''); setDryRun(null); setResult(null); setConfirmed(false);
+    try { setDryRun(await parityApi.purgeEventRuns(raceLookup, false)); }
+    catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [raceLookup]);
+
+  const doPurge = useCallback(async () => {
+    if (!confirmed) return;
+    setLoading(true); setError('');
+    try { setResult(await parityApi.purgeEventRuns(raceLookup, true)); setDryRun(null); }
+    catch (e: any) { setError(e.message); }
+    setLoading(false); setConfirmed(false);
+  }, [raceLookup, confirmed]);
+
+  return (
+    <div style={{ marginTop: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
+      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#c0392b', marginBottom: '0.4rem' }}>⚠ Purge Event Runs (Admin)</div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', marginBottom: '0.5rem' }}>
+        Deletes ALL runs and import records for this race lookup. Use before re-ingesting to get a clean slate.
+        The source_ref constraint bug that caused missing runs has been fixed — you only need to purge events
+        that were ingested before the fix.
+      </div>
+      {error && <div style={S.error}>{error}</div>}
+      {result && <div style={{ ...S.hint, color: '#27ae60' }}>✓ {result.message}</div>}
+      {!result && (
+        <div style={S.row}>
+          <button style={{ ...S.btn('secondary'), fontSize: '0.72rem', color: '#c0392b' }} onClick={doDryRun} disabled={loading}>
+            {loading && !dryRun ? 'Checking…' : 'Check runs to purge'}
+          </button>
+          {dryRun && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>
+              Would delete <b>{dryRun.runCount}</b> runs + <b>{dryRun.importCount}</b> import records.
+            </span>
+          )}
+        </div>
+      )}
+      {dryRun && !result && (
+        <div style={{ ...S.row, marginTop: '0.4rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#c0392b' }}>
+            <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+            I understand this is irreversible
+          </label>
+          <button
+            style={{ ...S.btn('primary'), background: '#c0392b', fontSize: '0.72rem', opacity: confirmed ? 1 : 0.4 }}
+            onClick={doPurge} disabled={loading || !confirmed}>
+            {loading ? 'Purging…' : `Purge ${dryRun.runCount} runs`}
+          </button>
         </div>
       )}
     </div>
@@ -4299,6 +4555,13 @@ function WeatherPanel() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
+  // Performance prediction state
+  const [predictionCategory, setPredictionCategory] = useState('');
+  const [predictionTrackId, setPredictionTrackId] = useState(0);
+  const [useTrackHistory, setUseTrackHistory] = useState(false);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionResult, setPredictionResult] = useState<any>(null);
+
   // Create track form
   const [newTrackName, setNewTrackName] = useState('');
   const [newTrackTz, setNewTrackTz] = useState('America/New_York');
@@ -4376,6 +4639,20 @@ function WeatherPanel() {
     } catch (e: any) { setError(e.message); }
     setCnLoading(false);
   }, []);
+
+  const doPerformancePrediction = useCallback(async () => {
+    if (!predictionCategory.trim()) return;
+    setPredictionLoading(true); setError(''); setPredictionResult(null);
+    try {
+      const r = await parityApi.performancePrediction({
+        category: predictionCategory.trim(),
+        trackId: predictionTrackId || undefined,
+        useTrackHistory: useTrackHistory && predictionTrackId > 0,
+      });
+      setPredictionResult(r);
+    } catch (e: any) { setError(e.message); }
+    setPredictionLoading(false);
+  }, [predictionCategory, predictionTrackId, useTrackHistory]);
 
   return (
     <div>
@@ -4482,6 +4759,126 @@ function WeatherPanel() {
           <div>
             <span style={S.stat}>Buckets: <b>{cnResult.bucketsProcessed}</b></span>
             <span style={S.stat}>Range: {cnResult.startUtc} — {cnResult.endUtc}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Performance Prediction */}
+      <div style={S.card}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Performance Prediction</h3>
+        <div style={{ marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+          Predict expected performance based on current weather conditions and historical data
+        </div>
+        <div style={S.row}>
+          <input 
+            style={S.inputWide} 
+            placeholder="Category (e.g., Comp, Top Fuel, Pro Stock)" 
+            value={predictionCategory} 
+            onChange={e => setPredictionCategory(e.target.value)} 
+          />
+          <select 
+            style={{ ...S.input, width: 150 }} 
+            value={predictionTrackId} 
+            onChange={e => setPredictionTrackId(Number(e.target.value))}
+          >
+            <option value={0}>All tracks</option>
+            {tracks.map(t => <option key={t.id} value={t.id}>{t.track_name}</option>)}
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}>
+            <input 
+              type="checkbox" 
+              checked={useTrackHistory} 
+              onChange={e => setUseTrackHistory(e.target.checked)}
+              disabled={predictionTrackId === 0}
+            />
+            Use track history
+          </label>
+          <button 
+            style={S.btn('primary')} 
+            onClick={doPerformancePrediction} 
+            disabled={predictionLoading || !predictionCategory.trim()}
+          >
+            {predictionLoading ? 'Predicting...' : 'Predict'}
+          </button>
+        </div>
+        
+        {predictionResult && (
+          <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 4 }}>
+            {predictionResult.error ? (
+              <div style={{ color: '#dc2626', fontSize: '0.8rem' }}>{predictionResult.error}</div>
+            ) : (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                  {predictionResult.category}{predictionResult.trackName ? ` at ${predictionResult.trackName}` : ''}
+                </div>
+                
+                {predictionResult.currentWeather && (
+                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem' }}>
+                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Current Weather:</div>
+                    <div style={S.stat}>
+                      Temp: <b>{predictionResult.currentWeather.temp_f.toFixed(1)}°F</b>
+                    </div>
+                    <div style={S.stat}>
+                      RH: <b>{predictionResult.currentWeather.rh_pct.toFixed(0)}%</b>
+                    </div>
+                    <div style={S.stat}>
+                      Pressure: <b>{predictionResult.currentWeather.pressure_inhg.toFixed(2)} inHg</b>
+                    </div>
+                    <div style={S.stat}>
+                      DA: <b>{predictionResult.currentWeather.densityAltitude.toFixed(0)} ft</b>
+                    </div>
+                    <div style={S.stat}>
+                      CF: <b>{predictionResult.currentWeather.correctionFactor.toFixed(4)}</b>
+                    </div>
+                  </div>
+                )}
+                
+                {predictionResult.baseline && (
+                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem' }}>
+                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Baseline ({predictionResult.baseline.description}):</div>
+                    <div style={S.stat}>
+                      ET: <b>{formatET(predictionResult.baseline.baseET)}</b>
+                    </div>
+                    <div style={S.stat}>
+                      MPH: <b>{formatMPH(predictionResult.baseline.baseMPH)}</b>
+                    </div>
+                    <div style={S.stat}>
+                      Samples: <b>{predictionResult.baseline.sampleCount}</b>
+                    </div>
+                  </div>
+                )}
+                
+                {predictionResult.prediction && (
+                  <div style={{ fontSize: '0.75rem' }}>
+                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Predicted Performance:</div>
+                    <div style={S.stat}>
+                      ET: <b style={{ color: '#2563eb' }}>{formatET(predictionResult.prediction.predictedET)}</b>
+                      <span style={{ marginLeft: '0.5rem', color: predictionResult.prediction.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
+                        ({predictionResult.prediction.adjustmentET > 0 ? '+' : ''}{predictionResult.prediction.adjustmentET.toFixed(4)})
+                      </span>
+                    </div>
+                    <div style={S.stat}>
+                      MPH: <b style={{ color: '#2563eb' }}>{formatMPH(predictionResult.prediction.predictedMPH)}</b>
+                      <span style={{ marginLeft: '0.5rem', color: predictionResult.prediction.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
+                        ({predictionResult.prediction.adjustmentMPH > 0 ? '+' : ''}{predictionResult.prediction.adjustmentMPH.toFixed(2)})
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {predictionResult.trackHistory && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                    <div style={{ color: 'var(--color-muted)', marginBottom: '0.25rem' }}>Track History Average:</div>
+                    <div style={S.stat}>
+                      ET: <b>{formatET(predictionResult.trackHistory.averageET)}</b>
+                    </div>
+                    <div style={S.stat}>
+                      MPH: <b>{formatMPH(predictionResult.trackHistory.averageMPH)}</b>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -4922,246 +5319,494 @@ function formatRaceLookup(rl: string): string {
   return `${rl.slice(0,4)}-${rl.slice(4,6)}-${rl.slice(6,8)}`;
 }
 
-// Custom tooltip for the chart — shows event name, track, raceLookup, value, runCount
-function TrendsTooltip({ active, payload, metric }: any) {
+const TREND_METRICS: { value: TrendMetricKey; label: string; isET: boolean }[] = [
+  { value: 'ft1320',  label: 'Best ET — Full Pass (1320ft)',     isET: true  },
+  { value: 'ft1000',  label: 'Best ET — 1000ft',                 isET: true  },
+  { value: 'ft660',   label: 'Best ET — Half Track (660ft)',      isET: true  },
+  { value: 'ft330',   label: 'Best ET — 330ft',                   isET: true  },
+  { value: 'ft60',    label: 'Best ET — 60ft Launch',             isET: true  },
+  { value: 'mph1320', label: 'Top Speed — Full Pass (MPH)',       isET: false },
+  { value: 'mph1000', label: 'Top Speed — 1000ft (MPH)',          isET: false },
+  { value: 'mph660',  label: 'Top Speed — Half Track (MPH)',      isET: false },
+];
+
+function trendFmtVal(v: number | null | undefined, isET: boolean): string {
+  if (v == null) return '—';
+  return isET ? v.toFixed(3) : v.toFixed(2);
+}
+
+// Custom tooltip for the By Event / Season chart
+function TrendsTooltip({ active, payload, label, isET }: any) {
   if (!active || !payload?.length) return null;
-  const row: TopByEventRow = payload[0].payload;
-  const isCorrected = false; // corrected_ft1320 metric removed — uses wrong backend CF
-  const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
-  const fmtVal = (v: number | null | undefined, d: number) => v != null ? v.toFixed(d) : '—';
-  const valStr = metric === 'mph1320' ? `${fmtVal(row.value, 2)} MPH` : `${fmtVal(row.value, 3)} sec`;
   return (
     <div style={{
-      background: 'var(--color-surface, #fff)', border: '1px solid var(--color-border)',
+      background: 'var(--color-surface, #1e1e2e)', border: '1px solid var(--color-border)',
       borderRadius: 6, padding: '0.5rem 0.75rem', fontSize: '0.75rem', lineHeight: 1.6,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.12)', maxWidth: 280,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.18)', maxWidth: 300,
     }}>
-      {row.eventName && <div style={{ fontWeight: 700, fontSize: '0.8rem' }}>{row.eventName}</div>}
-      {row.trackName && <div style={{ color: 'var(--color-muted)' }}>{row.trackName}</div>}
-      <div>Date: <b>{formatRaceLookup(row.raceLookup)}</b></div>
-      <div>{metricLabel}: <b>{valStr}</b></div>
-      {isCorrected && row.actualValue != null && (
-        <div>Actual ET: <b>{row.actualValue.toFixed(3)} sec</b></div>
+      {payload.map((p: any, i: number) => {
+        const row: TopByEventRow | undefined = p.payload;
+        const isMultiSeason = payload.length > 1;
+        return (
+          <div key={i} style={{ marginBottom: i < payload.length - 1 ? '0.4rem' : 0 }}>
+            {isMultiSeason && <div style={{ color: p.stroke, fontWeight: 700 }}>{p.name}</div>}
+            {row?.eventName && <div style={{ fontWeight: isMultiSeason ? 400 : 700, fontSize: '0.8rem' }}>{row.eventName}</div>}
+            {row?.trackName && <div style={{ color: 'var(--color-muted)' }}>{row.trackName}</div>}
+            {row?.raceLookup && <div>Date: <b>{formatRaceLookup(row.raceLookup)}</b></div>}
+            <div>{isET ? 'Best ET' : 'Top MPH'}: <b style={{ color: p.stroke }}>{trendFmtVal(p.value, isET)}{isET ? ' sec' : ' mph'}</b></div>
+            {row?.runCount != null && <div>Runs: <b>{row.runCount}</b></div>}
+          </div>
+        );
+      })}
+      {payload.length === 1 && !payload[0].payload?.eventName && label && (
+        <div style={{ color: 'var(--color-muted)', fontSize: '0.7rem' }}>Event #{label}</div>
       )}
-      <div>Runs: <b>{row.runCount}</b>{isCorrected && row.correctedCount != null && ` (${row.correctedCount} corrected)`}</div>
     </div>
   );
 }
 
+// Tooltip for the By Track bar chart
+function TrackBarTooltip({ active, payload, isET }: any) {
+  if (!active || !payload?.length) return null;
+  const row: TopByTrackRow = payload[0].payload;
+  return (
+    <div style={{
+      background: 'var(--color-surface, #1e1e2e)', border: '1px solid var(--color-border)',
+      borderRadius: 6, padding: '0.5rem 0.75rem', fontSize: '0.75rem', lineHeight: 1.6,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+    }}>
+      <div style={{ fontWeight: 700, fontSize: '0.8rem' }}>{row.trackName}</div>
+      <div>{isET ? 'Best ET' : 'Best MPH'}: <b>{trendFmtVal(row.bestValue, isET)}{isET ? ' sec' : ' mph'}</b></div>
+      <div>Avg: <b>{trendFmtVal(row.avgValue, isET)}{isET ? ' sec' : ' mph'}</b></div>
+      <div>Events: <b>{row.eventCount}</b></div>
+      <div>Runs: <b>{row.runCount}</b></div>
+    </div>
+  );
+}
+
+type TrendView = 'byEvent' | 'byTrack' | 'bySeason';
+
+// Season palette — up to 6 distinct seasons
+const SEASON_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2'];
+
 function TrendsPanel() {
-  // Chart controls
+  const [view, setView] = useState<TrendView>('byEvent');
   const [classIndex, setClassIndex] = useState('TF');
-  const [metric, setMetric] = useState<'mph1320' | 'ft1320'>('mph1320');
+  const [metric, setMetric] = useState<TrendMetricKey>('mph1320');
   const [startYear, setStartYear] = useState('');
   const [endYear, setEndYear] = useState('');
   const [includeDQ, setIncludeDQ] = useState(false);
   const [minRunCount, setMinRunCount] = useState(1);
 
-  // Chart data
+  // By Event data
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<TopByEventResponse | null>(null);
 
-  const loadChart = useCallback(async () => {
+  // By Track data
+  const [trackLoading, setTrackLoading] = useState(false);
+  const [trackError, setTrackError] = useState('');
+  const [trackData, setTrackData] = useState<TopByTrackResponse | null>(null);
+
+  // Season vs Season data — up to 3 seasons
+  const [seasonYears, setSeasonYears] = useState<string[]>(['', '']);
+  const [seasonLoading, setSeasonLoading] = useState(false);
+  const [seasonError, setSeasonError] = useState('');
+  const [seasonSets, setSeasonSets] = useState<TopByEventResponse[]>([]);
+
+  const metricMeta = TREND_METRICS.find(m => m.value === metric) ?? TREND_METRICS[0];
+  const isET = metricMeta.isET;
+  const chartColor = isET ? '#16a34a' : '#2563eb';
+
+  const sharedFilters = { classIndex, metric, includeDQ, minRunCount };
+
+  // ── By Event loader ──
+  const loadByEvent = useCallback(async () => {
     setLoading(true); setError(''); setData(null);
     try {
       const startRaceLookup = startYear ? `${startYear}0101` : undefined;
       const endRaceLookup = endYear ? `${endYear}1231` : undefined;
-      const res = await parityApi.topByEvent({
-        classIndex, metric, startRaceLookup, endRaceLookup,
-        includeDQ, minRunCount,
-      });
+      const res = await parityApi.topByEvent({ ...sharedFilters, startRaceLookup, endRaceLookup });
       setData(res);
     } catch (e: any) { setError(e.message); }
     setLoading(false);
   }, [classIndex, metric, startYear, endYear, includeDQ, minRunCount]);
 
-  const exportCsv = useCallback(() => {
+  // ── By Track loader ──
+  const loadByTrack = useCallback(async () => {
+    if (metric === 'corrected_ft1320') return;
+    setTrackLoading(true); setTrackError(''); setTrackData(null);
+    try {
+      const startRaceLookup = startYear ? `${startYear}0101` : undefined;
+      const endRaceLookup = endYear ? `${endYear}1231` : undefined;
+      const res = await parityApi.topByTrack({
+        classIndex, metric: metric as any, startRaceLookup, endRaceLookup, includeDQ, minRunCount,
+      });
+      setTrackData(res);
+    } catch (e: any) { setTrackError(e.message); }
+    setTrackLoading(false);
+  }, [classIndex, metric, startYear, endYear, includeDQ, minRunCount]);
+
+  // ── Season vs Season loader ──
+  const loadSeasons = useCallback(async () => {
+    const validYears = seasonYears.filter(y => y.length === 4);
+    if (validYears.length < 2) { setSeasonError('Enter at least 2 valid years.'); return; }
+    setSeasonLoading(true); setSeasonError(''); setSeasonSets([]);
+    try {
+      const results = await Promise.all(validYears.map(y =>
+        parityApi.topByEvent({ ...sharedFilters, startRaceLookup: `${y}0101`, endRaceLookup: `${y}1231` })
+      ));
+      setSeasonSets(results);
+    } catch (e: any) { setSeasonError(e.message); }
+    setSeasonLoading(false);
+  }, [classIndex, metric, includeDQ, minRunCount, seasonYears]);
+
+  // ── CSV export ──
+  const exportByEventCsv = useCallback(() => {
     if (!data?.rows.length) return;
-    const ml = metric === 'mph1320' ? 'Top MPH' : 'Best ET';
-    const header = `Race Lookup,Date,Event Name,Track,${ml},Run Count`;
+    const header = `Race Lookup,Date,Event Name,Track,${metricMeta.label},Run Count`;
     const esc = (s: string | null) => s ? `"${s.replace(/"/g, '""')}"` : '';
-    const fv = (v: number | null | undefined) => v != null ? String(v) : '';
     const lines = data.rows.map(r =>
-      `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${esc(r.eventName)},${esc(r.trackName)},${fv(r.value)},${r.runCount}`
+      `${r.raceLookup},${formatRaceLookup(r.raceLookup)},${esc(r.eventName)},${esc(r.trackName)},${r.value ?? ''},${r.runCount}`
     );
     const csv = [header, ...lines].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `parity_trends_${classIndex}_${metric}_${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [data, metric, classIndex]);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `trends_byevent_${classIndex}_${metric}_${Date.now()}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }, [data, metricMeta.label, classIndex, metric]);
 
-  const metricLabel = metric === 'mph1320' ? 'Top MPH' : 'Best ET (sec)';
-  const chartColor = metric === 'mph1320' ? '#2563eb' : '#16a34a';
-  const isCorrectedMetric = false;
+  const exportByTrackCsv = useCallback(() => {
+    if (!trackData?.rows.length) return;
+    const header = `Track,Best,Avg,Events,Runs`;
+    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const lines = trackData.rows.map(r =>
+      `${esc(r.trackName)},${r.bestValue},${r.avgValue},${r.eventCount},${r.runCount}`
+    );
+    const csv = [header, ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `trends_bytrack_${classIndex}_${metric}_${Date.now()}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }, [trackData, classIndex, metric]);
+
+  // ── Shared controls bar ──
+  const controlBar = (
+    <div style={S.card}>
+      <div className="parity-form-row">
+        <div className="parity-form-field">
+          <label>Class</label>
+          <select value={classIndex} onChange={e => setClassIndex(e.target.value)} style={{ width: 80 }}>
+            {NHRA_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="parity-form-field">
+          <label>Metric</label>
+          <select value={metric} onChange={e => setMetric(e.target.value as TrendMetricKey)} style={{ width: 220 }}>
+            {TREND_METRICS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+        {view !== 'bySeason' && (
+          <>
+            <div className="parity-form-field">
+              <label>From Year</label>
+              <input style={{ width: 60 }} placeholder="YYYY" maxLength={4}
+                value={startYear} onChange={e => setStartYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+            </div>
+            <div className="parity-form-field">
+              <label>To Year</label>
+              <input style={{ width: 60 }} placeholder="YYYY" maxLength={4}
+                value={endYear} onChange={e => setEndYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+            </div>
+          </>
+        )}
+        <button style={{ ...S.btn('primary'), alignSelf: 'flex-end' }}
+          onClick={view === 'byEvent' ? loadByEvent : view === 'byTrack' ? loadByTrack : loadSeasons}
+          disabled={loading || trackLoading || seasonLoading}>
+          {(loading || trackLoading || seasonLoading) ? 'Loading…' : 'Load'}
+        </button>
+      </div>
+      <div className="parity-form-row" style={{ marginBottom: 0 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', cursor: 'pointer' }}>
+          <input type="checkbox" checked={includeDQ} onChange={e => setIncludeDQ(e.target.checked)} />
+          Include DQ
+        </label>
+        <div className="parity-form-field">
+          <label>Min runs</label>
+          <input type="number" min={1} max={500} style={{ width: 55 }}
+            value={minRunCount} onChange={e => setMinRunCount(Math.max(1, parseInt(e.target.value, 10) || 1))} />
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Sub-tab nav ──
+  const subTabs: { key: TrendView; label: string }[] = [
+    { key: 'byEvent',  label: 'By Event'        },
+    { key: 'byTrack',  label: 'By Track'         },
+    { key: 'bySeason', label: 'Season vs Season' },
+  ];
 
   return (
     <div>
-      {/* ── Chart Controls ── */}
-      <div style={S.card}>
-        <div className="parity-form-row">
-          <div className="parity-form-field">
-            <label>Class</label>
-            <select value={classIndex} onChange={e => setClassIndex(e.target.value)}
-              style={{ width: 80 }}>
-              {NHRA_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div className="parity-form-field">
-            <label>Metric</label>
-            <select value={metric} onChange={e => setMetric(e.target.value as any)}
-              style={{ width: 165 }}>
-              <option value="mph1320">Top MPH (1320)</option>
-              <option value="ft1320">Best ET (1320)</option>
-            </select>
-          </div>
-          <div className="parity-form-field">
-            <label>From Year</label>
-            <input style={{ width: 60 }} placeholder="YYYY" maxLength={4}
-              value={startYear} onChange={e => setStartYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
-          </div>
-          <div className="parity-form-field">
-            <label>To Year</label>
-            <input style={{ width: 60 }} placeholder="YYYY" maxLength={4}
-              value={endYear} onChange={e => setEndYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
-          </div>
-          <button style={{ ...S.btn('primary'), alignSelf: 'flex-end' }} onClick={loadChart} disabled={loading}>
-            {loading ? 'Loading...' : 'Load Chart'}
+      {/* Sub-tab nav */}
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
+        {subTabs.map(t => (
+          <button key={t.key} onClick={() => setView(t.key)}
+            style={{ ...S.btn(view === t.key ? 'primary' : 'secondary'), fontSize: '0.8rem' }}>
+            {t.label}
           </button>
-        </div>
-        <div className="parity-form-row" style={{ marginBottom: 0 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={includeDQ} onChange={e => setIncludeDQ(e.target.checked)} />
-            Include DQ
-          </label>
-          <div className="parity-form-field">
-            <label>Min runs</label>
-            <input type="number" min={1} max={500} style={{ width: 55 }}
-              value={minRunCount} onChange={e => setMinRunCount(Math.max(1, parseInt(e.target.value, 10) || 1))} />
-          </div>
-          <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)', alignSelf: 'flex-end' }}>
-            (DQ rows with null flag treated as non-DQ)
-          </span>
-        </div>
+        ))}
       </div>
 
-      {error && <div style={S.error}>{error}</div>}
+      {controlBar}
 
-      {/* ── Chart ── */}
-      {data && data.rows.length > 0 && (
-        <div style={S.card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>
-              {classIndex} — {metricLabel} per Event ({data.rows.length} events)
-              {data.includeDQ && <span style={{ ...S.badge('#6b7280'), marginLeft: 6 }}>+DQ</span>}
-              {data.minRunCount > 1 && <span style={{ ...S.badge('#3b82f6'), marginLeft: 4 }}>≥{data.minRunCount} runs</span>}
-            </h3>
-            <button style={S.btn('secondary')} onClick={exportCsv}>Export CSV</button>
-          </div>
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={data.rows} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis
-                dataKey="raceLookup"
-                tickFormatter={rl => {
-                  const row = data.rows.find(r => r.raceLookup === rl);
-                  if (row?.eventName) {
-                    const short = row.eventName.length > 16 ? row.eventName.slice(0, 14) + '…' : row.eventName;
-                    return short;
-                  }
-                  return formatRaceLookup(rl).slice(0, 7);
-                }}
-                tick={{ fontSize: 9 }}
-                interval="preserveStartEnd"
-                angle={data.rows.length > 10 ? -30 : 0}
-                textAnchor={data.rows.length > 10 ? 'end' : 'middle'}
-                height={data.rows.length > 10 ? 60 : 30}
-              />
-              <YAxis
-                domain={['auto', 'auto']}
-                tick={{ fontSize: 10 }}
-                tickFormatter={(v: number) => metric === 'mph1320' ? v.toFixed(0) : v.toFixed(2)}
-              />
-              <Tooltip content={<TrendsTooltip metric={metric} />} />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={chartColor}
-                strokeWidth={2}
-                dot={{ r: 3, fill: chartColor }}
-                activeDot={{ r: 5 }}
-                name={isCorrectedMetric ? 'Corrected ET' : metricLabel}
-                connectNulls
-              />
-              {isCorrectedMetric && (
-                <Line
-                  type="monotone"
-                  dataKey="actualValue"
-                  stroke="#16a34a"
-                  strokeWidth={1.5}
-                  strokeDasharray="5 3"
-                  dot={{ r: 2, fill: '#16a34a' }}
-                  activeDot={{ r: 4 }}
-                  name="Actual ET"
-                  connectNulls
-                />
+      {/* ════ BY EVENT ════ */}
+      {view === 'byEvent' && (
+        <>
+          {error && <div style={S.error}>{error}</div>}
+          {data && data.rows.length > 0 && (
+            <div style={S.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>
+                  {classIndex} — {metricMeta.label} per Event ({data.rows.length} events)
+                  {data.includeDQ && <span style={{ ...S.badge('#6b7280'), marginLeft: 6 }}>+DQ</span>}
+                  {data.minRunCount > 1 && <span style={{ ...S.badge('#3b82f6'), marginLeft: 4 }}>≥{data.minRunCount} runs</span>}
+                </h3>
+                <button style={S.btn('secondary')} onClick={exportByEventCsv}>Export CSV</button>
+              </div>
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={data.rows} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis
+                    dataKey="raceLookup"
+                    tickFormatter={rl => {
+                      const row = data.rows.find(r => r.raceLookup === rl);
+                      if (row?.eventName) return row.eventName.length > 16 ? row.eventName.slice(0, 14) + '…' : row.eventName;
+                      return formatRaceLookup(rl).slice(0, 7);
+                    }}
+                    tick={{ fontSize: 9 }} interval="preserveStartEnd"
+                    angle={data.rows.length > 10 ? -30 : 0}
+                    textAnchor={data.rows.length > 10 ? 'end' : 'middle'}
+                    height={data.rows.length > 10 ? 60 : 30}
+                  />
+                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }}
+                    tickFormatter={(v: number) => isET ? v.toFixed(2) : v.toFixed(0)} />
+                  <Tooltip content={<TrendsTooltip isET={isET} />} />
+                  <Line type="monotone" dataKey="value" stroke={chartColor} strokeWidth={2}
+                    dot={{ r: 3, fill: chartColor }} activeDot={{ r: 5 }}
+                    name={metricMeta.label} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {data && data.rows.length === 0 && (
+            <div style={S.hint}>No data for {classIndex} / {metric}. Try adjusting filters or ingesting more events.</div>
+          )}
+          {data && data.rows.length > 0 && (
+            <div style={S.card}>
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>Data ({data.rows.length} rows)</h3>
+              <div style={{ maxHeight: 380, overflow: 'auto' }}>
+                <table style={S.table}>
+                  <thead><tr>
+                    <th style={S.th}>Race Lookup</th><th style={S.th}>Event</th>
+                    <th style={S.th}>Track</th><th style={S.th}>{metricMeta.label}</th><th style={S.th}>Runs</th>
+                  </tr></thead>
+                  <tbody>
+                    {data.rows.map(r => (
+                      <tr key={r.raceLookup}>
+                        <td style={S.td}><span title={formatRaceLookup(r.raceLookup)}>{r.raceLookup}</span></td>
+                        <td style={S.td}>{r.eventName ?? <span style={{ color: 'var(--color-muted)' }}>—</span>}</td>
+                        <td style={S.td}>{r.trackName ?? <span style={{ color: 'var(--color-muted)' }}>—</span>}</td>
+                        <td style={{ ...S.td, fontWeight: 600 }}>{trendFmtVal(r.value, isET)}</td>
+                        <td style={S.td}>{r.runCount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ════ BY TRACK ════ */}
+      {view === 'byTrack' && (
+        <>
+          {trackError && <div style={S.error}>{trackError}</div>}
+          {trackData && trackData.rows.length > 0 && (
+            <div style={S.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>
+                  {classIndex} — {metricMeta.label} by Track ({trackData.rows.length} tracks)
+                </h3>
+                <button style={S.btn('secondary')} onClick={exportByTrackCsv}>Export CSV</button>
+              </div>
+              <ResponsiveContainer width="100%" height={Math.max(280, trackData.rows.length * 28 + 40)}>
+                <BarChart data={trackData.rows} layout="vertical"
+                  margin={{ top: 5, right: 60, bottom: 5, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
+                  <XAxis type="number" domain={['auto', 'auto']} tick={{ fontSize: 10 }}
+                    tickFormatter={(v: number) => isET ? v.toFixed(2) : v.toFixed(1)} />
+                  <YAxis type="category" dataKey="trackName" width={160}
+                    tick={{ fontSize: 9 }} tickFormatter={(s: string) => s.length > 22 ? s.slice(0, 20) + '…' : s} />
+                  <Tooltip content={<TrackBarTooltip isET={isET} />} />
+                  <Bar dataKey="bestValue" name={isET ? 'Best ET' : 'Best MPH'} radius={[0, 3, 3, 0]}>
+                    {trackData.rows.map((_, idx) => (
+                      <Cell key={idx} fill={isET ? '#16a34a' : '#2563eb'} opacity={0.75 + (idx / trackData.rows.length) * 0.25} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="avgValue" name={isET ? 'Avg ET' : 'Avg MPH'}
+                    fill={isET ? '#86efac' : '#93c5fd'} radius={[0, 3, 3, 0]} opacity={0.6} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+                Dark bar = best {isET ? 'ET (lower is faster)' : 'MPH (higher is faster)'} · Light bar = average
+              </div>
+            </div>
+          )}
+          {trackData && trackData.rows.length === 0 && (
+            <div style={S.hint}>No track data found. Try adjusting filters.</div>
+          )}
+          {trackData && trackData.rows.length > 0 && (
+            <div style={S.card}>
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>Track Data ({trackData.rows.length} tracks)</h3>
+              <div style={{ maxHeight: 380, overflow: 'auto' }}>
+                <table style={S.table}>
+                  <thead><tr>
+                    <th style={S.th}>Track</th><th style={S.th}>Best</th>
+                    <th style={S.th}>Avg</th><th style={S.th}>Events</th><th style={S.th}>Runs</th>
+                  </tr></thead>
+                  <tbody>
+                    {trackData.rows.map((r, i) => (
+                      <tr key={i}>
+                        <td style={S.td}>{r.trackName}</td>
+                        <td style={{ ...S.td, fontWeight: 600 }}>{trendFmtVal(r.bestValue, isET)}</td>
+                        <td style={S.td}>{trendFmtVal(r.avgValue, isET)}</td>
+                        <td style={S.td}>{r.eventCount}</td>
+                        <td style={S.td}>{r.runCount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ════ SEASON VS SEASON ════ */}
+      {view === 'bySeason' && (
+        <>
+          {/* Year selectors */}
+          <div style={S.card}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+              Compare up to 3 seasons — enter years to overlay on the same chart
+            </div>
+            <div className="parity-form-row" style={{ marginBottom: 0 }}>
+              {seasonYears.map((y, i) => (
+                <div key={i} className="parity-form-field">
+                  <label style={{ color: SEASON_COLORS[i] }}>Season {i + 1}</label>
+                  <input style={{ width: 64, borderColor: SEASON_COLORS[i] }} placeholder="YYYY" maxLength={4}
+                    value={y} onChange={e => {
+                      const next = [...seasonYears];
+                      next[i] = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setSeasonYears(next);
+                    }} />
+                </div>
+              ))}
+              {seasonYears.length < 3 && (
+                <button style={{ ...S.btn('secondary'), alignSelf: 'flex-end', fontSize: '0.75rem' }}
+                  onClick={() => setSeasonYears([...seasonYears, ''])}>+ Add Season</button>
               )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {data && data.rows.length === 0 && (
-        <div style={S.hint}>No data found for {classIndex} {metric}. Try ingesting more events or lowering min run count.</div>
-      )}
-
-      {/* ── Data Table ── */}
-      {data && data.rows.length > 0 && (
-        <div style={S.card}>
-          <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-            Data ({data.rows.length} rows)
-          </h3>
-          <div style={{ maxHeight: 400, overflow: 'auto' }}>
-            <table style={S.table}>
-              <thead>
-                <tr>
-                  <th style={S.th}>Race Lookup</th>
-                  <th style={S.th}>Event</th>
-                  <th style={S.th}>Track</th>
-                  <th style={S.th}>{metricLabel}</th>
-                  {isCorrectedMetric && <th style={S.th}>Actual ET</th>}
-                  <th style={S.th}>Runs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map(r => (
-                  <tr key={r.raceLookup}>
-                    <td style={S.td}>
-                      <span title={formatRaceLookup(r.raceLookup)}>{r.raceLookup}</span>
-                    </td>
-                    <td style={S.td}>{r.eventName || <span style={{ color: 'var(--color-muted)' }}>—</span>}</td>
-                    <td style={S.td}>{r.trackName || <span style={{ color: 'var(--color-muted)' }}>—</span>}</td>
-                    <td style={{ ...S.td, fontWeight: 600 }}>
-                      {r.value != null ? (metric === 'mph1320' ? r.value.toFixed(2) : r.value.toFixed(3)) : '—'}
-                    </td>
-                    {isCorrectedMetric && (
-                      <td style={{ ...S.td, color: '#16a34a' }}>
-                        {r.actualValue != null ? r.actualValue.toFixed(3) : '—'}
-                      </td>
-                    )}
-                    <td style={S.td}>{r.runCount.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              {seasonYears.length > 2 && (
+                <button style={{ ...S.btn('secondary'), alignSelf: 'flex-end', fontSize: '0.75rem' }}
+                  onClick={() => setSeasonYears(seasonYears.slice(0, -1))}>− Remove</button>
+              )}
+            </div>
           </div>
-        </div>
+          {seasonError && <div style={S.error}>{seasonError}</div>}
+          {seasonSets.length >= 2 && (() => {
+            // Align by event index within each season
+            const maxLen = Math.max(...seasonSets.map(s => s.rows.length));
+            const chartData = Array.from({ length: maxLen }, (_, i) => {
+              const point: any = { eventIdx: i + 1 };
+              seasonSets.forEach((s, si) => {
+                const row = s.rows[i];
+                if (row) {
+                  point[`s${si}_value`] = row.value;
+                  point[`s${si}_meta`] = row;
+                }
+              });
+              return point;
+            });
+            const validYears = seasonYears.filter(y => y.length === 4);
+            return (
+              <div style={S.card}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  {classIndex} — {metricMeta.label}: Season Comparison
+                </h3>
+                <ResponsiveContainer width="100%" height={340}>
+                  <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    <XAxis dataKey="eventIdx" tick={{ fontSize: 10 }} label={{ value: 'Event #', position: 'insideBottomRight', offset: -8, fontSize: 10 }} />
+                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }}
+                      tickFormatter={(v: number) => isET ? v.toFixed(2) : v.toFixed(0)} />
+                    <Tooltip content={(props: any) => {
+                      if (!props.active || !props.payload?.length) return null;
+                      return (
+                        <div style={{
+                          background: 'var(--color-surface, #1e1e2e)', border: '1px solid var(--color-border)',
+                          borderRadius: 6, padding: '0.5rem 0.75rem', fontSize: '0.75rem', lineHeight: 1.6,
+                        }}>
+                          <div style={{ fontWeight: 700, marginBottom: 2 }}>Event #{props.label}</div>
+                          {props.payload.map((p: any, pi: number) => {
+                            const si = parseInt(p.dataKey.replace('s', '').replace('_value', ''));
+                            const meta: TopByEventRow | undefined = props.payload[0].payload[`s${si}_meta`];
+                            return (
+                              <div key={pi} style={{ color: p.stroke }}>
+                                <b>{validYears[si]}</b>
+                                {meta?.eventName ? ` — ${meta.eventName}` : ''}
+                                {': '}<b>{trendFmtVal(p.value, isET)}{isET ? ' sec' : ' mph'}</b>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    }} />
+                    <Legend formatter={(v: string) => {
+                      const si = parseInt(v.replace('s', '').replace('_value', ''));
+                      return validYears[si] ?? v;
+                    }} />
+                    {seasonSets.map((_, si) => (
+                      <Line key={si} type="monotone" dataKey={`s${si}_value`}
+                        stroke={SEASON_COLORS[si]} strokeWidth={2}
+                        dot={{ r: 3, fill: SEASON_COLORS[si] }} activeDot={{ r: 5 }}
+                        name={`s${si}_value`} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                  {seasonSets.map((s, si) => (
+                    <div key={si} style={{ fontSize: '0.75rem', color: SEASON_COLORS[si] }}>
+                      <b>{validYears[si]}</b>: {s.rows.length} events, best {trendFmtVal(
+                        isET ? Math.min(...s.rows.map(r => r.value ?? Infinity).filter(v => v !== Infinity))
+                             : Math.max(...s.rows.map(r => r.value ?? -Infinity).filter(v => v !== -Infinity)),
+                        isET
+                      )}{isET ? ' sec' : ' mph'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+          {seasonSets.length >= 2 && seasonSets.every(s => s.rows.length === 0) && (
+            <div style={S.hint}>No data found for the selected seasons.</div>
+          )}
+        </>
       )}
-
     </div>
   );
 }
@@ -6566,12 +7211,37 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
   const [error, setError] = useState('');
   const [range, setRange] = useState<WxRange>('event');
 
+  // Live Tempest current weather state
+  const [liveWx, setLiveWx] = useState<TempestCurrentWeatherResponse | null>(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState('');
+
+  // Station comparison column picker
+  const [showStationColPicker, setShowStationColPicker] = useState(false);
+  const [stationVisibleCols, setStationVisibleCols] = useState<Set<string>>(() =>
+    new Set(['temp_f', 'rh', 'press', 'da', 'cf', 'grains', 'updated'])
+  );
+
+  const fetchLiveWeather = useCallback(async () => {
+    setLiveLoading(true); setLiveError('');
+    try {
+      const res = await parityApi.tempestCurrentWeather();
+      setLiveWx(res);
+    } catch (e: any) {
+      setLiveError(e.message || 'Failed to fetch current weather');
+    }
+    setLiveLoading(false);
+  }, []);
+
   useEffect(() => {
     if (!event) { setData(null); return; }
     let cancelled = false;
     setLoading(true); setError('');
-    parityApi.weatherTimeseries({ eventId: event.id }).then(res => {
-      if (!cancelled) setData(res);
+    Promise.all([
+      parityApi.weatherTimeseries({ eventId: event.id }),
+      parityApi.tempestCurrentWeather(),
+    ]).then(([ts, live]) => {
+      if (!cancelled) { setData(ts); setLiveWx(live); }
     }).catch((e: any) => {
       if (!cancelled) setError(e.message || 'Failed to load weather timeseries');
     }).finally(() => {
@@ -6615,6 +7285,23 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     return allDerived.filter(p => new Date(p.ts).getTime() >= cutoff);
   }, [allDerived, range]);
 
+  // Compute live consensus (median of valid stations)
+  const liveConsensus = useMemo(() => {
+    if (!liveWx) return null;
+    const valid = liveWx.stations.filter(s => !s.error && s.temp_f != null && s.rh_pct != null && s.pressure_inhg != null);
+    if (valid.length === 0) return null;
+    const median = (arr: number[]) => {
+      const s = [...arr].sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+    const T = median(valid.map(s => s.temp_f!));
+    const RH = median(valid.map(s => s.rh_pct!));
+    const BP = median(valid.map(s => s.pressure_inhg!));
+    const w = computeWeather(T, pct_to_frac(RH), BP);
+    return { temp: T, rh: RH, baro: BP, da: w.densityAltitude, cf: w.correctionFactor, waterGrains: w.waterGrains, stationCount: valid.length };
+  }, [liveWx]);
+
 
   if (!event) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Select an event above.</p></div>;
   if (loading) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>Loading weather timeseries...</p></div>;
@@ -6622,7 +7309,6 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
   if (!data || data.points.length === 0) return <div style={S.card}><p style={{ color: 'var(--color-muted)' }}>No weather timeseries data for this event.</p></div>;
 
   const pts = filteredDerived;
-  const latest = allDerived[allDerived.length - 1];
 
   // Shared chart styles
   const ttStyle = { fontSize: '0.72rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)' };
@@ -6659,10 +7345,64 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
     </div>
   );
 
+  // Station label helper
+  const stationLabel = (sid: string, idx: number) => {
+    const labels = ['Primary', 'Backup', 'Tertiary'];
+    return `${labels[idx] ?? `Station ${idx + 1}`} (${sid})`;
+  };
+
+  // Station status color
+  const stationStatusColor = (s: TempestCurrentStation) => {
+    if (s.error) return '#ef4444';
+    if (s.temp_f == null) return '#f97316';
+    return '#22c55e';
+  };
+
+  // Compute derived values per station
+  type StationDerived = TempestCurrentStation & {
+    da: number | null; cf: number | null; waterGrains: number | null;
+    dewPt: number | null; airDensity: number | null; vaporPressure: number | null;
+  };
+  const stationsDerived: StationDerived[] = (liveWx?.stations ?? []).map(st => {
+    if (st.error || st.temp_f == null || st.rh_pct == null || st.pressure_inhg == null) {
+      return { ...st, da: null, cf: null, waterGrains: null, dewPt: null, airDensity: null, vaporPressure: null };
+    }
+    const w = computeWeather(st.temp_f, pct_to_frac(st.rh_pct), st.pressure_inhg);
+    return {
+      ...st,
+      da: w.densityAltitude, cf: w.correctionFactor, waterGrains: w.waterGrains,
+      dewPt: w.dewPoint, airDensity: w.airDensity, vaporPressure: w.vp,
+    };
+  });
+
+  // Column definitions for station comparison table
+  type StationCol = { key: string; label: string; defaultOn: boolean; fmt: (d: StationDerived) => string; align?: 'left' | 'right' };
+  const STATION_COLS: StationCol[] = [
+    { key: 'temp_f',   label: 'Temp °F',     defaultOn: true,  fmt: d => d.temp_f != null ? wxFmt.temp(d.temp_f) : '—', align: 'right' },
+    { key: 'temp_c',   label: 'Temp °C',     defaultOn: false, fmt: d => d.temp_c != null ? d.temp_c.toFixed(1) : '—', align: 'right' },
+    { key: 'rh',       label: 'RH %',        defaultOn: true,  fmt: d => d.rh_pct != null ? wxFmt.rh(d.rh_pct) : '—', align: 'right' },
+    { key: 'press',    label: 'Press inHg',   defaultOn: true,  fmt: d => d.pressure_inhg != null ? wxFmt.baro(d.pressure_inhg) : '—', align: 'right' },
+    { key: 'press_mb', label: 'Press mb',     defaultOn: false, fmt: d => d.station_pressure_mb != null ? d.station_pressure_mb.toFixed(1) : '—', align: 'right' },
+    { key: 'da',       label: 'Density Alt',  defaultOn: true,  fmt: d => d.da != null ? wxFmt.da(d.da) : '—', align: 'right' },
+    { key: 'cf',       label: 'Corr Factor',  defaultOn: true,  fmt: d => d.cf != null ? wxFmt.cf(d.cf) : '—', align: 'right' },
+    { key: 'grains',   label: 'Water Grains', defaultOn: true,  fmt: d => d.waterGrains != null ? wxFmt.grains(d.waterGrains) : '—', align: 'right' },
+    { key: 'dewPt',    label: 'Dew Point °F', defaultOn: false, fmt: d => d.dewPt != null ? d.dewPt.toFixed(1) : '—', align: 'right' },
+    { key: 'airDens',  label: 'Air Density',  defaultOn: false, fmt: d => d.airDensity != null ? d.airDensity.toFixed(4) : '—', align: 'right' },
+    { key: 'vp',       label: 'Vapor Press',  defaultOn: false, fmt: d => d.vaporPressure != null ? d.vaporPressure.toFixed(4) : '—', align: 'right' },
+    { key: 'updated',  label: 'Updated',      defaultOn: true,  fmt: d => d.timestamp_utc ? d.timestamp_utc.slice(11, 19) + ' UTC' : '—', align: 'left' },
+  ];
+
   return (
     <div>
-      {/* Time Range selector */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+      {/* Header + Get Current button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+        <button
+          style={{ ...S.btn('primary'), fontSize: '0.72rem', padding: '0.3rem 0.75rem', opacity: liveLoading ? 0.6 : 1 }}
+          onClick={fetchLiveWeather}
+          disabled={liveLoading}
+        >
+          {liveLoading ? 'Fetching...' : 'Get Current Weather'}
+        </button>
         <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
           {WX_RANGES.map(r => (
             <button key={r.key} onClick={() => setRange(r.key)}
@@ -6678,15 +7418,88 @@ function WeatherDashPanel({ event }: { event: EventWithStats | null }) {
         </div>
       </div>
 
-      {/* Current Conditions — even grid filling full width */}
-      {latest && latest.temp != null && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.4rem', marginBottom: '0.5rem' }}>
-          <CondCard label="Temperature" value={latest.temp != null ? wxFmt.temp(latest.temp) : '—'} unit="°F" color="#ef4444" />
-          <CondCard label="Humidity" value={latest.rh != null ? wxFmt.rh(latest.rh) : '—'} unit="%" color="#8b5cf6" />
-          <CondCard label="Barometer" value={latest.baro != null ? wxFmt.baro(latest.baro) : '—'} unit="inHg" color="#3b82f6" />
-          <CondCard label="Density Alt" value={latest.da != null ? wxFmt.da(latest.da) : '—'} unit="ft" color="#f97316" />
-          <CondCard label="Corr Factor" value={latest.cf != null ? wxFmt.cf(latest.cf) : '—'} unit="" color="#16a34a" />
-          <CondCard label="Water Grains" value={latest.waterGrains != null ? wxFmt.grains(latest.waterGrains) : '—'} unit="gr/lb" color="#84cc16" />
+      {liveError && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.3rem' }}>{liveError}</div>}
+
+      {/* Current Conditions — from LIVE Tempest readings (consensus of valid stations) */}
+      {liveConsensus && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.2rem' }}>
+            Live Conditions ({liveConsensus.stationCount} station{liveConsensus.stationCount > 1 ? 's' : ''})
+            {liveWx && <span style={{ marginLeft: '0.5rem' }}>as of {liveWx.fetchedAt} UTC</span>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.4rem' }}>
+            <CondCard label="Temperature" value={wxFmt.temp(liveConsensus.temp)} unit="°F" color="#ef4444" />
+            <CondCard label="Humidity" value={wxFmt.rh(liveConsensus.rh)} unit="%" color="#8b5cf6" />
+            <CondCard label="Barometer" value={wxFmt.baro(liveConsensus.baro)} unit="inHg" color="#3b82f6" />
+            <CondCard label="Density Alt" value={liveConsensus.da != null ? wxFmt.da(liveConsensus.da) : '—'} unit="ft" color="#f97316" />
+            <CondCard label="Corr Factor" value={liveConsensus.cf != null ? wxFmt.cf(liveConsensus.cf) : '—'} unit="" color="#16a34a" />
+            <CondCard label="Water Grains" value={liveConsensus.waterGrains != null ? wxFmt.grains(liveConsensus.waterGrains) : '—'} unit="gr/lb" color="#84cc16" />
+          </div>
+        </div>
+      )}
+
+      {/* Per-Station Comparison Table with Column Selector */}
+      {liveWx && liveWx.stations.length > 0 && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+            <div style={{ fontSize: '0.65rem', color: '#888' }}>Station Comparison</div>
+            <div style={{ position: 'relative' }}>
+              <button
+                style={{ ...S.btn('secondary'), fontSize: '0.62rem', padding: '0.15rem 0.5rem' }}
+                onClick={() => setShowStationColPicker(p => !p)}
+              >
+                Columns ▾
+              </button>
+              {showStationColPicker && (
+                <div style={{
+                  position: 'absolute', right: 0, top: '100%', zIndex: 20, background: 'var(--color-surface, #1e1e3a)',
+                  border: '1px solid var(--color-border)', borderRadius: 6, padding: '0.4rem', minWidth: 160,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                }}>
+                  {STATION_COLS.map(col => (
+                    <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.68rem', padding: '0.15rem 0', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={stationVisibleCols.has(col.key)}
+                        onChange={() => setStationVisibleCols(prev => {
+                          const next = new Set(prev);
+                          next.has(col.key) ? next.delete(col.key) : next.add(col.key);
+                          return next;
+                        })} />
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr>
+                  <th style={{ ...S.th, background: 'var(--color-surface, #1a1a2e)', fontSize: '0.65rem' }}>Station</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface, #1a1a2e)', fontSize: '0.65rem' }}>Status</th>
+                  {STATION_COLS.filter(c => stationVisibleCols.has(c.key)).map(col => (
+                    <th key={col.key} style={{ ...S.th, background: 'var(--color-surface, #1a1a2e)', fontSize: '0.65rem', textAlign: col.align === 'right' ? 'right' : undefined }}>{col.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {stationsDerived.map((st, idx) => (
+                  <tr key={st.stationId}>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{stationLabel(st.stationId, idx)}</td>
+                    <td style={S.td}>
+                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: stationStatusColor(st), marginRight: 4 }} />
+                      {st.error ? <span style={{ color: '#ef4444' }}>{st.error}</span> : 'Online'}
+                    </td>
+                    {STATION_COLS.filter(c => stationVisibleCols.has(c.key)).map(col => (
+                      <td key={col.key} style={{ ...S.td, textAlign: col.align === 'right' ? 'right' : undefined, fontFamily: col.align === 'right' ? 'monospace' : undefined, ...(col.key === 'updated' ? { fontSize: '0.65rem', color: '#888' } : {}) }}>
+                        {col.fmt(st)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -6781,7 +7594,7 @@ function LiveTimingPanel({ event, refreshKey = 0, onDriverClick }: { event: Even
     try {
       const res = await parityApi.runsWithWeather({
         raceLookup: event.race_lookup,
-        limit: 2000,
+        limit: 10000,
       });
       // Sort newest-to-oldest by local time
       const sorted = [...res.runs].sort((a, b) => {
@@ -7021,4 +7834,438 @@ function LiveTimingPanel({ event, refreshKey = 0, onDriverClick }: { event: Even
   );
 }
 
-// ParityDashPanel is now imported from ./ParityDashPanel.tsx
+// ── Body Style Definitions Panel ──────────────────────────────────────────
+
+function BodyStyleDefsPanel() {
+  const [bodyStyles, setBodyStyles] = useState<BodyStyleRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [editRow, setEditRow] = useState<{
+    id?: number; name: string; category: string; bodyStyleNum: string; cd: string; frontalArea: string; liftCoef: string; overhangIn: string; colorHex: string;
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const res = await parityApi.listBodyStyles();
+      setBodyStyles(res.bodyStyles);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleCategoryChange = (cat: string) => {
+    if (!editRow) return;
+    const color = CATEGORY_DEFAULT_COLORS[cat as keyof typeof CATEGORY_DEFAULT_COLORS] ?? '#888888';
+    setEditRow({ ...editRow, category: cat, colorHex: color });
+  };
+
+  const handleSave = async () => {
+    if (!editRow?.name) return;
+    setSaving(true); setError('');
+    try {
+      await parityApi.upsertBodyStyle({
+        id: editRow.id,
+        name: editRow.name,
+        category: editRow.category || 'Default',
+        bodyStyleNum: editRow.bodyStyleNum ? Number(editRow.bodyStyleNum) : null,
+        cd: Number(editRow.cd) || 0,
+        frontalArea: Number(editRow.frontalArea) || 0,
+        liftCoef: Number(editRow.liftCoef) || 0,
+        overhangIn: Number(editRow.overhangIn) || 0,
+        colorHex: editRow.colorHex || '#888888',
+      });
+      setEditRow(null);
+      await load();
+    } catch (e: any) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this body style?')) return;
+    setError('');
+    try { await parityApi.deleteBodyStyle(id); await load(); }
+    catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <div>
+      <h3 style={{ marginBottom: '0.5rem' }}>Body Style Definitions</h3>
+      <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1rem' }}>
+        Define body styles with aerodynamic parameters. Assign them to drivers in the Driver Body Styles tab.
+      </p>
+      {error && <pre style={{ color: 'salmon', marginBottom: '0.5rem' }}>{error}</pre>}
+
+      <div className="parity-form-row" style={{ marginBottom: '0.75rem' }}>
+        <button style={S.btn('primary')}
+          onClick={() => setEditRow({ name: '', category: 'Default', bodyStyleNum: '', cd: '0.40', frontalArea: '20', liftCoef: '0.1', overhangIn: '24', colorHex: '#888888' })}>
+          + Add Body Style
+        </button>
+      </div>
+
+      {editRow && (
+        <div style={{ border: '1px solid var(--color-border)', padding: '0.75rem', borderRadius: 4, marginBottom: '1rem', background: 'var(--color-bg-alt, #2a2a3a)' }}>
+          <div className="parity-form-row">
+            <div className="parity-form-field">
+              <label>Name</label>
+              <input value={editRow.name} onChange={e => setEditRow({ ...editRow, name: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 200 }} placeholder="e.g. Funny Car" />
+            </div>
+            <div className="parity-form-field">
+              <label>Category</label>
+              <select value={editRow.category} onChange={e => handleCategoryChange(e.target.value)}>
+                <option value="Default">Default</option>
+                {ENGINE_COMBO_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
+            <div className="parity-form-field">
+              <label>Color</label>
+              <input type="color" value={editRow.colorHex} onChange={e => setEditRow({ ...editRow, colorHex: e.target.value })} />
+            </div>
+            <div className="parity-form-field">
+              <label>VB6 Body#</label>
+              <input value={editRow.bodyStyleNum} onChange={e => setEditRow({ ...editRow, bodyStyleNum: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 50 }} placeholder="1-8" />
+            </div>
+          </div>
+          <div className="parity-form-row" style={{ marginTop: '0.5rem' }}>
+            <div className="parity-form-field">
+              <label>CD (Drag Coef)</label>
+              <input value={editRow.cd} onChange={e => setEditRow({ ...editRow, cd: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 80 }} />
+            </div>
+            <div className="parity-form-field">
+              <label>Frontal Area (ft²)</label>
+              <input value={editRow.frontalArea} onChange={e => setEditRow({ ...editRow, frontalArea: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 80 }} />
+            </div>
+            <div className="parity-form-field">
+              <label>Lift Coef</label>
+              <input value={editRow.liftCoef} onChange={e => setEditRow({ ...editRow, liftCoef: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 80 }} />
+            </div>
+            <div className="parity-form-field">
+              <label>Overhang (in)</label>
+              <input value={editRow.overhangIn} onChange={e => setEditRow({ ...editRow, overhangIn: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 80 }} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
+              <button style={S.btn('primary')} onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : editRow.id ? 'Update' : 'Create'}
+              </button>
+              <button style={S.btn('secondary')} onClick={() => setEditRow(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading ? <p>Loading...</p> : bodyStyles.length === 0 ? (
+        <p style={{ color: '#888' }}>No body styles defined yet.</p>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Name</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Category</th>
+              <th style={{ textAlign: 'right', padding: '0.5rem' }}>CD</th>
+              <th style={{ textAlign: 'right', padding: '0.5rem' }}>Area (ft²)</th>
+              <th style={{ textAlign: 'right', padding: '0.5rem' }}>Lift</th>
+              <th style={{ textAlign: 'right', padding: '0.5rem' }}>Overhang</th>
+              <th style={{ padding: '0.5rem' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bodyStyles.map(bs => (
+              <tr key={bs.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 600 }}>
+                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: bs.color_hex || '#888', marginRight: 8, verticalAlign: 'middle' }} />
+                  {bs.name}
+                </td>
+                <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}>{bs.category || 'Default'}</td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{bs.cd.toFixed(3)}</td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{bs.frontal_area.toFixed(1)}</td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{bs.lift_coef.toFixed(3)}</td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{bs.overhang_in}</td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>
+                  <button onClick={() => setEditRow({
+                    id: bs.id, name: bs.name, category: bs.category || 'Default',
+                    bodyStyleNum: bs.body_style_num != null ? String(bs.body_style_num) : '',
+                    cd: String(bs.cd), frontalArea: String(bs.frontal_area),
+                    liftCoef: String(bs.lift_coef), overhangIn: String(bs.overhang_in),
+                    colorHex: bs.color_hex || '#888888',
+                  })} style={{ cursor: 'pointer', background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.8rem', marginRight: 8 }}>Edit</button>
+                  <button onClick={() => handleDelete(bs.id)} style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'salmon', fontSize: '0.8rem' }}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ── Driver Body Styles Panel ─────────────────────────────────────────────
+
+function DriverBodyStylesPanel() {
+  const [assignments, setAssignments] = useState<DriverBodyStyleRow[]>([]);
+  const [bodyStyles, setBodyStyles] = useState<BodyStyleRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [filterDriver, setFilterDriver] = useState('');
+  const [filterClass, setFilterClass] = useState('');
+  const [editRow, setEditRow] = useState<{
+    id?: number; driverName: string; classIndex: string; bodyStyleId: number; effectiveFromUtc: string; effectiveToUtc: string;
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const [dbs, bs] = await Promise.all([
+        parityApi.listDriverBodyStyles({ driverName: filterDriver || undefined, classIndex: filterClass || undefined }),
+        parityApi.listBodyStyles(),
+      ]);
+      setAssignments(dbs.driverBodyStyles);
+      setBodyStyles(bs.bodyStyles);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [filterDriver, filterClass]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = async () => {
+    if (!editRow?.driverName || !editRow?.classIndex || !editRow?.bodyStyleId) return;
+    setSaving(true); setError('');
+    try {
+      await parityApi.upsertDriverBodyStyle({
+        id: editRow.id,
+        driverName: editRow.driverName,
+        classIndex: editRow.classIndex,
+        bodyStyleId: editRow.bodyStyleId,
+        effectiveFromUtc: editRow.effectiveFromUtc,
+        effectiveToUtc: editRow.effectiveToUtc || null,
+      });
+      setEditRow(null);
+      await load();
+    } catch (e: any) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this driver body style assignment?')) return;
+    setError('');
+    try { await parityApi.deleteDriverBodyStyle(id); await load(); }
+    catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <div>
+      <h3 style={{ marginBottom: '0.5rem' }}>Driver Body Style Assignments</h3>
+      <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1rem' }}>
+        Maps a driver + class to a body style definition for a time range.
+      </p>
+      {error && <pre style={{ color: 'salmon', marginBottom: '0.5rem' }}>{error}</pre>}
+
+      <div className="parity-form-row" style={{ marginBottom: '0.75rem' }}>
+        <input placeholder="Filter driver" value={filterDriver} onChange={e => setFilterDriver(e.target.value)}
+          style={{ ...S.input, fontFamily: 'monospace', width: 160 }} />
+        <input placeholder="Filter class" value={filterClass} onChange={e => setFilterClass(e.target.value)}
+          style={{ ...S.input, fontFamily: 'monospace', width: 80 }} />
+        <button style={S.btn('secondary')} onClick={load}>Filter</button>
+        <button style={S.btn('primary')}
+          onClick={() => setEditRow({ driverName: '', classIndex: '', bodyStyleId: bodyStyles[0]?.id ?? 0, effectiveFromUtc: '2024-01-01T00:00:00Z', effectiveToUtc: '' })}>
+          + Add Assignment
+        </button>
+      </div>
+
+      {editRow && (
+        <div style={{ border: '1px solid var(--color-border)', padding: '0.75rem', borderRadius: 4, marginBottom: '1rem', background: 'var(--color-bg-alt, #2a2a3a)' }}>
+          <div className="parity-form-row">
+            <div className="parity-form-field">
+              <label>Driver</label>
+              <input value={editRow.driverName} onChange={e => setEditRow({ ...editRow, driverName: e.target.value.toUpperCase() })}
+                style={{ fontFamily: 'monospace', width: 180 }} />
+            </div>
+            <div className="parity-form-field">
+              <label>Class</label>
+              <input value={editRow.classIndex} onChange={e => setEditRow({ ...editRow, classIndex: e.target.value.toUpperCase() })}
+                style={{ fontFamily: 'monospace', width: 60 }} />
+            </div>
+            <div className="parity-form-field">
+              <label>Body Style</label>
+              <select value={editRow.bodyStyleId} onChange={e => setEditRow({ ...editRow, bodyStyleId: Number(e.target.value) })}
+                style={{ fontFamily: 'monospace' }}>
+                {bodyStyles.map(bs => <option key={bs.id} value={bs.id}>{bs.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="parity-form-row" style={{ marginTop: '0.5rem' }}>
+            <div className="parity-form-field">
+              <label>From (UTC)</label>
+              <input value={editRow.effectiveFromUtc} onChange={e => setEditRow({ ...editRow, effectiveFromUtc: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 220 }} placeholder="2024-01-01T00:00:00Z" />
+            </div>
+            <div className="parity-form-field">
+              <label>To (UTC, optional)</label>
+              <input value={editRow.effectiveToUtc} onChange={e => setEditRow({ ...editRow, effectiveToUtc: e.target.value })}
+                style={{ fontFamily: 'monospace', width: 220 }} placeholder="leave empty for open-ended" />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
+              <button style={S.btn('primary')} onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : editRow.id ? 'Update' : 'Create'}
+              </button>
+              <button style={S.btn('secondary')} onClick={() => setEditRow(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading ? <p>Loading...</p> : assignments.length === 0 ? (
+        <p style={{ color: '#888' }}>No driver body style assignments found.</p>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Driver</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Class</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Body Style</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Effective From</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Effective To</th>
+              <th style={{ padding: '0.5rem' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {assignments.map(a => (
+              <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 600 }}>{a.driver_name}</td>
+                <td style={{ padding: '0.4rem 0.5rem' }}>{a.class_index}</td>
+                <td style={{ padding: '0.4rem 0.5rem' }}>{a.body_style_name}</td>
+                <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', fontFamily: 'monospace' }}>{a.effective_from_utc}</td>
+                <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', fontFamily: 'monospace', color: a.effective_to_utc ? undefined : '#888' }}>
+                  {a.effective_to_utc || '(open)'}
+                </td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>
+                  <button onClick={() => setEditRow({
+                    id: a.id, driverName: a.driver_name, classIndex: a.class_index,
+                    bodyStyleId: a.body_style_id,
+                    effectiveFromUtc: a.effective_from_utc, effectiveToUtc: a.effective_to_utc || '',
+                  })} style={{ cursor: 'pointer', background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.8rem', marginRight: 8 }}>Edit</button>
+                  <button onClick={() => handleDelete(a.id)} style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'salmon', fontSize: '0.8rem' }}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ── Slope Analysis Panel ────────────────────────────────────────────────
+
+function SlopeAnalysisPanel({ events }: { events: EventWithStats[] }) {
+  const [selectedEventId, setSelectedEventId] = useState<number>(0);
+  const [category, setCategory] = useState('Top Fuel');
+  const [metric, setMetric] = useState('et_1320');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [data, setData] = useState<Awaited<ReturnType<typeof parityApi.slopeAnalysis>> | null>(null);
+
+  const load = useCallback(async () => {
+    if (!selectedEventId || !category) return;
+    setLoading(true); setError(''); setData(null);
+    try {
+      const r = await parityApi.slopeAnalysis({ eventId: selectedEventId, category, metric });
+      setData(r);
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [selectedEventId, category, metric]);
+
+  const fmt = (v: number | null) => v == null ? '—' : v.toFixed(4);
+  const fmtDelta = (a: number | null, b: number | null) => {
+    if (a == null || b == null) return '—';
+    const d = b - a;
+    return `${d > 0 ? '+' : ''}${d.toFixed(4)}`;
+  };
+
+  return (
+    <div>
+      <div style={{ ...S.row, marginBottom: '0.5rem', flexWrap: 'wrap', gap: 6 }}>
+        <b style={{ fontSize: '0.9rem' }}>Slope Analysis</b>
+        <select style={{ ...S.input, width: 260 }} value={selectedEventId} onChange={e => setSelectedEventId(Number(e.target.value))}>
+          <option value={0}>Select event…</option>
+          {events.map(ev => <option key={ev.id} value={ev.id}>{ev.start_date_local?.slice(0, 4)} — {ev.event_name}</option>)}
+        </select>
+        <select style={{ ...S.input, width: 170 }} value={category} onChange={e => setCategory(e.target.value)}>
+          {['Top Fuel','Funny Car','Pro Stock','Pro Stock Motorcycle','Pro Mod','Top Alcohol Dragster','Top Alcohol Funny Car'].map(c =>
+            <option key={c} value={c}>{c}</option>
+          )}
+        </select>
+        <select style={{ ...S.input, width: 110 }} value={metric} onChange={e => setMetric(e.target.value)}>
+          <option value="et_1320">ET 1320</option>
+          <option value="mph_1320">MPH 1320</option>
+          <option value="t60">60 ft</option>
+          <option value="t330">330 ft</option>
+          <option value="t660">660 ft</option>
+        </select>
+        <button style={S.btn('primary')} onClick={load} disabled={loading || !selectedEventId}>
+          {loading ? '…' : 'Load'}
+        </button>
+      </div>
+      {error && <div style={S.error}>{error}</div>}
+      {data && (
+        <div>
+          <div style={{ fontSize: '0.78rem', marginBottom: '0.4rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+            <span><b>Event:</b> {data.eventName}</span>
+            <span><b>Track:</b> {data.trackName}</span>
+            <span>
+              <b>Slope:</b>{' '}
+              {data.slopeGradePct != null
+                ? `${data.slopeGradePct > 0 ? '+' : ''}${data.slopeGradePct}%`
+                : <span style={{ color: '#d97706' }}>⚠ not set — enter slope in Tracks admin first</span>}
+            </span>
+            <span><b>Weight:</b> {data.weightLbs} lbs ({data.category})</span>
+            {data.sfET != null && <span><b>ET factor:</b> {data.sfET.toFixed(6)}</span>}
+            {data.sfMPH != null && <span><b>MPH factor:</b> {data.sfMPH.toFixed(6)}</span>}
+            <span style={{ color: '#888' }}>{data.runCount} runs</span>
+          </div>
+          <div style={{ overflow: 'auto', maxHeight: 580 }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Driver</th>
+                  <th style={S.th}>Combo</th>
+                  <th style={S.th}>Round</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>Raw</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>Wx Corrected</th>
+                  <th style={{ ...S.th, textAlign: 'right', color: '#888' }}>Δ wx</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>Slope + Wx</th>
+                  <th style={{ ...S.th, textAlign: 'right', color: '#888' }}>Δ slope</th>
+                  <th style={{ ...S.th, textAlign: 'right', color: '#888' }}>HPC</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.runs.map((r, i) => (
+                  <tr key={r.runId} style={{ background: i % 2 === 1 ? 'var(--color-bg, #262636)' : undefined }}>
+                    <td style={S.td}>{r.driver}</td>
+                    <td style={S.td}><span style={{ fontSize: '0.68rem', padding: '0.05rem 0.3rem', background: '#333', borderRadius: 3 }}>{r.combo}</span></td>
+                    <td style={S.td}>{r.round}</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{fmt(r.rawVal)}</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{fmt(r.wxVal)}</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontSize: '0.7rem', color: '#888' }}>{fmtDelta(r.rawVal, r.wxVal)}</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{fmt(r.slopeWxVal)}</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontSize: '0.7rem', color: '#888' }}>{fmtDelta(r.wxVal ?? r.rawVal, r.slopeWxVal)}</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', fontSize: '0.7rem', color: '#888' }}>{r.hpc != null ? r.hpc.toFixed(4) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

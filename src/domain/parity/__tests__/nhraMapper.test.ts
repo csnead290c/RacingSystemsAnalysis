@@ -429,14 +429,25 @@ describe('nhra.parity capability gating', () => {
     expect(hasCap(ctx, 'nhra.parity')).toBe(false);
   });
 
-  it('owner HAS nhra.parity (role-based)', () => {
-    const ctx: UserCapabilityContext = { plan: 'free', role: 'owner' };
+  it('owner HAS nhra.parity via fullAccess flag', () => {
+    const ctx: UserCapabilityContext = { plan: 'free', role: 'owner', fullAccess: true };
     expect(hasCap(ctx, 'nhra.parity')).toBe(true);
   });
 
-  it('admin HAS nhra.parity (role-based)', () => {
+  it('owner WITHOUT fullAccess does NOT have nhra.parity without NHRA plan', () => {
+    const ctx: UserCapabilityContext = { plan: 'free', role: 'owner', fullAccess: false };
+    expect(hasCap(ctx, 'nhra.parity')).toBe(false);
+  });
+
+  it('admin does NOT have nhra.parity without NHRA plan', () => {
     const ctx: UserCapabilityContext = { plan: 'free', role: 'admin' };
+    expect(hasCap(ctx, 'nhra.parity')).toBe(false);
+  });
+
+  it('admin WITH nhra plan HAS nhra.parity', () => {
+    const ctx: UserCapabilityContext = { plan: 'nhra', role: 'admin' };
     expect(hasCap(ctx, 'nhra.parity')).toBe(true);
+    expect(hasCap(ctx, 'admin.access')).toBe(true); // Also has admin tools
   });
 
   it('nhra.parity is NOT in free/basic/pro/team plan capabilities', () => {
@@ -459,19 +470,25 @@ describe('nhra.parity capability gating', () => {
     expect(hasCap(ctx, 'nhra.parity.admin')).toBe(false);
   });
 
-  it('nhra.parity IS in owner and admin role capabilities', () => {
-    expect(ROLE_CAPABILITIES.owner.has('nhra.parity' as any)).toBe(true);
-    expect(ROLE_CAPABILITIES.admin.has('nhra.parity' as any)).toBe(true);
-  });
-
-  it('nhra.parity.admin IS in owner and admin role capabilities', () => {
-    expect(ROLE_CAPABILITIES.owner.has('nhra.parity.admin' as any)).toBe(true);
-    expect(ROLE_CAPABILITIES.admin.has('nhra.parity.admin' as any)).toBe(true);
-  });
-
-  it('nhra.parity is NOT in member or viewer role capabilities', () => {
+  it('nhra.parity is NOT in role capabilities (comes from NHRA plan)', () => {
+    // NHRA access now requires NHRA plan, not admin/owner role
+    expect(ROLE_CAPABILITIES.owner.has('nhra.parity' as any)).toBe(false);
+    expect(ROLE_CAPABILITIES.admin.has('nhra.parity' as any)).toBe(false);
     expect(ROLE_CAPABILITIES.member.has('nhra.parity' as any)).toBe(false);
     expect(ROLE_CAPABILITIES.viewer.has('nhra.parity' as any)).toBe(false);
+  });
+
+  it('nhra.parity.admin is NOT in role capabilities (comes from NHRA plan)', () => {
+    // NHRA admin access now requires NHRA plan, not admin/owner role
+    expect(ROLE_CAPABILITIES.owner.has('nhra.parity.admin' as any)).toBe(false);
+    expect(ROLE_CAPABILITIES.admin.has('nhra.parity.admin' as any)).toBe(false);
+  });
+
+  it('nhra.parity IS in NHRA plan capabilities', () => {
+    expect(PLAN_CAPABILITIES.nhra.has('nhra.parity' as any)).toBe(true);
+    expect(PLAN_CAPABILITIES.nhra.has('nhra.parity.admin' as any)).toBe(false); // admin is tech.admin
+    expect(PLAN_CAPABILITIES.nhra.has('nhra.tech.read' as any)).toBe(true);
+    expect(PLAN_CAPABILITIES.nhra.has('nhra.tech.admin' as any)).toBe(true);
   });
 
   it('fullAccess grants nhra.parity', () => {

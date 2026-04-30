@@ -476,7 +476,7 @@ export default function VehicleEditorUnified({
       <div style={styles.section}>
         <div style={styles.sectionTitle}>Weight & Chassis</div>
         <div style={styles.grid}>
-          <Field label="Weight (lb)" required compact={compact}>
+          <Field label="Weight (lb)" required hint={TOOLTIPS.weight} compact={compact}>
             <input
               type="number"
               style={styles.input}
@@ -484,7 +484,7 @@ export default function VehicleEditorUnified({
               onChange={(e) => updateField('weightLb', parseFloat(e.target.value))}
             />
           </Field>
-          <Field label="Wheelbase (in)" compact={compact}>
+          <Field label="Wheelbase (in)" hint={TOOLTIPS.wheelbase} compact={compact}>
             <input
               type="number"
               style={styles.input}
@@ -502,7 +502,7 @@ export default function VehicleEditorUnified({
             />
           </Field>
           {showAdvanced && (
-            <Field label="Overhang (in)" compact={compact}>
+            <Field label="Overhang (in)" hint={TOOLTIPS.overhang} compact={compact}>
               <input
                 type="number"
                 style={styles.input}
@@ -521,7 +521,7 @@ export default function VehicleEditorUnified({
         {/* Simple mode: Peak HP, RPM @ Peak, Shift RPM, Displacement */}
         {!showAdvanced && (
           <div style={styles.grid}>
-            <Field label="Peak HP" required compact={compact}>
+            <Field label="Peak HP" required hint={TOOLTIPS.peakHP} compact={compact}>
               <input
                 type="number"
                 style={styles.input}
@@ -529,7 +529,7 @@ export default function VehicleEditorUnified({
                 onChange={(e) => updateField('powerHP', parseFloat(e.target.value))}
               />
             </Field>
-            <Field label="RPM @ Peak HP" required compact={compact}>
+            <Field label="RPM @ Peak HP" required hint={TOOLTIPS.peakHPRPM} compact={compact}>
               <input
                 type="number"
                 step="100"
@@ -538,7 +538,7 @@ export default function VehicleEditorUnified({
                 onChange={(e) => updateField('rpmAtPeakHP', parseFloat(e.target.value))}
               />
             </Field>
-            <Field label="Shift RPM" hint="All gears" compact={compact}>
+            <Field label="Shift RPM" hint={TOOLTIPS.shiftRPM} compact={compact}>
               <input
                 type="number"
                 step="100"
@@ -589,7 +589,7 @@ export default function VehicleEditorUnified({
                   ))}
                 </select>
               </Field>
-              <Field label="HP/TQ Multiplier" hint="Scales dyno curve" compact={compact}>
+              <Field label="HP/TQ Multiplier" hint={TOOLTIPS.hpTorqueMultiplier} compact={compact}>
                 <div style={{ display: 'flex', gap: '4px' }}>
                   <input
                     type="number"
@@ -786,7 +786,7 @@ export default function VehicleEditorUnified({
             /* CLUTCH: Simple = Slip RPM only, Advanced = adds Launch RPM, Slippage, Lockup */
             <>
               {showAdvanced && (
-                <Field label="Launch RPM" compact={compact}>
+                <Field label="Launch RPM" hint={TOOLTIPS.clutchLaunchRPM} compact={compact}>
                   <input
                     type="number"
                     step="100"
@@ -796,7 +796,7 @@ export default function VehicleEditorUnified({
                   />
                 </Field>
               )}
-              <Field label="Slip RPM" compact={compact}>
+              <Field label="Slip RPM" hint={TOOLTIPS.clutchSlipRPM} compact={compact}>
                 <input
                   type="number"
                   step="100"
@@ -806,7 +806,7 @@ export default function VehicleEditorUnified({
                 />
               </Field>
               {showAdvanced && (
-                <Field label="Slippage" hint="1.0-1.02" compact={compact}>
+                <Field label="Slippage" hint={TOOLTIPS.clutchSlippage} compact={compact}>
                   <input
                     type="number"
                     step="0.001"
@@ -820,7 +820,7 @@ export default function VehicleEditorUnified({
           ) : (
             /* CONVERTER: Simple = Stall RPM + Diameter, Advanced = adds Torque Mult, Slippage */
             <>
-              <Field label="Stall RPM" compact={compact}>
+              <Field label="Stall RPM" hint={TOOLTIPS.converterStall} compact={compact}>
                 <input
                   type="number"
                   step="100"
@@ -829,7 +829,7 @@ export default function VehicleEditorUnified({
                   onChange={(e) => updateField('converterStallRPM', parseFloat(e.target.value))}
                 />
               </Field>
-              <Field label="Launch RPM" hint="RPM at launch (defaults to Stall)" compact={compact}>
+              <Field label="Launch RPM" hint={TOOLTIPS.converterLaunchRPM} compact={compact}>
                 <input
                   type="number"
                   step="100"
@@ -840,7 +840,7 @@ export default function VehicleEditorUnified({
               </Field>
               {!showAdvanced && (
                 /* Simple mode: show diameter */
-                <Field label="Diameter (in)" compact={compact}>
+                <Field label="Diameter (in)" hint={TOOLTIPS.converterDiameter} compact={compact}>
                   <input
                     type="number"
                     step="0.25"
@@ -853,7 +853,7 @@ export default function VehicleEditorUnified({
               {showAdvanced && (
                 /* Advanced mode: Torque Mult + Slippage */
                 <>
-                  <Field label="Torque Mult" hint="1.8-2.5" compact={compact}>
+                  <Field label="Torque Mult" hint={TOOLTIPS.converterTorqueMult} compact={compact}>
                     <input
                       type="number"
                       step="0.1"
@@ -862,7 +862,7 @@ export default function VehicleEditorUnified({
                       onChange={(e) => updateField('converterTorqueMult', parseFloat(e.target.value))}
                     />
                   </Field>
-                  <Field label="Slippage" hint="1.0-1.05" compact={compact}>
+                  <Field label="Slippage" hint={TOOLTIPS.converterSlippage} compact={compact}>
                     <input
                       type="number"
                       step="0.001"
@@ -908,7 +908,7 @@ export default function VehicleEditorUnified({
             />
           </Field>
           {showAdvanced && (
-            <Field label="Efficiency" hint="0.95-0.98" compact={compact}>
+            <Field label="Efficiency" hint={TOOLTIPS.finalDriveEfficiency} compact={compact}>
               <input
                 type="number"
                 step="0.005"
@@ -1161,7 +1161,7 @@ export default function VehicleEditorUnified({
             <>
               <Field 
                 label="Drag Coeff (Cd)" 
-                hint="0.3-0.5" 
+                hint={TOOLTIPS.dragCoefficient} 
                 worksheetButton={
                   <button
                     type="button"
@@ -1182,7 +1182,7 @@ export default function VehicleEditorUnified({
                   onChange={(e) => updateField('cd', parseFloat(e.target.value))}
                 />
               </Field>
-              <Field label="Lift Coeff" hint="+ = lift" compact={compact}>
+              <Field label="Lift Coeff" hint={TOOLTIPS.liftCoefficient} compact={compact}>
                 <input
                   type="number"
                   step="0.01"
@@ -1206,7 +1206,8 @@ export default function VehicleEditorUnified({
           <div style={styles.grid}>
             <Field 
               label="Engine + Flywheel" 
-              worksheetButton={<WorksheetButton onClick={() => setShowEnginePMIWorksheet(true)} tooltip="Calculate Engine PMI" />}
+              hint={TOOLTIPS.enginePMI}
+              worksheetButton={<WorksheetButton onClick={() => setShowEnginePMIWorksheet(true)} tooltip={TOOLTIPS.btnPMI} />}
               compact={compact}
             >
               <input
@@ -1220,7 +1221,8 @@ export default function VehicleEditorUnified({
             </Field>
             <Field 
               label="Trans + Driveshaft" 
-              worksheetButton={<WorksheetButton onClick={() => setShowTransPMIWorksheet(true)} tooltip="Calculate Trans PMI" />}
+              hint={TOOLTIPS.transPMI}
+              worksheetButton={<WorksheetButton onClick={() => setShowTransPMIWorksheet(true)} tooltip={TOOLTIPS.btnPMI} />}
               compact={compact}
             >
               <input
@@ -1234,7 +1236,8 @@ export default function VehicleEditorUnified({
             </Field>
             <Field 
               label="Tires + Wheels" 
-              worksheetButton={<WorksheetButton onClick={() => setShowTiresPMIWorksheet(true)} tooltip="Calculate Tire PMI" />}
+              hint={TOOLTIPS.tiresPMI}
+              worksheetButton={<WorksheetButton onClick={() => setShowTiresPMIWorksheet(true)} tooltip={TOOLTIPS.btnPMI} />}
               compact={compact}
             >
               <input

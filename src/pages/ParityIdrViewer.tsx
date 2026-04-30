@@ -180,17 +180,14 @@ export default function ParityIdrViewer() {
         )}
       </div>
 
-      {/* Placeholder for future IDR data viewer */}
+      {/* IDR data viewer — coming soon */}
       <div style={S.placeholder} data-testid="idr-data-placeholder">
         <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📊</div>
-        <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>Load IDR Data</div>
+        <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>IDR Data Viewer — Coming Soon</div>
         <div>
           {type === 'idr_session'
-            ? 'Session data viewer will be integrated here. The session identifier above can be used to query IDR data when the parser/viewer is ready.'
-            : 'File viewer will be integrated here. Use the download link above to access the raw file, or the inline viewer will render it once available.'}
-        </div>
-        <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', fontStyle: 'italic' }}>
-          Future: inline data table, charts, and overlay tools will render IDR contents directly in this space.
+            ? 'Inline session data viewing is not yet available. The session identifier above can be used to query IDR data when the viewer is ready.'
+            : 'Inline file viewing is not yet available. Use the download link above to access the raw file.'}
         </div>
       </div>
     </div>

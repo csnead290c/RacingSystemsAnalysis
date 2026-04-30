@@ -88,6 +88,94 @@ export interface AnalysisMeasurement {
   created_at: string;
 }
 
+// ── Workspace Foundation Types (v31) ───────────────────────────────────
+
+export interface ProcessedSessionMetadata {
+  session_id: number;
+  title: string;
+  source_type: string;
+  created_at: string;
+  file_name: string;
+  sample_count: number;
+  duration_seconds: number;
+  parse_warnings: string[];
+}
+
+export interface ProcessedChannel {
+  key: string;
+  label: string;
+  unit: string | null;
+  group: string;
+  sample_count: number;
+  min: number;
+  max: number;
+  data_type: string;
+  original_column: string;
+  color_hint: string | null;
+  values: (number | null)[];
+}
+
+export interface ProcessedSession {
+  metadata: ProcessedSessionMetadata;
+  timebase: {
+    values: number[];
+    unit: string;
+    sample_rate_hz: number | null;
+  };
+  channels: ProcessedChannel[];
+  markers: Array<{ time: number; label: string; type: string }>;
+  stats_summary: {
+    total_channels: number;
+    numeric_channels: number;
+    derived_channels: number;
+  };
+}
+
+export interface AnalysisWorkspace {
+  id: number;
+  session_id: number;
+  name: string;
+  description: string | null;
+  layout_json: WorkspaceLayout;
+  is_default: number;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceLayout {
+  plots?: Array<{
+    id: string;
+    channels: string[];
+    title?: string;
+  }>;
+  visible_channels?: string[];
+  zoom_range?: { min: number; max: number } | null;
+  cursor_time?: number | null;
+  bookmarks_visible?: boolean;
+  derived_channels?: Array<{
+    key: string;
+    label: string;
+    expression: string;
+    unit?: string;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface AnalysisBookmark {
+  id: number;
+  session_id: number;
+  workspace_id: number | null;
+  time_sec: number;
+  end_time_sec: number | null;
+  label: string;
+  note: string | null;
+  color: string | null;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Response types ──────────────────────────────────────────────────────
 
 export interface GetSessionResponse { session: AnalysisSession }
@@ -278,6 +366,90 @@ export const incidentAnalysisApi = {
     return iaRequest<DeleteMeasurementResponse>('/incident-analysis.php?action=deleteMeasurement', {
       method: 'POST',
       body: JSON.stringify({ measurement_id: measurementId }),
+    });
+  },
+
+  // ── Workspace Foundation (v31) ──────────────────────────────────────────
+
+  async processSession(sessionId: number): Promise<{ ok: boolean; processed: any }> {
+    return iaRequest('/incident-analysis.php?action=processSession', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+  },
+
+  async getProcessedSession(sessionId: number): Promise<{ processed_session: ProcessedSession }> {
+    return iaRequest(`/incident-analysis.php?action=getProcessedSession&session_id=${sessionId}`);
+  },
+
+  async listWorkspaces(sessionId: number): Promise<{ workspaces: AnalysisWorkspace[] }> {
+    return iaRequest(`/incident-analysis.php?action=listWorkspaces&session_id=${sessionId}`);
+  },
+
+  async getWorkspace(workspaceId: number): Promise<{ workspace: AnalysisWorkspace }> {
+    return iaRequest(`/incident-analysis.php?action=getWorkspace&workspace_id=${workspaceId}`);
+  },
+
+  async saveWorkspace(data: {
+    workspace_id?: number;
+    session_id: number;
+    name: string;
+    description?: string;
+    layout_json: WorkspaceLayout;
+    is_default?: boolean;
+  }): Promise<{ ok: boolean; workspace_id: number }> {
+    return iaRequest('/incident-analysis.php?action=saveWorkspace', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteWorkspace(workspaceId: number): Promise<{ ok: boolean; deleted_id: number }> {
+    return iaRequest('/incident-analysis.php?action=deleteWorkspace', {
+      method: 'POST',
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    });
+  },
+
+  async listBookmarks(sessionId: number, workspaceId?: number): Promise<{ bookmarks: AnalysisBookmark[] }> {
+    const params = workspaceId
+      ? `session_id=${sessionId}&workspace_id=${workspaceId}`
+      : `session_id=${sessionId}`;
+    return iaRequest(`/incident-analysis.php?action=listBookmarks&${params}`);
+  },
+
+  async createBookmark(data: {
+    session_id: number;
+    workspace_id?: number;
+    time_sec: number;
+    end_time_sec?: number;
+    label: string;
+    note?: string;
+    color?: string;
+  }): Promise<{ ok: boolean; bookmark_id: number }> {
+    return iaRequest('/incident-analysis.php?action=createBookmark', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateBookmark(bookmarkId: number, data: {
+    label?: string;
+    note?: string;
+    color?: string;
+    time_sec?: number;
+    end_time_sec?: number;
+  }): Promise<{ ok: boolean; bookmark_id: number }> {
+    return iaRequest('/incident-analysis.php?action=updateBookmark', {
+      method: 'POST',
+      body: JSON.stringify({ bookmark_id: bookmarkId, ...data }),
+    });
+  },
+
+  async deleteBookmark(bookmarkId: number): Promise<{ ok: boolean; deleted_id: number }> {
+    return iaRequest('/incident-analysis.php?action=deleteBookmark', {
+      method: 'POST',
+      body: JSON.stringify({ bookmark_id: bookmarkId }),
     });
   },
 };

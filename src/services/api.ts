@@ -3,7 +3,9 @@
  * Handles all communication with the PHP backend
  */
 
-const API_BASE = '/api';
+// For E2E testing, allow direct connection to local PHP server
+// In production/dev, use Vite proxy at /api
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Token storage
 let authToken: string | null = localStorage.getItem('rsa_token');
@@ -72,14 +74,14 @@ export const authApi = {
     return data;
   },
 
-  async register(email: string, password: string, name: string) {
+  async register(email: string, password: string, name: string, inviteCode?: string) {
     const data = await apiRequest<{
       success: boolean;
       token: string;
       user: ApiUser;
     }>('/auth.php?action=register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, invite_code: inviteCode }),
     });
     setAuthToken(data.token);
     return data;
@@ -244,6 +246,7 @@ export interface ApiUser {
   email: string;
   name: string;
   role: 'owner' | 'admin' | 'user' | 'beta';
+  plan?: string;
   products: string[];
   subscription_plan?: string | null;
   subscription_status?: string | null;

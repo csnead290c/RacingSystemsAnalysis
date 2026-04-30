@@ -124,17 +124,17 @@ describe('ROLE_CAPABILITIES mapping', () => {
     expect(ROLE_CAPABILITIES.viewer.size).toBe(0);
   });
 
-  it('owner role grants all incident capabilities', () => {
-    expect(ROLE_CAPABILITIES.owner.has('incidents.read')).toBe(true);
-    expect(ROLE_CAPABILITIES.owner.has('incidents.create')).toBe(true);
-    expect(ROLE_CAPABILITIES.owner.has('incidents.edit.own')).toBe(true);
+  it('owner role grants incidents.edit.all only (other incident caps come from NHRA plan)', () => {
+    expect(ROLE_CAPABILITIES.owner.has('incidents.read')).toBe(false);
+    expect(ROLE_CAPABILITIES.owner.has('incidents.create')).toBe(false);
+    expect(ROLE_CAPABILITIES.owner.has('incidents.edit.own')).toBe(false);
     expect(ROLE_CAPABILITIES.owner.has('incidents.edit.all')).toBe(true);
   });
 
-  it('admin role grants all incident capabilities', () => {
-    expect(ROLE_CAPABILITIES.admin.has('incidents.read')).toBe(true);
-    expect(ROLE_CAPABILITIES.admin.has('incidents.create')).toBe(true);
-    expect(ROLE_CAPABILITIES.admin.has('incidents.edit.own')).toBe(true);
+  it('admin role grants incidents.edit.all only (other incident caps come from NHRA plan)', () => {
+    expect(ROLE_CAPABILITIES.admin.has('incidents.read')).toBe(false);
+    expect(ROLE_CAPABILITIES.admin.has('incidents.create')).toBe(false);
+    expect(ROLE_CAPABILITIES.admin.has('incidents.edit.own')).toBe(false);
     expect(ROLE_CAPABILITIES.admin.has('incidents.edit.all')).toBe(true);
   });
 

@@ -81,13 +81,24 @@ export function fromPrintedRows(rows: VB6PrintedRow[]): DetailedParamRow[] {
       case 'rollout':  row.label = 'Rollout'; break;
       case 'distance': row.label = `${row.dist} ft`; break;
       case 'time':     row.label = `t=${row.time}s`; break;
-      case 'speed':    row.label = `${row.mph} mph`; break;
+      case 'speed':    row.label = speedLabel(row); break;
       case 'shift':    row.label = shiftLabel(result, i); break;
       default:         row.label = row.reason; break;
     }
   }
 
   return result;
+}
+
+/** Map speed-match rows to canonical target labels (e.g., "0–60 mph"). */
+function speedLabel(row: DetailedParamRow): string {
+  // reason tag is e.g. "SPEED@60" or "SPEED@100"
+  const m = row.reason.match(/^SPEED@(\d+)/);
+  if (m) return `0\u2013${m[1]} mph`;
+  // Fallback: round to nearest 10 mph target
+  const rounded = Math.round(row.mph_num / 10) * 10;
+  if (rounded > 0) return `0\u2013${rounded} mph`;
+  return `${row.mph} mph`;
 }
 
 /**

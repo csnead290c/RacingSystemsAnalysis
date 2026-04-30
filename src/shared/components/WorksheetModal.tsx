@@ -4,14 +4,27 @@
  * A reusable modal for calculator worksheets that can be triggered from
  * buttons next to input fields. Matches the VB6 pattern where worksheets
  * were popup dialogs that helped calculate values.
+ * 
+ * VB6 Transfer Semantics by Product Family:
+ * - QUARTER Pro/Jr: Manual entry only, NO transfer mechanism (advisory only)
+ * - ENGINE Pro/Jr: Double-click calculated result to transfer value
  */
 
 import React, { useState, useEffect, type ReactNode } from 'react';
 
+/**
+ * Worksheet transfer modes matching VB6 product family semantics
+ */
+export type WorksheetTransferMode = 
+  | 'advisory_manual_entry_only'  // QUARTER family - no transfer, advisory only
+  | 'double_click_result_transfers'  // ENGINE family - double-click result to transfer
+  | 'none';  // No worksheet
+
 interface WorksheetModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: number) => void;
+  onApply?: (value: number) => void;  // Optional - only used for transfer modes
+  transferMode?: WorksheetTransferMode;  // Default: advisory_manual_entry_only
   title: string;
   children: ReactNode;
   calculatedValue: number;
@@ -24,6 +37,7 @@ export default function WorksheetModal({
   isOpen,
   onClose,
   onApply,
+  transferMode = 'advisory_manual_entry_only',  // Default to QUARTER semantics
   title,
   children,
   calculatedValue,
@@ -34,8 +48,17 @@ export default function WorksheetModal({
   if (!isOpen) return null;
 
   const handleApply = () => {
-    onApply(calculatedValue);
-    onClose();
+    if (onApply) {
+      onApply(calculatedValue);
+      onClose();
+    }
+  };
+
+  const handleDoubleClickResult = () => {
+    if (transferMode === 'double_click_result_transfers' && onApply) {
+      onApply(calculatedValue);
+      onClose();
+    }
   };
 
   return (
@@ -98,12 +121,20 @@ export default function WorksheetModal({
             borderRadius: '8px',
             marginBottom: 'var(--space-3)',
             textAlign: 'center',
+            cursor: transferMode === 'double_click_result_transfers' ? 'pointer' : 'default',
           }}
+          onDoubleClick={handleDoubleClickResult}
+          title={transferMode === 'double_click_result_transfers' ? 'Double-click to transfer value and close worksheet' : ''}
         >
           <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>{calculatedLabel}</div>
           <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
             {calculatedValue.toFixed(3)} {unit}
           </div>
+          {transferMode === 'double_click_result_transfers' && (
+            <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '4px' }}>
+              (Double-click to use this value)
+            </div>
+          )}
         </div>
 
         {/* Help text */}
@@ -124,12 +155,27 @@ export default function WorksheetModal({
 
         {/* Buttons */}
         <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-          <button className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={handleApply}>
-            Apply Value
-          </button>
+          {transferMode === 'advisory_manual_entry_only' ? (
+            // QUARTER family: Close button only, no transfer
+            <button className="btn" onClick={onClose}>
+              Close
+            </button>
+          ) : transferMode === 'double_click_result_transfers' ? (
+            // ENGINE family: Close button (double-click result to transfer)
+            <button className="btn" onClick={onClose}>
+              Close
+            </button>
+          ) : (
+            // Legacy fallback: Cancel + Apply (deprecated)
+            <>
+              <button className="btn" onClick={onClose}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleApply}>
+                Apply Value
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -176,7 +222,7 @@ export function WorksheetButton({ onClick, tooltip = 'Open calculator worksheet'
 interface FrontalAreaWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: number) => void;
+  onApply?: (value: number) => void;  // Optional - not used for QUARTER (advisory only)
 }
 
 export function FrontalAreaWorksheet({ isOpen, onClose, onApply }: FrontalAreaWorksheetProps) {
@@ -191,6 +237,7 @@ export function FrontalAreaWorksheet({ isOpen, onClose, onApply }: FrontalAreaWo
       isOpen={isOpen}
       onClose={onClose}
       onApply={onApply}
+      transferMode="advisory_manual_entry_only"  // QUARTER family - no transfer
       title="Frontal Area Worksheet"
       calculatedValue={calculatedArea}
       calculatedLabel="Frontal Area"
@@ -247,7 +294,7 @@ export function FrontalAreaWorksheet({ isOpen, onClose, onApply }: FrontalAreaWo
 interface TireWidthWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: number) => void;
+  onApply?: (value: number) => void;  // Optional - not used for QUARTER (advisory only)
 }
 
 export function TireWidthWorksheet({ isOpen, onClose, onApply }: TireWidthWorksheetProps) {
@@ -263,6 +310,7 @@ export function TireWidthWorksheet({ isOpen, onClose, onApply }: TireWidthWorksh
       isOpen={isOpen}
       onClose={onClose}
       onApply={onApply}
+      transferMode="advisory_manual_entry_only"  // QUARTER family - no transfer
       title="Tire Width Worksheet"
       calculatedValue={Math.max(0, effectiveTireWidth)}
       calculatedLabel="Effective Tire Width"
@@ -328,7 +376,7 @@ export function TireWidthWorksheet({ isOpen, onClose, onApply }: TireWidthWorksh
 interface PMIWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: { engine: number; trans: number; tires: number }) => void;
+  onApply?: (value: { engine: number; trans: number; tires: number }) => void;  // Optional - not used for QUARTER (advisory only)
   type: 'engine' | 'trans' | 'tires';
 }
 
@@ -409,7 +457,8 @@ export function PMIWorksheet({ isOpen, onClose, onApply, type }: PMIWorksheetPro
     <WorksheetModal
       isOpen={isOpen}
       onClose={onClose}
-      onApply={() => onApply({ engine: enginePMI, trans: transPMI, tires: tiresPMI })}
+      onApply={onApply ? () => onApply({ engine: enginePMI, trans: transPMI, tires: tiresPMI }) : undefined}
+      transferMode="advisory_manual_entry_only"  // QUARTER family - no transfer
       title={`${currentLabel} Worksheet`}
       calculatedValue={currentValue}
       calculatedLabel={currentLabel}
@@ -690,7 +739,7 @@ export function DragCoefHelp({ isOpen, onClose }: DragCoefHelpProps) {
 interface GearRatioWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: number) => void;
+  onApply?: (value: number) => void;  // Optional - not used for QUARTER (advisory only)
 }
 
 export function GearRatioWorksheet({ isOpen, onClose, onApply }: GearRatioWorksheetProps) {
@@ -704,6 +753,7 @@ export function GearRatioWorksheet({ isOpen, onClose, onApply }: GearRatioWorksh
       isOpen={isOpen}
       onClose={onClose}
       onApply={onApply}
+      transferMode="advisory_manual_entry_only"  // QUARTER family - no transfer
       title="Gear Ratio Worksheet"
       calculatedValue={gearRatio}
       calculatedLabel="Gear Ratio"
@@ -743,7 +793,7 @@ export function GearRatioWorksheet({ isOpen, onClose, onApply }: GearRatioWorksh
 interface TireRolloutWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: number) => void;
+  onApply?: (value: number) => void;  // Optional - not used for QUARTER (advisory only)
   tireDiameter?: number;
   mode?: 'diameter' | 'rollout'; // Which value to apply
 }
@@ -775,7 +825,8 @@ export function TireRolloutWorksheet({ isOpen, onClose, onApply, tireDiameter = 
     <WorksheetModal
       isOpen={isOpen}
       onClose={onClose}
-      onApply={() => onApply(applyValue)}
+      onApply={onApply ? () => onApply(applyValue) : undefined}
+      transferMode="advisory_manual_entry_only"  // QUARTER family - no transfer
       title="Tire Rollout Worksheet"
       calculatedValue={mode === 'diameter' ? diameter : rollout}
       calculatedLabel={mode === 'diameter' ? 'Tire Diameter' : 'Tire Rollout'}
@@ -883,7 +934,7 @@ export function TireRolloutWorksheet({ isOpen, onClose, onApply, tireDiameter = 
 interface VehicleRolloutWorksheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (value: number) => void;
+  onApply?: (value: number) => void;  // Optional - not used for QUARTER (advisory only)
   currentValue?: number;
 }
 
@@ -905,7 +956,8 @@ export function VehicleRolloutWorksheet({ isOpen, onClose, onApply, currentValue
     <WorksheetModal
       isOpen={isOpen}
       onClose={onClose}
-      onApply={() => onApply(rollout)}
+      onApply={onApply ? () => onApply(rollout) : undefined}
+      transferMode="advisory_manual_entry_only"  // QUARTER family - no transfer
       title="Vehicle Rollout Worksheet"
       calculatedValue={rollout}
       calculatedLabel="Staging Rollout"

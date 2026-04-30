@@ -1,0 +1,444 @@
+/**
+ * RSA Auth & Access E2E Tests - Real Signup Flows
+ * 
+ * IMPORTANT: These tests run against the REAL backend (production API proxy).
+ * Test data is seeded in SQLite database via scripts/seed-e2e-test-data.sh
+ * 
+ * Run setup first: ./scripts/seed-e2e-test-data.sh
+ * Then run tests: npm run test:e2e:auth
+ */
+
+import { test, expect, type Page } from '@playwright/test';
+
+const BASE_URL = 'http://localhost:5173';
+
+// Helper to generate unique email for each test
+function generateTestEmail(prefix: string): string {
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 10000);
+  return `${prefix}-${timestamp}-${random}@test.rsa.local`;
+}
+
+// Helper to check localStorage for user data
+async function getUserFromStorage(page: Page) {
+  const userJson = await page.evaluate(() => {
+    return localStorage.getItem('rsa.auth.currentUser');
+  });
+  return userJson ? JSON.parse(userJson) : null;
+}
+
+// Helper to wait for navigation after form submission
+async function waitForPostLoginNavigation(page: Page) {
+  // Wait for either home, dashboard, or parity (depending on user type)
+  await page.waitForURL(/\/(home|dashboard|parity|$)/, { timeout: 10000 });
+}
+
+test.describe('Standard Signup Flow - Real E2E', () => {
+  
+  test('creates Free user with correct plan assignment', async ({ page }) => {
+    const email = generateTestEmail('free-user');
+    const password = 'TestPassword123!';
+    const name = 'Free Test User';
+
+    console.log(`Testing standard signup with email: ${email}`);
+
+    // Navigate to registration
+    await page.goto(`${BASE_URL}/register`);
+    
+    // Wait for page to load
+    await page.waitForLoadState('networkidle');
+
+    // Click "Start free" to skip tier selection and go to account form
+    await page.click('text=Start free');
+    await page.waitForLoadState('networkidle');
+
+    // Fill out registration form using placeholder text
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+
+    // Submit registration
+    await page.click('button[type="submit"]');
+
+    // Wait for redirect after successful registration
+    await waitForPostLoginNavigation(page);
+
+    // Verify user is logged in
+    const user = await getUserFromStorage(page);
+    expect(user).toBeTruthy();
+    expect(user.email).toBe(email);
+    expect(user.displayName).toBe(name);
+
+    // CRITICAL: Verify plan is 'free'
+    expect(user.subscription_plan).toBe('free');
+
+    console.log(`✅ PASS: Standard signup created Free user`);
+    console.log(`   Email: ${email}`);
+    console.log(`   Plan: ${user.subscription_plan}`);
+    console.log(`   Role: ${user.roleId}`);
+  });
+
+  test('Free user cannot access NHRA parity routes', async ({ page }) => {
+    const email = generateTestEmail('free-blocked');
+    const password = 'TestPassword123!';
+    const name = 'Free Blocked User';
+
+    // Register
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+    await page.click('text=Start free');
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify Free plan
+    const user = await getUserFromStorage(page);
+    expect(user.subscription_plan).toBe('free');
+
+    // Try to access NHRA parity route - should be blocked
+    await page.goto(`${BASE_URL}/parity`);
+    await page.waitForLoadState('networkidle');
+
+    // Check for access denied message
+    const accessDenied = await page.locator('text=/access.*restricted|access.*denied|upgrade.*required/i').isVisible().catch(() => false);
+    
+    expect(accessDenied).toBe(true);
+
+    console.log(`✅ PASS: Free user blocked from NHRA parity route`);
+  });
+
+  test('Free user cannot access Tech Master routes', async ({ page }) => {
+    const email = generateTestEmail('free-tech-blocked');
+    const password = 'TestPassword123!';
+    const name = 'Free Tech Blocked User';
+
+    // Register
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+    await page.click('text=Start free');
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify Free plan
+    const user = await getUserFromStorage(page);
+    expect(user.subscription_plan).toBe('free');
+
+    // Try to access Tech Master route - should be blocked
+    await page.goto(`${BASE_URL}/tech`);
+    await page.waitForLoadState('networkidle');
+
+    // Check for access denied message
+    const accessDenied = await page.locator('text=/access.*restricted|access.*denied|upgrade.*required/i').isVisible().catch(() => false);
+    
+    expect(accessDenied).toBe(true);
+
+    console.log(`✅ PASS: Free user blocked from Tech Master route`);
+  });
+});
+
+test.describe('NHRA Invite Signup Flow - Real E2E', () => {
+  
+  test('creates NHRA user with correct plan assignment', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_VALID_2026';
+    const email = generateTestEmail('nhra-user');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Test User';
+
+    console.log(`Testing NHRA invite signup with email: ${email}`);
+    console.log(`Using invite code: ${inviteCode}`);
+
+    // Navigate to registration with invite code (skips tier selection)
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+
+    // Fill out registration form using placeholder text
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+
+    // Submit registration
+    await page.click('button[type="submit"]');
+
+    // Wait for redirect
+    await waitForPostLoginNavigation(page);
+
+    // Verify user is logged in
+    const user = await getUserFromStorage(page);
+    expect(user).toBeTruthy();
+    expect(user.email).toBe(email);
+    expect(user.displayName).toBe(name);
+
+    // CRITICAL: Verify plan is 'nhra'
+    expect(user.subscription_plan).toBe('nhra');
+
+    console.log(`✅ PASS: NHRA invite signup created NHRA user`);
+    console.log(`   Email: ${email}`);
+    console.log(`   Plan: ${user.subscription_plan}`);
+    console.log(`   Role: ${user.roleId}`);
+  });
+
+  test('NHRA user CAN access parity routes', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_VALID_2026';
+    const email = generateTestEmail('nhra-parity-access');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Parity User';
+
+    // Register with NHRA invite
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify NHRA plan
+    const user = await getUserFromStorage(page);
+    expect(user.subscription_plan).toBe('nhra');
+
+    // Navigate to parity route - should work
+    await page.goto(`${BASE_URL}/parity`);
+    await page.waitForLoadState('networkidle');
+
+    // Should NOT see access denied
+    const accessDenied = await page.locator('text=/access.*restricted|access.*denied/i').isVisible().catch(() => false);
+    expect(accessDenied).toBe(false);
+
+    // Should see parity portal content
+    const hasParityContent = await page.locator('text=/parity.*portal|event.*category|race.*lookup/i').isVisible().catch(() => false);
+    expect(hasParityContent).toBe(true);
+
+    console.log(`✅ PASS: NHRA user can access parity route`);
+  });
+
+  test('NHRA user CAN access Tech Master routes', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_VALID_2026';
+    const email = generateTestEmail('nhra-tech-access');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Tech User';
+
+    // Register with NHRA invite
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify NHRA plan
+    const user = await getUserFromStorage(page);
+    expect(user.subscription_plan).toBe('nhra');
+
+    // Navigate to tech route - should work
+    await page.goto(`${BASE_URL}/tech`);
+    await page.waitForLoadState('networkidle');
+
+    // Should NOT see access denied
+    const accessDenied = await page.locator('text=/access.*restricted|access.*denied/i').isVisible().catch(() => false);
+    expect(accessDenied).toBe(false);
+
+    // Should see tech master content
+    const hasTechContent = await page.locator('text=/tech.*master|identities|events|entries/i').isVisible().catch(() => false);
+    expect(hasTechContent).toBe(true);
+
+    console.log(`✅ PASS: NHRA user can access Tech Master route`);
+  });
+
+  test('NHRA user CANNOT access general product routes', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_VALID_2026';
+    const email = generateTestEmail('nhra-product-blocked');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Product Blocked User';
+
+    // Register with NHRA invite
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify NHRA plan
+    const user = await getUserFromStorage(page);
+    expect(user.subscription_plan).toBe('nhra');
+
+    // Try to access vehicles route - should be blocked
+    await page.goto(`${BASE_URL}/vehicles`);
+    await page.waitForLoadState('networkidle');
+
+    const vehiclesBlocked = await page.locator('text=/access.*restricted|access.*denied|upgrade.*required/i').isVisible().catch(() => false);
+    expect(vehiclesBlocked).toBe(true);
+
+    console.log(`✅ PASS: NHRA user blocked from general product routes`);
+  });
+});
+
+test.describe('Invalid Invite Code Handling - Real E2E', () => {
+  
+  test('expired invite code fails safely', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_EXPIRED_2026';
+    const email = generateTestEmail('expired-invite');
+    const password = 'TestPassword123!';
+    const name = 'Expired Invite User';
+
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+
+    // Should show error message
+    const errorVisible = await page.locator('text=/expired.*invite|invite.*expired/i').isVisible({ timeout: 5000 }).catch(() => false);
+    expect(errorVisible).toBe(true);
+
+    // User should NOT be created
+    const user = await getUserFromStorage(page);
+    expect(user).toBeNull();
+
+    console.log(`✅ PASS: Expired invite code fails safely`);
+  });
+
+  test('revoked invite code fails safely', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_REVOKED_2026';
+    const email = generateTestEmail('revoked-invite');
+    const password = 'TestPassword123!';
+    const name = 'Revoked Invite User';
+
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+
+    // Should show error message
+    const errorVisible = await page.locator('text=/revoked.*invite|invite.*revoked|invalid.*invite/i').isVisible({ timeout: 5000 }).catch(() => false);
+    expect(errorVisible).toBe(true);
+
+    // User should NOT be created
+    const user = await getUserFromStorage(page);
+    expect(user).toBeNull();
+
+    console.log(`✅ PASS: Revoked invite code fails safely`);
+  });
+
+  test('max-uses invite code fails safely', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_MAXUSES_2026';
+    const email = generateTestEmail('maxuses-invite');
+    const password = 'TestPassword123!';
+    const name = 'Max Uses Invite User';
+
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+
+    // Should show error message
+    const errorVisible = await page.locator('text=/maximum.*uses|invite.*used|invalid.*invite/i').isVisible({ timeout: 5000 }).catch(() => false);
+    expect(errorVisible).toBe(true);
+
+    // User should NOT be created
+    const user = await getUserFromStorage(page);
+    expect(user).toBeNull();
+
+    console.log(`✅ PASS: Max-uses invite code fails safely`);
+  });
+});
+
+test.describe('Session Persistence - Real E2E', () => {
+  
+  test('Free user session persists after page reload', async ({ page }) => {
+    const email = generateTestEmail('free-session');
+    const password = 'TestPassword123!';
+    const name = 'Free Session User';
+
+    // Register
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+    await page.click('text=Start free');
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify initial session
+    const userBefore = await getUserFromStorage(page);
+    expect(userBefore.subscription_plan).toBe('free');
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Verify session persisted
+    const userAfter = await getUserFromStorage(page);
+    expect(userAfter).toBeTruthy();
+    expect(userAfter.subscription_plan).toBe('free');
+    expect(userAfter.email).toBe(email);
+
+    console.log(`✅ PASS: Free user session persists after reload`);
+  });
+
+  test('NHRA user session persists after page reload', async ({ page }) => {
+    const inviteCode = 'nhra_E2E_TEST_VALID_2026';
+    const email = generateTestEmail('nhra-session');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Session User';
+
+    // Register with NHRA invite
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.waitForLoadState('networkidle');
+    await page.fill('input[placeholder="John Doe"]', name);
+    await page.fill('input[placeholder="you@example.com"]', email);
+    await page.fill('input[placeholder="At least 8 characters"]', password);
+    await page.fill('input[placeholder="Confirm your password"]', password);
+    await page.click('button[type="submit"]');
+    await waitForPostLoginNavigation(page);
+
+    // Verify initial session
+    const userBefore = await getUserFromStorage(page);
+    expect(userBefore.subscription_plan).toBe('nhra');
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Verify session persisted
+    const userAfter = await getUserFromStorage(page);
+    expect(userAfter).toBeTruthy();
+    expect(userAfter.subscription_plan).toBe('nhra');
+    expect(userAfter.email).toBe(email);
+
+    // Verify parity access still works after reload
+    await page.goto(`${BASE_URL}/parity`);
+    await page.waitForLoadState('networkidle');
+    const accessDenied = await page.locator('text=/access.*restricted|access.*denied/i').isVisible().catch(() => false);
+    expect(accessDenied).toBe(false);
+
+    console.log(`✅ PASS: NHRA user session persists after reload`);
+  });
+});

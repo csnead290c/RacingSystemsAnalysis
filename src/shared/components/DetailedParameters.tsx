@@ -182,8 +182,8 @@ export default function DetailedParametersModal({
                   <th style={thStyle}>Dist (ft)</th>
                   <th style={thStyle}>MPH</th>
                   <th style={thStyle}>Accel (g)</th>
-                  <th style={thStyle}>RPM</th>
                   <th style={{ ...thStyle, textAlign: 'center' }}>Gear</th>
+                  <th style={thStyle}>RPM</th>
                   <th style={{ ...thStyle, textAlign: 'center' }}>Slip</th>
                 </tr>
               </thead>
@@ -203,8 +203,8 @@ export default function DetailedParametersModal({
                     <td style={tdStyle}>{row.dist}</td>
                     <td style={tdStyle}>{row.mph}</td>
                     <td style={tdStyle}>{row.accel}</td>
-                    <td style={tdStyle}>{row.rpm}</td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>{row.gear}</td>
+                    <td style={tdStyle}>{row.rpm}</td>
                     <td style={{ ...tdStyle, textAlign: 'center', color: row.slip ? '#ef4444' : 'transparent', fontWeight: 600, fontSize: '10px' }}>
                       {row.slip || ''}
                     </td>

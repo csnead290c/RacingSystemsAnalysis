@@ -24,7 +24,8 @@ export type InternalModule =
   | 'techCard'
   | 'ladder'
   | 'opponents'
-  | 'dialIn';
+  | 'dialIn'
+  | 'techMaster';
 
 /** All modules that require internal access. */
 export const INTERNAL_MODULES: readonly InternalModule[] = [
@@ -39,6 +40,7 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
   'ladder',
   'opponents',
   'dialIn',
+  'techMaster',
 ] as const;
 
 /** Route paths that map to internal modules. */
@@ -58,6 +60,7 @@ export const INTERNAL_ROUTES: Record<string, InternalModule> = {
   '/ladder': 'ladder',
   '/opponents': 'opponents',
   '/dial-in': 'dialIn',
+  '/tech': 'techMaster',
 };
 
 /** Public core routes (always safe to link for non-internal users). */

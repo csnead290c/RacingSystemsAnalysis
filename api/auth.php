@@ -4,8 +4,40 @@
  * Endpoints: login, register, me, update, preferences, request_password_reset, reset_password
  */
 
-require_once 'config.php';
+// Global error handler to return JSON errors instead of empty 500s
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error' => 'Server error',
+        'debug' => [
+            'message' => $errstr,
+            'file' => basename($errfile),
+            'line' => $errline
+        ]
+    ]);
+    exit;
+});
+
+set_exception_handler(function($e) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error' => 'Server error',
+        'debug' => [
+            'message' => $e->getMessage(),
+            'file' => basename($e->getFile()),
+            'line' => $e->getLine()
+        ]
+    ]);
+    exit;
+});
+
+if (!defined('RSA_CONFIG_LOADED')) {
+    require_once 'config.php';
+}
 require_once 'functions.php';
+require_once __DIR__ . '/lib/capabilities.php';
 rsa_setCorsHeaders();
 
 $pdo = getDB();
@@ -65,7 +97,27 @@ function handleLogin($pdo) {
         rsa_jsonResponse(['error' => 'Invalid email or password'], 401);
     }
     
+    // Check lifecycle status - block suspended and deleted users
+    $status = $user['status'] ?? 'active';
+    if ($status === 'suspended') {
+        rsa_jsonResponse(['error' => 'Your account has been suspended. Please contact support.'], 403);
+    }
+    if ($status === 'deleted') {
+        rsa_jsonResponse(['error' => 'This account is no longer active.'], 403);
+    }
+    if ($status === 'invited') {
+        rsa_jsonResponse(['error' => 'Please complete your account setup using the invite link.'], 403);
+    }
+    
     $token = rsa_generateToken($user['id'], $user['email'], $user['role']);
+    
+    // Get resolved plan using capability system
+    $plan = rsa_getUserPlan($pdo, $user['id']);
+    
+    // Get products: merge DB products with plan-based products
+    $dbProducts = json_decode($user['products'] ?? '[]', true) ?: [];
+    $planProducts = rsa_getProductsForPlanId($plan);
+    $allProducts = array_values(array_unique(array_merge($dbProducts, $planProducts)));
     
     rsa_jsonResponse([
         'success' => true,
@@ -75,51 +127,138 @@ function handleLogin($pdo) {
             'email' => $user['email'],
             'name' => $user['name'],
             'role' => $user['role'],
-            'products' => json_decode($user['products'], true)
+            'plan' => $plan,
+            'products' => $allProducts
         ]
     ]);
 }
 
 function handleRegister($pdo) {
-    $input = rsa_getJsonInput();
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    $name = $input['name'] ?? '';
+    // Ensure we always return JSON even on fatal errors
+    ob_start();
     
-    if (!$email || !$password || !$name) {
-        rsa_jsonResponse(['error' => 'Email, password, and name required'], 400);
+    try {
+        $input = rsa_getJsonInput();
+        $email = $input['email'] ?? '';
+        $password = $input['password'] ?? '';
+        $name = $input['name'] ?? '';
+        $inviteCode = $input['invite_code'] ?? null;
+        
+        if (!$email || !$password || !$name) {
+            rsa_jsonResponse(['error' => 'Email, password, and name required'], 400);
+        }
+        
+        if (strlen($password) < 6) {
+            rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+        }
+        
+        // Check if email exists
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            rsa_jsonResponse(['error' => 'Email already registered'], 400);
+        }
+        
+        // Validate invite code if provided
+        $plan = 'free';
+        $inviteCodeId = null;
+        if ($inviteCode) {
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT id, plan, max_uses, uses_count, expires_at, revoked_at 
+                    FROM invite_codes 
+                    WHERE code = ?
+                ");
+                $stmt->execute([$inviteCode]);
+                $invite = $stmt->fetch();
+                
+                if (!$invite) {
+                    rsa_jsonResponse(['error' => 'Invalid invite code'], 400);
+                }
+                
+                if ($invite['revoked_at']) {
+                    rsa_jsonResponse(['error' => 'Invite code has been revoked'], 400);
+                }
+                
+                if ($invite['expires_at'] && strtotime($invite['expires_at']) < time()) {
+                    rsa_jsonResponse(['error' => 'Invite code has expired'], 400);
+                }
+                
+                if ($invite['uses_count'] >= $invite['max_uses']) {
+                    rsa_jsonResponse(['error' => 'Invite code has reached maximum uses'], 400);
+                }
+                
+                $plan = $invite['plan'];
+                $inviteCodeId = $invite['id'];
+            } catch (PDOException $e) {
+                // invite_codes table may not exist - ignore invite code
+                error_log("Invite code lookup failed (table may not exist): " . $e->getMessage());
+            }
+        }
+        
+        // Create user with plan
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        
+        // Try with plan column first, fall back to without if column doesn't exist
+        try {
+            $stmt = $pdo->prepare("INSERT INTO users (email, password_hash, name, role, plan, products) VALUES (?, ?, ?, 'user', ?, '[]')");
+            $stmt->execute([$email, $hash, $name, $plan]);
+        } catch (PDOException $colErr) {
+            // plan column may not exist yet - try without it
+            if (strpos($colErr->getMessage(), 'plan') !== false || strpos($colErr->getMessage(), 'Unknown column') !== false) {
+                $stmt = $pdo->prepare("INSERT INTO users (email, password_hash, name, role, products) VALUES (?, ?, ?, 'user', '[]')");
+                $stmt->execute([$email, $hash, $name]);
+            } else {
+                throw $colErr; // Re-throw if it's a different error
+            }
+        }
+        
+        $userId = $pdo->lastInsertId();
+        
+        // Record invite code use if applicable
+        if ($inviteCodeId) {
+            $stmt = $pdo->prepare("UPDATE invite_codes SET uses_count = uses_count + 1 WHERE id = ?");
+            $stmt->execute([$inviteCodeId]);
+            
+            $stmt = $pdo->prepare("INSERT INTO invite_code_uses (invite_code_id, user_id, ip_address, user_agent) VALUES (?, ?, ?, ?)");
+            $stmt->execute([
+                $inviteCodeId,
+                $userId,
+                $_SERVER['REMOTE_ADDR'] ?? null,
+                $_SERVER['HTTP_USER_AGENT'] ?? null
+            ]);
+        }
+        
+        $token = rsa_generateToken($userId, $email, 'user');
+        
+        // Get products based on plan
+        $planProducts = rsa_getProductsForPlanId($plan);
+        
+        rsa_jsonResponse([
+            'success' => true,
+            'token' => $token,
+            'user' => [
+                'id' => $userId,
+                'email' => $email,
+                'name' => $name,
+                'role' => 'user',
+                'plan' => $plan,
+                'products' => $planProducts
+            ]
+        ], 201);
+    } catch (PDOException $e) {
+        error_log("Registration DB error: " . $e->getMessage());
+        rsa_jsonResponse([
+            'error' => 'Registration failed: database error',
+            'debug' => $e->getMessage()
+        ], 500);
+    } catch (Exception $e) {
+        error_log("Registration error: " . $e->getMessage());
+        rsa_jsonResponse([
+            'error' => 'Registration failed',
+            'debug' => $e->getMessage()
+        ], 500);
     }
-    
-    if (strlen($password) < 6) {
-        rsa_jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
-    }
-    
-    // Check if email exists
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->execute([$email]);
-    if ($stmt->fetch()) {
-        rsa_jsonResponse(['error' => 'Email already registered'], 400);
-    }
-    
-    // Create user
-    $hash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $pdo->prepare("INSERT INTO users (email, password_hash, name, role, products) VALUES (?, ?, ?, 'user', '[]')");
-    $stmt->execute([$email, $hash, $name]);
-    
-    $userId = $pdo->lastInsertId();
-    $token = rsa_generateToken($userId, $email, 'user');
-    
-    rsa_jsonResponse([
-        'success' => true,
-        'token' => $token,
-        'user' => [
-            'id' => $userId,
-            'email' => $email,
-            'name' => $name,
-            'role' => 'user',
-            'products' => []
-        ]
-    ], 201);
 }
 
 function handleMe($pdo) {
@@ -133,13 +272,22 @@ function handleMe($pdo) {
         rsa_jsonResponse(['error' => 'User not found'], 404);
     }
     
+    // Get resolved plan using capability system
+    $plan = rsa_getUserPlan($pdo, $user['id']);
+    
+    // Get products: merge DB products with plan-based products
+    $dbProducts = json_decode($user['products'] ?? '[]', true) ?: [];
+    $planProducts = rsa_getProductsForPlanId($plan);
+    $allProducts = array_values(array_unique(array_merge($dbProducts, $planProducts)));
+    
     rsa_jsonResponse([
         'user' => [
             'id' => $user['id'],
             'email' => $user['email'],
             'name' => $user['name'],
             'role' => $user['role'],
-            'products' => json_decode($user['products'], true)
+            'plan' => $plan,
+            'products' => $allProducts
         ]
     ]);
 }

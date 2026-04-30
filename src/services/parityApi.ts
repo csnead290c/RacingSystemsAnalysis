@@ -24,6 +24,28 @@ export interface PeekResponse {
   hint?: string;
 }
 
+export interface ProbeODataRoundRow { round: string; odata: number; db: number; missing: number; }
+export interface ProbeODataClassRow  { class: string;  odata: number; db: number; missing: number; }
+export interface ProbeODataResponse {
+  raceLookup: string;
+  odataTotal: number;
+  dbTotal: number;
+  totalMissing: number;
+  roundComparison: ProbeODataRoundRow[];
+  classComparison: ProbeODataClassRow[];
+  odataByCategory: Record<string, number>;
+}
+
+export interface PurgeEventRunsResponse {
+  raceLookup: string;
+  confirm: boolean;
+  runCount?: number;
+  importsDeleted?: number;
+  runsDeleted?: number;
+  importCount?: number;
+  message: string;
+}
+
 export interface IngestResponse {
   raceLookup: string;
   importId: string;
@@ -294,14 +316,45 @@ export interface TopByEventResponse {
   rows: TopByEventRow[];
 }
 
+export type TrendMetricKey =
+  | 'mph1320' | 'ft1320' | 'corrected_ft1320'
+  | 'ft60' | 'ft330' | 'ft660' | 'mph660'
+  | 'ft1000' | 'mph1000';
+
 export interface TopByEventParams {
   classIndex: string;
-  metric: 'mph1320' | 'ft1320' | 'corrected_ft1320';
+  metric: TrendMetricKey;
   startRaceLookup?: string;
   endRaceLookup?: string;
   includeDQ?: boolean;
   minRunCount?: number;
   limit?: number;
+}
+
+export interface TopByTrackRow {
+  trackName: string;
+  bestValue: number;
+  avgValue: number;
+  eventCount: number;
+  runCount: number;
+}
+
+export interface TopByTrackResponse {
+  classIndex: string;
+  metric: string;
+  aggregation: string;
+  includeDQ: boolean;
+  minRunCount: number;
+  rows: TopByTrackRow[];
+}
+
+export interface TopByTrackParams {
+  classIndex: string;
+  metric: Exclude<TrendMetricKey, 'corrected_ft1320'>;
+  startRaceLookup?: string;
+  endRaceLookup?: string;
+  includeDQ?: boolean;
+  minRunCount?: number;
 }
 
 export interface EventCatalogEntry {
@@ -570,6 +623,9 @@ export interface TrackWithStats {
   city: string | null;
   state: string | null;
   zip: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  slope_grade_pct: number | null;
   created_at: string;
   event_count: number;
   total_run_count: number;
@@ -696,15 +752,58 @@ export interface ClassAliasListResponse {
 export interface EngineComboRow {
   id: number;
   name: string;
+  category: string | null;
   t_power: number;
   d_power: number;
   friction_factor: number;
+  fuel_type: string;
+  color_hex: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface EngineComboListResponse {
   combos: EngineComboRow[];
+}
+
+// ── Body Style Types ──────────────────────────────────────────────────
+
+export interface BodyStyleRow {
+  id: number;
+  name: string;
+  category: string | null;
+  body_style_num: number | null;
+  cd: number;
+  frontal_area: number;
+  lift_coef: number;
+  overhang_in: number;
+  color_hex: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BodyStyleListResponse {
+  bodyStyles: BodyStyleRow[];
+}
+
+export interface DriverBodyStyleRow {
+  id: number;
+  driver_name: string;
+  class_index: string;
+  body_style_id: number;
+  body_style_name: string;
+  cd: number;
+  frontal_area: number;
+  lift_coef: number;
+  overhang_in: number;
+  effective_from_utc: string;
+  effective_to_utc: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriverBodyStyleListResponse {
+  driverBodyStyles: DriverBodyStyleRow[];
 }
 
 // ── Driver Combo Types ─────────────────────────────────────────────────
@@ -846,17 +945,19 @@ export interface WeatherCoverageResponse {
   hasTrackCoords: boolean;
   trackLat: number | null;
   trackLon: number | null;
-  canonicalCount: number;
-  canonicalBySource: Record<string, number>;
-  totalSamples: number;
-  samplesBySource: Record<string, number>;
-  runCount: number;
-  runsCovered: number;
-  runsUncovered: number;
-  coveragePct: number | null;
-  windowMinutes: number;
-  largestGapMinutes: number;
-  largestGapAt: string | null;
+  totalHours: number;
+  coveredHours: number;
+  coveragePercent: number;
+  samplesByProvider: Array<{
+    provider: string;
+    samples: number;
+    hours: number;
+  }>;
+  gaps: Array<{
+    startUtc: string;
+    endUtc: string;
+    durationHours: number;
+  }>;
 }
 
 export interface WeatherHealthBackfillResponse {
@@ -1254,6 +1355,25 @@ export interface WeatherTimeseriesResponse {
   stats: WeatherTimeseriesStats;
 }
 
+// ── Tempest Current Weather Types ───────────────────────────────────────
+
+export interface TempestCurrentStation {
+  stationId: string;
+  error: string | null;
+  temp_c: number | null;
+  temp_f: number | null;
+  rh_pct: number | null;
+  station_pressure_mb: number | null;
+  pressure_inhg: number | null;
+  timestamp_epoch: number | null;
+  timestamp_utc: string | null;
+}
+
+export interface TempestCurrentWeatherResponse {
+  stations: TempestCurrentStation[];
+  fetchedAt: string;
+}
+
 // ── Parity By Combo Types ──────────────────────────────────────────────
 
 export interface ParityComboRunWeather {
@@ -1281,6 +1401,9 @@ export interface ParityComboRun {
   weather: ParityComboRunWeather | null;
   engineCombo: string;
   engineComboId: number | null;
+  actualEngineCombo?: string | null;
+  bodyStyle?: string | null;
+  bodyStyleId?: number | null;
   et: number | null;
   mph: number | null;
   qualPosition?: number;
@@ -1332,6 +1455,7 @@ export interface ParityByComboTrust {
   runsWithWeather: number;
   runsWithCorrected: number;
   hasTrackCoords: boolean;
+  hasSlopeData?: boolean;
 }
 
 export interface ParityByComboResponse {
@@ -1371,9 +1495,13 @@ export interface ParitySummaryResponse {
   mode: 'raw' | 'corrected';
   topN: number;
   sessionScope: 'qual' | 'elim' | 'both';
+  groupBy: 'engineCombo' | 'bodyStyle';
   includeFlagged: boolean;
   includeUnknown: boolean;
   isLowerBetter: boolean;
+  isMultiEvent?: boolean;
+  eventIds?: number[];
+  eventCount?: number;
   event: {
     event_name: string;
     track_name: string;
@@ -1382,6 +1510,12 @@ export interface ParitySummaryResponse {
     start_date_local: string;
     end_date_local: string;
   };
+  allEvents?: Array<{
+    id: number;
+    event_name: string;
+    track_name: string;
+    start_date_local: string;
+  }>;
   trust: ParityByComboTrust;
   mapping: ParityMappingReadiness;
   combos: ParityComboEntry[];
@@ -1452,6 +1586,8 @@ export interface ParitySessionWeatherRow {
   pressure_inhg: number;
   density_alt_ft: number;
   hpc: number;
+  wind_speed_mph?: number | null;
+  wind_dir_deg?: number | null;
   avgOffsetMin?: number | null;
   localTimeHint?: string | null;
 }
@@ -1497,6 +1633,7 @@ export interface RangeParityMatrixResponse {
   mode: 'raw' | 'corrected';
   topN: number;
   sessionScope: 'qual' | 'elim' | 'both';
+  groupBy: 'engineCombo' | 'bodyStyle';
   isLowerBetter: boolean;
   startDate: string;
   endDate: string;
@@ -1545,6 +1682,146 @@ export interface BackfillStatusResponse {
 export interface BackfillJobsResponse {
   jobs: BackfillJob[];
   count: number;
+}
+
+// ── Incremental Comparison Types (matches NHRA Compulink printout) ───────────
+export interface IncrementalComparisonRow {
+  pos: number;
+  lane: string | null;
+  carNumber: string;
+  driverName: string;
+  round: string;
+  dqFlag: boolean;
+  runId: number;
+  engineComboName: string | null;
+  bodyStyleName: string | null;
+  ft60: number | null;
+  inc60_330: number | null;
+  ft330: number | null;
+  inc330_660: number | null;
+  ft660: number | null;
+  mph660: number | null;
+  inc660_1000: number | null;
+  ft1000: number | null;
+  mph1000: number | null;
+  inc1000_1320: number | null;
+  last18: number | null;
+  last18mph: number | null;
+  ft1320: number | null;
+  mph1320: number | null;
+}
+
+export interface IncrementalComparisonResponse {
+  eventId: number;
+  category: string;
+  session?: string;
+  mode?: string;
+  totalRuns: number;
+  rows: IncrementalComparisonRow[];
+}
+
+// ── Multi-Event Parity Types ─────────────────────────────────────────────
+
+export interface MultiEventParityParams {
+  eventIds: number[];
+  omittedEventIds: number[];
+  category?: string;
+  classIndex?: string;
+  minRunsPerDriver: number;
+  weightByRecency: boolean;
+}
+
+export interface CompositeQualifyingEntry {
+  position: number;
+  driverName: string;
+  carNumber: string;
+  classIndex: string;
+  totalRuns: number;
+  bestET: number;
+  avgET: number;
+  stdDev: number;
+  qualifyingRuns: number[];
+  avgQualifyingET: number;
+  participatingEvents: number[];
+  participatingEventCount: number;
+  recencyWeight: number;
+  consistencyScore: number;
+  weightedPerformance: number;
+  performanceScore: number;
+}
+
+export interface PerformanceClusters {
+  elite: CompositeQualifyingEntry[];
+  competitive: CompositeQualifyingEntry[];
+  inconsistent: CompositeQualifyingEntry[];
+  struggling: CompositeQualifyingEntry[];
+}
+
+export interface VirtualSessionInfo {
+  totalEntries: number;
+  totalRuns: number;
+  dateRange: { start: string | null; end: string | null };
+  selectedEvents: number;
+  omittedEvents: number;
+  effectiveEvents: number;
+  events: Array<{
+    id: number;
+    name: string;
+    date: string;
+    totalRuns: number;
+    avgET: number;
+    stdDev: number;
+    bestET: number;
+    worstET: number;
+  }>;
+}
+
+export interface CompositeParityAnalysis {
+  parityIndex: number;
+  meanET: number;
+  standardDeviation: number;
+  outlierThreshold: number;
+  eliteThreshold: number;
+  outlierCount: number;
+  eliteCount: number;
+  totalEntries: number;
+}
+
+export interface EventOutlierFactors {
+  weatherExtreme: boolean;
+  trackCondition: boolean;
+  participationAnomaly: boolean;
+  performanceAnomaly: boolean;
+  technicalIssues: boolean;
+}
+
+export interface EventOutlierAnalysis {
+  eventId: number;
+  eventName: string;
+  eventDate: string;
+  outlierScore: number;
+  outlierFactors: EventOutlierFactors;
+  recommendation: 'include' | 'exclude' | 'review';
+  metrics: {
+    avgET: number;
+    totalRuns: number;
+    avgTemp: number | null;
+    avgHumidity: number | null;
+    avgPressure: number | null;
+  };
+}
+
+export interface MultiEventParityResponse {
+  virtualSession: VirtualSessionInfo;
+  qualifyingGrid: CompositeQualifyingEntry[];
+  parityAnalysis: CompositeParityAnalysis;
+  performanceClusters: PerformanceClusters;
+  filters: {
+    category: string;
+    classIndex: string;
+    minRunsPerDriver: number;
+    weightByRecency: boolean;
+  };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -1638,6 +1915,21 @@ export const parityApi = {
     return parityRequest<PeekResponse>(
       `/parity.php?action=peek&raceLookup=${encodeURIComponent(raceLookup)}`
     );
+  },
+
+  async probeOData(raceLookup: string): Promise<ProbeODataResponse> {
+    return parityRequest<ProbeODataResponse>(
+      `/parity.php?action=probeOData&raceLookup=${encodeURIComponent(raceLookup)}`
+    );
+  },
+
+  async purgeEventRuns(raceLookup: string, confirm = false): Promise<PurgeEventRunsResponse> {
+    const result = await parityRequest<PurgeEventRunsResponse>('/parity.php?action=purgeEventRuns', {
+      method: 'POST',
+      body: JSON.stringify({ raceLookup, confirm }),
+    });
+    if (confirm) invalidateParityCache('imports');
+    return result;
   },
 
   async ingest(raceLookup: string, force = false): Promise<IngestResponse> {
@@ -1775,6 +2067,18 @@ export const parityApi = {
     if (params.minRunCount !== undefined) qs.set('minRunCount', String(params.minRunCount));
     if (params.limit) qs.set('limit', String(params.limit));
     return parityRequest<TopByEventResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async topByTrack(params: TopByTrackParams): Promise<TopByTrackResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'topByTrack');
+    qs.set('classIndex', params.classIndex);
+    qs.set('metric', params.metric);
+    if (params.startRaceLookup) qs.set('startRaceLookup', params.startRaceLookup);
+    if (params.endRaceLookup) qs.set('endRaceLookup', params.endRaceLookup);
+    if (params.includeDQ !== undefined) qs.set('includeDQ', params.includeDQ ? '1' : '0');
+    if (params.minRunCount !== undefined) qs.set('minRunCount', String(params.minRunCount));
+    return parityRequest<TopByTrackResponse>(`/parity.php?${qs.toString()}`);
   },
 
   async eventCatalog(startYear?: number, endYear?: number): Promise<EventCatalogResponse> {
@@ -2041,7 +2345,7 @@ export const parityApi = {
     return parityRequest<EngineComboListResponse>('/parity.php?action=listEngineCombos');
   },
 
-  async upsertEngineCombo(params: { id?: number; name: string; tPower: number; dPower: number; FF: number }): Promise<{ ok: boolean; id: number }> {
+  async upsertEngineCombo(params: { id?: number; name: string; category?: string; colorHex?: string; tPower: number; dPower: number; FF: number; fuelType: string }): Promise<{ ok: boolean; id: number }> {
     return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertEngineCombo', {
       method: 'POST',
       body: JSON.stringify(params),
@@ -2050,6 +2354,50 @@ export const parityApi = {
 
   async deleteEngineCombo(id: number): Promise<{ ok: boolean }> {
     return parityRequest<{ ok: boolean }>('/parity.php?action=deleteEngineCombo', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // ── Body Style endpoints ──────────────────────────────────────────────
+
+  async listBodyStyles(): Promise<BodyStyleListResponse> {
+    return parityRequest<BodyStyleListResponse>('/parity.php?action=listBodyStyles');
+  },
+
+  async upsertBodyStyle(params: { id?: number; name: string; category?: string; bodyStyleNum?: number | null; cd: number; frontalArea: number; liftCoef: number; overhangIn: number; colorHex?: string }): Promise<{ ok: boolean; id: number }> {
+    return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertBodyStyle', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async deleteBodyStyle(id: number): Promise<{ ok: boolean }> {
+    return parityRequest<{ ok: boolean }>('/parity.php?action=deleteBodyStyle', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  // ── Driver Body Style endpoints ────────────────────────────────────────
+
+  async listDriverBodyStyles(params?: { driverName?: string; classIndex?: string }): Promise<DriverBodyStyleListResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'listDriverBodyStyles');
+    if (params?.driverName) qs.set('driverName', params.driverName);
+    if (params?.classIndex) qs.set('classIndex', params.classIndex);
+    return parityRequest<DriverBodyStyleListResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async upsertDriverBodyStyle(params: { id?: number; driverName: string; classIndex: string; bodyStyleId: number; effectiveFromUtc: string; effectiveToUtc?: string | null }): Promise<{ ok: boolean; id: number }> {
+    return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertDriverBodyStyle', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async deleteDriverBodyStyle(id: number): Promise<{ ok: boolean }> {
+    return parityRequest<{ ok: boolean }>('/parity.php?action=deleteDriverBodyStyle', {
       method: 'POST',
       body: JSON.stringify({ id }),
     });
@@ -2172,12 +2520,32 @@ export const parityApi = {
     });
   },
 
+  async slopeAnalysis(params: {
+    eventId: number; category: string; metric?: string; classIndex?: string;
+  }): Promise<{
+    eventId: number; eventName: string; trackName: string;
+    category: string; metric: string; isLowerBetter: boolean;
+    slopeGradePct: number | null; weightLbs: number;
+    sfET: number | null; sfMPH: number | null;
+    runs: {
+      runId: number; driver: string; classIndex: string; round: string; combo: string;
+      rawVal: number; wxVal: number | null; slopeWxVal: number | null; hpc: number | null;
+    }[];
+    runCount: number;
+  }> {
+    const qs = new URLSearchParams({ action: 'slopeAnalysis', eventId: String(params.eventId), category: params.category });
+    if (params.metric) qs.set('metric', params.metric);
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    return parityRequest(`/parity.php?${qs.toString()}`);
+  },
+
   async updateTrackCoords(params: {
     trackId: number;
     latitude: number;
     longitude: number;
-  }): Promise<{ ok: boolean; trackId: number; latitude: number; longitude: number }> {
-    return parityRequest<{ ok: boolean; trackId: number; latitude: number; longitude: number }>(
+    slope_grade_pct?: number | null;
+  }): Promise<{ ok: boolean; trackId: number; latitude: number; longitude: number; slope_grade_pct: number | null }> {
+    return parityRequest<{ ok: boolean; trackId: number; latitude: number; longitude: number; slope_grade_pct: number | null }>(
       '/parity.php?action=updateTrackCoords',
       { method: 'POST', body: JSON.stringify(params) },
     );
@@ -2192,6 +2560,12 @@ export const parityApi = {
     if (params.startUtc) qs.set('startUtc', params.startUtc);
     if (params.endUtc) qs.set('endUtc', params.endUtc);
     return parityRequest<WeatherTimeseriesResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Tempest Current Weather ────────────────────────────────────────
+
+  async tempestCurrentWeather(): Promise<TempestCurrentWeatherResponse> {
+    return parityRequest<TempestCurrentWeatherResponse>('/parity.php?action=tempestCurrentWeather');
   },
 
   // ── Parity By Combo ────────────────────────────────────────────────
@@ -2222,25 +2596,32 @@ export const parityApi = {
   // ── Split Parity Endpoints (fast load) ─────────────────────────────
 
   async paritySummary(params: {
-    eventId: number;
+    eventId?: number;
+    eventIds?: number[];
     classIndex?: string;
     category?: string;
     metric?: string;
     mode?: 'raw' | 'corrected';
     topN?: number;
     sessionScope?: 'qual' | 'elim' | 'both';
+    groupBy?: 'engineCombo' | 'bodyStyle';
     includeFlagged?: boolean;
     includeUnknown?: boolean;
   }): Promise<ParitySummaryResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'paritySummary');
-    qs.set('eventId', String(params.eventId));
+    if (params.eventIds && params.eventIds.length > 0) {
+      qs.set('eventIds', params.eventIds.join(','));
+    } else if (params.eventId) {
+      qs.set('eventId', String(params.eventId));
+    }
     if (params.category) qs.set('category', params.category);
     else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.topN) qs.set('topN', String(params.topN));
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.groupBy) qs.set('groupBy', params.groupBy);
     if (params.includeFlagged) qs.set('includeFlagged', '1');
     if (params.includeUnknown) qs.set('includeUnknown', '1');
     return parityRequest<ParitySummaryResponse>(`/parity.php?${qs.toString()}`);
@@ -2254,6 +2635,7 @@ export const parityApi = {
     mode?: 'raw' | 'corrected';
     topN?: number;
     sessionScope?: 'qual' | 'elim' | 'both';
+    groupBy?: 'engineCombo' | 'bodyStyle';
     includeUnknown?: boolean;
   }): Promise<ParityDeltasResponse> {
     const qs = new URLSearchParams();
@@ -2265,6 +2647,7 @@ export const parityApi = {
     if (params.mode) qs.set('mode', params.mode);
     if (params.topN) qs.set('topN', String(params.topN));
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.groupBy) qs.set('groupBy', params.groupBy);
     if (params.includeUnknown) qs.set('includeUnknown', '1');
     return parityRequest<ParityDeltasResponse>(`/parity.php?${qs.toString()}`);
   },
@@ -2301,6 +2684,7 @@ export const parityApi = {
     metric?: string;
     mode?: 'raw' | 'corrected';
     sessionScope?: 'qual' | 'elim' | 'both';
+    groupBy?: 'engineCombo' | 'bodyStyle';
   }): Promise<ParityQualOrderResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'parityQualOrder');
@@ -2310,38 +2694,51 @@ export const parityApi = {
     if (params.metric) qs.set('metric', params.metric);
     if (params.mode) qs.set('mode', params.mode);
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.groupBy) qs.set('groupBy', params.groupBy);
     return parityRequest<ParityQualOrderResponse>(`/parity.php?${qs.toString()}`);
   },
 
   async parityIncrementals(params: {
-    eventId: number;
+    eventId?: number;
+    eventIds?: number[];
     classIndex?: string;
     category?: string;
     sessionScope?: 'qual' | 'elim' | 'both';
     mode?: 'raw' | 'corrected';
+    groupBy?: 'engineCombo' | 'bodyStyle';
     includeFlagged?: boolean;
     includeUnknown?: boolean;
   }): Promise<ParityIncrementalsResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'parityIncrementals');
-    qs.set('eventId', String(params.eventId));
+    if (params.eventIds && params.eventIds.length > 0) {
+      qs.set('eventIds', params.eventIds.join(','));
+    } else if (params.eventId) {
+      qs.set('eventId', String(params.eventId));
+    }
     if (params.category) qs.set('category', params.category);
     else if (params.classIndex) qs.set('classIndex', params.classIndex);
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
     if (params.mode) qs.set('mode', params.mode);
+    if (params.groupBy) qs.set('groupBy', params.groupBy);
     if (params.includeFlagged) qs.set('includeFlagged', '1');
     if (params.includeUnknown) qs.set('includeUnknown', '1');
     return parityRequest<ParityIncrementalsResponse>(`/parity.php?${qs.toString()}`);
   },
 
   async paritySessionWeather(params: {
-    eventId: number;
+    eventId?: number;
+    eventIds?: number[];
     classIndex?: string;
     category?: string;
   }): Promise<ParitySessionWeatherResponse> {
     const qs = new URLSearchParams();
     qs.set('action', 'paritySessionWeather');
-    qs.set('eventId', String(params.eventId));
+    if (params.eventIds && params.eventIds.length > 0) {
+      qs.set('eventIds', params.eventIds.join(','));
+    } else if (params.eventId) {
+      qs.set('eventId', String(params.eventId));
+    }
     if (params.category) qs.set('category', params.category);
     else if (params.classIndex) qs.set('classIndex', params.classIndex);
     return parityRequest<ParitySessionWeatherResponse>(`/parity.php?${qs.toString()}`);
@@ -2351,6 +2748,7 @@ export const parityApi = {
     classIndex?: string;
     category?: string;
     metric?: string;
+    groupBy?: 'engineCombo' | 'bodyStyle';
     mode?: 'raw' | 'corrected';
     topN?: number;
     sessionScope?: 'qual' | 'elim' | 'both';
@@ -2366,6 +2764,7 @@ export const parityApi = {
     if (params.mode) qs.set('mode', params.mode);
     if (params.topN) qs.set('topN', String(params.topN));
     if (params.sessionScope) qs.set('sessionScope', params.sessionScope);
+    if (params.groupBy) qs.set('groupBy', params.groupBy);
     if (params.year) qs.set('year', String(params.year));
     if (params.startDate) qs.set('startDate', params.startDate);
     if (params.endDate) qs.set('endDate', params.endDate);
@@ -2453,10 +2852,17 @@ export const parityApi = {
   // ── Refresh Event Data ──────────────────────────────────────────────
 
   async refreshEventData(eventId: number): Promise<RefreshEventDataResponse> {
-    return parityRequest<RefreshEventDataResponse>('/parity.php?action=refreshEventData', {
-      method: 'POST',
-      body: JSON.stringify({ eventId }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 600_000); // 10 min
+    try {
+      return await parityRequest<RefreshEventDataResponse>('/parity.php?action=refreshEventData', {
+        method: 'POST',
+        body: JSON.stringify({ eventId }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   },
 
   async updateRun(runId: number, fields: Record<string, string | number | boolean | null>): Promise<{ ok: boolean; runId: number; updatedFields: string[] }> {
@@ -2492,5 +2898,54 @@ export const parityApi = {
     qs.set('runId', String(params.runId));
     qs.set('raceLookup', params.raceLookup);
     return parityRequest<AnomalyDetailResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Incremental Comparison ─────────────────────────────────────────────
+
+  async incrementalComparison(params: {
+    eventId: number;
+    category?: string;
+    classIndex?: string;
+    session?: 'qualifying' | 'elimination' | '';
+    mode?: 'raw' | 'corrected';
+  }): Promise<IncrementalComparisonResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'incrementalComparison');
+    qs.set('eventId', String(params.eventId));
+    if (params.category) qs.set('category', params.category);
+    else if (params.classIndex) qs.set('classIndex', params.classIndex);
+    if (params.session) qs.set('session', params.session);
+    if (params.mode) qs.set('mode', params.mode);
+    return parityRequest<IncrementalComparisonResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  // ── Multi-Event Parity ──────────────────────────────────────────────
+
+  async multiEventParity(params: MultiEventParityParams): Promise<MultiEventParityResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'multiEventParity');
+    qs.set('eventIds', JSON.stringify(params.eventIds));
+    qs.set('omittedEventIds', JSON.stringify(params.omittedEventIds));
+    if (params.category) qs.set('category', params.category);
+    if (params.classIndex) qs.set('classIndex', params.classIndex);
+    qs.set('minRunsPerDriver', String(params.minRunsPerDriver));
+    qs.set('weightByRecency', params.weightByRecency ? 'true' : 'false');
+    return parityRequest<MultiEventParityResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async eventOutlierAnalysis(eventIds: number[]): Promise<EventOutlierAnalysis[]> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'eventOutlierAnalysis');
+    qs.set('eventIds', JSON.stringify(eventIds));
+    return parityRequest<EventOutlierAnalysis[]>(`/parity.php?${qs.toString()}`);
+  },
+
+  async performancePrediction(params: PerformancePredictionParams): Promise<PerformancePredictionResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'performancePrediction');
+    qs.set('category', params.category);
+    if (params.trackId) qs.set('trackId', params.trackId.toString());
+    if (params.useTrackHistory !== undefined) qs.set('useTrackHistory', params.useTrackHistory ? '1' : '0');
+    return parityRequest<PerformancePredictionResponse>(`/parity.php?${qs.toString()}`);
   },
 };

@@ -1,0 +1,441 @@
+/**
+ * RSA Auth & Access E2E Tests - Signup Flows
+ * 
+ * Critical validation:
+ * 1. Standard signup creates Free user with Free access only
+ * 2. NHRA invite signup creates NHRA user with parity-only access
+ * 3. Invalid invite fails safely
+ * 4. Route/nav enforcement matches access model
+ */
+
+import { test, expect, type Page } from '@playwright/test';
+
+const BASE_URL = 'http://localhost:5173';
+
+// Helper to generate unique email for each test
+function generateTestEmail(prefix: string): string {
+  const timestamp = Date.now();
+  return `${prefix}-${timestamp}@test.rsa.local`;
+}
+
+// Helper to check localStorage for user data
+async function getUserFromStorage(page: Page) {
+  const userJson = await page.evaluate(() => {
+    return localStorage.getItem('rsa.auth.currentUser');
+  });
+  return userJson ? JSON.parse(userJson) : null;
+}
+
+// Helper to check if nav link is visible
+async function isNavLinkVisible(page: Page, text: string): Promise<boolean> {
+  const link = page.getByRole('link', { name: text, exact: false });
+  return await link.isVisible().catch(() => false);
+}
+
+test.describe('Standard Signup Flow', () => {
+  
+  test('creates Free user with Free access only', async ({ page }) => {
+    const email = generateTestEmail('free-user');
+    const password = 'TestPassword123!';
+    const name = 'Free Test User';
+
+    // Navigate to registration
+    await page.goto(`${BASE_URL}/register`);
+    await expect(page).toHaveTitle(/Racing Systems Analysis/);
+
+    // Fill out registration form
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+
+    // Submit registration
+    await page.click('button[type="submit"]');
+
+    // Wait for redirect to home or dashboard
+    await page.waitForURL(/\/(home|dashboard|$)/, { timeout: 10000 });
+
+    // Verify user is logged in
+    const user = await getUserFromStorage(page);
+    expect(user).toBeTruthy();
+    expect(user.email).toBe(email);
+    expect(user.name).toBe(name);
+
+    // CRITICAL: Verify plan is 'free'
+    expect(user.subscription_plan).toBe('free');
+
+    // Verify Free user nav visibility
+    const hasVehiclesNav = await isNavLinkVisible(page, 'Vehicles');
+    const hasETSimNav = await isNavLinkVisible(page, 'Quarter');
+    const hasParityNav = await isNavLinkVisible(page, 'Parity');
+    const hasTechNav = await isNavLinkVisible(page, 'Tech');
+
+    expect(hasVehiclesNav).toBe(false); // Free users cannot access vehicles
+    expect(hasETSimNav).toBe(false); // Free users cannot access ET sim
+    expect(hasParityNav).toBe(false); // Free users cannot access parity
+    expect(hasTechNav).toBe(false); // Free users cannot access tech master
+
+    // Verify Free user route enforcement
+    await page.goto(`${BASE_URL}/vehicles`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    await page.goto(`${BASE_URL}/et-sim`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    await page.goto(`${BASE_URL}/parity`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    await page.goto(`${BASE_URL}/tech`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    // Verify Free user CAN access basic features
+    await page.goto(`${BASE_URL}/calculators`);
+    await expect(page.locator('text=Access Restricted')).not.toBeVisible();
+
+    console.log('✅ PASS: Standard signup creates Free user with Free access only');
+  });
+
+  test('Free user cannot escalate to Beta or Pro without upgrade', async ({ page }) => {
+    const email = generateTestEmail('free-no-escalate');
+    const password = 'TestPassword123!';
+    const name = 'Free No Escalate User';
+
+    // Register
+    await page.goto(`${BASE_URL}/register`);
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/(home|dashboard|$)/, { timeout: 10000 });
+
+    // Verify user data
+    const user = await getUserFromStorage(page);
+    expect(user.subscription_plan).toBe('free');
+
+    // Try to access Pro features - should be blocked
+    await page.goto(`${BASE_URL}/engine-pro`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    // Verify localStorage hasn't been tampered with
+    const userAfter = await getUserFromStorage(page);
+    expect(userAfter.subscription_plan).toBe('free');
+
+    console.log('✅ PASS: Free user cannot escalate to Beta/Pro');
+  });
+});
+
+test.describe('NHRA Invite Signup Flow', () => {
+  
+  test('creates NHRA user with parity-only access', async ({ page }) => {
+    // First, we need a valid NHRA invite code
+    // In real scenario, this would be created by admin
+    // For testing, we'll use a known test invite code
+    const inviteCode = 'nhra_TEST_E2E_VALID';
+    const email = generateTestEmail('nhra-user');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Test User';
+
+    // Navigate to registration with invite code
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await expect(page).toHaveTitle(/Racing Systems Analysis/);
+
+    // Verify invite code is pre-filled or detected
+    const inviteInput = page.locator('input[name="inviteCode"]');
+    if (await inviteInput.isVisible()) {
+      const inviteValue = await inviteInput.inputValue();
+      expect(inviteValue).toBe(inviteCode);
+    }
+
+    // Fill out registration form
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+
+    // Submit registration
+    await page.click('button[type="submit"]');
+
+    // Wait for redirect
+    await page.waitForURL(/\/(home|dashboard|parity|$)/, { timeout: 10000 });
+
+    // Verify user is logged in
+    const user = await getUserFromStorage(page);
+    expect(user).toBeTruthy();
+    expect(user.email).toBe(email);
+    expect(user.name).toBe(name);
+
+    // CRITICAL: Verify plan is 'nhra'
+    expect(user.subscription_plan).toBe('nhra');
+
+    // Verify NHRA user nav visibility
+    const hasParityNav = await isNavLinkVisible(page, 'Parity');
+    const hasTechNav = await isNavLinkVisible(page, 'Tech');
+    const hasVehiclesNav = await isNavLinkVisible(page, 'Vehicles');
+    const hasETSimNav = await isNavLinkVisible(page, 'Quarter');
+
+    expect(hasParityNav).toBe(true); // NHRA users CAN access parity
+    expect(hasTechNav).toBe(true); // NHRA users CAN access tech master
+    expect(hasVehiclesNav).toBe(false); // NHRA users CANNOT access vehicles
+    expect(hasETSimNav).toBe(false); // NHRA users CANNOT access ET sim
+
+    // Verify NHRA user CAN access parity routes
+    await page.goto(`${BASE_URL}/parity`);
+    await expect(page.locator('text=Access Restricted')).not.toBeVisible();
+    await expect(page.locator('text=Parity Portal')).toBeVisible({ timeout: 5000 });
+
+    await page.goto(`${BASE_URL}/tech`);
+    await expect(page.locator('text=Access Restricted')).not.toBeVisible();
+    await expect(page.locator('text=Tech Master')).toBeVisible({ timeout: 5000 });
+
+    // Verify NHRA user CANNOT access general product routes
+    await page.goto(`${BASE_URL}/vehicles`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    await page.goto(`${BASE_URL}/et-sim`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    console.log('✅ PASS: NHRA invite signup creates NHRA user with parity-only access');
+  });
+
+  test('invalid invite code fails safely', async ({ page }) => {
+    const inviteCode = 'nhra_INVALID_CODE_12345';
+    const email = generateTestEmail('invalid-invite');
+    const password = 'TestPassword123!';
+    const name = 'Invalid Invite User';
+
+    // Navigate to registration with invalid invite code
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+
+    // Fill out registration form
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+
+    // Submit registration
+    await page.click('button[type="submit"]');
+
+    // Should show error message
+    await expect(page.locator('text=/invalid.*invite/i')).toBeVisible({ timeout: 5000 });
+
+    // User should NOT be created or logged in
+    const user = await getUserFromStorage(page);
+    expect(user).toBeNull();
+
+    console.log('✅ PASS: Invalid invite code fails safely');
+  });
+
+  test('expired invite code fails safely', async ({ page }) => {
+    const inviteCode = 'nhra_EXPIRED_CODE_12345';
+    const email = generateTestEmail('expired-invite');
+    const password = 'TestPassword123!';
+    const name = 'Expired Invite User';
+
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+    await page.click('button[type="submit"]');
+
+    // Should show error message
+    await expect(page.locator('text=/expired.*invite/i')).toBeVisible({ timeout: 5000 });
+
+    // User should NOT be created
+    const user = await getUserFromStorage(page);
+    expect(user).toBeNull();
+
+    console.log('✅ PASS: Expired invite code fails safely');
+  });
+});
+
+test.describe('Login and Session Restore', () => {
+  
+  test('Free user session persists after page reload', async ({ page }) => {
+    const email = generateTestEmail('free-session');
+    const password = 'TestPassword123!';
+    const name = 'Free Session User';
+
+    // Register
+    await page.goto(`${BASE_URL}/register`);
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/(home|dashboard|$)/, { timeout: 10000 });
+
+    // Verify initial session
+    const userBefore = await getUserFromStorage(page);
+    expect(userBefore.subscription_plan).toBe('free');
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Verify session persisted
+    const userAfter = await getUserFromStorage(page);
+    expect(userAfter).toBeTruthy();
+    expect(userAfter.subscription_plan).toBe('free');
+    expect(userAfter.email).toBe(email);
+
+    // Verify access still enforced
+    await page.goto(`${BASE_URL}/parity`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    console.log('✅ PASS: Free user session persists correctly');
+  });
+
+  test('NHRA user session persists after page reload', async ({ page }) => {
+    const inviteCode = 'nhra_TEST_E2E_VALID';
+    const email = generateTestEmail('nhra-session');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Session User';
+
+    // Register with invite
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/(home|dashboard|parity|$)/, { timeout: 10000 });
+
+    // Verify initial session
+    const userBefore = await getUserFromStorage(page);
+    expect(userBefore.subscription_plan).toBe('nhra');
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Verify session persisted
+    const userAfter = await getUserFromStorage(page);
+    expect(userAfter).toBeTruthy();
+    expect(userAfter.subscription_plan).toBe('nhra');
+    expect(userAfter.email).toBe(email);
+
+    // Verify parity access still works
+    await page.goto(`${BASE_URL}/parity`);
+    await expect(page.locator('text=Access Restricted')).not.toBeVisible();
+    await expect(page.locator('text=Parity Portal')).toBeVisible({ timeout: 5000 });
+
+    // Verify general product access still blocked
+    await page.goto(`${BASE_URL}/vehicles`);
+    await expect(page.locator('text=Access Restricted')).toBeVisible({ timeout: 5000 });
+
+    console.log('✅ PASS: NHRA user session persists correctly');
+  });
+});
+
+test.describe('Access Enforcement Matrix', () => {
+  
+  test('Free user access matrix validation', async ({ page }) => {
+    const email = generateTestEmail('free-matrix');
+    const password = 'TestPassword123!';
+    const name = 'Free Matrix User';
+
+    await page.goto(`${BASE_URL}/register`);
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/(home|dashboard|$)/, { timeout: 10000 });
+
+    const results = {
+      canAccessHome: false,
+      canAccessCalculators: false,
+      canAccessVehicles: false,
+      canAccessETSim: false,
+      canAccessParity: false,
+      canAccessTech: false,
+      canAccessEngineSim: false,
+    };
+
+    // Test each route
+    await page.goto(`${BASE_URL}/`);
+    results.canAccessHome = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/calculators`);
+    results.canAccessCalculators = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/vehicles`);
+    results.canAccessVehicles = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/et-sim`);
+    results.canAccessETSim = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/parity`);
+    results.canAccessParity = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/tech`);
+    results.canAccessTech = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/engine-sim`);
+    results.canAccessEngineSim = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    // Verify expected access
+    expect(results.canAccessHome).toBe(true);
+    expect(results.canAccessCalculators).toBe(true);
+    expect(results.canAccessVehicles).toBe(false);
+    expect(results.canAccessETSim).toBe(false);
+    expect(results.canAccessParity).toBe(false);
+    expect(results.canAccessTech).toBe(false);
+    expect(results.canAccessEngineSim).toBe(true); // Basic engine sim allowed
+
+    console.log('✅ PASS: Free user access matrix validated');
+    console.log('Free User Access:', results);
+  });
+
+  test('NHRA user access matrix validation', async ({ page }) => {
+    const inviteCode = 'nhra_TEST_E2E_VALID';
+    const email = generateTestEmail('nhra-matrix');
+    const password = 'TestPassword123!';
+    const name = 'NHRA Matrix User';
+
+    await page.goto(`${BASE_URL}/register?invite=${inviteCode}`);
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.fill('input[name="name"]', name);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/(home|dashboard|parity|$)/, { timeout: 10000 });
+
+    const results = {
+      canAccessHome: false,
+      canAccessCalculators: false,
+      canAccessVehicles: false,
+      canAccessETSim: false,
+      canAccessParity: false,
+      canAccessTech: false,
+      canAccessEngineSim: false,
+    };
+
+    // Test each route
+    await page.goto(`${BASE_URL}/`);
+    results.canAccessHome = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/calculators`);
+    results.canAccessCalculators = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/vehicles`);
+    results.canAccessVehicles = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/et-sim`);
+    results.canAccessETSim = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/parity`);
+    results.canAccessParity = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/tech`);
+    results.canAccessTech = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    await page.goto(`${BASE_URL}/engine-sim`);
+    results.canAccessEngineSim = !(await page.locator('text=Access Restricted').isVisible().catch(() => false));
+
+    // Verify expected access
+    expect(results.canAccessHome).toBe(true);
+    expect(results.canAccessCalculators).toBe(true);
+    expect(results.canAccessVehicles).toBe(false); // NHRA users CANNOT access vehicles
+    expect(results.canAccessETSim).toBe(false); // NHRA users CANNOT access ET sim
+    expect(results.canAccessParity).toBe(true); // NHRA users CAN access parity
+    expect(results.canAccessTech).toBe(true); // NHRA users CAN access tech
+    expect(results.canAccessEngineSim).toBe(true); // Basic engine sim allowed
+
+    console.log('✅ PASS: NHRA user access matrix validated');
+    console.log('NHRA User Access:', results);
+  });
+});

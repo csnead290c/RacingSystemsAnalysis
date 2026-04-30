@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import EnvironmentForm from '../shared/components/EnvironmentForm';
 import { simulate } from '../workerBridge';
@@ -13,14 +13,13 @@ import { assertComplete, fixtureToSimInputs } from '../domain/physics/vb6/fixtur
 import { useFlag, useFlagsStore, useFlags } from '../domain/flags/store.tsx';
 import VB6Inputs from './VB6Inputs';
 import { fromVehicleToVB6Fixture } from '../dev/vb6/fromVehicle';
-import { useRunHistory, type SavedRun } from '../shared/state/runHistoryStore';
+import type { SavedRun } from '../shared/state/runHistoryStore';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { getAverage60ft } from '../state/storage';
-import { getAllTracks, type Track } from '../domain/config/tracks';
-import { fetchTrackWeather, fetchCurrentLocationWeather, weatherToEnv } from '../services/weather';
+// Live weather imports removed - feature suppressed as incomplete
 import { useSubscription } from '../domain/config/useSubscription';
 import { useCapabilities } from '../domain/config/useCapabilities';
-import { getQuarterProgramName, getLandSpeedProgramName } from '../domain/ui/programDisplayNames';
+import { getQuarterProgramName } from '../domain/ui/programDisplayNames';
 import { formatHp, formatLb } from '../shared/format/formatNumber';
 import { useSharedEnv } from '../shared/state/useSharedEnv';
 import { calculateWeatherImpact } from '../domain/physics/calculations/weatherImpact';
@@ -43,6 +42,7 @@ interface LocationState {
 
 function Predict() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { features } = useSubscription();
   const { can } = useCapabilities();
   
@@ -63,6 +63,15 @@ function Predict() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showVb6Panel, setShowVb6Panel] = useState(false);
+  
+  // Optimizer modal state
+  const [showOptimizer, setShowOptimizer] = useState(false);
+  
+  // Vehicle editor popup state
+  const [showVehicleEditor, setShowVehicleEditor] = useState(false);
+  
+  // Detailed parameters modal state
+  const [showDetailedParams, setShowDetailedParams] = useState(false);
   const { fixture } = useVb6Fixture();
   
   // What-If adjustments
@@ -76,9 +85,7 @@ function Predict() {
   const [throttleStopDuration, setThrottleStopDuration] = useState(1.5); // seconds
   const [throttleStopPct, setThrottleStopPct] = useState(30); // throttle percentage when active
   
-  // Run history
-  const { saveRun, getRecentRuns } = useRunHistory();
-  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  // Run history (for comparison overlay - Pro feature)
   const [comparisonRun, setComparisonRun] = useState<SavedRun | null>(null);
   
   // Check if fixture is complete for VB6 Strict Mode
@@ -98,20 +105,7 @@ function Predict() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const [showVehicleSelector, setShowVehicleSelector] = useState(false);
   
-  // Track and weather state
-  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherError, setWeatherError] = useState<string | null>(null);
-  const [lastWeatherUpdate, setLastWeatherUpdate] = useState<Date | null>(null);
-  
-  // Optimizer modal state
-  const [showOptimizer, setShowOptimizer] = useState(false);
-  
-  // Vehicle editor popup state
-  const [showVehicleEditor, setShowVehicleEditor] = useState(false);
-  
-  // Detailed parameters modal state
-  const [showDetailedParams, setShowDetailedParams] = useState(false);
+  // Track and weather state - suppressed (incomplete feature)
   
   // Average 60ft from database (CCP-style feature)
   const [avg60ftStats, setAvg60ftStats] = useState<{
@@ -461,26 +455,7 @@ function Predict() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle, env, raceLength, strictMode, fixture, hpAdjust, weightAdjust, throttleStopEnabled, throttleStopActivate, throttleStopDuration, throttleStopPct]);
 
-  // Fetch weather from track or current location
-  const handleFetchWeather = async (track?: Track) => {
-    setWeatherLoading(true);
-    setWeatherError(null);
-    try {
-      const weather = track 
-        ? await fetchTrackWeather(track)
-        : await fetchCurrentLocationWeather();
-      
-      // Pass track angle for wind direction correction
-      const envUpdate = weatherToEnv(weather, track?.trackAngle);
-      setEnv(prev => prev ? { ...prev, ...envUpdate } : { ...DEFAULT_ENV, ...envUpdate });
-      setLastWeatherUpdate(new Date());
-      if (track) setSelectedTrack(track);
-    } catch (err) {
-      setWeatherError(err instanceof Error ? err.message : 'Failed to fetch weather');
-    } finally {
-      setWeatherLoading(false);
-    }
-  };
+  // handleFetchWeather removed - live weather feature suppressed
 
   // Show loading state only on initial load (no results yet)
   // Once we have results, show them while recalculating
@@ -774,48 +749,8 @@ function Predict() {
     setRaceLength(newLength);
   };
 
-  // Save current run to history (Pro feature - includes traces for overlay)
-  const handleSaveRun = () => {
-    if (!vehicle || !env || !simResult) return;
-    
-    // Include traces for chart overlay (Pro feature)
-    const tracesToSave = features.quarterProFields && simResult.traces 
-      ? simResult.traces.map((t: any) => ({
-          t_s: t.t_s,
-          s_ft: t.s_ft,
-          v_mph: t.v_mph,
-          a_g: t.a_g,
-          rpm: t.rpm,
-          gear: t.gear,
-          hp: t.hp,
-        }))
-      : undefined;
-    
-    saveRun({
-      vehicleName: vehicle.name,
-      vehicleId: vehicle.id,
-      raceLength,
-      env,
-      result: {
-        et_s: simResult.et_s,
-        mph: simResult.mph,
-      },
-      hpAdjust,
-      weightAdjust,
-      traces: tracesToSave,
-    });
-    
-    setShowSaveConfirm(true);
-    setTimeout(() => setShowSaveConfirm(false), 2000);
-  };
-
-  // Load a saved run for comparison
-  const handleLoadComparison = (run: SavedRun) => {
-    setComparisonRun(comparisonRun?.id === run.id ? null : run);
-  };
-
   return (
-    <Page wide title={RACE_LENGTH_INFO[raceLength]?.category === 'landspeed' ? getLandSpeedProgramName(can) : getQuarterProgramName(can)} actions={<HelpLink manual="quarter" label="Manual" />}>
+    <Page wide actions={<HelpLink manual="quarter" label="Manual" />}>
       <style>{`
         .et-sim-dashboard {
           display: flex;
@@ -1149,144 +1084,86 @@ function Predict() {
               <span className="et-slip-value" style={{ fontSize: '13px' }}>{baseMPH.toFixed(flags.mphDecimals)}</span>
             </div>
             
-            {/* Vehicle selector dropdown with edit button */}
-            <div className="et-slip-vehicle" style={{ marginTop: '6px', display: 'flex', gap: '4px' }}>
-              <select
-                value={vehicle.id}
-                onChange={async (e) => {
-                  const selected = availableVehicles.find(v => v.id === e.target.value);
-                  if (selected) {
-                    // Load full vehicle data
-                    const vehicles = await loadVehicles();
-                    const fullVehicle = vehicles.find(v => v.id === selected.id);
-                    if (fullVehicle) {
-                      setVehicle(fullVehicle as Vehicle);
-                      // Load throttle stop settings from vehicle
-                      if ((fullVehicle as any).throttleStopEnabled) {
-                        setThrottleStopEnabled(true);
-                        setThrottleStopActivate((fullVehicle as any).throttleStopDelay ?? 1.0);
-                        setThrottleStopDuration((fullVehicle as any).throttleStopDuration ?? 1.5);
-                        setThrottleStopPct((fullVehicle as any).throttleStopPct ?? 30);
-                      } else {
-                        setThrottleStopEnabled(false);
+            {/* Vehicle selector dropdown with edit and new buttons */}
+            <div className="et-slip-vehicle" style={{ marginTop: '6px', display: 'flex', gap: '4px', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select
+                  value={vehicle.id}
+                  onChange={async (e) => {
+                    const selected = availableVehicles.find(v => v.id === e.target.value);
+                    if (selected) {
+                      // Load full vehicle data
+                      const vehicles = await loadVehicles();
+                      const fullVehicle = vehicles.find(v => v.id === selected.id);
+                      if (fullVehicle) {
+                        setVehicle(fullVehicle as Vehicle);
+                        // Load throttle stop settings from vehicle
+                        if ((fullVehicle as any).throttleStopEnabled) {
+                          setThrottleStopEnabled(true);
+                          setThrottleStopActivate((fullVehicle as any).throttleStopDelay ?? 1.0);
+                          setThrottleStopDuration((fullVehicle as any).throttleStopDuration ?? 1.5);
+                          setThrottleStopPct((fullVehicle as any).throttleStopPct ?? 30);
+                        } else {
+                          setThrottleStopEnabled(false);
+                        }
                       }
                     }
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: '4px 6px',
-                  fontSize: '0.7rem',
-                  backgroundColor: '#222',
-                  color: 'white',
-                  border: '1px solid #444',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                {availableVehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '4px 6px',
+                    fontSize: '0.7rem',
+                    backgroundColor: '#222',
+                    color: 'white',
+                    border: '1px solid #444',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {availableVehicles.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setShowVehicleEditor(true)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.7rem',
+                    backgroundColor: '#333',
+                    color: 'white',
+                    border: '1px solid #444',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                  title="Edit vehicle settings"
+                >
+                  ⚙️
+                </button>
+              </div>
               <button
-                onClick={() => setShowVehicleEditor(true)}
+                onClick={() => {
+                  // Navigate to Vehicles page to create new vehicle
+                  navigate('/vehicles');
+                }}
                 style={{
-                  padding: '4px 8px',
-                  fontSize: '0.7rem',
-                  backgroundColor: '#333',
+                  padding: '4px 6px',
+                  fontSize: '0.65rem',
+                  backgroundColor: '#2563eb',
                   color: 'white',
-                  border: '1px solid #444',
+                  border: '1px solid #1d4ed8',
                   borderRadius: '4px',
                   cursor: 'pointer',
+                  fontWeight: 600,
                 }}
-                title="Edit vehicle settings"
+                title="Create a new vehicle"
               >
-                ⚙️
+                + New Vehicle
               </button>
             </div>
             
             {/* Action Buttons */}
             <div className="et-slip-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px', minWidth: 0 }}>
-              {features.quarterProFields ? (
-                <button
-                  onClick={handleSaveRun}
-                  style={{
-                    flex: 1,
-                    padding: '6px 8px',
-                    fontSize: '0.7rem',
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: showSaveConfirm ? '#22c55e' : '#333',
-                    color: 'white',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                  title="Save run for comparison overlay"
-                >
-                  {showSaveConfirm ? '✓ Saved!' : 'Save'}
-                </button>
-              ) : (
-                <span
-                  style={{
-                    flex: 1,
-                    padding: '6px 8px',
-                    fontSize: '0.7rem',
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: '#222',
-                    color: '#666',
-                    textAlign: 'center',
-                  }}
-                  title="Save & Compare - Pro feature"
-                >
-                  🔒 Save
-                </span>
-              )}
-              <button
-                onClick={() => {
-                  const text = `RSA ${getQuarterProgramName(can)} Prediction
-${vehicle.name}
-${new Date().toLocaleDateString()}
-
-ET: ${baseET.toFixed(flags.etDecimals)}
-MPH: ${baseMPH.toFixed(flags.mphDecimals)}
-
-60': ${(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(flags.etDecimals)}
-330': ${(timeslip.find(s => s.d_ft === 330)?.t_s ?? 0).toFixed(flags.etDecimals)}
-${raceLength === 'QUARTER' ? `1/8: ${(timeslip.find(s => s.d_ft === 660)?.t_s ?? 0).toFixed(flags.etDecimals)} @ ${(timeslip.find(s => s.d_ft === 660)?.v_mph ?? 0).toFixed(flags.mphDecimals)} mph` : ''}
-
-racingsystemsanalysis.com`;
-                  navigator.clipboard.writeText(text);
-                  alert('Timeslip copied to clipboard!');
-                }}
-                style={{
-                  padding: '6px 8px',
-                  fontSize: '0.7rem',
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: '#333',
-                  color: 'white',
-                  cursor: 'pointer',
-                }}
-                title="Copy timeslip to clipboard"
-              >
-                📋
-              </button>
-              <button
-                onClick={() => window.print()}
-                style={{
-                  padding: '6px 8px',
-                  fontSize: '0.7rem',
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: '#333',
-                  color: 'white',
-                  cursor: 'pointer',
-                }}
-                title="Print timeslip"
-              >
-                🖨️
-              </button>
+              {/* Save, Copy, and Print buttons removed - not verified as faithful to original RSA programs */}
               {simResult?.traces && simResult.traces.length > 0 && (
                 <button
                   onClick={() => setShowDetailedParams(true)}
@@ -1298,10 +1175,11 @@ racingsystemsanalysis.com`;
                     backgroundColor: '#333',
                     color: 'white',
                     cursor: 'pointer',
+                    width: '100%',
                   }}
                   title="Detailed Parameters — step-by-step simulation output"
                 >
-                  📊 Detail
+                  � Detail
                 </button>
               )}
             </div>
@@ -1376,31 +1254,6 @@ racingsystemsanalysis.com`;
                 </div>
               </div>
             )}
-            
-            {/* Recent Runs - Pro feature for chart overlay comparison */}
-            {features.quarterProFields && (
-              <div style={{ marginTop: '8px', borderTop: '1px solid var(--color-border)', paddingTop: '8px' }}>
-                <div style={{ fontWeight: '600', marginBottom: '6px', color: 'var(--color-text)', fontSize: '0.7rem' }}>Saved Runs</div>
-                <div style={{ fontSize: '0.65rem', maxHeight: '80px', overflowY: 'auto' }}>
-                  {getRecentRuns(5).length === 0 ? (
-                    <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No saved runs</div>
-                  ) : (
-                    getRecentRuns(5).map(run => (
-                      <button key={run.id} onClick={() => handleLoadComparison(run)}
-                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '3px 5px', marginBottom: '2px',
-                          borderRadius: '3px', border: comparisonRun?.id === run.id ? '1px solid #3b82f6' : '1px solid var(--color-border)',
-                          backgroundColor: comparisonRun?.id === run.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-bg-secondary)',
-                          color: 'var(--color-text)', cursor: 'pointer' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600 }}>{run.result.et_s.toFixed(3)}s</span>
-                          <span style={{ color: 'var(--color-text-muted)' }}>{run.result.mph.toFixed(1)}</span>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Data Logger Chart */}
@@ -1470,60 +1323,7 @@ racingsystemsanalysis.com`;
                   </optgroup>
                 )}
               </select>
-              {features.liveWeather ? (
-                <>
-                  <select
-                    value={selectedTrack?.id || ''}
-                    onChange={(e) => {
-                      const track = getAllTracks().find(t => t.id === e.target.value);
-                      if (track) handleFetchWeather(track);
-                    }}
-                    style={{
-                      padding: '2px 4px',
-                      fontSize: '0.6rem',
-                      borderRadius: '4px',
-                      border: '1px solid var(--color-border)',
-                      backgroundColor: 'var(--color-bg-secondary)',
-                      color: 'var(--color-text)',
-                      cursor: 'pointer',
-                      maxWidth: '90px',
-                    }}
-                    disabled={weatherLoading}
-                  >
-                    <option value="">Track...</option>
-                    {getAllTracks().map(track => (
-                      <option key={track.id} value={track.id}>
-                        {track.name.length > 12 ? track.name.slice(0, 10) + '...' : track.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => handleFetchWeather()}
-                    disabled={weatherLoading}
-                    style={{
-                      padding: '2px 6px',
-                      fontSize: '0.6rem',
-                      borderRadius: '4px',
-                      border: '1px solid var(--color-border)',
-                      backgroundColor: 'var(--color-bg-secondary)',
-                      color: 'var(--color-text)',
-                      cursor: weatherLoading ? 'wait' : 'pointer',
-                    }}
-                    title="Get weather for your current location"
-                  >
-                    📍
-                  </button>
-                </>
-              ) : (
-                <span style={{ fontSize: '0.6rem', color: 'var(--color-muted)' }}>🔒 Weather</span>
-              )}
-              {weatherError && <span style={{ fontSize: '0.55rem', color: '#ef4444' }}>{weatherError}</span>}
-              {lastWeatherUpdate && !weatherError && (
-                <span style={{ fontSize: '0.55rem', color: 'var(--color-muted)' }}>
-                  {lastWeatherUpdate.toLocaleTimeString().slice(0, -3)}
-                  {selectedTrack && ` • ${selectedTrack.city}`}
-                </span>
-              )}
+              {/* Live weather feature suppressed - incomplete track list, experimental */}
             </div>
             <EnvironmentForm value={env} onChange={setEnv} compact />
           </div>
@@ -1571,10 +1371,10 @@ racingsystemsanalysis.com`;
                 <div style={{ minWidth: '140px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)', fontSize: '0.8rem' }}>Tools</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <button onClick={() => setShowOptimizer(true)} title="Optimize gear/converter"
+                    <button onClick={() => setShowOptimizer(true)} title="Experimental optimizer - gear/converter tuning"
                       style={{ padding: '6px 10px', fontSize: '0.7rem', borderRadius: '4px', border: '1px solid var(--color-accent)',
                         backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 600 }}>
-                      ⚡ Optimize
+                      ⚡ Optimize (Beta)
                     </button>
                     {/* Throttle Stop */}
                     <div style={{ fontSize: '0.7rem' }}>

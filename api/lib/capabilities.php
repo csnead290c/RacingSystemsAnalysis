@@ -121,6 +121,9 @@ const PLAN_CAPABILITIES = [
     ],
     'nhra' => [
         'nhra.parity',
+        'nhra.parity.admin',
+        'nhra.tech.read',
+        'nhra.tech.admin',
         'sim.basic',
         'charts.basic',
         'weather.manual',
@@ -132,23 +135,56 @@ const PLAN_CAPABILITIES = [
 
 // Role-based capabilities (independent of subscription plan)
 const ROLE_CAPABILITIES = [
-    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all'],
-    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all'],
+    'owner' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin', 'nhra.tech.read', 'nhra.tech.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all'],
+    'admin' => ['admin.devTools', 'admin.userManagement', 'admin.access', 'nhra.parity', 'nhra.parity.admin', 'nhra.tech.read', 'nhra.tech.admin', 'incidents.read', 'incidents.create', 'incidents.edit.own', 'incidents.edit.all'],
     'beta'  => ['admin.devTools'],
 ];
 
 // Legacy plan name → canonical plan ID
+// IMPORTANT: This must include ALL possible plan names that might be stored in:
+//   - users.plan (registration)
+//   - users.assigned_plan (admin assignment)
+//   - users.subscription_plan (legacy)
+//   - subscriptions.plan_id (Stripe webhook)
 const PLAN_ALIASES = [
-    'racer' => 'basic',
-    'free'  => 'free',
-    'basic' => 'basic',
-    'pro'   => 'pro',
-    'team'  => 'team',
-    'nhra'  => 'nhra',
+    // Canonical names
+    'free'    => 'free',
+    'basic'   => 'basic',
+    'pro'     => 'pro',
+    'team'    => 'team',
+    'nhra'    => 'nhra',
+    // Legacy/alternate names
+    'racer'   => 'basic',   // Stripe plan ID for basic tier
+    'junior'  => 'basic',   // Legacy name for basic tier
+    'jr'      => 'basic',   // Abbreviated name
+    'nitro'   => 'team',    // Legacy name for team tier
+    'trial'   => 'free',    // Trial users get free base (trial overlay handles capabilities)
+    'beta'    => 'pro',     // Beta testers get pro capabilities
 ];
 
 // Payment failure grace period (seconds). After this window, past_due degrades to free.
 const GRACE_PERIOD_SECONDS = 3 * 24 * 60 * 60; // 3 days
+
+// Plan → Legacy Product mapping (for hasFeature compatibility)
+// Maps canonical plan IDs to the legacy product IDs used by the frontend
+const PLAN_PRODUCTS = [
+    'free'  => [],
+    'basic' => ['quarter_jr'],
+    'pro'   => ['quarter_jr', 'quarter_pro', 'bonneville_pro'],
+    'team'  => ['quarter_jr', 'quarter_pro', 'bonneville_pro', 'engine_pro', 'clutch_pro', 'suspension_pro'],
+    'nhra'  => [],  // NHRA users get capabilities, not products
+];
+
+/**
+ * Get legacy product IDs for a plan.
+ * Used to bridge the capability system with the legacy hasFeature() system.
+ *
+ * @param string $planId Canonical plan ID (free, basic, pro, team, nhra)
+ * @return string[] Array of product IDs
+ */
+function rsa_getProductsForPlanId(string $planId): array {
+    return PLAN_PRODUCTS[$planId] ?? [];
+}
 
 // ============================================================================
 // DB-backed plan capabilities (prefer DB if populated, fallback to code)
@@ -243,13 +279,45 @@ function rsa_setPlanCapabilities(PDO $pdo, string $planId, array $capabilityKeys
 // ============================================================================
 
 /**
- * Get the user's active subscription plan from the subscriptions table.
- * Falls back to the legacy users.subscription_plan column during migration.
+ * Get the user's active subscription plan.
  *
- * @return string The canonical plan ID ('free', 'basic', 'pro', 'team')
+ * Resolution order (first match wins):
+ *   1. Admin-assigned plan (users.assigned_plan) — if not expired
+ *   2. Stripe subscription (subscriptions table) — if active/trialing/past_due
+ *   3. Legacy subscription (users.subscription_plan) — if status is valid
+ *   4. Registration plan (users.plan) — set during signup
+ *   5. Default: 'free'
+ *
+ * @return string The canonical plan ID ('free', 'basic', 'pro', 'team', 'nhra')
  */
 function rsa_getUserPlan(PDO $pdo, int $userId): string {
-    // Try new subscriptions table first
+    // ── 1. Check admin-assigned plan (highest priority) ──
+    try {
+        $stmt = $pdo->prepare("
+            SELECT assigned_plan, assigned_plan_expires_at FROM users WHERE id = ?
+        ");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+
+        if ($user && !empty($user['assigned_plan'])) {
+            // Check if assignment has expired
+            $expiresAt = $user['assigned_plan_expires_at'];
+            if ($expiresAt && strtotime($expiresAt) < time()) {
+                error_log("Assigned plan expired: user=$userId plan={$user['assigned_plan']} expired_at=$expiresAt");
+                // Don't return — fall through to other sources
+            } else {
+                $canonical = PLAN_ALIASES[$user['assigned_plan']] ?? null;
+                if ($canonical !== null) {
+                    return $canonical;
+                }
+                error_log("PLAN_ALIASES miss: assigned_plan='{$user['assigned_plan']}' for user=$userId");
+            }
+        }
+    } catch (PDOException $e) {
+        error_log("assigned_plan lookup failed: " . $e->getMessage());
+    }
+
+    // ── 2. Check subscriptions table (Stripe) ──
     try {
         $stmt = $pdo->prepare("
             SELECT plan_id, status, updated_at FROM subscriptions
@@ -268,25 +336,29 @@ function rsa_getUserPlan(PDO $pdo, int $userId): string {
                 if ($elapsed > GRACE_PERIOD_SECONDS) {
                     $days = round($elapsed / 86400, 1);
                     error_log("Grace expired: user=$userId plan_id={$row['plan_id']} past_due for {$days}d (limit=" . (GRACE_PERIOD_SECONDS / 86400) . "d) — degrading to free");
-                    return 'free';
+                    // Don't return free yet — fall through to check other sources
+                } else {
+                    $remaining = round((GRACE_PERIOD_SECONDS - $elapsed) / 3600, 1);
+                    error_log("Grace active: user=$userId plan_id={$row['plan_id']} past_due, {$remaining}h remaining");
+                    $canonical = PLAN_ALIASES[$row['plan_id']] ?? null;
+                    if ($canonical !== null) {
+                        return $canonical;
+                    }
                 }
-                $remaining = round((GRACE_PERIOD_SECONDS - $elapsed) / 3600, 1);
-                error_log("Grace active: user=$userId plan_id={$row['plan_id']} past_due, {$remaining}h remaining");
+            } else {
+                $canonical = PLAN_ALIASES[$row['plan_id']] ?? null;
+                if ($canonical !== null) {
+                    return $canonical;
+                }
+                error_log("PLAN_ALIASES miss: plan_id='{$row['plan_id']}' for user=$userId");
             }
-
-            $canonical = PLAN_ALIASES[$row['plan_id']] ?? null;
-            if ($canonical === null) {
-                error_log("PLAN_ALIASES miss: plan_id='{$row['plan_id']}' for user=$userId — falling back to 'free'. Add it to PLAN_ALIASES in capabilities.php.");
-                return 'free';
-            }
-            return $canonical;
         }
     } catch (PDOException $e) {
-        // subscriptions table may not exist yet — fall through to legacy
+        // subscriptions table may not exist yet — fall through
         error_log("subscriptions table lookup failed (may not exist): " . $e->getMessage());
     }
 
-    // Fallback: legacy column on users table
+    // ── 3. Check legacy subscription_plan column ──
     try {
         $stmt = $pdo->prepare("
             SELECT subscription_plan, subscription_status FROM users WHERE id = ?
@@ -295,23 +367,36 @@ function rsa_getUserPlan(PDO $pdo, int $userId): string {
         $user = $stmt->fetch();
 
         if ($user && !empty($user['subscription_plan']) && in_array($user['subscription_status'] ?? '', ['active', 'trialing', 'past_due'])) {
-            // Grace period for legacy path: use a conservative approach —
-            // legacy table has no updated_at for status changes, so we allow past_due
-            // but log a warning. The subscriptions table path above is authoritative.
             if ($user['subscription_status'] === 'past_due') {
-                error_log("Grace (legacy fallback): user=$userId plan={$user['subscription_plan']} past_due — no timestamp available, granting grace. Migrate to subscriptions table.");
+                error_log("Grace (legacy fallback): user=$userId plan={$user['subscription_plan']} past_due — no timestamp available, granting grace.");
             }
 
             $canonical = PLAN_ALIASES[$user['subscription_plan']] ?? null;
-            if ($canonical === null) {
-                error_log("PLAN_ALIASES miss: subscription_plan='{$user['subscription_plan']}' for user=$userId — falling back to 'free'. Add it to PLAN_ALIASES in capabilities.php.");
-                return 'free';
+            if ($canonical !== null) {
+                return $canonical;
             }
-            return $canonical;
+            error_log("PLAN_ALIASES miss: subscription_plan='{$user['subscription_plan']}' for user=$userId");
         }
     } catch (PDOException $e) {
-        // subscription_plan/subscription_status columns may not exist — fall through to free
         error_log("Legacy subscription_plan lookup failed: " . $e->getMessage());
+    }
+
+    // ── 4. Check registration plan column (set during signup) ──
+    try {
+        $stmt = $pdo->prepare("SELECT plan FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+
+        if ($user && !empty($user['plan'])) {
+            $canonical = PLAN_ALIASES[$user['plan']] ?? null;
+            if ($canonical !== null) {
+                return $canonical;
+            }
+            error_log("PLAN_ALIASES miss: plan='{$user['plan']}' for user=$userId");
+        }
+    } catch (PDOException $e) {
+        // plan column may not exist — fall through to free
+        error_log("Registration plan lookup failed: " . $e->getMessage());
     }
 
     return 'free';

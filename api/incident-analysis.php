@@ -37,6 +37,7 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/lib/capabilities.php';
+require_once __DIR__ . '/lib/ia-processing.php';
 
 $action = $_GET['action'] ?? '';
 
@@ -150,6 +151,58 @@ switch ($action) {
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         ia_requireCap($pdo, $userId, $role, 'incidents.read');
         handleDiagnose($pdo, $userId, $role);
+        break;
+    
+    // ── Workspace Foundation (v31) ──
+    case 'processSession':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.create');
+        handleProcessSession($pdo, $userId);
+        break;
+    case 'getProcessedSession':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.read');
+        handleGetProcessedSession($pdo);
+        break;
+    case 'listWorkspaces':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.read');
+        handleListWorkspaces($pdo);
+        break;
+    case 'getWorkspace':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.read');
+        handleGetWorkspace($pdo);
+        break;
+    case 'saveWorkspace':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.create');
+        handleSaveWorkspace($pdo, $userId);
+        break;
+    case 'deleteWorkspace':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.create');
+        handleDeleteWorkspace($pdo, $userId, $role);
+        break;
+    case 'listBookmarks':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.read');
+        handleListBookmarks($pdo);
+        break;
+    case 'createBookmark':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.create');
+        handleCreateBookmark($pdo, $userId);
+        break;
+    case 'updateBookmark':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.create');
+        handleUpdateBookmark($pdo, $userId);
+        break;
+    case 'deleteBookmark':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        ia_requireCap($pdo, $userId, $role, 'incidents.create');
+        handleDeleteBookmark($pdo, $userId, $role);
         break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
@@ -1242,4 +1295,255 @@ function ia_parseIniBytes(string $val): int {
         'k' => $num * 1024,
         default => $num,
     };
+}
+
+// ============================================================================
+// Workspace Foundation Handlers (v31)
+// ============================================================================
+
+function handleProcessSession(PDO $pdo, int $userId): void {
+    $input = rsa_getJsonInput();
+    $sessionId = (int)($input['session_id'] ?? 0);
+    if ($sessionId <= 0) rsa_jsonResponse(['error' => 'session_id is required'], 400);
+    
+    // Defensive check: verify function is available
+    if (!function_exists('ia_processSession')) {
+        $libPath = __DIR__ . '/lib/ia-processing.php';
+        $fileExists = file_exists($libPath);
+        $realPath = $fileExists ? realpath($libPath) : 'N/A';
+        
+        // Check if file is actually included
+        $includedFiles = array_map('realpath', get_included_files());
+        $isIncluded = in_array($realPath, $includedFiles, true);
+        
+        // Check for user-defined functions with 'ia_' prefix
+        $allUserFunctions = get_defined_functions()['user'];
+        $iaFunctions = array_filter($allUserFunctions, function($fn) {
+            return stripos($fn, 'ia_') !== false || stripos($fn, 'process') !== false;
+        });
+        
+        error_log("CRITICAL: ia_processSession() not found. File exists: " . ($fileExists ? 'YES' : 'NO') . ", Is included: " . ($isIncluded ? 'YES' : 'NO') . ", Path: $realPath");
+        error_log("Available ia_* functions: " . implode(', ', $iaFunctions));
+        
+        rsa_jsonResponse([
+            'error' => 'Processing function not available',
+            'detail' => 'ia_processSession() function not found',
+            'debug' => [
+                'expected_path' => $libPath,
+                'file_exists' => $fileExists,
+                'real_path' => $realPath,
+                'is_included' => $isIncluded,
+                'included_files_count' => count(get_included_files()),
+                'ia_functions_found' => $iaFunctions
+            ]
+        ], 500);
+    }
+    
+    try {
+        $result = ia_processSession($pdo, $sessionId, $userId);
+        rsa_jsonResponse(['ok' => true, 'processed' => $result]);
+    } catch (Exception $e) {
+        error_log("Process session failed for session $sessionId: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        rsa_jsonResponse([
+            'error' => $e->getMessage(),
+            'type' => get_class($e),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ], 500);
+    }
+}
+
+function handleGetProcessedSession(PDO $pdo): void {
+    $sessionId = (int)($_GET['session_id'] ?? 0);
+    if ($sessionId <= 0) rsa_jsonResponse(['error' => 'session_id is required'], 400);
+    
+    $stmt = $pdo->prepare("SELECT * FROM incident_analysis_processed_sessions WHERE session_id = ? AND processed_status = 'ready' LIMIT 1");
+    $stmt->execute([$sessionId]);
+    $ps = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$ps) rsa_jsonResponse(['error' => 'No processed session found'], 404);
+    
+    try {
+        $payload = ia_loadProcessedSession($ps['processed_file_path']);
+        rsa_jsonResponse(['processed_session' => $payload]);
+    } catch (RuntimeException $e) {
+        rsa_jsonResponse(['error' => $e->getMessage()], 500);
+    }
+}
+
+function handleListWorkspaces(PDO $pdo): void {
+    $sessionId = (int)($_GET['session_id'] ?? 0);
+    if ($sessionId <= 0) rsa_jsonResponse(['error' => 'session_id is required'], 400);
+    
+    $stmt = $pdo->prepare("SELECT * FROM incident_analysis_workspaces WHERE session_id = ? ORDER BY is_default DESC, created_at DESC");
+    $stmt->execute([$sessionId]);
+    $workspaces = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($workspaces as &$w) {
+        $w['id'] = (int)$w['id'];
+        $w['session_id'] = (int)$w['session_id'];
+        $w['is_default'] = (int)$w['is_default'];
+        $w['created_by'] = (int)$w['created_by'];
+        $w['layout_json'] = json_decode($w['layout_json'], true);
+    }
+    
+    rsa_jsonResponse(['workspaces' => $workspaces]);
+}
+
+function handleGetWorkspace(PDO $pdo): void {
+    $workspaceId = (int)($_GET['workspace_id'] ?? 0);
+    if ($workspaceId <= 0) rsa_jsonResponse(['error' => 'workspace_id is required'], 400);
+    
+    $stmt = $pdo->prepare("SELECT * FROM incident_analysis_workspaces WHERE id = ?");
+    $stmt->execute([$workspaceId]);
+    $workspace = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$workspace) rsa_jsonResponse(['error' => 'Workspace not found'], 404);
+    
+    $workspace['id'] = (int)$workspace['id'];
+    $workspace['session_id'] = (int)$workspace['session_id'];
+    $workspace['is_default'] = (int)$workspace['is_default'];
+    $workspace['created_by'] = (int)$workspace['created_by'];
+    $workspace['layout_json'] = json_decode($workspace['layout_json'], true);
+    
+    rsa_jsonResponse(['workspace' => $workspace]);
+}
+
+function handleSaveWorkspace(PDO $pdo, int $userId): void {
+    $input = rsa_getJsonInput();
+    $workspaceId = isset($input['workspace_id']) ? (int)$input['workspace_id'] : null;
+    $sessionId = (int)($input['session_id'] ?? 0);
+    $name = trim($input['name'] ?? '');
+    $description = $input['description'] ?? null;
+    $layoutJson = $input['layout_json'] ?? [];
+    $isDefault = !empty($input['is_default']);
+    
+    if ($sessionId <= 0) rsa_jsonResponse(['error' => 'session_id is required'], 400);
+    if ($name === '') rsa_jsonResponse(['error' => 'name is required'], 400);
+    
+    if ($workspaceId) {
+        // Update existing
+        $stmt = $pdo->prepare("UPDATE incident_analysis_workspaces SET name = ?, description = ?, layout_json = ?, is_default = ? WHERE id = ?");
+        $stmt->execute([$name, $description, json_encode($layoutJson), $isDefault ? 1 : 0, $workspaceId]);
+        if ($stmt->rowCount() === 0) rsa_jsonResponse(['error' => 'Workspace not found'], 404);
+        rsa_jsonResponse(['ok' => true, 'workspace_id' => $workspaceId]);
+    } else {
+        // Create new
+        $stmt = $pdo->prepare("INSERT INTO incident_analysis_workspaces (session_id, name, description, layout_json, is_default, created_by) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$sessionId, $name, $description, json_encode($layoutJson), $isDefault ? 1 : 0, $userId]);
+        $newId = (int)$pdo->lastInsertId();
+        rsa_jsonResponse(['ok' => true, 'workspace_id' => $newId], 201);
+    }
+}
+
+function handleDeleteWorkspace(PDO $pdo, int $userId, string $role): void {
+    $input = rsa_getJsonInput();
+    $workspaceId = (int)($input['workspace_id'] ?? 0);
+    if ($workspaceId <= 0) rsa_jsonResponse(['error' => 'workspace_id is required'], 400);
+    
+    // Verify ownership
+    $stmt = $pdo->prepare("SELECT session_id, created_by FROM incident_analysis_workspaces WHERE id = ?");
+    $stmt->execute([$workspaceId]);
+    $ws = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$ws) rsa_jsonResponse(['error' => 'Workspace not found'], 404);
+    
+    if (!in_array($role, ['owner', 'admin']) && (int)$ws['created_by'] !== $userId) {
+        rsa_jsonResponse(['error' => 'You do not own this workspace'], 403);
+    }
+    
+    $pdo->prepare("DELETE FROM incident_analysis_workspaces WHERE id = ?")->execute([$workspaceId]);
+    rsa_jsonResponse(['ok' => true, 'deleted_id' => $workspaceId]);
+}
+
+function handleListBookmarks(PDO $pdo): void {
+    $sessionId = (int)($_GET['session_id'] ?? 0);
+    $workspaceId = isset($_GET['workspace_id']) ? (int)$_GET['workspace_id'] : null;
+    
+    if ($sessionId <= 0) rsa_jsonResponse(['error' => 'session_id is required'], 400);
+    
+    if ($workspaceId) {
+        $stmt = $pdo->prepare("SELECT * FROM incident_analysis_bookmarks WHERE session_id = ? AND (workspace_id = ? OR workspace_id IS NULL) ORDER BY time_sec ASC");
+        $stmt->execute([$sessionId, $workspaceId]);
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM incident_analysis_bookmarks WHERE session_id = ? ORDER BY time_sec ASC");
+        $stmt->execute([$sessionId]);
+    }
+    
+    $bookmarks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($bookmarks as &$b) {
+        $b['id'] = (int)$b['id'];
+        $b['session_id'] = (int)$b['session_id'];
+        $b['workspace_id'] = $b['workspace_id'] ? (int)$b['workspace_id'] : null;
+        $b['time_sec'] = (float)$b['time_sec'];
+        $b['end_time_sec'] = $b['end_time_sec'] ? (float)$b['end_time_sec'] : null;
+        $b['created_by'] = (int)$b['created_by'];
+    }
+    
+    rsa_jsonResponse(['bookmarks' => $bookmarks]);
+}
+
+function handleCreateBookmark(PDO $pdo, int $userId): void {
+    $input = rsa_getJsonInput();
+    $sessionId = (int)($input['session_id'] ?? 0);
+    $workspaceId = isset($input['workspace_id']) ? (int)$input['workspace_id'] : null;
+    $timeSec = (float)($input['time_sec'] ?? 0);
+    $endTimeSec = isset($input['end_time_sec']) ? (float)$input['end_time_sec'] : null;
+    $label = trim($input['label'] ?? '');
+    $note = $input['note'] ?? null;
+    $color = $input['color'] ?? null;
+    
+    if ($sessionId <= 0) rsa_jsonResponse(['error' => 'session_id is required'], 400);
+    if ($label === '') rsa_jsonResponse(['error' => 'label is required'], 400);
+    
+    $stmt = $pdo->prepare("INSERT INTO incident_analysis_bookmarks (session_id, workspace_id, time_sec, end_time_sec, label, note, color, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$sessionId, $workspaceId, $timeSec, $endTimeSec, $label, $note, $color, $userId]);
+    $newId = (int)$pdo->lastInsertId();
+    
+    rsa_jsonResponse(['ok' => true, 'bookmark_id' => $newId], 201);
+}
+
+function handleUpdateBookmark(PDO $pdo, int $userId): void {
+    $input = rsa_getJsonInput();
+    $bookmarkId = (int)($input['bookmark_id'] ?? 0);
+    if ($bookmarkId <= 0) rsa_jsonResponse(['error' => 'bookmark_id is required'], 400);
+    
+    $fields = [];
+    $values = [];
+    
+    if (isset($input['label'])) { $fields[] = 'label = ?'; $values[] = trim($input['label']); }
+    if (isset($input['note'])) { $fields[] = 'note = ?'; $values[] = $input['note']; }
+    if (isset($input['color'])) { $fields[] = 'color = ?'; $values[] = $input['color']; }
+    if (isset($input['time_sec'])) { $fields[] = 'time_sec = ?'; $values[] = (float)$input['time_sec']; }
+    if (isset($input['end_time_sec'])) { $fields[] = 'end_time_sec = ?'; $values[] = (float)$input['end_time_sec']; }
+    
+    if (empty($fields)) rsa_jsonResponse(['error' => 'No fields to update'], 400);
+    
+    $values[] = $bookmarkId;
+    $sql = "UPDATE incident_analysis_bookmarks SET " . implode(', ', $fields) . " WHERE id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($values);
+    
+    if ($stmt->rowCount() === 0) rsa_jsonResponse(['error' => 'Bookmark not found'], 404);
+    
+    rsa_jsonResponse(['ok' => true, 'bookmark_id' => $bookmarkId]);
+}
+
+function handleDeleteBookmark(PDO $pdo, int $userId, string $role): void {
+    $input = rsa_getJsonInput();
+    $bookmarkId = (int)($input['bookmark_id'] ?? 0);
+    if ($bookmarkId <= 0) rsa_jsonResponse(['error' => 'bookmark_id is required'], 400);
+    
+    // Verify ownership
+    $stmt = $pdo->prepare("SELECT created_by FROM incident_analysis_bookmarks WHERE id = ?");
+    $stmt->execute([$bookmarkId]);
+    $bm = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$bm) rsa_jsonResponse(['error' => 'Bookmark not found'], 404);
+    
+    if (!in_array($role, ['owner', 'admin']) && (int)$bm['created_by'] !== $userId) {
+        rsa_jsonResponse(['error' => 'You do not own this bookmark'], 403);
+    }
+    
+    $pdo->prepare("DELETE FROM incident_analysis_bookmarks WHERE id = ?")->execute([$bookmarkId]);
+    rsa_jsonResponse(['ok' => true, 'deleted_id' => $bookmarkId]);
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Env } from '../../domain/schemas/env.schema';
 import { useSubscription } from '../../domain/config/useSubscription';
+import { FieldHelp } from './FieldHelp';
 
 
 interface EnvironmentFormProps {
@@ -112,18 +113,18 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
               )}
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Temp (°F)</label>
+              <label style={labelStyle}>Temp (°F) <FieldHelp fieldKey="temperature" /></label>
               <input type="number" style={inputStyle} className="input" value={value.temperatureF} onChange={(e) => handleChange('temperatureF', e.target.value)} />
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Humid %</label>
+              <label style={labelStyle}>Humid % <FieldHelp fieldKey="humidity" /></label>
               <input type="number" style={inputStyle} className="input" value={value.humidityPct} onChange={(e) => handleChange('humidityPct', e.target.value)} />
             </div>
           </div>
           {/* Row 2: Optional fields - Track temp and wind are Pro only */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
             <div style={groupStyle}>
-              <label style={labelStyle}>Track °F {!hasAdvancedWeather && '🔒'}</label>
+              <label style={labelStyle}>Track °F {!hasAdvancedWeather && '🔒'} <FieldHelp fieldKey="trackTemp" /></label>
               <input 
                 type="number" 
                 style={{ ...optInputStyle, opacity: hasAdvancedWeather ? 1 : 0.5 }} 
@@ -136,11 +137,11 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
               />
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Grip</label>
+              <label style={labelStyle}>Grip <FieldHelp fieldKey="tractionIndex" /></label>
               <input type="number" style={optInputStyle} className="input" value={value.tractionIndex ?? ''} onChange={(e) => handleOptionalChange('tractionIndex', e.target.value)} placeholder="—" />
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Wind {!hasAdvancedWeather && '🔒'}</label>
+              <label style={labelStyle}>Wind {!hasAdvancedWeather && '🔒'} <FieldHelp fieldKey="windVelocity" /></label>
               <input 
                 type="number" 
                 style={{ ...optInputStyle, opacity: hasAdvancedWeather ? 1 : 0.5 }} 
@@ -153,7 +154,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
               />
             </div>
             <div style={groupStyle}>
-              <label style={labelStyle}>Angle {!hasAdvancedWeather && '🔒'}</label>
+              <label style={labelStyle}>Angle {!hasAdvancedWeather && '🔒'} <FieldHelp fieldKey="windAngle" /></label>
               <input 
                 type="number" 
                 style={{ ...optInputStyle, opacity: hasAdvancedWeather ? 1 : 0.5 }} 
@@ -177,7 +178,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
       <div className="grid grid-2 gap-4">
         <div>
           <label className="label" htmlFor="elevation">
-            Elevation (ft)
+            Elevation (ft) <FieldHelp fieldKey="elevation" />
           </label>
           <input
             id="elevation"
@@ -192,7 +193,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
 
         <div>
           <label className="label" htmlFor="temperatureF">
-            Temperature (°F)
+            Temperature (°F) <FieldHelp fieldKey="temperature" />
           </label>
           <input
             id="temperatureF"
@@ -207,7 +208,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
 
         <div>
           <label className="label" htmlFor="barometerInHg">
-            Barometer (inHg)
+            Barometer (inHg) <FieldHelp fieldKey="barometer" />
           </label>
           <input
             id="barometerInHg"
@@ -222,7 +223,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
 
         <div>
           <label className="label" htmlFor="humidityPct">
-            Humidity (%)
+            Humidity (%) <FieldHelp fieldKey="humidity" />
           </label>
           <input
             id="humidityPct"
@@ -257,7 +258,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
         <div className="grid grid-2 gap-4 mt-4">
           <div>
             <label className="label" htmlFor="trackTempF">
-              Track Temp (°F)
+              Track Temp (°F) <FieldHelp fieldKey="trackTemp" />
             </label>
             <input
               id="trackTempF"
@@ -272,7 +273,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
 
           <div>
             <label className="label" htmlFor="tractionIndex">
-              Traction Index
+              Traction Index <FieldHelp fieldKey="tractionIndex" />
             </label>
             <input
               id="tractionIndex"
@@ -287,7 +288,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
 
           <div>
             <label className="label" htmlFor="windMph">
-              Wind Speed (mph)
+              Wind Speed (mph) <FieldHelp fieldKey="windVelocity" />
             </label>
             <input
               id="windMph"
@@ -302,7 +303,7 @@ function EnvironmentForm({ value, onChange, compact = false, disabled = false }:
 
           <div>
             <label className="label" htmlFor="windAngleDeg">
-              Wind Angle (deg)
+              Wind Angle (deg) <FieldHelp fieldKey="windAngle" />
             </label>
             <input
               id="windAngleDeg"

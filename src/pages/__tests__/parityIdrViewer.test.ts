@@ -66,13 +66,13 @@ describe('ParityIdrViewer — idr_file download', () => {
 describe('ParityIdrViewer — data placeholder', () => {
   it('renders a placeholder for future IDR data viewer', () => {
     expect(viewerSrc).toContain('data-testid="idr-data-placeholder"');
-    expect(viewerSrc).toContain('Load IDR Data');
+    expect(viewerSrc).toContain('IDR Data Viewer');
   });
 
   it('shows different messages for session vs file', () => {
     expect(viewerSrc).toContain("type === 'idr_session'");
-    expect(viewerSrc).toContain('Session data viewer');
-    expect(viewerSrc).toContain('File viewer');
+    expect(viewerSrc).toContain('session data viewing is not yet available');
+    expect(viewerSrc).toContain('file viewing is not yet available');
   });
 });
 
@@ -124,11 +124,11 @@ describe('App.tsx — /parity/idr route', () => {
     expect(parityIdx).toBeGreaterThan(idrIdx);
   });
 
-  it('wraps ParityIdrViewer in ProtectedRoute + InternalRoute', () => {
+  it('wraps ParityIdrViewer in CapabilityRoute with nhra.parity requirement', () => {
     const idrIdx = appSrc.indexOf('path="/parity/idr"');
     const routeBlock = appSrc.slice(idrIdx, idrIdx + 300);
-    expect(routeBlock).toContain('<ProtectedRoute>');
-    expect(routeBlock).toContain('<InternalRoute>');
+    expect(routeBlock).toContain('<CapabilityRoute');
+    expect(routeBlock).toContain('requireCap="nhra.parity"');
     expect(routeBlock).toContain('<ParityIdrViewer />');
   });
 });

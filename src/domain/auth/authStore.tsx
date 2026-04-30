@@ -111,7 +111,7 @@ interface AuthContextValue extends AuthState {
   // Auth actions
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (email: string, password: string, displayName: string, tier?: string) => Promise<boolean>;
+  register: (email: string, password: string, displayName: string, tier?: string, inviteCode?: string) => Promise<boolean>;
   
   // User management
   getAllUsers: () => User[];
@@ -264,19 +264,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           lastLoginAt: new Date().toISOString(),
         };
         
-        saveToStorage(STORAGE_KEYS.CURRENT_USER, localUser);
+        // Add plan to user object if provided by API (used by useCapabilities)
+        const userToStore = apiUser.plan 
+          ? { ...localUser, subscription_plan: apiUser.plan }
+          : localUser;
+        
+        saveToStorage(STORAGE_KEYS.CURRENT_USER, userToStore);
         
         console.log('API Login successful:', {
           user: localUser.email,
           roleId: localUser.roleId,
           apiRole: apiUser.role,
+          apiPlan: apiUser.plan,
           apiProducts: apiProducts,
         });
         
         setState({
           isAuthenticated: true,
           isLoading: false,
-          user: localUser,
+          user: userToStore,
           error: null,
         });
         
@@ -346,15 +352,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Register new user
-  const register = useCallback(async (email: string, password: string, displayName: string, tier?: string): Promise<boolean> => {
+  const register = useCallback(async (email: string, password: string, displayName: string, tier?: string, inviteCode?: string): Promise<boolean> => {
     // Try backend API first (creates user in database)
     try {
-      const apiRes = await authApi.register(email, password, displayName);
+      const apiRes = await authApi.register(email, password, displayName, inviteCode);
       if (apiRes.success && apiRes.token && apiRes.user) {
         const apiUser = apiRes.user;
 
-        // Map API role to local roleId (new users get 'user' role = guest/free)
-        let roleId = 'guest';
+        // Map API role to local roleId (new users get 'user' role = viewer/free)
+        let roleId = 'viewer';
         if (apiUser.role === 'owner') roleId = 'owner';
         else if (apiUser.role === 'admin') roleId = 'admin';
 
@@ -368,15 +374,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           lastLoginAt: new Date().toISOString(),
         };
 
-        saveToStorage(STORAGE_KEYS.CURRENT_USER, localUser);
+        // Add plan to user object if provided by API
+        const userToStore = apiUser.plan 
+          ? { ...localUser, subscription_plan: apiUser.plan }
+          : localUser;
+
+        saveToStorage(STORAGE_KEYS.CURRENT_USER, userToStore);
         saveToStorage('rsa.auth.apiProducts', apiUser.products || []);
 
-        console.log('API Registration successful:', { email, displayName, tier, role: apiUser.role });
+        console.log('API Registration successful:', { email, displayName, tier, plan: apiUser.plan, role: apiUser.role });
 
         setState({
           isAuthenticated: true,
           isLoading: false,
-          user: localUser,
+          user: userToStore,
           error: null,
         });
 
