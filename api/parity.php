@@ -12831,6 +12831,44 @@ function mepa_performanceClusters(array $grid): array {
     return $clusters;
 }
 
+// Weather calculation function for performance prediction
+function parity_computeWeather(float $tempF, float $rhFraction, float $pressureInHg): array {
+    // Calculate density altitude and correction factor
+    // Using standard weather formulas for drag racing
+    
+    // Convert to metric for calculations
+    $tempC = ($tempF - 32) * 5/9;
+    $tempK = $tempC + 273.15;
+    $pressurePa = $pressureInHg * 3386.39; // inHg to Pa
+    
+    // Calculate vapor pressure
+    $svp = 610.78 * exp($tempC / ($tempC + 237.3) * 17.27); // Saturation vapor pressure in Pa
+    $vp = $svp * $rhFraction; // Actual vapor pressure in Pa
+    $dap = $pressurePa - $vp; // Dry air pressure in Pa
+    
+    // Air density (kg/m³)
+    $Rd = 287.05; // Gas constant for dry air
+    $Rv = 461.5; // Gas constant for water vapor
+    $airDensity = ($dap / ($Rd * $tempK)) + ($vp / ($Rv * $tempK));
+    
+    // Standard sea level density
+    $standardDensity = 1.225; // kg/m³ at 15°C, 1013.25 hPa
+    
+    // Density altitude calculation
+    $densityAltitude = 44330 * (1 - pow($airDensity / $standardDensity, 0.235));
+    
+    // Correction factor (simplified for drag racing)
+    $correctionFactor = sqrt($standardDensity / $airDensity);
+    
+    return [
+        'densityAltitude' => $densityAltitude,
+        'correctionFactor' => $correctionFactor,
+        'airDensity' => $airDensity,
+        'vaporPressure' => $vp,
+        'dryAirPressure' => $dap
+    ];
+}
+
 function handlePerformancePrediction(PDO $pdo): void {
     $category = $_GET['category'] ?? '';
     $trackId = isset($_GET['trackId']) ? (int)$_GET['trackId'] : null;
