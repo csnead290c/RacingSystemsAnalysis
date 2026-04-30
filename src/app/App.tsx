@@ -488,9 +488,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       >
         {nhraMode ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-header-text)', letterSpacing: '0.02em' }}>
-              Tech Parity Portal
-            </span>
+            <img src="/nhra-header-logo.png" alt="NHRA" style={{ height: '40px', width: 'auto' }} />
           </div>
         ) : (
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none' }}>
@@ -518,7 +516,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           borderTop: '1px solid var(--color-border)',
         }}
       >
-        {nhraMode ? 'Tech Parity Portal © 2026' : 'Racing Systems Analysis © 2026'}
+        {nhraMode ? 'NHRA Tech Parity Portal © 2026' : 'Racing Systems Analysis © 2026'}
       </footer>
       <ViewAsBanner />
     </div>
