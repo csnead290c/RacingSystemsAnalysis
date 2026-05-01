@@ -12935,7 +12935,7 @@ function handlePerformancePrediction(PDO $pdo): void {
                    COUNT(*) AS sample_count
             FROM parity_runs r
             JOIN parity_events e ON r.race_lookup = e.race_lookup
-            WHERE e.track_id = ? AND r.class_index = ? 
+            WHERE e.track_id = ? AND r.category = ? 
               AND COALESCE(r.dq_flag,0)=0 AND r.ft1320 IS NOT NULL AND r.ft1320 > 0
         ";
         $baselineStmt = $pdo->prepare($baselineQuery);
@@ -12964,7 +12964,7 @@ function handlePerformancePrediction(PDO $pdo): void {
                    AVG(r.mph1320) AS avg_mph, MAX(r.mph1320) AS best_mph,
                    COUNT(*) AS sample_count
             FROM parity_runs r
-            WHERE r.class_index = ? 
+            WHERE r.category = ? 
               AND COALESCE(r.dq_flag,0)=0 AND r.ft1320 IS NOT NULL AND r.ft1320 > 0
         ";
         $baselineStmt = $pdo->prepare($baselineQuery);
