@@ -13089,6 +13089,59 @@ function handlePerformancePrediction(PDO $pdo): void {
         }
     }
 
+    // ── Group by engine combo ─────────────────────────────────────────────
+    // Fetch driver → engine combo mapping for all relevant drivers
+    $response['comboPredictions'] = [];
+    if (!empty($response['driverPredictions'])) {
+        $driverNames = array_unique(array_column($response['driverPredictions'], 'driverName'));
+        $ph = implode(',', array_fill(0, count($driverNames), '?'));
+        $comboMapStmt = $pdo->prepare("
+            SELECT dc.driver_name, ec.id AS combo_id, ec.name AS combo_name
+            FROM parity_driver_combos dc
+            JOIN parity_engine_combos ec ON ec.id = dc.engine_combo_id
+            WHERE dc.driver_name IN ($ph)
+            ORDER BY dc.driver_name, dc.effective_from_utc DESC
+        ");
+        $comboMapStmt->execute($driverNames);
+        $comboRows = $comboMapStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // driver_name → {comboId, comboName} — use most-recent assignment
+        $driverToCombo = [];
+        foreach ($comboRows as $cr) {
+            if (!isset($driverToCombo[$cr['driver_name']])) {
+                $driverToCombo[$cr['driver_name']] = [
+                    'comboId'   => (int)$cr['combo_id'],
+                    'comboName' => $cr['combo_name'],
+                ];
+            }
+        }
+
+        // Group driver predictions by combo (driverPredictions already sorted ET ASC
+        // so first driver encountered per combo is the best for that combo)
+        $comboPredictions = [];
+        foreach ($response['driverPredictions'] as $dp) {
+            $ci = $driverToCombo[$dp['driverName']] ?? null;
+            if (!$ci) continue;
+            $cid = $ci['comboId'];
+            if (!isset($comboPredictions[$cid])) {
+                $comboPredictions[$cid] = [
+                    'comboId'      => $cid,
+                    'comboName'    => $ci['comboName'],
+                    'baselineET'   => $dp['baselineET'],
+                    'baselineMPH'  => $dp['baselineMPH'],
+                    'predictedET'  => $dp['predictedET'],
+                    'predictedMPH' => $dp['predictedMPH'],
+                    'adjustmentET' => $dp['adjustmentET'],
+                    'adjustmentMPH'=> $dp['adjustmentMPH'],
+                    'bestDriver'   => $dp['driverName'],
+                ];
+            }
+        }
+
+        usort($comboPredictions, fn($a, $b) => $a['baselineET'] <=> $b['baselineET']);
+        $response['comboPredictions'] = array_values($comboPredictions);
+    }
+
     // ── Overall prediction ────────────────────────────────────────────────
     if ($response['baseline'] && $response['currentWeather']) {
         $cf = $response['currentWeather']['correctionFactor'];

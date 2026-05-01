@@ -7088,6 +7088,7 @@ function WeatherDashPanel({ event, category }: { event: EventWithStats | null; c
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionResult, setPredictionResult] = useState<any>(null);
   const [predictionError, setPredictionError] = useState('');
+  const [comboExpanded, setComboExpanded] = useState(false);
 
   const fetchLiveWeather = useCallback(async () => {
     setLiveLoading(true); setLiveError('');
@@ -7359,42 +7360,86 @@ function WeatherDashPanel({ event, category }: { event: EventWithStats | null; c
                     )}
                   </div>
 
-                  {predictionResult.driverPredictions && predictionResult.driverPredictions.length > 0 ? (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
-                        <thead>
-                          <tr>
-                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Driver</th>
-                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Car #</th>
-                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Baseline ET</th>
-                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted ET</th>
-                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Baseline MPH</th>
-                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted MPH</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {predictionResult.driverPredictions.map((d: any, i: number) => (
-                            <tr key={i}>
-                              <td style={S.td}>{d.driverName}</td>
-                              <td style={{ ...S.td, textAlign: 'right', color: '#888' }}>{d.carNumber || '—'}</td>
-                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{formatET(d.baselineET)}</td>
-                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
-                                <b style={{ color: '#2563eb' }}>{formatET(d.predictedET)}</b>
-                                <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: d.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
-                                  ({d.adjustmentET > 0 ? '+' : ''}{d.adjustmentET.toFixed(3)})
+                  {predictionResult.comboPredictions && predictionResult.comboPredictions.length > 0 ? (
+                    <div>
+                      {/* Header row: combo count + expand toggle */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                        <div style={{ fontSize: '0.62rem', color: '#888' }}>
+                          {predictionResult.comboPredictions.length} engine combo{predictionResult.comboPredictions.length !== 1 ? 's' : ''}
+                        </div>
+                        <button
+                          onClick={() => setComboExpanded(e => !e)}
+                          style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.12rem 0.45rem' }}
+                        >
+                          {comboExpanded ? '▲ Compact' : '▼ Expand'}
+                        </button>
+                      </div>
+
+                      {comboExpanded ? (
+                        /* ── Expanded: one row per engine combo ── */
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Engine Combo</th>
+                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Best Driver</th>
+                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Baseline ET</th>
+                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted ET</th>
+                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Baseline MPH</th>
+                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted MPH</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {predictionResult.comboPredictions.map((c: any, i: number) => (
+                                <tr key={i}>
+                                  <td style={{ ...S.td, fontWeight: 600 }}>{c.comboName}</td>
+                                  <td style={{ ...S.td, color: '#aaa', fontSize: '0.68rem' }}>{c.bestDriver}</td>
+                                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{formatET(c.baselineET)}</td>
+                                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                                    <b style={{ color: '#2563eb' }}>{formatET(c.predictedET)}</b>
+                                    <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: c.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
+                                      ({c.adjustmentET > 0 ? '+' : ''}{c.adjustmentET.toFixed(3)})
+                                    </span>
+                                  </td>
+                                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{formatMPH(c.baselineMPH)}</td>
+                                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                                    <b style={{ color: '#2563eb' }}>{formatMPH(c.predictedMPH)}</b>
+                                    <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: c.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
+                                      ({c.adjustmentMPH > 0 ? '+' : ''}{c.adjustmentMPH.toFixed(2)})
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        /* ── Compact: best combo only ── */
+                        (() => {
+                          const best = predictionResult.comboPredictions[0];
+                          return (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'baseline' }}>
+                              <div>
+                                <span style={{ color: '#888' }}>ET:</span>{' '}
+                                <b style={{ color: '#2563eb', fontFamily: 'monospace' }}>{formatET(best.predictedET)}</b>
+                                <span style={{ marginLeft: '0.25rem', fontSize: '0.65rem', color: best.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
+                                  ({best.adjustmentET > 0 ? '+' : ''}{best.adjustmentET.toFixed(3)})
                                 </span>
-                              </td>
-                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{formatMPH(d.baselineMPH)}</td>
-                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
-                                <b style={{ color: '#2563eb' }}>{formatMPH(d.predictedMPH)}</b>
-                                <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: d.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
-                                  ({d.adjustmentMPH > 0 ? '+' : ''}{d.adjustmentMPH.toFixed(2)})
+                              </div>
+                              <div>
+                                <span style={{ color: '#888' }}>MPH:</span>{' '}
+                                <b style={{ color: '#2563eb', fontFamily: 'monospace' }}>{formatMPH(best.predictedMPH)}</b>
+                                <span style={{ marginLeft: '0.25rem', fontSize: '0.65rem', color: best.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
+                                  ({best.adjustmentMPH > 0 ? '+' : ''}{best.adjustmentMPH.toFixed(2)})
                                 </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                              </div>
+                              <div style={{ fontSize: '0.65rem', color: '#888' }}>
+                                {best.comboName}
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   ) : predictionResult.prediction ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.3rem' }}>
