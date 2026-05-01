@@ -12928,54 +12928,76 @@ function handlePerformancePrediction(PDO $pdo): void {
     $baselineDescription = 'Best run from all events';
     
     if ($useTrackHistory && $trackId) {
-        // Use track-specific history
+        // Use track-specific history — best run (ET+MPH from same row) with sanity bounds
         $baselineQuery = "
-            SELECT MIN(r.ft1320) AS best_et, AVG(r.ft1320) AS avg_et, 
-                   AVG(r.mph1320) AS avg_mph, MAX(r.mph1320) AS best_mph,
-                   COUNT(*) AS sample_count
+            SELECT r.ft1320 AS best_et, r.mph1320 AS best_mph, cnt.sample_count,
+                   cnt.avg_et, cnt.avg_mph
             FROM parity_runs r
             JOIN parity_events e ON r.race_lookup = e.race_lookup
-            WHERE e.track_id = ? AND r.category = ? 
-              AND COALESCE(r.dq_flag,0)=0 AND r.ft1320 IS NOT NULL AND r.ft1320 > 0
+            JOIN (
+                SELECT COUNT(*) AS sample_count, AVG(r2.ft1320) AS avg_et, AVG(r2.mph1320) AS avg_mph
+                FROM parity_runs r2
+                JOIN parity_events e2 ON r2.race_lookup = e2.race_lookup
+                WHERE e2.track_id = ? AND r2.category = ?
+                  AND COALESCE(r2.dq_flag,0)=0
+                  AND r2.ft1320 BETWEEN 3.0 AND 15.0
+                  AND r2.mph1320 BETWEEN 50 AND 400
+            ) cnt ON 1=1
+            WHERE e.track_id = ? AND r.category = ?
+              AND COALESCE(r.dq_flag,0)=0
+              AND r.ft1320 BETWEEN 3.0 AND 15.0
+              AND r.mph1320 BETWEEN 50 AND 400
+            ORDER BY r.ft1320 ASC
+            LIMIT 1
         ";
         $baselineStmt = $pdo->prepare($baselineQuery);
-        $baselineStmt->execute([$trackId, $category]);
+        $baselineStmt->execute([$trackId, $category, $trackId, $category]);
         $baselineData = $baselineStmt->fetch(PDO::FETCH_ASSOC);
         
         if ($baselineData && $baselineData['best_et']) {
             $response['baseline'] = [
                 'method' => 'track_history',
-                'baseET' => $baselineData['best_et'],
-                'baseMPH' => $baselineData['best_mph'],
+                'baseET' => (float)$baselineData['best_et'],
+                'baseMPH' => (float)$baselineData['best_mph'],
                 'sampleCount' => (int)$baselineData['sample_count'],
                 'description' => "Best run at {$response['trackName']}",
             ];
             
             $response['trackHistory'] = [
-                'averageET' => $baselineData['avg_et'],
-                'averageMPH' => $baselineData['avg_mph'],
+                'averageET' => (float)$baselineData['avg_et'],
+                'averageMPH' => (float)$baselineData['avg_mph'],
                 'sampleCount' => (int)$baselineData['sample_count'],
             ];
         }
     } else {
-        // Use overall best run for the category
+        // Use overall best run for the category — ET+MPH from same row, with sanity bounds
         $baselineQuery = "
-            SELECT MIN(r.ft1320) AS best_et, AVG(r.ft1320) AS avg_et,
-                   AVG(r.mph1320) AS avg_mph, MAX(r.mph1320) AS best_mph,
-                   COUNT(*) AS sample_count
+            SELECT r.ft1320 AS best_et, r.mph1320 AS best_mph, cnt.sample_count
             FROM parity_runs r
-            WHERE r.category = ? 
-              AND COALESCE(r.dq_flag,0)=0 AND r.ft1320 IS NOT NULL AND r.ft1320 > 0
+            JOIN (
+                SELECT COUNT(*) AS sample_count
+                FROM parity_runs
+                WHERE category = ?
+                  AND COALESCE(dq_flag,0)=0
+                  AND ft1320 BETWEEN 3.0 AND 15.0
+                  AND mph1320 BETWEEN 50 AND 400
+            ) cnt ON 1=1
+            WHERE r.category = ?
+              AND COALESCE(r.dq_flag,0)=0
+              AND r.ft1320 BETWEEN 3.0 AND 15.0
+              AND r.mph1320 BETWEEN 50 AND 400
+            ORDER BY r.ft1320 ASC
+            LIMIT 1
         ";
         $baselineStmt = $pdo->prepare($baselineQuery);
-        $baselineStmt->execute([$category]);
+        $baselineStmt->execute([$category, $category]);
         $baselineData = $baselineStmt->fetch(PDO::FETCH_ASSOC);
         
         if ($baselineData && $baselineData['best_et']) {
             $response['baseline'] = [
                 'method' => 'best_run',
-                'baseET' => $baselineData['best_et'],
-                'baseMPH' => $baselineData['best_mph'],
+                'baseET' => (float)$baselineData['best_et'],
+                'baseMPH' => (float)$baselineData['best_mph'],
                 'sampleCount' => (int)$baselineData['sample_count'],
                 'description' => 'Best run from all events',
             ];
