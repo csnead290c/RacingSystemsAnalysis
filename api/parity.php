@@ -12923,8 +12923,8 @@ function handlePerformancePrediction(PDO $pdo): void {
         ];
     }
     
-    // ── Pass 1: distribution stats for outlier-rejection bounds ─────────────
-    $statsStmt = $pdo->prepare("
+    // ── Pass 1: rough stats for initial outlier bounds ────────────────────
+    $roughStmt = $pdo->prepare("
         SELECT AVG(ft1320) AS avg_et,  STDDEV(ft1320) AS sd_et,
                AVG(mph1320) AS avg_mph, STDDEV(mph1320) AS sd_mph
         FROM parity_runs
@@ -12933,20 +12933,43 @@ function handlePerformancePrediction(PDO $pdo): void {
           AND ft1320  BETWEEN 3.0 AND 15.0
           AND mph1320 BETWEEN 50  AND 400
     ");
-    $statsStmt->execute([$category]);
-    $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+    $roughStmt->execute([$category]);
+    $rough = $roughStmt->fetch(PDO::FETCH_ASSOC);
 
-    $sigma = 2.5;
-    if ($stats && (float)$stats['avg_et'] > 0 && (float)$stats['sd_et'] > 0) {
-        $etMin  = max(3.0,  (float)$stats['avg_et']  - $sigma * (float)$stats['sd_et']);
-        $etMax  = min(15.0, (float)$stats['avg_et']  + $sigma * (float)$stats['sd_et']);
-        $mphMin = max(50.0, (float)$stats['avg_mph'] - $sigma * (float)$stats['sd_mph']);
-        $mphMax = min(400.0,(float)$stats['avg_mph'] + $sigma * (float)$stats['sd_mph']);
+    // Rough 3σ cut to remove the most extreme junk before refining
+    if ($rough && (float)$rough['avg_et'] > 0 && (float)$rough['sd_et'] > 0) {
+        $r3EtMin  = max(3.0,  (float)$rough['avg_et']  - 3.0 * (float)$rough['sd_et']);
+        $r3EtMax  = min(15.0, (float)$rough['avg_et']  + 3.0 * (float)$rough['sd_et']);
+        $r3MphMin = max(50.0, (float)$rough['avg_mph'] - 3.0 * (float)$rough['sd_mph']);
+        $r3MphMax = min(400.0,(float)$rough['avg_mph'] + 3.0 * (float)$rough['sd_mph']);
     } else {
-        $etMin = 3.0; $etMax = 15.0; $mphMin = 50.0; $mphMax = 400.0;
+        $r3EtMin = 3.0; $r3EtMax = 15.0; $r3MphMin = 50.0; $r3MphMax = 400.0;
     }
 
-    // ── Pass 2: best run within outlier-cleaned bounds ────────────────────
+    // ── Pass 2: refined stats within rough bounds ────────────────────────
+    $refStmt = $pdo->prepare("
+        SELECT AVG(ft1320) AS avg_et,  STDDEV(ft1320) AS sd_et,
+               AVG(mph1320) AS avg_mph, STDDEV(mph1320) AS sd_mph
+        FROM parity_runs
+        WHERE category = ?
+          AND COALESCE(dq_flag,0)=0
+          AND ft1320  BETWEEN ? AND ?
+          AND mph1320 BETWEEN ? AND ?
+    ");
+    $refStmt->execute([$category, $r3EtMin, $r3EtMax, $r3MphMin, $r3MphMax]);
+    $refined = $refStmt->fetch(PDO::FETCH_ASSOC);
+
+    $sigma = 2.0;
+    if ($refined && (float)$refined['avg_et'] > 0 && (float)$refined['sd_et'] > 0) {
+        $etMin  = max(3.0,  (float)$refined['avg_et']  - $sigma * (float)$refined['sd_et']);
+        $etMax  = min(15.0, (float)$refined['avg_et']  + $sigma * (float)$refined['sd_et']);
+        $mphMin = max(50.0, (float)$refined['avg_mph'] - $sigma * (float)$refined['sd_mph']);
+        $mphMax = min(400.0,(float)$refined['avg_mph'] + $sigma * (float)$refined['sd_mph']);
+    } else {
+        $etMin = $r3EtMin; $etMax = $r3EtMax; $mphMin = $r3MphMin; $mphMax = $r3MphMax;
+    }
+
+    // ── Pass 3: best run within outlier-cleaned bounds ────────────────────
     if ($useTrackHistory && $trackId) {
         $baselineQuery = "
             SELECT r.ft1320 AS best_et, r.mph1320 AS best_mph, cnt.sample_count,
