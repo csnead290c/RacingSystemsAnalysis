@@ -13136,7 +13136,17 @@ function handlePerformancePrediction(PDO $pdo): void {
             return $comboId ? ['comboId' => $comboId, 'comboName' => $comboName] : null;
         };
 
-        // Build comboPredictions: best run per combo, corrected via HPC
+        // Prepared stmt: look up weather closest to a run timestamp (±30 min)
+        $runWeatherStmt = $pdo->prepare("
+            SELECT temp_f, rh_pct, pressure_inhg
+            FROM parity_weather_canonical
+            WHERE timestamp_utc BETWEEN DATE_SUB(?, INTERVAL 30 MINUTE)
+                                    AND DATE_ADD(?, INTERVAL 30 MINUTE)
+            ORDER BY ABS(TIMESTAMPDIFF(SECOND, timestamp_utc, ?)) ASC
+            LIMIT 1
+        ");
+
+        // Build comboPredictions: best run per combo, corrected via HPC ratio
         $comboPredictions = [];
         foreach ($driverRows as $dr) {
             $comboInfo = $resolveCombo($dr['driver_name'], $dr['class_index'] ?? '', $dr['run_timestamp_utc'] ?? '');
@@ -13152,14 +13162,30 @@ function handlePerformancePrediction(PDO $pdo): void {
             $p = $ecParams[$cid] ?? null;
             if ($p && $theta > 0 && $delta > 0) {
                 $ff  = $p['ff'];
-                $hpc = (1 + $ff/100) * pow($theta, $p['tPower']) / pow($delta, $p['dPower']) - $ff/100;
-            } else {
-                $hpc = 1.0; // fallback: no correction
-            }
-            $hpc = max(0.5, min(2.0, $hpc)); // safety clamp
+                $hpcToday = (1 + $ff/100) * pow($theta, $p['tPower']) / pow($delta, $p['dPower']) - $ff/100;
+                $hpcToday = max(0.5, min(2.0, $hpcToday));
 
-            $pET  = $bET  * pow($hpc, 0.33);
-            $pMPH = $bMPH * pow($hpc, -0.33);
+                // Look up weather for this baseline run — if found, use ratio (today/baseline)
+                // so we don't double-apply when the baseline itself was in off-standard conditions
+                $hpcBaseline = 1.0;
+                $runTs = $dr['run_timestamp_utc'] ?? '';
+                if ($runTs) {
+                    $runWeatherStmt->execute([$runTs, $runTs, $runTs]);
+                    $rw = $runWeatherStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($rw && $rw['temp_f'] !== null && $rw['pressure_inhg'] !== null) {
+                        $rwc = parity_computeWeather((float)$rw['temp_f'], (float)$rw['rh_pct']/100, (float)$rw['pressure_inhg']);
+                        $hpcBaseline = (1 + $ff/100) * pow($rwc['theta'], $p['tPower']) / pow($rwc['delta'], $p['dPower']) - $ff/100;
+                        $hpcBaseline = max(0.5, min(2.0, $hpcBaseline));
+                    }
+                }
+
+                $hpcRatio = $hpcToday / $hpcBaseline;
+                $pET  = $bET  * pow($hpcRatio, 0.33);
+                $pMPH = $bMPH * pow($hpcRatio, -0.33);
+            } else {
+                $pET  = $bET;
+                $pMPH = $bMPH;
+            }
 
             $comboPredictions[$cid] = [
                 'comboId'      => $cid,
