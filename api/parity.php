@@ -13047,7 +13047,8 @@ function handlePerformancePrediction(PDO $pdo): void {
     // ── Per-driver predictions ────────────────────────────────────────────
     // Best clean run per driver within outlier bounds, then apply same CF
     $driverStmt = $pdo->prepare("
-        SELECT r.driver_name, r.car_number, r.ft1320 AS best_et, r.mph1320 AS best_mph
+        SELECT r.driver_name, r.car_number, r.class_index, r.run_timestamp_utc,
+               r.ft1320 AS best_et, r.mph1320 AS best_mph
         FROM parity_runs r
         JOIN (
             SELECT driver_name, MIN(ft1320) AS min_et
@@ -13090,40 +13091,68 @@ function handlePerformancePrediction(PDO $pdo): void {
     }
 
     // ── Group by engine combo ─────────────────────────────────────────────
-    // Fetch driver → engine combo mapping for all relevant drivers
+    // Load all driver combos + class defaults (same resolution logic as other handlers)
     $response['comboPredictions'] = [];
     if (!empty($response['driverPredictions'])) {
-        $driverNames = array_values(array_unique(array_column($response['driverPredictions'], 'driverName')));
-        $ph = implode(',', array_fill(0, count($driverNames), '?'));
-        $comboMapStmt = $pdo->prepare("
-            SELECT dc.driver_name, ec.id AS combo_id, ec.name AS combo_name
+        $allDC = $pdo->query("
+            SELECT dc.driver_name, dc.class_index, dc.engine_combo_id,
+                   ec.name AS engine_combo_name, dc.effective_from_utc, dc.effective_to_utc
             FROM parity_driver_combos dc
             JOIN parity_engine_combos ec ON ec.id = dc.engine_combo_id
-            WHERE dc.driver_name IN ($ph)
-            ORDER BY dc.driver_name, dc.effective_from_utc DESC
-        ");
-        $comboMapStmt->execute($driverNames);
-        $comboRows = $comboMapStmt->fetchAll(PDO::FETCH_ASSOC);
+        ")->fetchAll(PDO::FETCH_ASSOC);
 
-        // driver_name → {comboId, comboName} — use most-recent assignment
-        $driverToCombo = [];
-        foreach ($comboRows as $cr) {
-            if (!isset($driverToCombo[$cr['driver_name']])) {
-                $driverToCombo[$cr['driver_name']] = [
-                    'comboId'   => (int)$cr['combo_id'],
-                    'comboName' => $cr['combo_name'],
-                ];
+        $allCD = $pdo->query("
+            SELECT cd.class_index, cd.engine_combo_id,
+                   ec.name AS engine_combo_name, cd.effective_from_utc, cd.effective_to_utc
+            FROM parity_class_defaults cd
+            JOIN parity_engine_combos ec ON ec.id = cd.engine_combo_id
+        ")->fetchAll(PDO::FETCH_ASSOC);
+
+        // Resolve combo for a driver/class/timestamp (mirrors resolution in other handlers)
+        $resolveCombo = function($driverName, $classIndex, $runTs) use ($allDC, $allCD) {
+            $dn = strtoupper(trim($driverName));
+            $ci = strtoupper(trim($classIndex));
+            $comboId = null; $comboName = null; $bestFrom = '';
+            foreach ($allDC as $dc) {
+                if (strtoupper($dc['driver_name']) !== $dn) continue;
+                if (strtoupper($dc['class_index'])  !== $ci) continue;
+                if ($runTs && $runTs < $dc['effective_from_utc']) continue;
+                if ($dc['effective_to_utc'] !== null && $runTs && $runTs >= $dc['effective_to_utc']) continue;
+                if ($dc['effective_from_utc'] >= $bestFrom) {
+                    $bestFrom  = $dc['effective_from_utc'];
+                    $comboId   = (int)$dc['engine_combo_id'];
+                    $comboName = $dc['engine_combo_name'];
+                }
             }
-        }
+            if ($comboId === null) { // class default fallback
+                $bestFrom = '';
+                foreach ($allCD as $cd) {
+                    if (strtoupper($cd['class_index']) !== $ci) continue;
+                    if ($runTs && $runTs < $cd['effective_from_utc']) continue;
+                    if ($cd['effective_to_utc'] !== null && $runTs && $runTs >= $cd['effective_to_utc']) continue;
+                    if ($cd['effective_from_utc'] >= $bestFrom) {
+                        $bestFrom  = $cd['effective_from_utc'];
+                        $comboId   = (int)$cd['engine_combo_id'];
+                        $comboName = $cd['engine_combo_name'];
+                    }
+                }
+            }
+            return $comboId ? ['comboId' => $comboId, 'comboName' => $comboName] : null;
+        };
 
-        // Group driver predictions by combo (driverPredictions already sorted ET ASC
-        // so first driver encountered per combo is the best for that combo)
+        // Group driverPredictions by combo (already ET ASC so first per combo = best)
         $comboPredictions = [];
-        foreach ($response['driverPredictions'] as $dp) {
-            $ci = $driverToCombo[$dp['driverName']] ?? null;
+        foreach ($driverRows as $dr) {
+            $ci = $resolveCombo($dr['driver_name'], $dr['class_index'] ?? '', $dr['run_timestamp_utc'] ?? '');
             if (!$ci) continue;
             $cid = $ci['comboId'];
             if (!isset($comboPredictions[$cid])) {
+                // find matching driverPrediction entry
+                $dp = null;
+                foreach ($response['driverPredictions'] as $d) {
+                    if ($d['driverName'] === $dr['driver_name']) { $dp = $d; break; }
+                }
+                if (!$dp) continue;
                 $comboPredictions[$cid] = [
                     'comboId'      => $cid,
                     'comboName'    => $ci['comboName'],
@@ -13138,7 +13167,7 @@ function handlePerformancePrediction(PDO $pdo): void {
             }
         }
 
-        usort($comboPredictions, fn($a, $b) => $a['baselineET'] <=> $b['baselineET']);
+        usort($comboPredictions, function($a, $b) { return $a['baselineET'] <=> $b['baselineET']; });
         $response['comboPredictions'] = array_values($comboPredictions);
     }
 
