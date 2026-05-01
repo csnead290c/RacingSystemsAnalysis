@@ -12912,12 +12912,14 @@ function handlePerformancePrediction(PDO $pdo): void {
         // Calculate weather metrics
         $weather = parity_computeWeather($currentWeather['temp_f'], $currentWeather['rh_pct'] / 100, $currentWeather['pressure_inhg']);
         $response['currentWeather'] = [
-            'temp_f' => $currentWeather['temp_f'],
-            'rh_pct' => $currentWeather['rh_pct'],
-            'pressure_inhg' => $currentWeather['pressure_inhg'],
+            'temp_f'          => $currentWeather['temp_f'],
+            'rh_pct'          => $currentWeather['rh_pct'],
+            'pressure_inhg'   => $currentWeather['pressure_inhg'],
             'densityAltitude' => $weather['densityAltitude'],
-            'correctionFactor' => $weather['correctionFactor'],
-            'timestamp' => $currentWeather['timestamp_utc'],
+            'correctionFactor'=> $weather['correctionFactor'],
+            'theta'           => $weather['theta'],
+            'delta'           => $weather['delta'],
+            'timestamp'       => $currentWeather['timestamp_utc'],
         ];
     }
     
