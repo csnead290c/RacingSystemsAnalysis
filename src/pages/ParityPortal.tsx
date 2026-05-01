@@ -7339,10 +7339,10 @@ function WeatherDashPanel({ event, category }: { event: EventWithStats | null; c
             <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.2rem' }}>{predictionError}</div>
           )}
           {predictionResult && (
-            <div style={{ 
-              background: 'rgba(59,130,246,0.05)', 
-              border: '1px solid rgba(59,130,246,0.2)', 
-              borderRadius: 6, 
+            <div style={{
+              background: 'rgba(59,130,246,0.05)',
+              border: '1px solid rgba(59,130,246,0.2)',
+              borderRadius: 6,
               padding: '0.5rem',
               fontSize: '0.75rem'
             }}>
@@ -7350,46 +7350,74 @@ function WeatherDashPanel({ event, category }: { event: EventWithStats | null; c
                 <div style={{ color: '#dc2626' }}>{predictionResult.error}</div>
               ) : (
                 <div>
-                  <div style={{ fontWeight: 600, marginBottom: '0.3rem', color: '#2563eb' }}>
-                    Predicted Performance (Current Conditions)
+                  <div style={{ fontWeight: 600, marginBottom: '0.4rem', color: '#2563eb' }}>
+                    Predicted Performance — Current Conditions
+                    {predictionResult.currentWeather && (
+                      <span style={{ fontWeight: 400, fontSize: '0.65rem', color: '#888', marginLeft: '0.5rem' }}>
+                        DA: {predictionResult.currentWeather.densityAltitude.toFixed(0)}ft &nbsp;·&nbsp; CF: {predictionResult.currentWeather.correctionFactor.toFixed(4)}
+                      </span>
+                    )}
                   </div>
-                  
-                  {predictionResult.currentWeather && (
-                    <div style={{ marginBottom: '0.3rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.3rem' }}>
-                      <div><span style={{ color: '#888' }}>Temp:</span> <b>{predictionResult.currentWeather.temp_f.toFixed(1)}°F</b></div>
-                      <div><span style={{ color: '#888' }}>RH:</span> <b>{predictionResult.currentWeather.rh_pct.toFixed(0)}%</b></div>
-                      <div><span style={{ color: '#888' }}>DA:</span> <b>{predictionResult.currentWeather.densityAltitude.toFixed(0)}ft</b></div>
-                      <div><span style={{ color: '#888' }}>CF:</span> <b>{predictionResult.currentWeather.correctionFactor.toFixed(4)}</b></div>
+
+                  {predictionResult.driverPredictions && predictionResult.driverPredictions.length > 0 ? (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Driver</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Car #</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Baseline ET</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted ET</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Baseline MPH</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted MPH</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {predictionResult.driverPredictions.map((d: any, i: number) => (
+                            <tr key={i}>
+                              <td style={S.td}>{d.driverName}</td>
+                              <td style={{ ...S.td, textAlign: 'right', color: '#888' }}>{d.carNumber || '—'}</td>
+                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{formatET(d.baselineET)}</td>
+                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                                <b style={{ color: '#2563eb' }}>{formatET(d.predictedET)}</b>
+                                <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: d.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
+                                  ({d.adjustmentET > 0 ? '+' : ''}{d.adjustmentET.toFixed(3)})
+                                </span>
+                              </td>
+                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{formatMPH(d.baselineMPH)}</td>
+                              <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                                <b style={{ color: '#2563eb' }}>{formatMPH(d.predictedMPH)}</b>
+                                <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: d.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
+                                  ({d.adjustmentMPH > 0 ? '+' : ''}{d.adjustmentMPH.toFixed(2)})
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-                  
-                  {predictionResult.prediction && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.3rem' }}>
+                  ) : predictionResult.prediction ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.3rem' }}>
                       <div>
                         <span style={{ color: '#888' }}>ET:</span>{' '}
-                        <b style={{ color: '#2563eb' }}>
-                          {formatET(predictionResult.prediction.predictedET)}
-                        </b>
+                        <b style={{ color: '#2563eb' }}>{formatET(predictionResult.prediction.predictedET)}</b>
                         <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: predictionResult.prediction.adjustmentET < 0 ? '#059669' : '#dc2626' }}>
-                          ({predictionResult.prediction.adjustmentET > 0 ? '+' : ''}{predictionResult.prediction.adjustmentET.toFixed(4)})
+                          ({predictionResult.prediction.adjustmentET > 0 ? '+' : ''}{predictionResult.prediction.adjustmentET.toFixed(3)})
                         </span>
                       </div>
                       <div>
                         <span style={{ color: '#888' }}>MPH:</span>{' '}
-                        <b style={{ color: '#2563eb' }}>
-                          {formatMPH(predictionResult.prediction.predictedMPH)}
-                        </b>
+                        <b style={{ color: '#2563eb' }}>{formatMPH(predictionResult.prediction.predictedMPH)}</b>
                         <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: predictionResult.prediction.adjustmentMPH > 0 ? '#059669' : '#dc2626' }}>
                           ({predictionResult.prediction.adjustmentMPH > 0 ? '+' : ''}{predictionResult.prediction.adjustmentMPH.toFixed(2)})
                         </span>
                       </div>
                     </div>
-                  )}
-                  
+                  ) : null}
+
                   {predictionResult.baseline && (
-                    <div style={{ marginTop: '0.2rem', fontSize: '0.65rem', color: '#888' }}>
-                      Baseline: {formatET(predictionResult.baseline.baseET)} / {formatMPH(predictionResult.baseline.baseMPH)} 
-                      ({predictionResult.baseline.description})
+                    <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: '#888' }}>
+                      {predictionResult.baseline.sampleCount?.toLocaleString()} runs · {predictionResult.baseline.description}
                     </div>
                   )}
                 </div>

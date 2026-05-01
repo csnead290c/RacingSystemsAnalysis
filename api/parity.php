@@ -12923,12 +12923,31 @@ function handlePerformancePrediction(PDO $pdo): void {
         ];
     }
     
-    // Get baseline performance for the category
-    $baselineMethod = 'best_run';
-    $baselineDescription = 'Best run from all events';
-    
+    // ── Pass 1: distribution stats for outlier-rejection bounds ─────────────
+    $statsStmt = $pdo->prepare("
+        SELECT AVG(ft1320) AS avg_et,  STDDEV(ft1320) AS sd_et,
+               AVG(mph1320) AS avg_mph, STDDEV(mph1320) AS sd_mph
+        FROM parity_runs
+        WHERE category = ?
+          AND COALESCE(dq_flag,0)=0
+          AND ft1320  BETWEEN 3.0 AND 15.0
+          AND mph1320 BETWEEN 50  AND 400
+    ");
+    $statsStmt->execute([$category]);
+    $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
+    $sigma = 2.5;
+    if ($stats && (float)$stats['avg_et'] > 0 && (float)$stats['sd_et'] > 0) {
+        $etMin  = max(3.0,  (float)$stats['avg_et']  - $sigma * (float)$stats['sd_et']);
+        $etMax  = min(15.0, (float)$stats['avg_et']  + $sigma * (float)$stats['sd_et']);
+        $mphMin = max(50.0, (float)$stats['avg_mph'] - $sigma * (float)$stats['sd_mph']);
+        $mphMax = min(400.0,(float)$stats['avg_mph'] + $sigma * (float)$stats['sd_mph']);
+    } else {
+        $etMin = 3.0; $etMax = 15.0; $mphMin = 50.0; $mphMax = 400.0;
+    }
+
+    // ── Pass 2: best run within outlier-cleaned bounds ────────────────────
     if ($useTrackHistory && $trackId) {
-        // Use track-specific history — best run (ET+MPH from same row) with sanity bounds
         $baselineQuery = "
             SELECT r.ft1320 AS best_et, r.mph1320 AS best_mph, cnt.sample_count,
                    cnt.avg_et, cnt.avg_mph
@@ -12940,37 +12959,35 @@ function handlePerformancePrediction(PDO $pdo): void {
                 JOIN parity_events e2 ON r2.race_lookup = e2.race_lookup
                 WHERE e2.track_id = ? AND r2.category = ?
                   AND COALESCE(r2.dq_flag,0)=0
-                  AND r2.ft1320 BETWEEN 3.0 AND 15.0
-                  AND r2.mph1320 BETWEEN 50 AND 400
+                  AND r2.ft1320  BETWEEN ? AND ?
+                  AND r2.mph1320 BETWEEN ? AND ?
             ) cnt ON 1=1
             WHERE e.track_id = ? AND r.category = ?
               AND COALESCE(r.dq_flag,0)=0
-              AND r.ft1320 BETWEEN 3.0 AND 15.0
-              AND r.mph1320 BETWEEN 50 AND 400
-            ORDER BY r.ft1320 ASC
-            LIMIT 1
+              AND r.ft1320  BETWEEN ? AND ?
+              AND r.mph1320 BETWEEN ? AND ?
+            ORDER BY r.ft1320 ASC LIMIT 1
         ";
         $baselineStmt = $pdo->prepare($baselineQuery);
-        $baselineStmt->execute([$trackId, $category, $trackId, $category]);
+        $baselineStmt->execute([$trackId, $category, $etMin, $etMax, $mphMin, $mphMax,
+                                  $trackId, $category, $etMin, $etMax, $mphMin, $mphMax]);
         $baselineData = $baselineStmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($baselineData && $baselineData['best_et']) {
             $response['baseline'] = [
-                'method' => 'track_history',
-                'baseET' => (float)$baselineData['best_et'],
-                'baseMPH' => (float)$baselineData['best_mph'],
+                'method'      => 'track_history',
+                'baseET'      => (float)$baselineData['best_et'],
+                'baseMPH'     => (float)$baselineData['best_mph'],
                 'sampleCount' => (int)$baselineData['sample_count'],
                 'description' => "Best run at {$response['trackName']}",
             ];
-            
             $response['trackHistory'] = [
-                'averageET' => (float)$baselineData['avg_et'],
-                'averageMPH' => (float)$baselineData['avg_mph'],
+                'averageET'   => (float)$baselineData['avg_et'],
+                'averageMPH'  => (float)$baselineData['avg_mph'],
                 'sampleCount' => (int)$baselineData['sample_count'],
             ];
         }
     } else {
-        // Use overall best run for the category — ET+MPH from same row, with sanity bounds
         $baselineQuery = "
             SELECT r.ft1320 AS best_et, r.mph1320 AS best_mph, cnt.sample_count
             FROM parity_runs r
@@ -12979,52 +12996,92 @@ function handlePerformancePrediction(PDO $pdo): void {
                 FROM parity_runs
                 WHERE category = ?
                   AND COALESCE(dq_flag,0)=0
-                  AND ft1320 BETWEEN 3.0 AND 15.0
-                  AND mph1320 BETWEEN 50 AND 400
+                  AND ft1320  BETWEEN ? AND ?
+                  AND mph1320 BETWEEN ? AND ?
             ) cnt ON 1=1
             WHERE r.category = ?
               AND COALESCE(r.dq_flag,0)=0
-              AND r.ft1320 BETWEEN 3.0 AND 15.0
-              AND r.mph1320 BETWEEN 50 AND 400
-            ORDER BY r.ft1320 ASC
-            LIMIT 1
+              AND r.ft1320  BETWEEN ? AND ?
+              AND r.mph1320 BETWEEN ? AND ?
+            ORDER BY r.ft1320 ASC LIMIT 1
         ";
         $baselineStmt = $pdo->prepare($baselineQuery);
-        $baselineStmt->execute([$category, $category]);
+        $baselineStmt->execute([$category, $etMin, $etMax, $mphMin, $mphMax,
+                                  $category, $etMin, $etMax, $mphMin, $mphMax]);
         $baselineData = $baselineStmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($baselineData && $baselineData['best_et']) {
             $response['baseline'] = [
-                'method' => 'best_run',
-                'baseET' => (float)$baselineData['best_et'],
-                'baseMPH' => (float)$baselineData['best_mph'],
+                'method'      => 'best_run',
+                'baseET'      => (float)$baselineData['best_et'],
+                'baseMPH'     => (float)$baselineData['best_mph'],
                 'sampleCount' => (int)$baselineData['sample_count'],
                 'description' => 'Best run from all events',
             ];
         }
     }
-    
-    // Calculate prediction if we have both baseline and current weather
+
+    // ── Per-driver predictions ────────────────────────────────────────────
+    // Best clean run per driver within outlier bounds, then apply same CF
+    $driverStmt = $pdo->prepare("
+        SELECT r.driver_name, r.car_number, r.ft1320 AS best_et, r.mph1320 AS best_mph
+        FROM parity_runs r
+        JOIN (
+            SELECT driver_name, MIN(ft1320) AS min_et
+            FROM parity_runs
+            WHERE category = ?
+              AND COALESCE(dq_flag,0)=0
+              AND ft1320  BETWEEN ? AND ?
+              AND mph1320 BETWEEN ? AND ?
+            GROUP BY driver_name
+        ) best ON r.driver_name = best.driver_name AND r.ft1320 = best.min_et
+        WHERE r.category = ?
+          AND COALESCE(r.dq_flag,0)=0
+          AND r.mph1320 BETWEEN ? AND ?
+        ORDER BY r.ft1320 ASC
+        LIMIT 30
+    ");
+    $driverStmt->execute([$category, $etMin, $etMax, $mphMin, $mphMax,
+                           $category, $mphMin, $mphMax]);
+    $driverRows = $driverStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $response['driverPredictions'] = [];
+    if ($currentWeather && !empty($driverRows)) {
+        $cf = $currentWeather['correctionFactor'] ?? 1.0;
+        foreach ($driverRows as $dr) {
+            $bET  = (float)$dr['best_et'];
+            $bMPH = (float)$dr['best_mph'];
+            $pET  = $bET  * $cf;
+            $pMPH = $bMPH / $cf;
+            $response['driverPredictions'][] = [
+                'driverName'   => $dr['driver_name'],
+                'carNumber'    => $dr['car_number'],
+                'baselineET'   => $bET,
+                'baselineMPH'  => $bMPH,
+                'predictedET'  => $pET,
+                'predictedMPH' => $pMPH,
+                'adjustmentET' => $pET  - $bET,
+                'adjustmentMPH'=> $pMPH - $bMPH,
+            ];
+        }
+    }
+
+    // ── Overall prediction ────────────────────────────────────────────────
     if ($response['baseline'] && $response['currentWeather']) {
-        $baseET = $response['baseline']['baseET'];
-        $baseMPH = $response['baseline']['baseMPH'];
-        $correctionFactor = $response['currentWeather']['correctionFactor'];
-        
-        // Apply weather correction
-        $predictedET = $baseET * $correctionFactor;
-        $predictedMPH = $baseMPH / $correctionFactor; // MPH inversely affected
-        
+        $cf = $response['currentWeather']['correctionFactor'];
+        $bET  = $response['baseline']['baseET'];
+        $bMPH = $response['baseline']['baseMPH'];
         $response['prediction'] = [
-            'predictedET' => $predictedET,
-            'predictedMPH' => $predictedMPH,
-            'adjustmentET' => $predictedET - $baseET,
-            'adjustmentMPH' => $predictedMPH - $baseMPH,
+            'predictedET'   => $bET  * $cf,
+            'predictedMPH'  => $bMPH / $cf,
+            'adjustmentET'  => $bET  * $cf - $bET,
+            'adjustmentMPH' => $bMPH / $cf - $bMPH,
         ];
     } elseif (!$response['currentWeather']) {
         $response['error'] = 'No current weather data available';
     } elseif (!$response['baseline']) {
         $response['error'] = 'No baseline performance data found for this category';
     }
-    
+
     rsa_jsonResponse($response);
 }
