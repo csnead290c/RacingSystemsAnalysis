@@ -13070,7 +13070,7 @@ function handlePerformancePrediction(PDO $pdo): void {
 
     $response['driverPredictions'] = [];
     if ($currentWeather && !empty($driverRows)) {
-        $cf = $currentWeather['correctionFactor'] ?? 1.0;
+        $cf = $response['currentWeather']['correctionFactor'] ?? 1.0;
         foreach ($driverRows as $dr) {
             $bET  = (float)$dr['best_et'];
             $bMPH = (float)$dr['best_mph'];
@@ -13093,7 +13093,7 @@ function handlePerformancePrediction(PDO $pdo): void {
     // Fetch driver → engine combo mapping for all relevant drivers
     $response['comboPredictions'] = [];
     if (!empty($response['driverPredictions'])) {
-        $driverNames = array_unique(array_column($response['driverPredictions'], 'driverName'));
+        $driverNames = array_values(array_unique(array_column($response['driverPredictions'], 'driverName')));
         $ph = implode(',', array_fill(0, count($driverNames), '?'));
         $comboMapStmt = $pdo->prepare("
             SELECT dc.driver_name, ec.id AS combo_id, ec.name AS combo_name
