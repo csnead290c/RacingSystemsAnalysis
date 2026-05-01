@@ -12831,41 +12831,39 @@ function mepa_performanceClusters(array $grid): array {
     return $clusters;
 }
 
-// Weather calculation function for performance prediction
+// Weather calculation — matches frontend weatherCorrection.ts formulas exactly.
+// Returns theta/delta used by the HPC pipeline, plus NHRA CF for display.
 function parity_computeWeather(float $tempF, float $rhFraction, float $pressureInHg): array {
-    // Calculate density altitude and correction factor
-    // Using standard weather formulas for drag racing
-    
-    // Convert to metric for calculations
-    $tempC = ($tempF - 32) * 5/9;
-    $tempK = $tempC + 273.15;
-    $pressurePa = $pressureInHg * 3386.39; // inHg to Pa
-    
-    // Calculate vapor pressure
-    $svp = 610.78 * exp($tempC / ($tempC + 237.3) * 17.27); // Saturation vapor pressure in Pa
-    $vp = $svp * $rhFraction; // Actual vapor pressure in Pa
-    $dap = $pressurePa - $vp; // Dry air pressure in Pa
-    
-    // Air density (kg/m³)
-    $Rd = 287.05; // Gas constant for dry air
-    $Rv = 461.5; // Gas constant for water vapor
-    $airDensity = ($dap / ($Rd * $tempK)) + ($vp / ($Rv * $tempK));
-    
-    // Standard sea level density
-    $standardDensity = 1.225; // kg/m³ at 15°C, 1013.25 hPa
-    
-    // Density altitude calculation
-    $densityAltitude = 44330 * (1 - pow($airDensity / $standardDensity, 0.235));
-    
-    // Correction factor (simplified for drag racing)
-    $correctionFactor = sqrt($standardDensity / $airDensity);
-    
+    // SVP: same empirical formula as frontend saturatedVaporPressure()
+    $svp = 29.98 / exp(35.83 * (212 - $tempF) / pow($tempF + 459.67, 1.152)); // inHg
+    $vp  = $rhFraction * $svp;           // inHg — actual vapor pressure
+    $dap = $pressureInHg - $vp;          // inHg — dry air pressure
+
+    // HPC dimensionless ratios (matches frontend theta() / delta())
+    $theta = ($tempF + 459.67) / 519.67; // T / T_std  (std = 60°F)
+    $delta = $dap / 29.92;               // P_dry / P_std
+
+    // NHRA CF formula — matches frontend correctionFactor() exactly
+    $tempK  = ($tempF - 32) * (5.0/9.0) + 273.15;
+    $dapHPa = $dap / 0.02953;           // inHg → hPa
+    $correctionFactor = 1.176 * (1013.20690822892 / $dapHPa) * sqrt($tempK / 288.705555555556) - 0.176;
+
+    // Air density + density altitude (metric, for informational use)
+    $pressurePa = $pressureInHg * 3386.39;
+    $vpPa       = $vp  * 3386.39;
+    $dapPa      = $dap * 3386.39;
+    $tempK2     = $tempK; // same value
+    $airDensity     = ($dapPa / (287.05 * $tempK2)) + ($vpPa / (461.5 * $tempK2));
+    $densityAltitude = 44330 * (1 - pow($airDensity / 1.225, 0.235)) * 3.28084; // feet
+
     return [
-        'densityAltitude' => $densityAltitude,
+        'densityAltitude'  => $densityAltitude,
         'correctionFactor' => $correctionFactor,
-        'airDensity' => $airDensity,
-        'vaporPressure' => $vp,
-        'dryAirPressure' => $dap
+        'airDensity'       => $airDensity,
+        'vaporPressure'    => $vp,
+        'dryAirPressure'   => $dap,
+        'theta'            => $theta,
+        'delta'            => $delta,
     ];
 }
 
@@ -13069,31 +13067,28 @@ function handlePerformancePrediction(PDO $pdo): void {
                            $category, $mphMin, $mphMax]);
     $driverRows = $driverStmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // ── Engine combo HPC predictions ──────────────────────────────────────
+    // Uses the same HPC pipeline as the rest of the parity system.
+    // ET_pred = ET_base × HPC^0.33   MPH_pred = MPH_base × HPC^(-0.33)
     $response['driverPredictions'] = [];
-    if ($currentWeather && !empty($driverRows)) {
-        $cf = $response['currentWeather']['correctionFactor'] ?? 1.0;
-        foreach ($driverRows as $dr) {
-            $bET  = (float)$dr['best_et'];
-            $bMPH = (float)$dr['best_mph'];
-            $pET  = $bET  * $cf;
-            $pMPH = $bMPH / $cf;
-            $response['driverPredictions'][] = [
-                'driverName'   => $dr['driver_name'],
-                'carNumber'    => $dr['car_number'],
-                'baselineET'   => $bET,
-                'baselineMPH'  => $bMPH,
-                'predictedET'  => $pET,
-                'predictedMPH' => $pMPH,
-                'adjustmentET' => $pET  - $bET,
-                'adjustmentMPH'=> $pMPH - $bMPH,
+    $response['comboPredictions']  = [];
+
+    if (!empty($driverRows)) {
+        // Current theta/delta from weather (HPC pipeline inputs)
+        $theta = (float)($response['currentWeather']['theta'] ?? 1.0);
+        $delta = (float)($response['currentWeather']['delta'] ?? 1.0);
+
+        // Engine combo params keyed by id
+        $ecParams = [];
+        foreach ($pdo->query("SELECT id, t_power, d_power, friction_factor FROM parity_engine_combos")->fetchAll(PDO::FETCH_ASSOC) as $ec) {
+            $ecParams[(int)$ec['id']] = [
+                'tPower' => (float)$ec['t_power'],
+                'dPower' => (float)$ec['d_power'],
+                'ff'     => (float)$ec['friction_factor'],
             ];
         }
-    }
 
-    // ── Group by engine combo ─────────────────────────────────────────────
-    // Load all driver combos + class defaults (same resolution logic as other handlers)
-    $response['comboPredictions'] = [];
-    if (!empty($response['driverPredictions'])) {
+        // Driver → combo resolver (matches other handler resolution logic)
         $allDC = $pdo->query("
             SELECT dc.driver_name, dc.class_index, dc.engine_combo_id,
                    ec.name AS engine_combo_name, dc.effective_from_utc, dc.effective_to_utc
@@ -13108,7 +13103,6 @@ function handlePerformancePrediction(PDO $pdo): void {
             JOIN parity_engine_combos ec ON ec.id = cd.engine_combo_id
         ")->fetchAll(PDO::FETCH_ASSOC);
 
-        // Resolve combo for a driver/class/timestamp (mirrors resolution in other handlers)
         $resolveCombo = function($driverName, $classIndex, $runTs) use ($allDC, $allCD) {
             $dn = strtoupper(trim($driverName));
             $ci = strtoupper(trim($classIndex));
@@ -13124,7 +13118,7 @@ function handlePerformancePrediction(PDO $pdo): void {
                     $comboName = $dc['engine_combo_name'];
                 }
             }
-            if ($comboId === null) { // class default fallback
+            if ($comboId === null) {
                 $bestFrom = '';
                 foreach ($allCD as $cd) {
                     if (strtoupper($cd['class_index']) !== $ci) continue;
@@ -13140,34 +13134,43 @@ function handlePerformancePrediction(PDO $pdo): void {
             return $comboId ? ['comboId' => $comboId, 'comboName' => $comboName] : null;
         };
 
-        // Group driverPredictions by combo (already ET ASC so first per combo = best)
+        // Build comboPredictions: best run per combo, corrected via HPC
         $comboPredictions = [];
         foreach ($driverRows as $dr) {
-            $ci = $resolveCombo($dr['driver_name'], $dr['class_index'] ?? '', $dr['run_timestamp_utc'] ?? '');
-            if (!$ci) continue;
-            $cid = $ci['comboId'];
-            if (!isset($comboPredictions[$cid])) {
-                // find matching driverPrediction entry
-                $dp = null;
-                foreach ($response['driverPredictions'] as $d) {
-                    if ($d['driverName'] === $dr['driver_name']) { $dp = $d; break; }
-                }
-                if (!$dp) continue;
-                $comboPredictions[$cid] = [
-                    'comboId'      => $cid,
-                    'comboName'    => $ci['comboName'],
-                    'baselineET'   => $dp['baselineET'],
-                    'baselineMPH'  => $dp['baselineMPH'],
-                    'predictedET'  => $dp['predictedET'],
-                    'predictedMPH' => $dp['predictedMPH'],
-                    'adjustmentET' => $dp['adjustmentET'],
-                    'adjustmentMPH'=> $dp['adjustmentMPH'],
-                    'bestDriver'   => $dp['driverName'],
-                ];
+            $comboInfo = $resolveCombo($dr['driver_name'], $dr['class_index'] ?? '', $dr['run_timestamp_utc'] ?? '');
+            if (!$comboInfo) continue;
+            $cid  = $comboInfo['comboId'];
+            $bET  = (float)$dr['best_et'];
+            $bMPH = (float)$dr['best_mph'];
+
+            // Only keep the best (lowest ET) driver per combo
+            if (isset($comboPredictions[$cid]) && $bET >= $comboPredictions[$cid]['baselineET']) continue;
+
+            // Compute HPC for this combo at current conditions
+            $p = $ecParams[$cid] ?? null;
+            if ($p && $theta > 0 && $delta > 0) {
+                $ff  = $p['ff'];
+                $hpc = (1 + $ff/100) * pow($theta, $p['tPower']) / pow($delta, $p['dPower']) - $ff/100;
+            } else {
+                $hpc = 1.0; // fallback: no correction
             }
+            $hpc = max(0.5, min(2.0, $hpc)); // safety clamp
+
+            $pET  = $bET  * pow($hpc, 0.33);
+            $pMPH = $bMPH * pow($hpc, -0.33);
+
+            $comboPredictions[$cid] = [
+                'comboId'      => $cid,
+                'comboName'    => $comboInfo['comboName'],
+                'baselineET'   => $bET,
+                'baselineMPH'  => $bMPH,
+                'predictedET'  => $pET,
+                'predictedMPH' => $pMPH,
+                'bestDriver'   => $dr['driver_name'],
+            ];
         }
 
-        usort($comboPredictions, function($a, $b) { return $a['baselineET'] <=> $b['baselineET']; });
+        usort($comboPredictions, function($a, $b) { return $a['predictedET'] <=> $b['predictedET']; });
         $response['comboPredictions'] = array_values($comboPredictions);
     }
 
