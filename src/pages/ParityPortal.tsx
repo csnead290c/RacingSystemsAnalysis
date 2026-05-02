@@ -822,10 +822,12 @@ function parseColFilter(input: string): ColFilterSpec {
   // Between: "8.5~9.2"  or  "8.5-9.2"  (both sides numeric)
   const bet = s.match(/^(-?\d+\.?\d*)\s*[~\-]\s*(-?\d+\.?\d*)$/);
   if (bet) return { type: 'between', lo: +bet[1], hi: +bet[2] };
-  if (s.startsWith('>=')) { const n = +s.slice(2); if (!isNaN(n)) return { type: 'gte', val: n }; }
-  if (s.startsWith('<=')) { const n = +s.slice(2); if (!isNaN(n)) return { type: 'lte', val: n }; }
-  if (s.startsWith('>'))  { const n = +s.slice(1); if (!isNaN(n)) return { type: 'gt',  val: n }; }
-  if (s.startsWith('<'))  { const n = +s.slice(1); if (!isNaN(n)) return { type: 'lt',  val: n }; }
+  // Numeric operators — only activate when the value part is non-empty and valid;
+  // incomplete inputs like "<" or ">" are treated as no-op so the table stays visible
+  if (s.startsWith('>=')) { const v = s.slice(2).trim(); if (v !== '') { const n = +v; if (!isNaN(n)) return { type: 'gte', val: n }; } return { type: 'none' }; }
+  if (s.startsWith('<=')) { const v = s.slice(2).trim(); if (v !== '') { const n = +v; if (!isNaN(n)) return { type: 'lte', val: n }; } return { type: 'none' }; }
+  if (s.startsWith('>'))  { const v = s.slice(1).trim(); if (v !== '') { const n = +v; if (!isNaN(n)) return { type: 'gt',  val: n }; } return { type: 'none' }; }
+  if (s.startsWith('<'))  { const v = s.slice(1).trim(); if (v !== '') { const n = +v; if (!isNaN(n)) return { type: 'lt',  val: n }; } return { type: 'none' }; }
   return { type: 'contains', val: s.toLowerCase() };
 }
 
@@ -1133,22 +1135,22 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
 
       {loading && <div style={S.hint}>Loading runs with weather...</div>}
 
-      {!loading && sortedRuns.length === 0 && (
-        <div style={S.hint}>No runs found{categoryFilter ? ` for ${categoryFilter}` : ''}.</div>
-      )}
-
       {/* ── Summary stats ── */}
-      {!loading && sortedRuns.length > 0 && (
+      {!loading && runs.length > 0 && (
         <div style={{ marginBottom: '0.35rem', color: 'var(--color-muted)', fontSize: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <span>{sortedRuns.length} of {total} runs{categoryFilter ? ` (${categoryFilter})` : ''}</span>
+          <span>{sortedRuns.length} of {total} runs{categoryFilter ? ` (${categoryFilter})` : ''}{sortedRuns.length < runs.length ? ` — ${runs.length - sortedRuns.length} hidden by filters` : ''}</span>
           <span style={{ color: joinedCount > 0 ? '#2563eb' : '#6b7280' }}>
             {joinedCount} with weather ({total > 0 ? Math.round(joinedCount / total * 100) : 0}%)
           </span>
         </div>
       )}
 
+      {!loading && runs.length === 0 && (
+        <div style={S.hint}>No runs found{categoryFilter ? ` for ${categoryFilter}` : ''}.</div>
+      )}
+
       {/* ── Standard Table ── */}
-      {sortedRuns.length > 0 && (
+      {runs.length > 0 && (
         <div style={{ overflow: 'auto', maxHeight: 500 }}>
           <table style={S.table}>
             <thead>
@@ -1182,6 +1184,11 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
               </tr>
             </thead>
             <tbody>
+              {sortedRuns.length === 0 && (
+                <tr><td colSpan={activeCols.length + (canReadIncidents ? 1 : 0) + 1 + (isParityAdmin ? 1 : 0)} style={{ ...S.td, textAlign: 'center', color: 'var(--color-muted)', padding: '1rem', fontStyle: 'italic' }}>
+                  No rows match the current filters
+                </td></tr>
+              )}
               {sortedRuns.map((r, i) => {
                 const isFlagged = flaggedRunIds.has(r.id);
                 return (
