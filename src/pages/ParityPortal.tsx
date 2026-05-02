@@ -61,6 +61,7 @@ import {
   type RefreshEventDataResponse,
   type RefreshStepResult,
   type EventCategory,
+  type RefreshTimingOnlyResponse,
 } from '../services/parityApi';
 import {
   formatET, formatMPH, formatBaro,
@@ -300,6 +301,9 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
 // ── Refresh Result Banner ────────────────────────────────────────────────
 
 function RefreshStepSummary({ label, step }: { label: string; step: RefreshStepResult }) {
+  if (step.skipped_fresh) {
+    return <span><strong>{label}:</strong> <span style={{ color: 'var(--color-muted)' }}>already fresh</span></span>;
+  }
   const parts: string[] = [];
   if (step.fetched != null) parts.push(`${step.fetched} fetched`);
   if (step.daysFetched != null) parts.push(`${step.daysFetched} days`);
@@ -338,6 +342,7 @@ function RefreshResultBanner({ result, onDismiss }: { result: RefreshEventDataRe
 
   // Simplified one-line summary: step emoji badges
   const stepBadge = (label: string, step: RefreshStepResult) => {
+    if (step.skipped_fresh) return `— ${label}: fresh`;
     const ok = !step.errors || step.errors.length === 0;
     const count = step.inserted ?? step.fetched ?? step.bucketsProcessed ?? 0;
     return `${ok ? '✓' : '⚠'} ${label}${count > 0 ? ` +${count}` : ''}`;
@@ -382,8 +387,9 @@ function RefreshResultBanner({ result, onDismiss }: { result: RefreshEventDataRe
 // ── Component ───────────────────────────────────────────────────────────
 
 export default function ParityPortal() {
-  const { role } = useCapabilities();
+  const { role, can } = useCapabilities();
   const isAdmin = role === 'owner' || role === 'admin';
+  const canRefresh = can('nhra.parity' as any);
   const [tab, setTab] = useState<Tab>('eventRuns');
   const [showAdminTools, setShowAdminTools] = useState(false);
   const [raceLookup, setRaceLookup] = useState('');
@@ -400,8 +406,10 @@ export default function ParityPortal() {
 
   const selectedEvent = events.find(e => e.id === selectedEventId) ?? null;
 
-  // Refresh Event Data state
-  const [refreshing, setRefreshing] = useState(false);
+  // Refresh Event Data state — two-phase: timing (phase1) then weather (phase2)
+  const [refreshingPhase1, setRefreshingPhase1] = useState(false);
+  const [refreshingPhase2, setRefreshingPhase2] = useState(false);
+  const refreshing = refreshingPhase1 || refreshingPhase2; void refreshing; // convenience alias kept for auto-refresh guard
   const [refreshStep, setRefreshStep] = useState('');
   const [refreshResult, setRefreshResult] = useState<RefreshEventDataResponse | null>(null);
   const [refreshError, setRefreshError] = useState('');
@@ -452,31 +460,63 @@ export default function ParityPortal() {
   }, [selectedEventId]);
 
   const handleRefreshEventData = useCallback(async () => {
-    if (!selectedEventId || refreshing) return;
-    setRefreshing(true);
+    if (!selectedEventId || refreshingPhase1) return;
+
+    // ── Phase 1: timing only (fast, always runs) ──────────────────────────
+    setRefreshingPhase1(true);
     setRefreshStep('Refreshing timing…');
     setRefreshResult(null);
     setRefreshError('');
+    let timingRes: RefreshTimingOnlyResponse | null = null;
     try {
-      const stepTimer = setTimeout(() => setRefreshStep('Refreshing Tempest…'), 5000);
-      const stepTimer2 = setTimeout(() => setRefreshStep('Refreshing backfill…'), 15000);
-      const res = await parityApi.refreshEventData(selectedEventId);
-      clearTimeout(stepTimer);
-      clearTimeout(stepTimer2);
-      setRefreshResult(res);
-      setRefreshStep('');
-      loadEvents(selectedYear);
-      // Trigger child panel refetch so UI updates without page reload
+      timingRes = await parityApi.refreshTimingOnly(selectedEventId);
+      // UI updates immediately with fresh timing data
       setRefreshKey(k => k + 1);
-      // Reload event categories too (new runs may introduce new classes)
+      loadEvents(selectedYear);
       parityApi.eventCategories(selectedEventId).then(r => setEventCategories(r.categories)).catch(() => {});
     } catch (e: any) {
-      setRefreshError(e.message || 'Refresh failed');
+      setRefreshError(e.message || 'Timing refresh failed');
       setRefreshStep('');
-    } finally {
-      setRefreshing(false);
+      setRefreshingPhase1(false);
+      return;
     }
-  }, [selectedEventId, refreshing, selectedYear, loadEvents]);
+    setRefreshingPhase1(false);
+
+    // ── Phase 2: weather (slow, button re-enabled; soft status indicator) ──
+    setRefreshingPhase2(true);
+    setRefreshStep('Refreshing weather…');
+    try {
+      const weatherRes = await parityApi.refreshWeather(selectedEventId);
+      setRefreshResult({
+        ok: timingRes.ok && weatherRes.ok,
+        event_id: timingRes.event_id,
+        event_name: timingRes.event_name,
+        range: timingRes.range,
+        timing: timingRes.timing,
+        tempest: weatherRes.tempest,
+        open_meteo: weatherRes.open_meteo,
+        canonical: weatherRes.canonical,
+        duration_ms: timingRes.duration_ms + weatherRes.duration_ms,
+      });
+      setRefreshKey(k => k + 1); // re-trigger load with weather now joined
+    } catch (e: any) {
+      // Weather failed — timing is already good; show combined result with warning
+      setRefreshResult({
+        ok: timingRes.ok,
+        event_id: timingRes.event_id,
+        event_name: timingRes.event_name,
+        range: timingRes.range,
+        timing: timingRes.timing,
+        tempest: { errors: [e.message || 'Weather refresh failed'] },
+        open_meteo: { errors: [] },
+        canonical: timingRes.canonical,
+        duration_ms: timingRes.duration_ms,
+      });
+    } finally {
+      setRefreshStep('');
+      setRefreshingPhase2(false);
+    }
+  }, [selectedEventId, refreshingPhase1, selectedYear, loadEvents]);
 
   const handleEventChange = useCallback((id: number) => {
     setSelectedEventId(id);
@@ -548,15 +588,22 @@ export default function ParityPortal() {
             </optgroup>
           )}
         </select>
-        {isAdmin && selectedEventId && (
-          <button
-            style={{ ...S.btn, fontSize: '0.75rem', padding: '0.25rem 0.6rem', opacity: refreshing ? 0.6 : 1, whiteSpace: 'nowrap' }}
-            onClick={handleRefreshEventData}
-            disabled={refreshing}
-            title="Re-fetch timing data, Tempest weather, Open-Meteo backfill, and rebuild canonical weather for this event"
-          >
-            {refreshing ? (refreshStep || 'Refreshing…') : '↻ Refresh Event Data'}
-          </button>
+        {canRefresh && selectedEventId && (
+          <>
+            <button
+              style={{ ...S.btn, fontSize: '0.75rem', padding: '0.25rem 0.6rem', opacity: refreshingPhase1 ? 0.6 : 1, whiteSpace: 'nowrap' }}
+              onClick={handleRefreshEventData}
+              disabled={refreshingPhase1}
+              title="Re-fetch timing data, Tempest weather, Open-Meteo backfill, and rebuild canonical weather for this event"
+            >
+              {refreshingPhase1 ? (refreshStep || 'Refreshing timing…') : '↻ Refresh Event Data'}
+            </button>
+            {refreshingPhase2 && (
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
+                ⟳ {refreshStep || 'Refreshing weather…'}
+              </span>
+            )}
+          </>
         )}
         {eventIsOngoing && (
           <button
@@ -672,7 +719,10 @@ export default function ParityPortal() {
 
 type RunSortKey = 'driver_name' | 'class_index' | 'category' | 'round' | 'lane' | 'car_number'
   | 'dial_in' | 'rt' | 'ft60' | 'ft330' | 'ft660' | 'mph660' | 'ft1000' | 'mph1000' | 'ft1320' | 'mph1320'
-  | 'mov' | 'wx_temp' | 'wx_rh' | 'wx_press' | 'run_time_local';
+  | 'mov' | 'wx_temp' | 'wx_rh' | 'wx_press' | 'run_time_local'
+  | 'split_60_330' | 'split_330_660' | 'split_660_1000' | 'split_1000_1320'
+  | 'backhalf_et' | 'backhalf_mph' | 'wx_da' | 'wx_cf' | 'wx_wg' | 'wx_dp'
+  | 'win_flag' | 'dq_flag';
 type SortDir = 'asc' | 'desc';
 
 // Column definitions for the column picker
@@ -700,36 +750,36 @@ const ALL_COLUMNS: ColDef[] = [
   { key: 'ft60', label: '60ft', sortKey: 'ft60', group: 'slip', defaultOn: true, format: r => r.ft60 != null ? formatET(r.ft60) : '', align: 'right' },
   { key: 'ft330', label: '330ft', sortKey: 'ft330', group: 'slip', defaultOn: false, format: r => r.ft330 != null ? formatET(r.ft330) : '', align: 'right' },
   { key: 'ft660', label: '660ft', sortKey: 'ft660', group: 'slip', defaultOn: false, format: r => r.ft660 != null ? formatET(r.ft660) : '', align: 'right' },
-  { key: 'mph660', label: '660mph', sortKey: 'mph660', group: 'slip', defaultOn: false, format: r => r.mph660 != null ? formatMPH(r.mph660) : '', align: 'right' },
+  { key: 'mph660', label: '660 MPH', sortKey: 'mph660', group: 'slip', defaultOn: false, format: r => r.mph660 != null ? formatMPH(r.mph660) : '', align: 'right' },
   { key: 'ft1000', label: '1000ft', sortKey: 'ft1000', group: 'slip', defaultOn: false, format: r => r.ft1000 != null ? formatET(r.ft1000) : '', align: 'right' },
-  { key: 'mph1000', label: '1000mph', sortKey: 'mph1000', group: 'slip', defaultOn: false, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
+  { key: 'mph1000', label: '1000 MPH', sortKey: 'mph1000', group: 'slip', defaultOn: false, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
   { key: 'ft1320', label: 'ET', sortKey: 'ft1320', group: 'core', defaultOn: true, format: r => r.ft1320 != null ? formatET(r.ft1320) : '', align: 'right', bold: true },
   { key: 'mph1320', label: 'MPH', sortKey: 'mph1320', group: 'core', defaultOn: true, format: r => r.mph1320 != null ? formatMPH(r.mph1320) : '', align: 'right', bold: true },
-  { key: 'split_60_330', label: '60-330', group: 'slip', defaultOn: false, format: r => (r.ft60 != null && r.ft330 != null) ? formatET(r.ft330 - r.ft60) : '', align: 'right' },
-  { key: 'split_330_660', label: '330-660', group: 'slip', defaultOn: false, format: r => (r.ft330 != null && r.ft660 != null) ? formatET(r.ft660 - r.ft330) : '', align: 'right' },
-  { key: 'split_660_1000', label: '660-1000', group: 'slip', defaultOn: false, format: r => (r.ft660 != null && r.ft1000 != null) ? formatET(r.ft1000 - r.ft660) : '', align: 'right' },
-  { key: 'split_1000_1320', label: '1000-1320', group: 'slip', defaultOn: false, format: r => (r.ft1000 != null && r.ft1320 != null) ? formatET(r.ft1320 - r.ft1000) : '', align: 'right' },
-  { key: 'backhalf_et', label: 'Back½ ET', group: 'slip', defaultOn: false, format: r => (r.ft660 != null && r.ft1320 != null) ? formatET(r.ft1320 - r.ft660) : '', align: 'right' },
-  { key: 'backhalf_mph', label: '½ΔM', group: 'slip', defaultOn: false, format: r => (r.mph660 != null && r.mph1320 != null) ? (r.mph1320 - r.mph660).toFixed(2) : '', align: 'right' },
+  { key: 'split_60_330', label: '60-330', sortKey: 'split_60_330', group: 'slip', defaultOn: false, format: r => (r.ft60 != null && r.ft330 != null) ? formatET(r.ft330 - r.ft60) : '', align: 'right' },
+  { key: 'split_330_660', label: '330-660', sortKey: 'split_330_660', group: 'slip', defaultOn: false, format: r => (r.ft330 != null && r.ft660 != null) ? formatET(r.ft660 - r.ft330) : '', align: 'right' },
+  { key: 'split_660_1000', label: '660-1000', sortKey: 'split_660_1000', group: 'slip', defaultOn: false, format: r => (r.ft660 != null && r.ft1000 != null) ? formatET(r.ft1000 - r.ft660) : '', align: 'right' },
+  { key: 'split_1000_1320', label: '1000-1320', sortKey: 'split_1000_1320', group: 'slip', defaultOn: false, format: r => (r.ft1000 != null && r.ft1320 != null) ? formatET(r.ft1320 - r.ft1000) : '', align: 'right' },
+  { key: 'backhalf_et', label: 'Backhalf ET', sortKey: 'backhalf_et', group: 'slip', defaultOn: false, format: r => (r.ft660 != null && r.ft1320 != null) ? formatET(r.ft1320 - r.ft660) : '', align: 'right' },
+  { key: 'backhalf_mph', label: 'Backhalf MPH', sortKey: 'backhalf_mph', group: 'slip', defaultOn: false, format: r => (r.mph660 != null && r.mph1320 != null) ? (r.mph1320 - r.mph660).toFixed(2) : '', align: 'right' },
   { key: 'mov', label: 'MOV', sortKey: 'mov', group: 'extra', defaultOn: false, format: r => r.mov != null ? r.mov.toFixed(4) : '', align: 'right' },
-  { key: 'win_flag', label: 'W', group: 'extra', defaultOn: false, format: r => r.win_flag ? 'W' : '', align: 'left' },
-  { key: 'dq_flag', label: 'DQ', group: 'extra', defaultOn: false, format: r => r.dq_flag ? 'DQ' : '', align: 'left' },
+  { key: 'win_flag', label: 'W', sortKey: 'win_flag', group: 'extra', defaultOn: false, format: r => r.win_flag ? 'W' : '', align: 'left' },
+  { key: 'dq_flag', label: 'DQ', sortKey: 'dq_flag', group: 'extra', defaultOn: false, format: r => r.dq_flag ? 'DQ' : '', align: 'left' },
   { key: 'wx_temp', label: 'Temp °F', sortKey: 'wx_temp', group: 'weather', defaultOn: false, format: r => r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '', align: 'right' },
   { key: 'wx_rh', label: 'RH%', sortKey: 'wx_rh', group: 'weather', defaultOn: false, format: r => r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '', align: 'right' },
   { key: 'wx_press', label: 'Press inHg', sortKey: 'wx_press', group: 'weather', defaultOn: false, format: r => r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '', align: 'right' },
-  { key: 'wx_da', label: 'DA ft', group: 'weather', defaultOn: false, format: r => {
+  { key: 'wx_da', label: 'DA ft', sortKey: 'wx_da', group: 'weather', defaultOn: false, format: r => {
     const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
     return formatDA(computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).densityAltitude);
   }, align: 'right' },
-  { key: 'wx_wg', label: 'WG', group: 'weather', defaultOn: false, format: r => {
+  { key: 'wx_wg', label: 'WG', sortKey: 'wx_wg', group: 'weather', defaultOn: false, format: r => {
     const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
     return computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).waterGrains.toFixed(1);
   }, align: 'right' },
-  { key: 'wx_dp', label: 'Dew Pt', group: 'weather', defaultOn: false, format: r => {
+  { key: 'wx_dp', label: 'Dew Pt', sortKey: 'wx_dp', group: 'weather', defaultOn: false, format: r => {
     const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
     return computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).dewPoint.toFixed(1);
   }, align: 'right' },
-  { key: 'wx_cf', label: 'CF', group: 'weather', defaultOn: false, format: r => {
+  { key: 'wx_cf', label: 'CF', sortKey: 'wx_cf', group: 'weather', defaultOn: false, format: r => {
     const w = r.weather; if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return '';
     return computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg).correctionFactor.toFixed(4);
   }, align: 'right' },
@@ -739,6 +789,23 @@ function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
   if (key === 'wx_temp') return r.weather?.temp_f ?? null;
   if (key === 'wx_rh') return r.weather?.rh_pct ?? null;
   if (key === 'wx_press') return r.weather?.pressure_inhg ?? null;
+  if (key === 'win_flag') return r.win_flag ? 1 : 0;
+  if (key === 'dq_flag') return r.dq_flag ? 1 : 0;
+  if (key === 'split_60_330') return (r.ft60 != null && r.ft330 != null) ? r.ft330 - r.ft60 : null;
+  if (key === 'split_330_660') return (r.ft330 != null && r.ft660 != null) ? r.ft660 - r.ft330 : null;
+  if (key === 'split_660_1000') return (r.ft660 != null && r.ft1000 != null) ? r.ft1000 - r.ft660 : null;
+  if (key === 'split_1000_1320') return (r.ft1000 != null && r.ft1320 != null) ? r.ft1320 - r.ft1000 : null;
+  if (key === 'backhalf_et') return (r.ft660 != null && r.ft1320 != null) ? r.ft1320 - r.ft660 : null;
+  if (key === 'backhalf_mph') return (r.mph660 != null && r.mph1320 != null) ? r.mph1320 - r.mph660 : null;
+  if (key === 'wx_da' || key === 'wx_cf' || key === 'wx_wg' || key === 'wx_dp') {
+    const w = r.weather;
+    if (!w || w.temp_f == null || w.rh_pct == null || w.pressure_inhg == null) return null;
+    const wx = computeWeather(w.temp_f, pct_to_frac(w.rh_pct), w.pressure_inhg);
+    if (key === 'wx_da') return wx.densityAltitude;
+    if (key === 'wx_cf') return wx.correctionFactor;
+    if (key === 'wx_wg') return wx.waterGrains;
+    if (key === 'wx_dp') return wx.dewPoint;
+  }
   return (r as any)[key] ?? null;
 }
 
@@ -767,6 +834,13 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
   const [laneFilter, setLaneFilter] = useState('');
   const [driverSearch, setDriverSearch] = useState('');
   const [includeBad, setIncludeBad] = useState(false);
+
+  // Per-column text filters (Excel-style)
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const setColFilter = (key: string, val: string) =>
+    setColFilters(prev => val ? { ...prev, [key]: val } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
+  const clearColFilters = () => setColFilters({});
+  const hasColFilters = Object.keys(colFilters).length > 0;
 
   // Sort
   const [sortKey, setSortKey] = useState<RunSortKey>('ft1320');
@@ -832,7 +906,7 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
 
   useEffect(() => { loadRuns(); loadFlags(); }, [loadRuns, loadFlags, refreshKey]);
 
-  // Client-side filters: flagged + driver search
+  // Client-side filters: flagged + driver search + per-column
   const filteredRuns = useMemo(() => {
     let result = runs;
     if (!includeBad) result = result.filter(r => !flaggedRunIds.has(r.id));
@@ -840,8 +914,18 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
       const q = driverSearch.trim().toLowerCase();
       result = result.filter(r => r.driver_name?.toLowerCase().includes(q));
     }
+    if (Object.keys(colFilters).length > 0) {
+      result = result.filter(r => {
+        return Object.entries(colFilters).every(([key, fval]) => {
+          if (!fval) return true;
+          const colDef = ALL_COLUMNS.find(c => c.key === key);
+          const cellStr = colDef?.format ? colDef.format(r) : String((r as any)[key] ?? '');
+          return cellStr.toLowerCase().includes(fval.toLowerCase());
+        });
+      });
+    }
     return result;
-  }, [runs, includeBad, flaggedRunIds, driverSearch]);
+  }, [runs, includeBad, flaggedRunIds, driverSearch, colFilters]);
 
   // Sort
   const sortedRuns = useMemo(() => [...filteredRuns].sort((a, b) => {
@@ -1000,6 +1084,12 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
           placeholder="Driver search..."
           value={driverSearch}
           onChange={e => setDriverSearch(e.target.value)} />
+
+        {hasColFilters && (
+          <button style={{ ...S.btn('secondary'), fontSize: '0.65rem', padding: '0.1rem 0.4rem', color: '#e44' }} onClick={clearColFilters} title="Clear all column filters">
+            ✕ Col Filters
+          </button>
+        )}
       </div>
 
       {loading && <div style={S.hint}>Loading runs with weather...</div>}
@@ -1033,6 +1123,22 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
                 {canReadIncidents && <th style={{ ...stickyTh, width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
                 <th style={stickyTh}>Flag</th>
                 {isParityAdmin && <th style={stickyTh}>Edit</th>}
+              </tr>
+              <tr>
+                {activeCols.map(c => (
+                  <th key={c.key} style={{ ...S.th, padding: '1px 2px', background: 'var(--color-surface, #1e1e2e)' }}>
+                    <input
+                      type="text"
+                      value={colFilters[c.key] ?? ''}
+                      onChange={e => setColFilter(c.key, e.target.value)}
+                      placeholder="▽"
+                      style={{ width: '100%', minWidth: 28, fontSize: '0.62rem', padding: '1px 3px', background: colFilters[c.key] ? 'rgba(59,130,246,0.15)' : 'var(--color-bg, #16162a)', border: '1px solid var(--color-border)', borderRadius: 2, color: 'inherit', outline: 'none' }}
+                    />
+                  </th>
+                ))}
+                {canReadIncidents && <th style={{ ...S.th, padding: '1px', background: 'var(--color-surface, #1e1e2e)' }} />}
+                <th style={{ ...S.th, padding: '1px', background: 'var(--color-surface, #1e1e2e)' }} />
+                {isParityAdmin && <th style={{ ...S.th, padding: '1px', background: 'var(--color-surface, #1e1e2e)' }} />}
               </tr>
             </thead>
             <tbody>
@@ -1385,8 +1491,11 @@ function IncrementalDrilldown({ runs, flaggedRunIds, classFilter, total, onDrive
 
 // ── Driver Drilldown Panel ──────────────────────────────────────────────
 
-type DriverSortKey = 'race_lookup' | 'ft1320' | 'mph1320' | 'rt' | 'ft60' | 'round' | 'event_name'
-  | 'inc_0_60' | 'inc_60_330' | 'inc_330_660' | 'inc_660_1000' | 'inc_1000_1320';
+type DriverSortKey = 'event_name' | 'race_lookup' | 'round' | 'lane'
+  | 'rt' | 'ft60' | 'ft330' | 'ft660' | 'mph660' | 'ft1000' | 'mph1000' | 'ft1320' | 'mph1320'
+  | 'corr_et' | 'corr_mph' | 'hpc'
+  | 'inc_0_60' | 'inc_60_330' | 'inc_330_660' | 'inc_660_1000' | 'inc_1000_1320'
+  | 'wx_temp' | 'wx_press' | 'wx_rh' | 'win_flag' | 'dq_flag';
 type DriverSortDir = 'asc' | 'desc';
 type SessionFilter = '' | 'qual' | 'elim';
 type ValueMode = 'raw' | 'corrected';
@@ -1420,6 +1529,13 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
   const [sortDir, setSortDir] = useState<DriverSortDir>('desc');
   const [valueMode, setValueMode] = useState<ValueMode>('raw');
   const [showColPicker, setShowColPicker] = useState(false);
+
+  // Per-column text filters (Excel-style)
+  const [dhColFilters, setDhColFilters] = useState<Record<string, string>>({});
+  const setDhColFilter = (key: string, val: string) =>
+    setDhColFilters(prev => val ? { ...prev, [key]: val } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
+  const clearDhColFilters = () => setDhColFilters({});
+  const hasDhColFilters = Object.keys(dhColFilters).length > 0;
 
   // Driver History column picker — persisted in localStorage
   const DH_COL_LS_KEY = 'parity_driverHistoryCols_v2';
@@ -1561,9 +1677,69 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
     return c?.correctedMPH != null ? c.correctedMPH : r.mph1320;
   };
 
-  const sortedRuns = [...runs].sort((a, b) => {
-    const av = a[sortKey] ?? 0;
-    const bv = b[sortKey] ?? 0;
+  const getDriverSortValue = (r: DriverRun, key: DriverSortKey): any => {
+    if (key === 'wx_temp') return r.weather?.temp_f ?? null;
+    if (key === 'wx_press') return r.weather?.pressure_inhg ?? null;
+    if (key === 'wx_rh') return r.weather?.rh_pct ?? null;
+    if (key === 'win_flag') return r.win_flag ? 1 : 0;
+    if (key === 'dq_flag') return r.dq_flag ? 1 : 0;
+    if (key === 'corr_et' || key === 'corr_mph' || key === 'hpc') {
+      const c = corrCtx ? correctRunClientSide(r, corrCtx) : null;
+      if (key === 'corr_et') return c?.correctedET ?? r.ft1320 ?? null;
+      if (key === 'corr_mph') return c?.correctedMPH ?? r.mph1320 ?? null;
+      if (key === 'hpc') return c?.hpc ?? null;
+    }
+    return (r as any)[key] ?? null;
+  };
+
+  // Driver col filter helper — formats a cell value as string for matching
+  const getDhCellStr = (r: DriverRun, key: DHColKey): string => {
+    const c = corrCtx ? correctRunClientSide(r, corrCtx) : null;
+    switch (key) {
+      case 'event_name': return r.event_name || '';
+      case 'race_lookup': return r.race_lookup || '';
+      case 'round': return r.round || '';
+      case 'lane': return r.lane || '';
+      case 'rt': return r.rt != null ? formatET(r.rt) : '';
+      case 'ft60': return r.ft60 != null ? formatET(r.ft60) : '';
+      case 'ft330': return r.ft330 != null ? formatET(r.ft330) : '';
+      case 'ft660': return r.ft660 != null ? formatET(r.ft660) : '';
+      case 'mph660': return r.mph660 != null ? formatMPH(r.mph660) : '';
+      case 'ft1000': return r.ft1000 != null ? formatET(r.ft1000) : '';
+      case 'mph1000': return r.mph1000 != null ? formatMPH(r.mph1000) : '';
+      case 'ft1320': return r.ft1320 != null ? formatET(r.ft1320) : '';
+      case 'mph1320': return r.mph1320 != null ? formatMPH(r.mph1320) : '';
+      case 'corr_et': return c?.correctedET != null ? formatET(c.correctedET) : '';
+      case 'corr_mph': return c?.correctedMPH != null ? formatMPH(c.correctedMPH) : '';
+      case 'hpc': return c?.hpc != null ? c.hpc.toFixed(6) : '';
+      case 'inc_0_60': return (r as any).inc_0_60 != null ? String((r as any).inc_0_60) : '';
+      case 'inc_60_330': return (r as any).inc_60_330 != null ? String((r as any).inc_60_330) : '';
+      case 'inc_330_660': return (r as any).inc_330_660 != null ? String((r as any).inc_330_660) : '';
+      case 'inc_660_1000': return (r as any).inc_660_1000 != null ? String((r as any).inc_660_1000) : '';
+      case 'inc_1000_1320': return (r as any).inc_1000_1320 != null ? String((r as any).inc_1000_1320) : '';
+      case 'wx_temp': return r.weather?.temp_f != null ? formatTemp(r.weather.temp_f) : '';
+      case 'wx_press': return r.weather?.pressure_inhg != null ? formatBaro(r.weather.pressure_inhg) : '';
+      case 'wx_rh': return r.weather?.rh_pct != null ? formatRH(r.weather.rh_pct) : '';
+      case 'win_flag': return r.win_flag ? 'W' : '';
+      case 'dq_flag': return r.dq_flag ? 'DQ' : '';
+      default: return '';
+    }
+  };
+
+  const filteredSortedRuns = [...runs].filter(r => {
+    if (!hasDhColFilters) return true;
+    return Object.entries(dhColFilters).every(([key, fval]) => {
+      if (!fval) return true;
+      return getDhCellStr(r, key as DHColKey).toLowerCase().includes(fval.toLowerCase());
+    });
+  });
+
+  const sortedRuns = filteredSortedRuns.sort((a, b) => {
+    const av = getDriverSortValue(a, sortKey);
+    const bv = getDriverSortValue(b, sortKey);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
     if (typeof av === 'string' && typeof bv === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     return sortDir === 'asc' ? (Number(av) - Number(bv)) : (Number(bv) - Number(av));
   });
@@ -1696,6 +1872,12 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
             {showAssignments ? 'Hide Assignments' : 'Assignments'}
           </button>
 
+          {hasDhColFilters && (
+            <button style={{ ...S.btn('secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem', color: '#e44' }} onClick={clearDhColFilters} title="Clear all column filters">
+              ✕ Col Filters
+            </button>
+          )}
+
           <button style={{ ...S.btn('secondary'), fontSize: '0.7rem', padding: '0.15rem 0.4rem', marginLeft: 'auto' }}
             onClick={exportCsv}>
             Export CSV
@@ -1813,10 +1995,25 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
             <thead>
               <tr>
                 {dhActiveCols.map(col => {
-                  const sk = (['event_name','race_lookup','round','rt','ft60','ft330','ft660','mph660','ft1000','mph1000','ft1320','mph1320','inc_0_60','inc_60_330','inc_330_660','inc_660_1000','inc_1000_1320'] as DriverSortKey[]).includes(col.key as DriverSortKey) ? col.key as DriverSortKey : null;
+                  const ALL_DRIVER_SORT_KEYS: DriverSortKey[] = ['event_name','race_lookup','round','lane','rt','ft60','ft330','ft660','mph660','ft1000','mph1000','ft1320','mph1320','corr_et','corr_mph','hpc','inc_0_60','inc_60_330','inc_330_660','inc_660_1000','inc_1000_1320','wx_temp','wx_press','wx_rh','win_flag','dq_flag'];
+                  const sk = ALL_DRIVER_SORT_KEYS.includes(col.key as DriverSortKey) ? col.key as DriverSortKey : null;
                   return <th key={col.key} style={{ ...stickyTh, cursor: sk ? 'pointer' : undefined }} onClick={sk ? () => handleSort(sk) : undefined}>{col.label}{sk ? arrow(sk) : ''}</th>;
                 })}
                 {canReadIncidents && <th style={{ ...S.th, position: 'sticky', top: 0, zIndex: 1, background: 'var(--color-surface, #1e1e2e)', width: 28, textAlign: 'center' }} title="Incidents">Inc</th>}
+              </tr>
+              <tr>
+                {dhActiveCols.map(col => (
+                  <th key={col.key} style={{ ...S.th, padding: '1px 2px', background: 'var(--color-surface, #1e1e2e)' }}>
+                    <input
+                      type="text"
+                      value={dhColFilters[col.key] ?? ''}
+                      onChange={e => setDhColFilter(col.key, e.target.value)}
+                      placeholder="▽"
+                      style={{ width: '100%', minWidth: 28, fontSize: '0.62rem', padding: '1px 3px', background: dhColFilters[col.key] ? 'rgba(59,130,246,0.15)' : 'var(--color-bg, #16162a)', border: '1px solid var(--color-border)', borderRadius: 2, color: 'inherit', outline: 'none' }}
+                    />
+                  </th>
+                ))}
+                {canReadIncidents && <th style={{ ...S.th, padding: '1px', background: 'var(--color-surface, #1e1e2e)' }} />}
               </tr>
             </thead>
             <tbody>
@@ -7526,9 +7723,9 @@ const LIVE_TIMING_COLUMNS: ColDef[] = [
   { key: 'ft60', label: '60ft', sortKey: 'ft60', group: 'slip', defaultOn: true, format: r => r.ft60 != null ? formatET(r.ft60) : '', align: 'right' },
   { key: 'ft330', label: '330ft', sortKey: 'ft330', group: 'slip', defaultOn: true, format: r => r.ft330 != null ? formatET(r.ft330) : '', align: 'right' },
   { key: 'ft660', label: '660ft', sortKey: 'ft660', group: 'slip', defaultOn: true, format: r => r.ft660 != null ? formatET(r.ft660) : '', align: 'right' },
-  { key: 'mph660', label: '660mph', sortKey: 'mph660', group: 'slip', defaultOn: true, format: r => r.mph660 != null ? formatMPH(r.mph660) : '', align: 'right' },
+  { key: 'mph660', label: '660 MPH', sortKey: 'mph660', group: 'slip', defaultOn: true, format: r => r.mph660 != null ? formatMPH(r.mph660) : '', align: 'right' },
   { key: 'ft1000', label: '1000ft', sortKey: 'ft1000', group: 'slip', defaultOn: true, format: r => r.ft1000 != null ? formatET(r.ft1000) : '', align: 'right' },
-  { key: 'mph1000', label: '1000mph', sortKey: 'mph1000', group: 'slip', defaultOn: true, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
+  { key: 'mph1000', label: '1000 MPH', sortKey: 'mph1000', group: 'slip', defaultOn: true, format: r => r.mph1000 != null ? formatMPH(r.mph1000) : '', align: 'right' },
   { key: 'ft1320', label: 'ET', sortKey: 'ft1320', group: 'core', defaultOn: true, format: r => r.ft1320 != null ? formatET(r.ft1320) : '', align: 'right', bold: true },
   { key: 'mph1320', label: 'MPH', sortKey: 'mph1320', group: 'core', defaultOn: true, format: r => r.mph1320 != null ? formatMPH(r.mph1320) : '', align: 'right', bold: true },
   { key: 'mov', label: 'MOV', sortKey: 'mov', group: 'extra', defaultOn: false, format: r => r.mov != null ? r.mov.toFixed(4) : '', align: 'right' },

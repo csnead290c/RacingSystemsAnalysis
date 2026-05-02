@@ -918,6 +918,7 @@ export interface RefreshStepResult {
   daysFetched?: number;
   bucketsProcessed?: number;
   errors: string[];
+  skipped_fresh?: boolean;
 }
 
 export interface RefreshEventDataResponse {
@@ -926,6 +927,25 @@ export interface RefreshEventDataResponse {
   event_name: string;
   range: { startLocal: string; endLocal: string; timezone: string };
   timing: RefreshStepResult;
+  tempest: RefreshStepResult;
+  open_meteo: RefreshStepResult;
+  canonical: RefreshStepResult;
+  duration_ms: number;
+}
+
+export interface RefreshTimingOnlyResponse {
+  ok: boolean;
+  event_id: number;
+  event_name: string;
+  range: { startLocal: string; endLocal: string; timezone: string };
+  timing: RefreshStepResult;
+  canonical: RefreshStepResult;
+  duration_ms: number;
+}
+
+export interface RefreshWeatherResponse {
+  ok: boolean;
+  event_id: number;
   tempest: RefreshStepResult;
   open_meteo: RefreshStepResult;
   canonical: RefreshStepResult;
@@ -2897,6 +2917,34 @@ export const parityApi = {
     const timeoutId = setTimeout(() => controller.abort(), 600_000); // 10 min
     try {
       return await parityRequest<RefreshEventDataResponse>('/parity.php?action=refreshEventData', {
+        method: 'POST',
+        body: JSON.stringify({ eventId }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
+  async refreshTimingOnly(eventId: number): Promise<RefreshTimingOnlyResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000); // 60s — timing only
+    try {
+      return await parityRequest<RefreshTimingOnlyResponse>('/parity.php?action=refreshTimingOnly', {
+        method: 'POST',
+        body: JSON.stringify({ eventId }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
+  async refreshWeather(eventId: number): Promise<RefreshWeatherResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300_000); // 5 min for weather
+    try {
+      return await parityRequest<RefreshWeatherResponse>('/parity.php?action=refreshWeather', {
         method: 'POST',
         body: JSON.stringify({ eventId }),
         signal: controller.signal,

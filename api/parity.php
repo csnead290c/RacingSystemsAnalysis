@@ -452,6 +452,14 @@ switch ($action) {
         if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleRefreshEventData($pdo, $userId, $auth);
         break;
+    case 'refreshTimingOnly':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleRefreshTimingOnly($pdo, $userId, $auth);
+        break;
+    case 'refreshWeather':
+        if ($method !== 'POST') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleRefreshWeather($pdo, $userId, $auth);
+        break;
     case 'listOrphanRuns':
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handleListOrphanRuns($pdo, $auth);
@@ -3190,6 +3198,401 @@ function handleRefreshEventData(PDO $pdo, int $userId, array $auth): void {
         'tempest' => $tempestResult,
         'open_meteo' => $openMeteoResult,
         'canonical' => $canonicalResult,
+        'duration_ms' => $durationMs,
+    ]);
+}
+
+// ============================================================================
+// POST ?action=refreshTimingOnly
+// Body: { eventId: int }
+// Fast path: OData timing ingest + canonical rebuild only. No weather APIs.
+// Returns immediately once OData + canonical complete (typically 2–5s).
+// ============================================================================
+
+function handleRefreshTimingOnly(PDO $pdo, int $userId, array $auth): void {
+    $role = rsa_getUserRole($pdo, $userId);
+    if (!rsa_hasCap($pdo, $userId, $role, 'nhra.parity')) {
+        rsa_jsonResponse(['error' => 'Forbidden: nhra.parity required'], 403);
+    }
+    set_time_limit(120);
+
+    $input = rsa_getJsonInput();
+    $eventId = (int)($input['eventId'] ?? 0);
+    if ($eventId <= 0) {
+        rsa_jsonResponse(['error' => 'eventId is required'], 400);
+    }
+
+    $t0 = microtime(true);
+
+    $evStmt = $pdo->prepare("
+        SELECT e.id, e.event_name, e.race_lookup, e.start_date_local, e.end_date_local,
+               t.id AS track_id, t.timezone_iana
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.id = ?
+    ");
+    $evStmt->execute([$eventId]);
+    $event = $evStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) {
+        rsa_jsonResponse(['error' => "Event $eventId not found"], 404);
+    }
+
+    $tz         = $event['timezone_iana'];
+    $startLocal = $event['start_date_local'];
+    $endLocal   = $event['end_date_local'] ?? '';
+    if (empty($endLocal)) {
+        $endLocal = (new DateTime($startLocal))->modify('+4 days')->format('Y-m-d');
+    }
+    $todayLocal = (new DateTime('now', new DateTimeZone($tz)))->format('Y-m-d');
+    if ($endLocal > $todayLocal) $endLocal = $todayLocal;
+
+    $tzObj    = new DateTimeZone($tz);
+    $startDt  = new DateTimeImmutable("$startLocal 00:00:00", $tzObj);
+    $endDt    = new DateTimeImmutable("$endLocal 23:59:59", $tzObj);
+    $startUtc = $startDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    $endUtc   = $endDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+
+    // ── Step 1: OData timing ingest ───────────────────────────────────────
+    $timingResult = ['fetched' => 0, 'inserted' => 0, 'updated' => 0, 'skipped' => 0, 'deduped' => 0, 'errors' => []];
+    $raceLookup   = $event['race_lookup'] ?? '';
+
+    if (!empty($raceLookup) && preg_match('/^\d{8}$/', $raceLookup)) {
+        try {
+            $odataResult = parity_fetchODataResults($raceLookup);
+            $rows = $odataResult['rows'];
+            $timingResult['fetched'] = count($rows);
+
+            if (!empty($rows)) {
+                $importUuid  = parity_generateUUID();
+                $requestedAt = gmdate('Y-m-d H:i:s');
+                $stmt = $pdo->prepare("
+                    INSERT INTO parity_run_imports (uuid, race_lookup, requested_at_utc, fetched_at_utc, status, row_count, source_url, created_by_user_id)
+                    VALUES (?, ?, ?, ?, 'success', ?, ?, ?)
+                ");
+                $stmt->execute([$importUuid, $raceLookup, $requestedAt, $requestedAt, count($rows), $odataResult['url'], $userId]);
+                $importId = (int)$pdo->lastInsertId();
+
+                foreach ($rows as $raw) {
+                    $normalized = parity_normalizeRow($raw, $raceLookup);
+                    $rowHash    = parity_computeRowHash($raceLookup, $normalized, $raw);
+                    $localTime  = $normalized['run_timestamp_utc'];
+                    $utcTime    = ($localTime !== null) ? parity_localToUtc($localTime, $tz) : null;
+                    try {
+                        $res = parity_upsertRun($pdo, $normalized, $rowHash, $importId, $raceLookup, $utcTime, $localTime);
+                        if ($res === 'inserted') $timingResult['inserted']++;
+                        elseif ($res === 'updated') $timingResult['updated']++;
+                        else $timingResult['skipped']++;
+                    } catch (Exception $e) {
+                        $timingResult['errors'][] = $e->getMessage();
+                    }
+                }
+                $timingResult['deduped'] = $timingResult['updated'] + $timingResult['skipped'];
+                $pdo->prepare("UPDATE parity_run_imports SET row_count = ? WHERE id = ?")->execute([$timingResult['inserted'], $importId]);
+            }
+        } catch (Exception $e) {
+            $timingResult['errors'][] = $e->getMessage();
+        }
+    } else {
+        $timingResult['errors'][] = 'No valid race_lookup — skipping timing ingest';
+    }
+
+    // ── Step 2: Rebuild canonical weather (fast — no external APIs) ──────
+    $canonicalResult = ['bucketsProcessed' => 0, 'errors' => []];
+    try {
+        $r = weatherRebuildCanonicalRange($pdo, $startUtc, $endUtc, 30);
+        $canonicalResult['bucketsProcessed'] = $r['bucketsProcessed'] ?? 0;
+    } catch (Exception $e) {
+        $canonicalResult['errors'][] = $e->getMessage();
+    }
+
+    $durationMs = (int)((microtime(true) - $t0) * 1000);
+
+    rsa_jsonResponse([
+        'ok'          => true,
+        'event_id'    => $eventId,
+        'event_name'  => $event['event_name'],
+        'range'       => ['startLocal' => $startLocal, 'endLocal' => $endLocal, 'timezone' => $tz],
+        'timing'      => $timingResult,
+        'canonical'   => $canonicalResult,
+        'duration_ms' => $durationMs,
+    ]);
+}
+
+// ============================================================================
+// POST ?action=refreshWeather
+// Body: { eventId: int }
+// Slow path: Tempest + Open-Meteo backfill + canonical rebuild.
+// Freshness gate: skips Tempest for days already fetched within 8 minutes.
+// Tempest retries capped at 2 (vs default 5) to avoid long 429 stalls.
+// Each weather step has a 60s wall-clock budget; hard-stops if exceeded.
+// ============================================================================
+
+function handleRefreshWeather(PDO $pdo, int $userId, array $auth): void {
+    $role = rsa_getUserRole($pdo, $userId);
+    if (!rsa_hasCap($pdo, $userId, $role, 'nhra.parity')) {
+        rsa_jsonResponse(['error' => 'Forbidden: nhra.parity required'], 403);
+    }
+    set_time_limit(600);
+
+    $input = rsa_getJsonInput();
+    $eventId = (int)($input['eventId'] ?? 0);
+    if ($eventId <= 0) {
+        rsa_jsonResponse(['error' => 'eventId is required'], 400);
+    }
+
+    $t0 = microtime(true);
+
+    $evStmt = $pdo->prepare("
+        SELECT e.id, e.event_name, e.race_lookup, e.start_date_local, e.end_date_local,
+               t.id AS track_id, t.timezone_iana, t.latitude, t.longitude
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.id = ?
+    ");
+    $evStmt->execute([$eventId]);
+    $event = $evStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) {
+        rsa_jsonResponse(['error' => "Event $eventId not found"], 404);
+    }
+
+    $tz         = $event['timezone_iana'];
+    $startLocal = $event['start_date_local'];
+    $endLocal   = $event['end_date_local'] ?? '';
+    if (empty($endLocal)) {
+        $endLocal = (new DateTime($startLocal))->modify('+4 days')->format('Y-m-d');
+    }
+    $todayLocal = (new DateTime('now', new DateTimeZone($tz)))->format('Y-m-d');
+    if ($endLocal > $todayLocal) $endLocal = $todayLocal;
+
+    $tzObj    = new DateTimeZone($tz);
+    $startDt  = new DateTimeImmutable("$startLocal 00:00:00", $tzObj);
+    $endDt    = new DateTimeImmutable("$endLocal 23:59:59", $tzObj);
+    $startUtc = $startDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    $endUtc   = $endDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+
+    // ── Step 1: Tempest backfill (with freshness gate + capped retries) ──
+    $tempestResult = ['daysFetched' => 0, 'inserted' => 0, 'deduped' => 0, 'errors' => [], 'stations' => [], 'skipped_fresh' => false];
+
+    // Freshness gate: check if any weather sample for this event was inserted within 8 minutes
+    $freshnessStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM parity_weather_samples
+        WHERE event_id = ?
+          AND timestamp_utc BETWEEN ? AND ?
+          AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 8 MINUTE)
+    ");
+    // Fall back gracefully if created_at column doesn't exist
+    try {
+        $freshnessStmt->execute([$eventId, $startUtc, $endUtc]);
+        $recentCount = (int)$freshnessStmt->fetchColumn();
+    } catch (Exception $e) {
+        $recentCount = 0; // column may not exist yet — proceed without gate
+    }
+
+    if ($recentCount > 0) {
+        $tempestResult['skipped_fresh'] = true;
+        error_log("refreshWeather[$eventId]: Tempest skipped — $recentCount fresh samples found (< 8 min old)");
+    } else {
+        try {
+            $config = parity_getTempestConfig();
+            $stationIds = $config['station_ids'];
+            $tempestResult['stations'] = array_fill_keys($stationIds, ['inserted' => 0, 'deduped' => 0, 'errors' => []]);
+
+            $hasWindCols = false;
+            try {
+                $colChk = $pdo->query("SHOW COLUMNS FROM parity_weather_samples LIKE 'wind_speed_mph'");
+                $hasWindCols = $colChk->rowCount() > 0;
+            } catch (Exception $e) { /* ignore */ }
+
+            if ($hasWindCols) {
+                $stmtInsert = $pdo->prepare("
+                    INSERT INTO parity_weather_samples
+                        (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, wind_speed_mph, wind_dir_deg, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+            } else {
+                $stmtInsert = $pdo->prepare("
+                    INSERT INTO parity_weather_samples
+                        (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+            }
+
+            $current      = new DateTime($startLocal);
+            $end          = new DateTime($endLocal);
+            $isFirstDay   = true;
+            $stepStart    = microtime(true);
+            $STEP_BUDGET  = 60.0; // max seconds for all Tempest fetches
+
+            while ($current <= $end) {
+                // Wall-clock budget guard
+                if ((microtime(true) - $stepStart) > $STEP_BUDGET) {
+                    $tempestResult['errors'][] = 'Tempest step exceeded 60s budget — stopping early';
+                    break;
+                }
+
+                $dateStr = $current->format('Y-m-d');
+                $range   = parity_localDateToUtcRange($dateStr, $tz);
+
+                if (!$isFirstDay) usleep(100 * 1000); // 100ms between days
+                $isFirstDay = false;
+                $tempestResult['daysFetched']++;
+
+                $allStations = parity_fetchAllTempestStations(
+                    $range['start_epoch'],
+                    $range['end_epoch'],
+                    $config,
+                    300,
+                    2  // max 2 retries (vs default 5) — backoff capped at 3s per station-day
+                );
+
+                foreach ($allStations['stations'] as $sid => $stationData) {
+                    if ($stationData['error']) {
+                        $tempestResult['stations'][$sid]['errors'][] = "$dateStr: " . $stationData['error'];
+                        $tempestResult['errors'][] = "station $sid $dateStr: " . $stationData['error'];
+                        continue;
+                    }
+                    $sourceTag = "tempest_$sid";
+                    foreach ($stationData['samples'] as $s) {
+                        $tsUtc   = gmdate('Y-m-d H:i:s', $s['timestamp_epoch']);
+                        $utcDt   = new DateTimeImmutable("@{$s['timestamp_epoch']}");
+                        $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
+                        $localStr = $localDt->format('Y-m-d H:i:s');
+                        $tempF = parity_cToF($s['temp_c']);
+                        try {
+                            if ($hasWindCols) {
+                                $stmtInsert->execute([
+                                    $tsUtc, $eventId, (int)$event['track_id'], $localStr,
+                                    $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
+                                    $s['wind_speed_mph'] ?? null, $s['wind_dir_deg'] ?? null,
+                                    $sourceTag,
+                                ]);
+                            } else {
+                                $stmtInsert->execute([
+                                    $tsUtc, $eventId, (int)$event['track_id'], $localStr,
+                                    $s['temp_c'], $tempF, $s['rh_pct'], $s['station_pressure_raw'],
+                                    $sourceTag,
+                                ]);
+                            }
+                            $tempestResult['inserted']++;
+                            $tempestResult['stations'][$sid]['inserted']++;
+                        } catch (PDOException $e) {
+                            if (strpos($e->getMessage(), 'Duplicate') !== false) {
+                                $tempestResult['deduped']++;
+                                $tempestResult['stations'][$sid]['deduped']++;
+                            } else {
+                                $tempestResult['errors'][] = $e->getMessage();
+                            }
+                        }
+                    }
+                }
+                $current->modify('+1 day');
+            }
+        } catch (RuntimeException $e) {
+            $tempestResult['errors'][] = 'Tempest config: ' . $e->getMessage();
+        }
+    }
+    error_log("refreshWeather[$eventId]: Tempest complete — fresh_skip=" . ($tempestResult['skipped_fresh'] ? 'yes' : 'no') . " inserted={$tempestResult['inserted']} errors=" . count($tempestResult['errors']));
+
+    // ── Step 2: Open-Meteo backfill (with wall-clock budget) ─────────────
+    $openMeteoResult = ['fetched' => 0, 'inserted' => 0, 'deduped' => 0, 'errors' => []];
+    $lat = (float)($event['latitude'] ?? 0);
+    $lon = (float)($event['longitude'] ?? 0);
+
+    if ($lat !== 0.0 && $lon !== 0.0) {
+        require_once __DIR__ . '/parity_weather_provider.php';
+        try {
+            $omStart  = microtime(true);
+            $startUtcIso = $startDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+            $endUtcIso   = $endDt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+            $samples  = fetchOpenMeteoWeather($lat, $lon, $startUtcIso, $endUtcIso);
+            $openMeteoResult['fetched'] = count($samples);
+
+            $hasWindColsOM = false;
+            try {
+                $colChkOM = $pdo->query("SHOW COLUMNS FROM parity_weather_samples LIKE 'wind_speed_mph'");
+                $hasWindColsOM = $colChkOM->rowCount() > 0;
+            } catch (Exception $e) { /* ignore */ }
+
+            if ($hasWindColsOM) {
+                $omInsert = $pdo->prepare("
+                    INSERT INTO parity_weather_samples
+                        (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, wind_speed_mph, wind_dir_deg, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open_meteo_backfill')
+                ");
+            } else {
+                $omInsert = $pdo->prepare("
+                    INSERT INTO parity_weather_samples
+                        (timestamp_utc, event_id, track_id, event_local_time, temp_c, temp_f, rh_pct, station_pressure_raw, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open_meteo_backfill')
+                ");
+            }
+
+            foreach ($samples as $sample) {
+                if ((microtime(true) - $omStart) > 60.0) {
+                    $openMeteoResult['errors'][] = 'Open-Meteo insert exceeded 60s budget — stopping early';
+                    break;
+                }
+                $tempC = ($sample['tempF'] - 32) * 5.0 / 9.0;
+                $pressureMbar = $sample['baroInHg'] / 0.02953;
+                try {
+                    $utcDt   = new DateTimeImmutable($sample['timestampUtc'], new DateTimeZone('UTC'));
+                    $localDt = $utcDt->setTimezone(new DateTimeZone($tz));
+                    $localStr   = $localDt->format('Y-m-d H:i:s');
+                    $tsUtcFmt   = $utcDt->format('Y-m-d H:i:s');
+                } catch (Exception $e) {
+                    $openMeteoResult['errors'][] = 'timestamp parse: ' . $e->getMessage();
+                    continue;
+                }
+                try {
+                    if ($hasWindColsOM) {
+                        $omInsert->execute([
+                            $tsUtcFmt, $eventId, (int)$event['track_id'], $localStr,
+                            round($tempC, 4), round($sample['tempF'], 4),
+                            round($sample['humidityPct'], 2), round($pressureMbar, 4),
+                            isset($sample['windSpeedMph']) ? round($sample['windSpeedMph'], 2) : null,
+                            $sample['windDirDeg'] ?? null,
+                        ]);
+                    } else {
+                        $omInsert->execute([
+                            $tsUtcFmt, $eventId, (int)$event['track_id'], $localStr,
+                            round($tempC, 4), round($sample['tempF'], 4),
+                            round($sample['humidityPct'], 2), round($pressureMbar, 4),
+                        ]);
+                    }
+                    $openMeteoResult['inserted']++;
+                } catch (PDOException $e) {
+                    if (strpos($e->getMessage(), 'Duplicate') !== false) {
+                        $openMeteoResult['deduped']++;
+                    } else {
+                        $openMeteoResult['errors'][] = $e->getMessage();
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            $openMeteoResult['errors'][] = $e->getMessage();
+        }
+    } else {
+        $openMeteoResult['errors'][] = 'Track has no lat/lon — skipping Open-Meteo';
+    }
+    error_log("refreshWeather[$eventId]: Open-Meteo complete — fetched={$openMeteoResult['fetched']} inserted={$openMeteoResult['inserted']} errors=" . count($openMeteoResult['errors']));
+
+    // ── Step 3: Rebuild canonical weather ────────────────────────────────
+    $canonicalResult = ['bucketsProcessed' => 0, 'errors' => []];
+    try {
+        $r = weatherRebuildCanonicalRange($pdo, $startUtc, $endUtc, 30);
+        $canonicalResult['bucketsProcessed'] = $r['bucketsProcessed'] ?? 0;
+    } catch (Exception $e) {
+        $canonicalResult['errors'][] = $e->getMessage();
+    }
+
+    $durationMs = (int)((microtime(true) - $t0) * 1000);
+
+    rsa_jsonResponse([
+        'ok'          => true,
+        'event_id'    => $eventId,
+        'tempest'     => $tempestResult,
+        'open_meteo'  => $openMeteoResult,
+        'canonical'   => $canonicalResult,
         'duration_ms' => $durationMs,
     ]);
 }

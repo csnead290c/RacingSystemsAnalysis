@@ -527,12 +527,12 @@ const PARITY_MB_TO_INHG = 0.02953;
  * @return array{samples: array, httpCode: int, attempts: int}
  * @throws RuntimeException on unrecoverable failure (message is safe to expose)
  */
-function parity_fetchTempest(int $startEpoch, int $endEpoch, int $bucketMinutes, string $stationId, string $apiKey): array {
+function parity_fetchTempest(int $startEpoch, int $endEpoch, int $bucketMinutes, string $stationId, string $apiKey, int $maxRetries = 5): array {
     $url = "https://swd.weatherflow.com/swd/rest/observations/stn/{$stationId}"
          . "?time_start={$startEpoch}&time_end={$endEpoch}"
          . "&bucket={$bucketMinutes}&api_key={$apiKey}";
 
-    $maxRetries = 5;
+    $maxRetries = max(1, $maxRetries);
     $lastHttpCode = 0;
     $lastError = '';
 
@@ -705,7 +705,7 @@ function parity_getTempestConfig(): array {
  * @param int    $throttleMs     Delay between station fetches (default 300ms)
  * @return array [ 'stations' => [ stationId => [ 'samples' => [...], 'error' => null|string ] ], 'totalSamples' => int ]
  */
-function parity_fetchAllTempestStations(int $startEpoch, int $endEpoch, array $config, int $throttleMs = 300): array {
+function parity_fetchAllTempestStations(int $startEpoch, int $endEpoch, array $config, int $throttleMs = 300, int $maxRetries = 5): array {
     $stationIds = $config['station_ids'];
     $apiKey = $config['api_key'];
     $bucketMinutes = $config['bucket_minutes'];
@@ -721,7 +721,7 @@ function parity_fetchAllTempestStations(int $startEpoch, int $endEpoch, array $c
         $isFirst = false;
 
         try {
-            $result = parity_fetchTempest($startEpoch, $endEpoch, $bucketMinutes, $sid, $apiKey);
+            $result = parity_fetchTempest($startEpoch, $endEpoch, $bucketMinutes, $sid, $apiKey, $maxRetries);
             $stations[$sid] = ['samples' => $result['samples'], 'error' => null];
             $totalSamples += count($result['samples']);
         } catch (RuntimeException $e) {
