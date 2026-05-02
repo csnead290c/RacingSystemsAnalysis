@@ -809,6 +809,42 @@ function getRunSortValue(r: RunWithWeather, key: RunSortKey): any {
   return (r as any)[key] ?? null;
 }
 
+// ── Column filter utilities (shared by EventRunsPanel + DriverDrilldownPanel) ──
+type ColFilterSpec =
+  | { type: 'none' }
+  | { type: 'contains'; val: string }
+  | { type: 'gt' | 'gte' | 'lt' | 'lte'; val: number }
+  | { type: 'between'; lo: number; hi: number };
+
+function parseColFilter(input: string): ColFilterSpec {
+  const s = input.trim();
+  if (!s) return { type: 'none' };
+  // Between: "8.5~9.2"  or  "8.5-9.2"  (both sides numeric)
+  const bet = s.match(/^(-?\d+\.?\d*)\s*[~\-]\s*(-?\d+\.?\d*)$/);
+  if (bet) return { type: 'between', lo: +bet[1], hi: +bet[2] };
+  if (s.startsWith('>=')) { const n = +s.slice(2); if (!isNaN(n)) return { type: 'gte', val: n }; }
+  if (s.startsWith('<=')) { const n = +s.slice(2); if (!isNaN(n)) return { type: 'lte', val: n }; }
+  if (s.startsWith('>'))  { const n = +s.slice(1); if (!isNaN(n)) return { type: 'gt',  val: n }; }
+  if (s.startsWith('<'))  { const n = +s.slice(1); if (!isNaN(n)) return { type: 'lt',  val: n }; }
+  return { type: 'contains', val: s.toLowerCase() };
+}
+
+function matchColFilter(spec: ColFilterSpec, cellStr: string, rawVal: number | string | null): boolean {
+  if (spec.type === 'none') return true;
+  if (spec.type === 'contains') return cellStr.toLowerCase().includes(spec.val);
+  // Numeric comparison — use rawVal if numeric, else try parsing the formatted string
+  const n = typeof rawVal === 'number' ? rawVal : parseFloat(cellStr.replace(/[,%]/g, ''));
+  if (isNaN(n)) return false; // non-numeric column: numeric operators yield no match
+  if (spec.type === 'gt')      return n >  spec.val;
+  if (spec.type === 'gte')     return n >= spec.val;
+  if (spec.type === 'lt')      return n <  spec.val;
+  if (spec.type === 'lte')     return n <= spec.val;
+  if (spec.type === 'between') return n >= spec.lo && n <= spec.hi;
+  return true;
+}
+
+const COL_FILTER_HINT = 'Filter: text (contains)  |  >x  >=x  <x  <=x  |  x~y (between)';
+
 function EventRunsPanel({ event, category: globalCategory, classIndex: _globalClassIndex, onDriverClick, refreshKey = 0 }: { event: EventWithStats | null; category?: string; classIndex: string; onDriverClick?: (driver: string, classIndex?: string) => void; refreshKey?: number }) {
   void _globalClassIndex; // kept for backward-compat prop interface
   const { can: canCap } = useCapabilities();
@@ -918,9 +954,12 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
       result = result.filter(r => {
         return Object.entries(colFilters).every(([key, fval]) => {
           if (!fval) return true;
+          const spec = parseColFilter(fval);
+          if (spec.type === 'none') return true;
           const colDef = ALL_COLUMNS.find(c => c.key === key);
           const cellStr = colDef?.format ? colDef.format(r) : String((r as any)[key] ?? '');
-          return cellStr.toLowerCase().includes(fval.toLowerCase());
+          const rawVal = colDef?.sortKey ? getRunSortValue(r, colDef.sortKey) : ((r as any)[key] ?? null);
+          return matchColFilter(spec, cellStr, typeof rawVal === 'number' ? rawVal : null);
         });
       });
     }
@@ -1132,6 +1171,7 @@ function EventRunsPanel({ event, category: globalCategory, classIndex: _globalCl
                       value={colFilters[c.key] ?? ''}
                       onChange={e => setColFilter(c.key, e.target.value)}
                       placeholder="▽"
+                      title={COL_FILTER_HINT}
                       style={{ width: '100%', minWidth: 28, fontSize: '0.62rem', padding: '1px 3px', background: colFilters[c.key] ? 'rgba(59,130,246,0.15)' : 'var(--color-bg, #16162a)', border: '1px solid var(--color-border)', borderRadius: 2, color: 'inherit', outline: 'none' }}
                     />
                   </th>
@@ -1730,7 +1770,11 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
     if (!hasDhColFilters) return true;
     return Object.entries(dhColFilters).every(([key, fval]) => {
       if (!fval) return true;
-      return getDhCellStr(r, key as DHColKey).toLowerCase().includes(fval.toLowerCase());
+      const spec = parseColFilter(fval);
+      if (spec.type === 'none') return true;
+      const cellStr = getDhCellStr(r, key as DHColKey);
+      const rawVal = getDriverSortValue(r, key as DriverSortKey);
+      return matchColFilter(spec, cellStr, typeof rawVal === 'number' ? rawVal : null);
     });
   });
 
@@ -2009,6 +2053,7 @@ function DriverDrilldownPanel({ initialFilter }: { initialFilter?: { driver?: st
                       value={dhColFilters[col.key] ?? ''}
                       onChange={e => setDhColFilter(col.key, e.target.value)}
                       placeholder="▽"
+                      title={COL_FILTER_HINT}
                       style={{ width: '100%', minWidth: 28, fontSize: '0.62rem', padding: '1px 3px', background: dhColFilters[col.key] ? 'rgba(59,130,246,0.15)' : 'var(--color-bg, #16162a)', border: '1px solid var(--color-border)', borderRadius: 2, color: 'inherit', outline: 'none' }}
                     />
                   </th>
