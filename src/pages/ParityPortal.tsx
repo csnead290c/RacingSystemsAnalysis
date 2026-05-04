@@ -62,6 +62,12 @@ import {
   type RefreshStepResult,
   type EventCategory,
   type RefreshTimingOnlyResponse,
+  type WeatherForecastResponse,
+  type ForecastSlot,
+  type RtAnalysisResponse,
+  type RtRun,
+  type RtDriverStat,
+  type RtHoleshot,
 } from '../services/parityApi';
 import {
   formatET, formatMPH, formatBaro,
@@ -75,6 +81,7 @@ import AnomaliesPanel from './AnomaliesPanel';
 import {
   computeWeather,
   computeHPC,
+  applyN2OBlendToHpc,
   correctET,
   correctMPH,
   pct_to_frac,
@@ -86,7 +93,7 @@ import { correctRunClientSide } from '../domain/parity/correctRunClient';
 import { parseCsvWeatherData, WEATHER_PROVIDERS, type WeatherSampleRow } from '../domain/parity/weatherBackfill';
 import { parseBulkCsv, normalizeTrackName } from '../domain/parity/eventImport';
 import { formatLocalTimeLabel, formatLocalDateTime } from '../domain/parity/formatLocalTime';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import { exportQualSheetPdf, exportLadderPdf, exportParitySummaryPdf } from '../services/parityPdf';
 import { resolveDefaultEvent } from '../domain/parity/resolveDefaultEvent';
 import { useCategoryPreset, CLASS_TO_CATEGORY, normalizeCategory } from '../domain/parity/useClassPreset';
@@ -247,7 +254,7 @@ const S = {
   } as React.CSSProperties,
 } as const;
 
-type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'trends' | 'weatherDash' | 'parityDash' | 'parityReport'
+type Tab = 'eventRuns' | 'qualSheet' | 'driverHistory' | 'rtAnalysis' | 'trends' | 'weatherDash' | 'parityDash' | 'parityReport'
   | 'liveTiming' | 'anomalies' | 'incrementalComparison'
   | 'parity' | 'ladder' | 'peek' | 'ingest' | 'query' | 'imports' | 'weather' | 'runsWeather' | 'backfill'
   | 'adminTracks' | 'adminEvents' | 'classAliases' | 'engineCombos' | 'driverCombos' | 'assignCombos'
@@ -261,6 +268,7 @@ const DASHBOARD_TABS: { key: Tab; label: string }[] = [
   { key: 'eventRuns', label: 'Event Runs' },
   { key: 'liveTiming', label: 'Live Timing' },
   { key: 'driverHistory', label: 'Driver History' },
+  { key: 'rtAnalysis', label: 'Reaction Times' },
   { key: 'weatherDash', label: 'Weather' },
   { key: 'parityReport', label: 'Parity Report' },
   { key: 'incrementalComparison', label: 'Incremental Comparison' },
@@ -679,6 +687,7 @@ export default function ParityPortal() {
       {tab === 'liveTiming' && <LiveTimingPanel event={selectedEvent} refreshKey={refreshKey} onDriverClick={goToDriverHistory} />}
       {tab === 'qualSheet' && <QualSheetPanel event={selectedEvent} classIndex={classIndex} onDriverClick={goToDriverHistory} />}
       {tab === 'driverHistory' && <DriverDrilldownPanel initialFilter={driverHistoryFilter} />}
+      {tab === 'rtAnalysis' && <RtAnalysisPanel event={selectedEvent} category={category} />}
       {tab === 'trends' && <TrendsPanel />}
       {tab === 'weatherDash' && <WeatherDashPanel event={selectedEvent} category={category} />}
       {tab === 'parityReport' && <ParityReport event={selectedEvent} events={events} classIndex={classIndex} category={category} onClassChange={(ci: string) => setCategory(CLASS_TO_CATEGORY[ci] || ci)} onDriverClick={goToDriverHistory} />}
@@ -2377,6 +2386,7 @@ function EngineCombosPanel() {
         category: editRow.category || 'Default',
         colorHex: editRow.color_hex || CATEGORY_DEFAULT_COLORS[editRow.category || 'Default'] || '#888888',
         fuelType: editRow.fuel_type || 'Gasoline Carbureted',
+        usesN2o: editRow.uses_n2o ?? false,
       };
       
       // Only include HPC params if manual override is enabled
@@ -2438,7 +2448,7 @@ function EngineCombosPanel() {
 
       <button style={S.btn('primary')} onClick={() => setEditRow({ 
         name: '', category: 'Default', color_hex: '#888888',
-        fuel_type: 'Gasoline Carbureted', t_power: 0.6, d_power: 1.0, friction_factor: 15,
+        fuel_type: 'Gasoline Carbureted', uses_n2o: false, t_power: 0.6, d_power: 1.0, friction_factor: 15,
         manualOverride: false 
       })}>+ Add Engine Combo</button>
 
@@ -2477,6 +2487,17 @@ function EngineCombosPanel() {
                 <option value="Supercharged Methanol">Supercharged Methanol</option>
                 <option value="Supercharged Nitro">Supercharged Nitro</option>
               </select>
+            </div>
+            <div className="parity-form-field">
+              <label>
+                <input type="checkbox" checked={editRow.uses_n2o ?? false}
+                  onChange={e => setEditRow({ ...editRow, uses_n2o: e.target.checked })}
+                  style={{ marginRight: '4px' }} />
+                Nitrous assisted / N2O
+              </label>
+              <div style={{ fontSize: '0.7rem', color: '#999', marginTop: 2 }}>
+                Applies a 50/50 blended gasoline weather correction for large nitrous combinations.
+              </div>
             </div>
             <div className="parity-form-field">
               <label>
@@ -2543,7 +2564,12 @@ function EngineCombosPanel() {
                     {c.category || 'Default'}
                   </span>
                 </td>
-                <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', color: '#999' }}>{c.fuel_type}</td>
+                <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', color: '#999' }}>
+                  {c.fuel_type}
+                  {c.uses_n2o && (
+                    <span style={{ marginLeft: 6, background: '#92400e', color: '#fde68a', padding: '1px 5px', borderRadius: 3, fontSize: '0.7rem', fontWeight: 600 }}>N2O</span>
+                  )}
+                </td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{c.t_power}</td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{c.d_power}</td>
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>{c.friction_factor}</td>
@@ -3393,13 +3419,22 @@ function WeatherCorrectionPanel({ event }: { event: EventWithStats | null }) {
 
       {hpc != null && (() => {
         const combo = engineCombos.find(c => c.id === selectedComboId);
+        const blendedHpc = combo?.uses_n2o ? applyN2OBlendToHpc(hpc) : null;
+        const effectiveHpc = blendedHpc ?? hpc;
         return (
           <div style={{ border: '2px solid var(--color-primary, #3b82f6)', borderRadius: 6, padding: '0.75rem', marginBottom: '1rem', background: 'var(--color-bg-alt, #2a2a3a)' }}>
             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
               <div>
-                <div style={{ fontSize: '0.7rem', color: '#888' }}>HPC (Horsepower Correction)</div>
+                <div style={{ fontSize: '0.7rem', color: '#888' }}>{blendedHpc != null ? 'HPC (gasoline base)' : 'HPC (Horsepower Correction)'}</div>
                 <div style={{ fontFamily: 'monospace', fontSize: '1.3rem', fontWeight: 700 }}>{hpc.toFixed(6)}</div>
               </div>
+              {blendedHpc != null && (
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#fde68a' }}>HPC (N2O blended, 50%)</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '1.3rem', fontWeight: 700, color: '#fde68a' }}>{blendedHpc.toFixed(6)}</div>
+                  <div style={{ fontSize: '0.7rem', color: '#d97706', marginTop: 2 }}>N2O blend: 50% gasoline weather sensitivity</div>
+                </div>
+              )}
               {combo && (
                 <div style={{ fontSize: '0.75rem', color: '#aaa', fontFamily: 'monospace' }}>
                   {combo.name} — tP={combo.t_power} dP={combo.d_power} FF={combo.friction_factor}
@@ -3411,12 +3446,12 @@ function WeatherCorrectionPanel({ event }: { event: EventWithStats | null }) {
                 <input type="number" step="0.001" value={sampleET} onChange={e => setSampleET(parseFloat(e.target.value) || 0)}
                   style={{ padding: '0.25rem 0.5rem', fontFamily: 'monospace', width: 80, marginLeft: 4 }} />
               </label>
-              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>→ Corrected ET: <b>{fmt(correctET(sampleET, hpc), 4)}</b></span>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>→ Corrected ET: <b>{fmt(correctET(sampleET, effectiveHpc), 4)}</b></span>
               <label style={{ fontSize: '0.8rem' }}>Sample MPH:
                 <input type="number" step="0.1" value={sampleMPH} onChange={e => setSampleMPH(parseFloat(e.target.value) || 0)}
                   style={{ padding: '0.25rem 0.5rem', fontFamily: 'monospace', width: 80, marginLeft: 4 }} />
               </label>
-              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>→ Corrected MPH: <b>{fmt(correctMPH(sampleMPH, hpc), 2)}</b></span>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>→ Corrected MPH: <b>{fmt(correctMPH(sampleMPH, effectiveHpc), 2)}</b></span>
             </div>
           </div>
         );
@@ -5126,9 +5161,10 @@ function RunsWeatherPanel({ raceLookup, onGoToAssignCombos }: { raceLookup: stri
         const ec = ecMap.get(resolved.engineComboId!);
         if (!ec) { cr._hpcReason = `Engine combo #${resolved.engineComboId} missing`; missingCount++; return cr; }
 
-        const hpc = computeHPC({ engineCombo: ec.name, tPower: ec.t_power, dPower: ec.d_power, FF: ec.friction_factor, theta: w.theta, delta: w.delta });
-        if (!hpc || !isFinite(hpc)) { cr._hpcReason = 'HPC non-finite'; return cr; }
+        const rawHpc = computeHPC({ engineCombo: ec.name, tPower: ec.t_power, dPower: ec.d_power, FF: ec.friction_factor, theta: w.theta, delta: w.delta });
+        if (!rawHpc || !isFinite(rawHpc)) { cr._hpcReason = 'HPC non-finite'; return cr; }
 
+        const hpc = ec.uses_n2o ? applyN2OBlendToHpc(rawHpc) : rawHpc;
         cr._hpc = hpc;
         cr._corr1320 = r.ft1320 != null ? correctET(r.ft1320, hpc) : null;
         cr._corrMph1320 = r.mph1320 != null ? correctMPH(r.mph1320, hpc) : null;
@@ -7307,6 +7343,372 @@ interface DerivedPoint {
 }
 
 /** Centralized weather metric formatters for consistent axis ticks, tooltips, and readouts */
+// ────────────────────────────────────────────────────────────────────────────
+// RtAnalysisPanel
+// ────────────────────────────────────────────────────────────────────────────
+
+const RADAR_COLORS = ['#2563eb','#16a34a','#dc2626','#9333ea','#f97316','#0891b2','#ca8a04','#db2777'];
+
+function rtColor(rt: number, p33: number, p66: number): string {
+  if (rt <= p33) return '#16a34a';
+  if (rt <= p66) return '#ca8a04';
+  return '#dc2626';
+}
+
+function percentile(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  const idx = Math.max(0, Math.ceil(sorted.length * p) - 1);
+  return sorted[idx];
+}
+
+function RtAnalysisPanel({ event, category }: { event: EventWithStats | null; category: string }) {
+  type RtSubTab = 'event' | 'season';
+  const [subTab, setSubTab] = useState<RtSubTab>('event');
+  const [rtData, setRtData] = useState<RtAnalysisResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [seasonYear, setSeasonYear] = useState<number>(new Date().getFullYear());
+  const [selectedDrivers, setSelectedDrivers] = useState<Set<string>>(new Set());
+  const [driverSortCol, setDriverSortCol] = useState<keyof RtDriverStat>('medianRT');
+  const [driverSortAsc, setDriverSortAsc] = useState(true);
+  const [showAllRounds, setShowAllRounds] = useState(false);
+
+  const fetch = useCallback(async () => {
+    if (!category.trim()) return;
+    setLoading(true); setError(''); setRtData(null);
+    try {
+      const params = subTab === 'event' && event
+        ? { eventId: event.id, category: category.trim() }
+        : { category: category.trim(), year: seasonYear };
+      const r = await parityApi.rtAnalysis(params);
+      setRtData(r);
+      // Default: top 5 drivers by median RT
+      if (r.driverStats.length) {
+        setSelectedDrivers(new Set(r.driverStats.slice(0, Math.min(5, r.driverStats.length)).map(d => d.driver)));
+      }
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  }, [subTab, event, category, seasonYear]);
+
+  // Compute RT percentile thresholds for coloring
+  const rtThresholds = useMemo(() => {
+    if (!rtData) return { p33: 0, p66: 1 };
+    const sorted = [...rtData.runs.filter(r => !r.dqFlag).map(r => r.rt)].sort((a, b) => a - b);
+    return { p33: percentile(sorted, 0.33), p66: percentile(sorted, 0.66) };
+  }, [rtData]);
+
+  // Sort driver stats
+  const sortedDrivers = useMemo(() => {
+    if (!rtData) return [];
+    return [...rtData.driverStats].sort((a, b) => {
+      const av = a[driverSortCol] as number | null;
+      const bv = b[driverSortCol] as number | null;
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return driverSortAsc ? av - bv : bv - av;
+    });
+  }, [rtData, driverSortCol, driverSortAsc]);
+
+  const sortHeader = (col: keyof RtDriverStat, label: string) => (
+    <th
+      style={{ ...S.th, cursor: 'pointer', background: 'var(--color-surface)', fontSize: '0.62rem', textAlign: 'right' as const, userSelect: 'none' as const }}
+      onClick={() => { if (driverSortCol === col) setDriverSortAsc(a => !a); else { setDriverSortCol(col); setDriverSortAsc(true); } }}
+    >
+      {label}{driverSortCol === col ? (driverSortAsc ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+
+  // Radar data
+  const radarDrivers = sortedDrivers.filter(d => selectedDrivers.has(d.driver));
+  const radarData = radarDrivers.length > 0 ? [
+    { axis: 'Quickness',   ...Object.fromEntries(radarDrivers.map(d => [d.driver, d.radar?.rtQuickness ?? 0]))   },
+    { axis: 'Consistency', ...Object.fromEntries(radarDrivers.map(d => [d.driver, d.radar?.rtConsistency ?? 0])) },
+    { axis: 'Staging',     ...Object.fromEntries(radarDrivers.map(d => [d.driver, d.radar?.stagingDepth ?? 0]))  },
+    { axis: 'Elim ↑',      ...Object.fromEntries(radarDrivers.map(d => [d.driver, d.radar?.elimStepup ?? 0]))    },
+    { axis: 'Net Launch',  ...Object.fromEntries(radarDrivers.map(d => [d.driver, d.radar?.netLaunch ?? 0]))     },
+    { axis: 'Holeshot',    ...Object.fromEntries(radarDrivers.map(d => [d.driver, d.radar?.holeshotRate ?? 0]))  },
+  ] : [];
+
+  // Group runs by round for per-round table
+  const roundGroups = useMemo(() => {
+    if (!rtData) return new Map<string, RtRun[]>();
+    const m = new Map<string, RtRun[]>();
+    for (const r of rtData.runs) {
+      const arr = m.get(r.round) ?? [];
+      arr.push(r);
+      m.set(r.round, arr);
+    }
+    return m;
+  }, [rtData]);
+
+  const roundOrder = ['Q1','Q2','Q3','Q4','E1','E2','E3','E4','Final','Other'];
+  const sortedRounds = useMemo(() =>
+    [...roundGroups.keys()].sort((a, b) => {
+      const ai = roundOrder.indexOf(a.toUpperCase());
+      const bi = roundOrder.indexOf(b.toUpperCase());
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }),
+    [roundGroups]
+  );
+
+  // Elim runs sorted by RT for ranked view
+  const rankedElimRuns = useMemo(() =>
+    rtData ? [...rtData.runs.filter(r => r.roundType === 'elim' && !r.dqFlag)].sort((a, b) => a.rt - b.rt) : [],
+    [rtData]
+  );
+
+  return (
+    <div style={{ padding: '0.5rem 0' }}>
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {(['event', 'season'] as RtSubTab[]).map(st => (
+          <button
+            key={st}
+            onClick={() => { setSubTab(st); setRtData(null); }}
+            style={{
+              ...S.btn(subTab === st ? 'primary' : 'secondary'),
+              fontSize: '0.75rem', padding: '0.2rem 0.6rem', textTransform: 'capitalize' as const
+            }}
+          >{st === 'event' ? 'Event' : 'Season'}</button>
+        ))}
+        {subTab === 'season' && (
+          <select value={seasonYear} onChange={e => setSeasonYear(+e.target.value)} style={{ ...S.input, width: 90, fontSize: '0.75rem', padding: '0.18rem 0.35rem' }}>
+            {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        )}
+        <button
+          onClick={fetch}
+          disabled={loading || (!event && subTab === 'event') || !category}
+          style={{ ...S.btn('primary'), fontSize: '0.75rem', padding: '0.2rem 0.6rem', opacity: (loading || (!event && subTab === 'event') || !category) ? 0.5 : 1 }}
+        >
+          {loading ? 'Loading…' : '⚡ Analyze'}
+        </button>
+        {!category && <span style={{ fontSize: '0.7rem', color: '#f97316' }}>Select a category first</span>}
+        {subTab === 'event' && !event && <span style={{ fontSize: '0.7rem', color: '#f97316' }}>Select an event first</span>}
+      </div>
+
+      {error && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{error}</div>}
+
+      {rtData && rtData.runs.length === 0 && (
+        <div style={{ ...S.hint }}>No reaction time data found for this {subTab === 'event' ? 'event' : `${seasonYear} season`}.</div>
+      )}
+
+      {rtData && rtData.runs.length > 0 && (
+        <div>
+          {/* ── Summary bar ── */}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
+            <span>{rtData.runs.length} runs total</span>
+            <span>{rtData.runs.filter(r => r.roundType === 'elim').length} elim</span>
+            <span>{rtData.runs.filter(r => r.roundType === 'qual').length} qual</span>
+            <span>{rtData.driverStats.length} drivers</span>
+            {rtData.holeshots.length > 0 && <span style={{ color: '#2563eb' }}>{rtData.holeshots.length} holeshots</span>}
+          </div>
+
+          {/* ── Section 1: RTs Per Round ── */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>RTs Per Round</span>
+              <button onClick={() => setShowAllRounds(v => !v)} style={{ ...S.btn('secondary'), fontSize: '0.58rem', padding: '0.08rem 0.3rem' }}>
+                {showAllRounds ? 'Elim only' : 'All rounds'}
+              </button>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+                <thead><tr>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Round</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Driver</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem', textAlign: 'right' as const }}>RT</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem', textAlign: 'right' as const }}>60′</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>W</th>
+                </tr></thead>
+                <tbody>
+                  {sortedRounds
+                    .filter(rd => showAllRounds || (rtData.runs.find(r => r.round === rd)?.roundType === 'elim'))
+                    .flatMap(rd => {
+                      const runs = roundGroups.get(rd) ?? [];
+                      const minRT = Math.min(...runs.map(r => r.rt));
+                      return runs.map((r, i) => (
+                        <tr key={`${rd}-${i}`}>
+                          {i === 0 && <td rowSpan={runs.length} style={{ ...S.td, fontWeight: 600, verticalAlign: 'top', fontSize: '0.65rem', color: r.roundType === 'elim' ? '#2563eb' : '#888' }}>{rd}</td>}
+                          <td style={{ ...S.td, fontSize: '0.68rem' }}>{r.driver}</td>
+                          <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', fontWeight: r.rt === minRT ? 700 : 400, color: rtColor(r.rt, rtThresholds.p33, rtThresholds.p66) }}>
+                            {r.rt.toFixed(4)}
+                          </td>
+                          <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#888', fontSize: '0.65rem' }}>
+                            {r.ft60 != null ? r.ft60.toFixed(4) : '—'}
+                          </td>
+                          <td style={{ ...S.td, textAlign: 'center' as const }}>
+                            {r.winFlag ? <span style={{ color: '#16a34a' }}>✓</span> : ''}
+                          </td>
+                        </tr>
+                      ));
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── Section 2: Ranked Elim RTs ── */}
+          {rankedElimRuns.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.25rem' }}>Ranked Eliminations RT (best → worst)</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+                  <thead><tr>
+                    <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Rank</th>
+                    <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Driver</th>
+                    <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Round</th>
+                    <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem', textAlign: 'right' as const }}>RT</th>
+                    <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>W</th>
+                  </tr></thead>
+                  <tbody>
+                    {rankedElimRuns.map((r, idx) => (
+                      <tr key={idx}>
+                        <td style={{ ...S.td, color: '#888', fontSize: '0.62rem' }}>{idx + 1}</td>
+                        <td style={{ ...S.td, fontSize: '0.68rem' }}>{r.driver}</td>
+                        <td style={{ ...S.td, fontSize: '0.65rem', color: '#888' }}>{r.round}</td>
+                        <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: rtColor(r.rt, rtThresholds.p33, rtThresholds.p66), fontWeight: 700 }}>
+                          {r.rt.toFixed(4)}
+                        </td>
+                        <td style={{ ...S.td, textAlign: 'center' as const }}>
+                          {r.winFlag ? <span style={{ color: '#16a34a' }}>✓</span> : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Section 3: Driver Summary (sortable) ── */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.25rem' }}>Driver Summary</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+                <thead><tr>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.62rem' }}>#</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.62rem' }}>Driver</th>
+                  {sortHeader('medianRT', 'Median RT')}
+                  {sortHeader('stddevRT', 'Std Dev')}
+                  {sortHeader('runCount', 'Runs')}
+                  {sortHeader('qualAvgRT', 'Qual Avg')}
+                  {sortHeader('elimAvgRT', 'Elim Avg')}
+                  {sortHeader('elimStepup', 'Step-up')}
+                  {sortHeader('avgFt60', '60′ Avg')}
+                  {sortHeader('netLaunch', 'Net Launch')}
+                  {sortHeader('holeshotCount', 'HS')}
+                </tr></thead>
+                <tbody>
+                  {sortedDrivers.map((d, i) => (
+                    <tr key={d.driver}>
+                      <td style={{ ...S.td, color: '#888', fontSize: '0.6rem' }}>{i + 1}</td>
+                      <td style={{ ...S.td, fontSize: '0.7rem', fontWeight: 600 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedDrivers.has(d.driver)}
+                            onChange={e => setSelectedDrivers(prev => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(d.driver); else next.delete(d.driver);
+                              return next;
+                            })}
+                            style={{ width: 12, height: 12 }}
+                          />
+                          {d.driver}
+                        </label>
+                      </td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: rtColor(d.medianRT, rtThresholds.p33, rtThresholds.p66), fontWeight: 700 }}>{d.medianRT.toFixed(4)}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace' }}>{d.stddevRT.toFixed(4)}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const }}>{d.runCount}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#888' }}>{d.qualAvgRT != null ? d.qualAvgRT.toFixed(4) : '—'}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#888' }}>{d.elimAvgRT != null ? d.elimAvgRT.toFixed(4) : '—'}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: d.elimStepup != null ? (d.elimStepup < 0 ? '#16a34a' : '#dc2626') : '#888' }}>
+                        {d.elimStepup != null ? (d.elimStepup < 0 ? '' : '+') + d.elimStepup.toFixed(4) : '—'}
+                      </td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#888' }}>{d.avgFt60 != null ? d.avgFt60.toFixed(4) : '—'}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#888' }}>{d.netLaunch != null ? d.netLaunch.toFixed(4) : '—'}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, color: d.holeshotCount > 0 ? '#2563eb' : '#888' }}>{d.holeshotCount || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '0.2rem' }}>Check drivers to include in radar chart. Step-up = elim avg − qual avg (negative = faster in elims).</div>
+          </div>
+
+          {/* ── Section 4: Radar Chart ── */}
+          {radarData.length > 0 && radarDrivers.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.35rem' }}>
+                RT Performance Radar — {radarDrivers.length} driver{radarDrivers.length !== 1 ? 's' : ''} (normalized 0–1, higher = better)
+              </div>
+              <ResponsiveContainer width="100%" height={320}>
+                <RadarChart data={radarData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
+                  <PolarGrid stroke="var(--color-border)" />
+                  <PolarAngleAxis dataKey="axis" tick={{ fontSize: 11, fill: 'var(--color-text)' }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 1]} tick={{ fontSize: 9, fill: '#888' }} tickCount={4} />
+                  {radarDrivers.map((d, i) => (
+                    <Radar
+                      key={d.driver}
+                      name={d.driver}
+                      dataKey={d.driver}
+                      stroke={RADAR_COLORS[i % RADAR_COLORS.length]}
+                      fill={RADAR_COLORS[i % RADAR_COLORS.length]}
+                      fillOpacity={0.12}
+                      strokeWidth={2}
+                    />
+                  ))}
+                  <Legend wrapperStyle={{ fontSize: '0.65rem' }} />
+                  <Tooltip
+                    formatter={(v: number, name: string) => [v.toFixed(3), name]}
+                    contentStyle={{ fontSize: '0.7rem' }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* ── Section 5: Holeshots ── */}
+          <div style={{ marginBottom: '0.5rem' }}>
+            <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.25rem' }}>Holeshots</div>
+            {rtData.holeshots.length === 0 ? (
+              <div style={{ ...S.hint }}>No holeshots detected.</div>
+            ) : (
+              <table style={{ ...S.table, fontSize: '0.72rem' }}>
+                <thead><tr>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Round</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Winner</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem', textAlign: 'right' as const }}>Winner RT</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Loser</th>
+                  <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem', textAlign: 'right' as const }}>Loser RT</th>
+                </tr></thead>
+                <tbody>
+                  {rtData.holeshots.map((h: RtHoleshot, i: number) => (
+                    <tr key={i}>
+                      <td style={{ ...S.td, fontSize: '0.65rem', color: '#2563eb', fontWeight: 600 }}>{h.round}</td>
+                      <td style={{ ...S.td }}>{h.winner}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#16a34a', fontWeight: 700 }}>{h.winnerRT.toFixed(4)}</td>
+                      <td style={{ ...S.td, color: '#888' }}>{h.loser}</td>
+                      <td style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace', color: '#888' }}>{h.loserRT.toFixed(4)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const wxFmt = {
   temp:   (v: number) => v.toFixed(1),                                         // °F — 1 decimal
   rh:     (v: number) => v.toFixed(0),                                         // % — integer
@@ -7338,6 +7740,12 @@ function WeatherDashPanel({ event, category }: { event: EventWithStats | null; c
   const [predictionResult, setPredictionResult] = useState<any>(null);
   const [predictionError, setPredictionError] = useState('');
   const [comboExpanded, setComboExpanded] = useState(false);
+
+  // Weather forecast state
+  const [forecastData, setForecastData] = useState<WeatherForecastResponse | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState('');
+  const [forecastExpanded, setForecastExpanded] = useState(true);
 
   const fetchLiveWeather = useCallback(async () => {
     setLiveLoading(true); setLiveError('');
@@ -7578,107 +7986,150 @@ function WeatherDashPanel({ event, category }: { event: EventWithStats | null; c
         </div>
       )}
 
-      {/* Performance Prediction */}
+      {/* Performance Prediction — three tiers + combo table */}
       {category && (
         <div style={{ marginBottom: '0.5rem' }}>
-          <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '0.2rem' }}>
-            Performance Prediction for <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{category}</span>
-            {predictionLoading && <span style={{ marginLeft: '0.5rem', color: '#3b82f6' }}>Calculating...</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.65rem', color: '#888' }}>
+              Predicted Performance — <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{category}</span>
+            </span>
+            {predictionLoading && <span style={{ fontSize: '0.65rem', color: '#3b82f6' }}>Calculating...</span>}
+            {event && (
+              <button
+                style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.12rem 0.45rem', marginLeft: 'auto', opacity: forecastLoading ? 0.6 : 1 }}
+                disabled={forecastLoading}
+                onClick={async () => {
+                  setForecastLoading(true); setForecastError('');
+                  try {
+                    const r = await parityApi.weatherForecast({ eventId: event.id, category: category.trim(), hours: 4 });
+                    setForecastData(r);
+                  } catch (e: any) { setForecastError(e.message); }
+                  setForecastLoading(false);
+                }}
+              >
+                {forecastLoading ? 'Fetching…' : '⛅ Get +4hr Forecast'}
+              </button>
+            )}
           </div>
-          {predictionError && (
-            <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.2rem' }}>{predictionError}</div>
-          )}
-          {predictionResult && (
-            <div style={{
-              background: 'rgba(59,130,246,0.05)',
-              border: '1px solid rgba(59,130,246,0.2)',
-              borderRadius: 6,
-              padding: '0.5rem',
-              fontSize: '0.75rem'
-            }}>
-              {predictionResult.error ? (
-                <div style={{ color: '#dc2626' }}>{predictionResult.error}</div>
-              ) : (
-                <div>
-                  <div style={{ fontWeight: 600, marginBottom: '0.4rem', color: '#2563eb' }}>
-                    Predicted Performance
-                  </div>
+          {predictionError && <div style={{ color: '#ef4444', fontSize: '0.72rem', marginBottom: '0.2rem' }}>{predictionError}</div>}
 
-                  {predictionResult.comboPredictions && predictionResult.comboPredictions.length > 0 ? (
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
-                        <button
-                          onClick={() => setComboExpanded(e => !e)}
-                          style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.12rem 0.45rem' }}
-                        >
-                          {comboExpanded ? '▲ Compact' : '▼ Expand'}
-                        </button>
-                      </div>
-
-                      {comboExpanded ? (
-                        /* ── Expanded: one row per engine combo ── */
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
-                            <thead>
-                              <tr>
-                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Engine Combo</th>
-                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Best Driver</th>
-                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted ET</th>
-                                <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>Predicted MPH</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {predictionResult.comboPredictions.map((c: any, i: number) => (
-                                <tr key={i}>
-                                  <td style={{ ...S.td, fontWeight: 600 }}>{c.comboName}</td>
-                                  <td style={{ ...S.td, color: '#aaa', fontSize: '0.68rem' }}>{c.bestDriver}</td>
-                                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
-                                    <b style={{ color: '#2563eb' }}>{formatET(c.predictedET)}</b>
-                                  </td>
-                                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>
-                                    <b style={{ color: '#2563eb' }}>{formatMPH(c.predictedMPH)}</b>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+          {predictionResult && !predictionResult.error && (() => {
+            const tiers = predictionResult.tiers;
+            const tierDefs = [
+              { key: 'average', label: 'Average', color: '#6b7280', accent: 'rgba(107,114,128,0.1)' },
+              { key: 'good',    label: 'Good',    color: '#16a34a', accent: 'rgba(22,163,74,0.1)'  },
+              { key: 'great',   label: 'Great',   color: '#2563eb', accent: 'rgba(37,99,235,0.1)'  },
+            ] as const;
+            return (
+              <div>
+                {tiers && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.35rem', marginBottom: '0.4rem' }}>
+                    {tierDefs.map(td => {
+                      const t = tiers[td.key];
+                      return (
+                        <div key={td.key} style={{ background: td.accent, border: `1px solid ${td.color}33`, borderRadius: 6, padding: '0.4rem 0.5rem', textAlign: 'center' as const }}>
+                          <div style={{ fontSize: '0.55rem', textTransform: 'uppercase' as const, color: td.color, fontWeight: 700, letterSpacing: '0.05em', marginBottom: '0.15rem' }}>{td.label}</div>
+                          {t ? (
+                            <>
+                              <div style={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 800, color: td.color, lineHeight: 1.1 }}>{formatET(t.predictedET)}</div>
+                              <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: td.color }}>{formatMPH(t.predictedMPH)} MPH</div>
+                              <div style={{ fontSize: '0.55rem', color: '#888', marginTop: '0.1rem' }}>{t.sampleCount} runs</div>
+                            </>
+                          ) : <div style={{ fontSize: '0.7rem', color: '#888' }}>—</div>}
                         </div>
-                      ) : (
-                        /* ── Compact: best combo only ── */
-                        (() => {
-                          const best = predictionResult.comboPredictions[0];
-                          return (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'baseline' }}>
-                              <div>
-                                <span style={{ color: '#888' }}>ET:</span>{' '}
-                                <b style={{ color: '#2563eb', fontFamily: 'monospace' }}>{formatET(best.predictedET)}</b>
-                              </div>
-                              <div>
-                                <span style={{ color: '#888' }}>MPH:</span>{' '}
-                                <b style={{ color: '#2563eb', fontFamily: 'monospace' }}>{formatMPH(best.predictedMPH)}</b>
-                              </div>
-                              <div style={{ fontSize: '0.65rem', color: '#888' }}>{best.comboName}</div>
-                            </div>
-                          );
-                        })()
-                      )}
+                      );
+                    })}
+                  </div>
+                )}
+                {predictionResult.comboPredictions && predictionResult.comboPredictions.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                      <span style={{ fontSize: '0.62rem', color: '#888' }}>By Engine Combo</span>
+                      <button onClick={() => setComboExpanded(e => !e)} style={{ ...S.btn('secondary'), fontSize: '0.6rem', padding: '0.1rem 0.4rem' }}>
+                        {comboExpanded ? '▲' : '▼'}
+                      </button>
                     </div>
-                  ) : predictionResult.prediction ? (
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                      <div>
-                        <span style={{ color: '#888' }}>ET:</span>{' '}
-                        <b style={{ color: '#2563eb' }}>{formatET(predictionResult.prediction.predictedET)}</b>
+                    {comboExpanded && (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ ...S.table, fontSize: '0.72rem', width: '100%' }}>
+                          <thead><tr>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Combo</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)' }}>Driver</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>ET</th>
+                            <th style={{ ...S.th, fontSize: '0.62rem', background: 'var(--color-surface)', textAlign: 'right' }}>MPH</th>
+                          </tr></thead>
+                          <tbody>
+                            {predictionResult.comboPredictions.map((c: any, i: number) => (
+                              <tr key={i}>
+                                <td style={{ ...S.td, fontWeight: 600 }}>{c.comboName}</td>
+                                <td style={{ ...S.td, color: '#aaa', fontSize: '0.68rem' }}>{c.bestDriver}</td>
+                                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}><b style={{ color: '#2563eb' }}>{formatET(c.predictedET)}</b></td>
+                                <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}><b style={{ color: '#2563eb' }}>{formatMPH(c.predictedMPH)}</b></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <div>
-                        <span style={{ color: '#888' }}>MPH:</span>{' '}
-                        <b style={{ color: '#2563eb' }}>{formatMPH(predictionResult.prediction.predictedMPH)}</b>
-                      </div>
-                    </div>
-                  ) : null}
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Weather Forecast Grid ── */}
+          {forecastError && <div style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '0.25rem' }}>{forecastError}</div>}
+          {forecastData && forecastData.forecast.length > 0 && (() => {
+            const tiers = predictionResult?.tiers;
+            const hasT = !!tiers;
+            return (
+              <div style={{ marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                  <div style={{ fontSize: '0.62rem', color: '#888' }}>Weather Forecast — {forecastData.trackName}</div>
+                  <button
+                    onClick={() => setForecastExpanded(e => !e)}
+                    style={{ ...S.btn('secondary'), fontSize: '0.58rem', padding: '0.1rem 0.4rem' }}
+                  >
+                    {forecastExpanded ? '▲ Hide' : '▼ Show'}
+                  </button>
                 </div>
-              )}
+                {!forecastExpanded ? null : <div style={{ overflowX: 'auto' }}>
+                <table style={{ ...S.table, fontSize: '0.7rem', width: '100%', minWidth: 380 }}>
+                  <thead><tr>
+                    <th style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem' }}>Metric</th>
+                    {forecastData.forecast.map((s: ForecastSlot) => (
+                      <th key={s.offsetHours} style={{ ...S.th, background: 'var(--color-surface)', fontSize: '0.6rem', textAlign: 'center' as const }}>
+                        +{s.offsetHours}h<br /><span style={{ fontWeight: 400, color: '#aaa' }}>{s.timeUtc.slice(11, 16)} UTC</span>
+                      </th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {[
+                      { label: 'Temp °F',     fmt: (s: ForecastSlot) => s.temp_f != null ? wxFmt.temp(s.temp_f) : '—' },
+                      { label: 'RH %',        fmt: (s: ForecastSlot) => s.rh_pct != null ? wxFmt.rh(s.rh_pct) : '—' },
+                      { label: 'Press inHg',  fmt: (s: ForecastSlot) => s.pressure_inhg != null ? wxFmt.baro(s.pressure_inhg) : '—' },
+                      { label: 'Density Alt', fmt: (s: ForecastSlot) => s.da != null ? wxFmt.da(s.da) : '—' },
+                      { label: 'Corr Factor', fmt: (s: ForecastSlot) => s.cf != null ? wxFmt.cf(s.cf) : '—' },
+                      { label: 'Grains',      fmt: (s: ForecastSlot) => s.waterGrains != null ? wxFmt.grains(s.waterGrains) : '—' },
+                      ...(hasT ? [
+                        { label: '🥉 Avg ET',   fmt: (s: ForecastSlot) => s.tiers?.average ? formatET(s.tiers.average.predictedET) : '—' },
+                        { label: '🥈 Good ET',  fmt: (s: ForecastSlot) => s.tiers?.good    ? formatET(s.tiers.good.predictedET)    : '—' },
+                        { label: '🥇 Great ET', fmt: (s: ForecastSlot) => s.tiers?.great   ? formatET(s.tiers.great.predictedET)   : '—' },
+                      ] : []),
+                    ].map(row => (
+                      <tr key={row.label}>
+                        <td style={{ ...S.td, fontSize: '0.62rem', color: '#888', whiteSpace: 'nowrap' as const }}>{row.label}</td>
+                        {forecastData.forecast.map((s: ForecastSlot) => (
+                          <td key={s.offsetHours} style={{ ...S.td, textAlign: 'right' as const, fontFamily: 'monospace' }}>{row.fmt(s)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

@@ -498,6 +498,14 @@ switch ($action) {
         if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
         handlePerformancePrediction($pdo);
         break;
+    case 'weatherForecast':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleWeatherForecast($pdo);
+        break;
+    case 'rtAnalysis':
+        if ($method !== 'GET') rsa_jsonResponse(['error' => 'Method not allowed'], 405);
+        handleRtAnalysis($pdo);
+        break;
     default:
         rsa_jsonResponse(['error' => 'Invalid action'], 400);
 }
@@ -5862,13 +5870,14 @@ function handleBulkCreateEvents(PDO $pdo, array $auth): void {
 // ============================================================================
 
 function handleListEngineCombos(PDO $pdo): void {
-    $stmt = $pdo->query("SELECT id, name, category, t_power, d_power, friction_factor, fuel_type, color_hex, created_at, updated_at FROM parity_engine_combos ORDER BY name");
+    $stmt = $pdo->query("SELECT id, name, category, t_power, d_power, friction_factor, fuel_type, uses_n2o, color_hex, created_at, updated_at FROM parity_engine_combos ORDER BY name");
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
         $r['id'] = (int)$r['id'];
         $r['t_power'] = (float)$r['t_power'];
         $r['d_power'] = (float)$r['d_power'];
         $r['friction_factor'] = (float)$r['friction_factor'];
+        $r['uses_n2o'] = (bool)$r['uses_n2o'];
     }
     rsa_jsonResponse(['combos' => $rows]);
 }
@@ -5885,6 +5894,7 @@ function handleUpsertEngineCombo(PDO $pdo, array $auth): void {
     $category = trim($input['category'] ?? 'Default');
     $colorHex = trim($input['colorHex'] ?? '#888888');
     $fuelType = trim($input['fuelType'] ?? 'Gasoline Carbureted');
+    $usesN2o  = !empty($input['usesN2o']) ? 1 : 0;
     $tPower   = (float)($input['tPower'] ?? 0);
     $dPower   = (float)($input['dPower'] ?? 0);
     $ff       = (float)($input['FF'] ?? 0);
@@ -5912,15 +5922,15 @@ function handleUpsertEngineCombo(PDO $pdo, array $auth): void {
         $chk = $pdo->prepare("SELECT id FROM parity_engine_combos WHERE name=? AND id!=?");
         $chk->execute([$name, $id]);
         if ($chk->fetch()) rsa_jsonResponse(['error' => 'Engine combo name already exists'], 409);
-        $pdo->prepare("UPDATE parity_engine_combos SET name=?, category=?, t_power=?, d_power=?, friction_factor=?, fuel_type=?, color_hex=? WHERE id=?")
-            ->execute([$name, $category, $tPower, $dPower, $ff, $fuelType, $colorHex, $id]);
+        $pdo->prepare("UPDATE parity_engine_combos SET name=?, category=?, t_power=?, d_power=?, friction_factor=?, fuel_type=?, uses_n2o=?, color_hex=? WHERE id=?")
+            ->execute([$name, $category, $tPower, $dPower, $ff, $fuelType, $usesN2o, $colorHex, $id]);
         rsa_jsonResponse(['ok' => true, 'id' => $id]);
     } else {
         $chk = $pdo->prepare("SELECT id FROM parity_engine_combos WHERE name=?");
         $chk->execute([$name]);
         if ($chk->fetch()) rsa_jsonResponse(['error' => 'Engine combo name already exists'], 409);
-        $pdo->prepare("INSERT INTO parity_engine_combos (name, category, t_power, d_power, friction_factor, fuel_type, color_hex) VALUES (?,?,?,?,?,?,?)")
-            ->execute([$name, $category, $tPower, $dPower, $ff, $fuelType, $colorHex]);
+        $pdo->prepare("INSERT INTO parity_engine_combos (name, category, t_power, d_power, friction_factor, fuel_type, uses_n2o, color_hex) VALUES (?,?,?,?,?,?,?,?)")
+            ->execute([$name, $category, $tPower, $dPower, $ff, $fuelType, $usesN2o, $colorHex]);
         rsa_jsonResponse(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
     }
 }
@@ -13251,22 +13261,256 @@ function parity_computeWeather(float $tempF, float $rhFraction, float $pressureI
     $dapHPa = $dap / 0.02953;           // inHg → hPa
     $correctionFactor = 1.176 * (1013.20690822892 / $dapHPa) * sqrt($tempK / 288.705555555556) - 0.176;
 
-    // Air density + density altitude (metric, for informational use)
-    $pressurePa = $pressureInHg * 3386.39;
-    $vpPa       = $vp  * 3386.39;
-    $dapPa      = $dap * 3386.39;
-    $tempK2     = $tempK; // same value
-    $airDensity     = ($dapPa / (287.05 * $tempK2)) + ($vpPa / (461.5 * $tempK2));
-    $densityAltitude = 44330 * (1 - pow($airDensity / 1.225, 0.235)) * 3.28084; // feet
+    // Air density + density altitude — matches frontend formulas exactly:
+    //   airDensity    = 1736.86 * (BP - vp) / (T_rankine)   [unit: ~% of std]
+    //   densityAltitude = 145723 * (1 - (ad/100)^0.234944)  [feet]
+    $tempRankine     = $tempF + 459.67;
+    $airDensity      = 1736.86 * $dap / $tempRankine;
+    $densityAltitude = 145723.0 * (1.0 - pow($airDensity / 100.0, 0.234944));
+
+    // Water grains — matches frontend: (vp / (BP - vp)) * 7000 / 1.60791
+    // BP and vp are both in inHg here
+    $waterGrains = ($pressureInHg - $vp) > 0 ? ($vp / ($pressureInHg - $vp)) * 7000 / 1.60791 : 0.0;
 
     return [
         'densityAltitude'  => $densityAltitude,
         'correctionFactor' => $correctionFactor,
         'airDensity'       => $airDensity,
+        'waterGrains'      => $waterGrains,
         'vaporPressure'    => $vp,
         'dryAirPressure'   => $dap,
         'theta'            => $theta,
         'delta'            => $delta,
+    ];
+}
+
+// ============================================================================
+// Helper: load HPC-normalised per-driver best runs for a category.
+//
+// For each driver, this function:
+//   1. Finds their best (lowest) raw ET in the recent 3-year window.
+//   2. Resolves their engine combo (driver override → class default).
+//   3. Looks up weather at the time of that run.
+//   4. Computes HPC_baseline = (1+ff/100)×θ^tP/δ^dP − ff/100  for that run.
+//   5. Strips the weather out: normET = rawET / HPC_baseline^0.33
+//      (this is the ET the car "would have run" at HPC = 1.0).
+//
+// Returns ['drivers' => [...], 'ecParams' => [...]]
+// Falls back to all-time data if the recent window yields < 20 drivers.
+// ============================================================================
+function parity_getTierDriverData(PDO $pdo, string $category): array {
+    $recentYear = (int)date('Y') - 2;
+
+    // ── Step 1: best raw run per driver ────────────────────────────────────
+    $getBestPerDriver = function(string $rlFilter) use ($pdo, $category): array {
+        $stmt = $pdo->prepare("
+            SELECT r.driver_name, r.class_index, r.ft1320, r.mph1320, r.run_timestamp_utc
+            FROM parity_runs r
+            JOIN (
+                SELECT driver_name, MIN(ft1320) AS min_et
+                FROM parity_runs
+                WHERE category = ? AND COALESCE(dq_flag,0)=0
+                  AND ft1320 BETWEEN 3.0 AND 15.0 AND mph1320 BETWEEN 50 AND 400
+                  $rlFilter
+                GROUP BY driver_name
+            ) best ON r.driver_name = best.driver_name AND r.ft1320 = best.min_et
+            WHERE r.category = ? AND COALESCE(r.dq_flag,0)=0
+              AND r.ft1320 BETWEEN 3.0 AND 15.0 AND r.mph1320 BETWEEN 50 AND 400
+              $rlFilter
+        ");
+        $stmt->execute([$category, $category]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    };
+
+    $rows = $getBestPerDriver(" AND race_lookup >= '$recentYear'");
+    if (count($rows) < 20) {
+        $rows = $getBestPerDriver('');
+    }
+    if (empty($rows)) return ['drivers' => [], 'ecParams' => []];
+
+    // ── Step 2: 3σ outlier clean on raw ETs ────────────────────────────────
+    $ets  = array_map(fn($r) => (float)$r['ft1320'], $rows);
+    $mEt  = array_sum($ets) / count($ets);
+    $vEt  = array_sum(array_map(fn($v) => pow($v - $mEt, 2), $ets)) / count($ets);
+    $sdEt = $vEt > 0 ? sqrt($vEt) : 0.0;
+    if ($sdEt > 0) {
+        $rows = array_values(array_filter($rows, fn($r) =>
+            (float)$r['ft1320'] >= $mEt - 3.0 * $sdEt &&
+            (float)$r['ft1320'] <= $mEt + 3.0 * $sdEt
+        ));
+    }
+    if (empty($rows)) return ['drivers' => [], 'ecParams' => []];
+
+    // ── Step 3: load engine combo params ───────────────────────────────────
+    $ecParams = [];
+    foreach ($pdo->query("SELECT id, t_power, d_power, friction_factor FROM parity_engine_combos")
+                  ->fetchAll(PDO::FETCH_ASSOC) as $ec) {
+        $ecParams[(int)$ec['id']] = [
+            'tPower' => (float)$ec['t_power'],
+            'dPower' => (float)$ec['d_power'],
+            'ff'     => (float)$ec['friction_factor'],
+        ];
+    }
+
+    // ── Step 4: combo resolver (identical logic to handlePerformancePrediction) ─
+    $allDC = $pdo->query("
+        SELECT driver_name, class_index, engine_combo_id, effective_from_utc, effective_to_utc
+        FROM parity_driver_combos
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    $allCD = $pdo->query("
+        SELECT class_index, engine_combo_id, effective_from_utc, effective_to_utc
+        FROM parity_class_defaults
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    $resolveComboId = function(string $driverName, string $classIndex, ?string $runTs)
+        use ($allDC, $allCD): ?int
+    {
+        $dn = strtoupper(trim($driverName));
+        $ci = strtoupper(trim($classIndex));
+        $comboId = null; $bestFrom = '';
+        foreach ($allDC as $dc) {
+            if (strtoupper($dc['driver_name']) !== $dn) continue;
+            if (strtoupper($dc['class_index'])  !== $ci) continue;
+            if ($runTs && $runTs < $dc['effective_from_utc']) continue;
+            if ($dc['effective_to_utc'] !== null && $runTs && $runTs >= $dc['effective_to_utc']) continue;
+            if ($dc['effective_from_utc'] >= $bestFrom) {
+                $bestFrom = $dc['effective_from_utc'];
+                $comboId  = (int)$dc['engine_combo_id'];
+            }
+        }
+        if ($comboId === null) {
+            $bestFrom = '';
+            foreach ($allCD as $cd) {
+                if (strtoupper($cd['class_index']) !== $ci) continue;
+                if ($runTs && $runTs < $cd['effective_from_utc']) continue;
+                if ($cd['effective_to_utc'] !== null && $runTs && $runTs >= $cd['effective_to_utc']) continue;
+                if ($cd['effective_from_utc'] >= $bestFrom) {
+                    $bestFrom = $cd['effective_from_utc'];
+                    $comboId  = (int)$cd['engine_combo_id'];
+                }
+            }
+        }
+        return $comboId;
+    };
+
+    // ── Step 5: weather lookup + HPC normalisation ─────────────────────────
+    $wxStmt = $pdo->prepare("
+        SELECT temp_f, rh_pct, pressure_inhg
+        FROM parity_weather_canonical
+        WHERE timestamp_utc BETWEEN DATE_SUB(?, INTERVAL 30 MINUTE)
+                                AND DATE_ADD(?, INTERVAL 30 MINUTE)
+        ORDER BY ABS(TIMESTAMPDIFF(SECOND, timestamp_utc, ?)) ASC
+        LIMIT 1
+    ");
+
+    $computeHPC = function(array $p, float $theta, float $delta): float {
+        $ff  = $p['ff'];
+        $hpc = (1.0 + $ff / 100.0) * pow($theta, $p['tPower']) / pow($delta, $p['dPower'])
+               - $ff / 100.0;
+        return max(0.5, min(2.0, $hpc));
+    };
+
+    $drivers = [];
+    foreach ($rows as $r) {
+        $rawET   = (float)$r['ft1320'];
+        $rawMPH  = (float)$r['mph1320'];
+        $ts      = $r['run_timestamp_utc'];
+        $ci      = $r['class_index'] ?? '';
+        $comboId = $resolveComboId($r['driver_name'], $ci, $ts);
+
+        $normET  = $rawET;
+        $normMPH = $rawMPH;
+
+        if ($ts && $comboId !== null && isset($ecParams[$comboId])) {
+            $wxStmt->execute([$ts, $ts, $ts]);
+            $wx = $wxStmt->fetch(PDO::FETCH_ASSOC);
+            if ($wx && $wx['temp_f'] !== null && $wx['pressure_inhg'] !== null) {
+                $wxd     = parity_computeWeather(
+                    (float)$wx['temp_f'],
+                    (float)$wx['rh_pct'] / 100.0,
+                    (float)$wx['pressure_inhg']
+                );
+                $hpcBase = $computeHPC($ecParams[$comboId], $wxd['theta'], $wxd['delta']);
+                // Normalise to HPC = 1.0: rawET = normET × hpcBase^0.33
+                $normET  = $rawET  / pow($hpcBase, 0.33);
+                $normMPH = $rawMPH * pow($hpcBase, 0.33);  // inverse relationship
+            }
+        }
+
+        $drivers[] = ['normET' => $normET, 'normMPH' => $normMPH, 'comboId' => $comboId];
+    }
+
+    // Sort by normalised ET ascending (fastest first)
+    usort($drivers, fn($a, $b) => $a['normET'] <=> $b['normET']);
+
+    return ['drivers' => $drivers, 'ecParams' => $ecParams];
+}
+
+// ============================================================================
+// Helper: project tier driver data to specific weather conditions.
+//
+// Uses the identical HPC formula as handlePerformancePrediction:
+//   HPC_today = (1+ff/100) × θ^tPower / δ^dPower − ff/100
+//   predictedET = normET × HPC_today^0.33
+//
+// Returns ['great','good','average'] each with predictedET/predictedMPH/sampleCount.
+// ============================================================================
+function parity_computeTierProjections(array $driverData, float $thetaToday, float $deltaToday): array {
+    $drivers  = $driverData['drivers'];
+    $ecParams = $driverData['ecParams'];
+    $n = count($drivers);
+    if ($n === 0) return ['great' => null, 'good' => null, 'average' => null];
+
+    $computeHPC = function(array $p, float $theta, float $delta): float {
+        $ff  = $p['ff'];
+        $hpc = (1.0 + $ff / 100.0) * pow($theta, $p['tPower']) / pow($delta, $p['dPower'])
+               - $ff / 100.0;
+        return max(0.5, min(2.0, $hpc));
+    };
+
+    // Pre-compute HPC_today per combo (small, fixed number of combos)
+    $hpcToday = [];
+    foreach ($ecParams as $cid => $p) {
+        $hpcToday[$cid] = $computeHPC($p, $thetaToday, $deltaToday);
+    }
+
+    // Project each driver's normalised ET to today's conditions
+    $projected = [];
+    foreach ($drivers as $d) {
+        $cid    = $d['comboId'];
+        $normET  = $d['normET'];
+        $normMPH = $d['normMPH'];
+        if ($cid !== null && isset($hpcToday[$cid])) {
+            $hpc    = $hpcToday[$cid];
+            $projET  = $normET  * pow($hpc, 0.33);
+            $projMPH = $normMPH / pow($hpc, 0.33);
+        } else {
+            // No combo resolved — include without HPC adjustment
+            $projET  = $normET;
+            $projMPH = $normMPH;
+        }
+        $projected[] = ['et' => $projET, 'mph' => $projMPH];
+    }
+
+    usort($projected, fn($a, $b) => $a['et'] <=> $b['et']);
+
+    $mkTier = function(int $cnt) use ($projected): array {
+        $slice  = array_slice($projected, 0, $cnt);
+        return [
+            'predictedET'  => round(array_sum(array_column($slice, 'et'))  / $cnt, 4),
+            'predictedMPH' => round(array_sum(array_column($slice, 'mph')) / $cnt, 3),
+            'sampleCount'  => $cnt,
+        ];
+    };
+
+    $greatLimit = max(1, (int)ceil($n * 0.05));
+    $goodLimit  = max(1, (int)ceil($n * 0.25));
+
+    return [
+        'great'   => $mkTier($greatLimit),
+        'good'    => $mkTier($goodLimit),
+        'average' => $mkTier($n),
     ];
 }
 
@@ -13622,5 +13866,316 @@ function handlePerformancePrediction(PDO $pdo): void {
         $response['error'] = 'No baseline performance data found for this category';
     }
 
+    // ── Performance tiers (Average / Good / Great) using full HPC pipeline ──
+    $tierDriverData = parity_getTierDriverData($pdo, $category);
+    $thetaToday     = (float)($response['currentWeather']['theta'] ?? 1.0);
+    $deltaToday     = (float)($response['currentWeather']['delta'] ?? 1.0);
+    $response['tiers'] = parity_computeTierProjections($tierDriverData, $thetaToday, $deltaToday);
+
     rsa_jsonResponse($response);
+}
+
+// ============================================================================
+// GET ?action=weatherForecast&eventId=X&category=Y&hours=4
+// Returns +1..+4 hourly forecast from Open-Meteo with DA/CF/water grains and
+// three-tier (Average/Good/Great) performance predictions per slot.
+// ============================================================================
+function handleWeatherForecast(PDO $pdo): void {
+    $eventId  = isset($_GET['eventId'])  ? (int)$_GET['eventId']  : 0;
+    $category = trim($_GET['category'] ?? '');
+    $hours    = min(6, max(1, (int)($_GET['hours'] ?? 4)));
+
+    if (!$eventId) { rsa_jsonResponse(['error' => 'eventId is required'], 400); return; }
+
+    $evStmt = $pdo->prepare("
+        SELECT e.id, e.event_name, t.track_name, t.timezone_iana, t.latitude, t.longitude
+        FROM parity_events e
+        JOIN parity_tracks t ON t.id = e.track_id
+        WHERE e.id = ?
+    ");
+    $evStmt->execute([$eventId]);
+    $event = $evStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) { rsa_jsonResponse(['error' => 'Event not found'], 404); return; }
+
+    $lat = (float)($event['latitude']  ?? 0);
+    $lon = (float)($event['longitude'] ?? 0);
+    if (!$lat && !$lon) {
+        rsa_jsonResponse(['error' => 'Track has no coordinates — forecast unavailable', 'noCoords' => true]);
+        return;
+    }
+
+    $params = http_build_query([
+        'latitude'         => $lat,
+        'longitude'        => $lon,
+        'hourly'           => 'temperature_2m,relative_humidity_2m,surface_pressure',
+        'temperature_unit' => 'fahrenheit',
+        'timezone'         => 'UTC',
+        'forecast_hours'   => $hours + 3,
+    ]);
+    $url = 'https://api.open-meteo.com/v1/forecast?' . $params;
+    $ctx = stream_context_create(['http' => ['timeout' => 10, 'user_agent' => 'RSA-Parity/1.0']]);
+    $raw = @file_get_contents($url, false, $ctx);
+    if ($raw === false) { rsa_jsonResponse(['error' => 'Failed to fetch forecast from Open-Meteo'], 502); return; }
+
+    $data = json_decode($raw, true);
+    if (!$data || !isset($data['hourly']['time'])) { rsa_jsonResponse(['error' => 'Invalid forecast response from Open-Meteo'], 502); return; }
+
+    $times    = $data['hourly']['time'];
+    $temps    = $data['hourly']['temperature_2m']       ?? [];
+    $humidity = $data['hourly']['relative_humidity_2m'] ?? [];
+    $pressure = $data['hourly']['surface_pressure']     ?? [];
+
+    // Find first slot >= current UTC hour
+    $nowHour = gmdate('Y-m-d\TH') . ':00';
+    $startIdx = 0;
+    foreach ($times as $i => $t) {
+        if ($t >= $nowHour) { $startIdx = $i; break; }
+    }
+
+    // Load driver data once; parity_computeTierProjections is called per forecast slot
+    $tierDriverData = ($category !== '') ? parity_getTierDriverData($pdo, $category) : null;
+
+    $forecast = [];
+    for ($h = 1; $h <= $hours; $h++) {
+        $idx = $startIdx + $h;
+        if ($idx >= count($times)) break;
+
+        $T         = isset($temps[$idx])    ? (float)$temps[$idx]    : null;
+        $RH        = isset($humidity[$idx]) ? (float)$humidity[$idx] : null;
+        $pressMb   = isset($pressure[$idx]) ? (float)$pressure[$idx] : null;
+        $pressInhg = $pressMb !== null ? $pressMb / 33.8639 : null;
+
+        $wx = null;
+        if ($T !== null && $RH !== null && $pressInhg !== null) {
+            $wx = parity_computeWeather($T, $RH / 100.0, $pressInhg);
+        }
+
+        $slotTiers = null;
+        if ($wx && $tierDriverData && !empty($tierDriverData['drivers'])) {
+            $slotTiers = parity_computeTierProjections(
+                $tierDriverData,
+                (float)$wx['theta'],
+                (float)$wx['delta']
+            );
+        }
+
+        $forecast[] = [
+            'offsetHours'   => $h,
+            'timeUtc'       => $times[$idx] . ':00',
+            'temp_f'        => $T,
+            'rh_pct'        => $RH,
+            'pressure_inhg' => $pressInhg !== null ? round($pressInhg, 4) : null,
+            'da'            => $wx ? (int)round($wx['densityAltitude'])     : null,
+            'cf'            => $wx ? round($wx['correctionFactor'], 5)      : null,
+            'waterGrains'   => $wx ? round($wx['waterGrains'], 2)           : null,
+            'tiers'         => $slotTiers,
+        ];
+    }
+
+    rsa_jsonResponse([
+        'eventId'   => (int)$event['id'],
+        'eventName' => $event['event_name'],
+        'trackName' => $event['track_name'],
+        'timezone'  => $event['timezone_iana'],
+        'category'  => $category,
+        'forecast'  => $forecast,
+    ]);
+}
+
+// ============================================================================
+// GET ?action=rtAnalysis
+//   Event mode:  &eventId=X&category=Y
+//   Season mode: &category=Y&year=2026
+// Returns per-round RT data, per-driver stats, and holeshot detection.
+// ============================================================================
+function handleRtAnalysis(PDO $pdo): void {
+    $eventId  = isset($_GET['eventId'])  ? (int)$_GET['eventId']  : 0;
+    $category = trim($_GET['category'] ?? '');
+    $year     = isset($_GET['year'])     ? (int)$_GET['year']     : 0;
+    $mode     = ($eventId > 0) ? 'event' : 'season';
+
+    if (empty($category)) { rsa_jsonResponse(['error' => 'category is required'], 400); return; }
+    if ($mode === 'season' && !$year) { rsa_jsonResponse(['error' => 'year is required for season mode'], 400); return; }
+
+    if ($mode === 'event') {
+        $evRow = $pdo->prepare("SELECT race_lookup FROM parity_events WHERE id=?");
+        $evRow->execute([$eventId]);
+        $raceLookup = $evRow->fetchColumn();
+        if (!$raceLookup) { rsa_jsonResponse(['error' => 'Event not found'], 404); return; }
+        $whereSQL    = "r.race_lookup = ? AND r.category = ?";
+        $whereParams = [$raceLookup, $category];
+    } else {
+        $whereSQL    = "r.race_lookup LIKE ? AND r.category = ?";
+        $whereParams = [$year . '%', $category];
+    }
+
+    $runStmt = $pdo->prepare("
+        SELECT r.driver_name, r.round, r.lane, r.rt, r.ft60, r.win_flag, r.dq_flag, r.race_lookup
+        FROM parity_runs r
+        WHERE {$whereSQL}
+          AND r.rt IS NOT NULL AND r.rt >= 0 AND r.rt <= 0.500
+        ORDER BY r.race_lookup, r.round, r.driver_name
+    ");
+    $runStmt->execute($whereParams);
+    $rawRuns = $runStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($rawRuns)) {
+        rsa_jsonResponse(['mode' => $mode, 'category' => $category, 'runs' => [], 'driverStats' => [], 'holeshots' => []]);
+        return;
+    }
+
+    $classifyRound = function(string $round): string {
+        $r = strtoupper(trim($round));
+        if (str_starts_with($r, 'Q')) return 'qual';
+        if (str_starts_with($r, 'E')) return 'elim';
+        return 'other';
+    };
+
+    $runs = [];
+    foreach ($rawRuns as $r) {
+        $runs[] = [
+            'driver'     => $r['driver_name'],
+            'round'      => $r['round'],
+            'roundType'  => $classifyRound($r['round']),
+            'lane'       => $r['lane'],
+            'rt'         => (float)$r['rt'],
+            'ft60'       => $r['ft60'] !== null ? (float)$r['ft60'] : null,
+            'winFlag'    => (bool)$r['win_flag'],
+            'dqFlag'     => (bool)$r['dq_flag'],
+            'raceLookup' => $r['race_lookup'],
+        ];
+    }
+
+    // Per-driver aggregation
+    $driverData = [];
+    foreach ($runs as $run) {
+        if ($run['dqFlag']) continue;
+        $d = $run['driver'];
+        if (!isset($driverData[$d])) {
+            $driverData[$d] = ['rts' => [], 'qualRts' => [], 'elimRts' => [], 'ft60s' => []];
+        }
+        $driverData[$d]['rts'][] = $run['rt'];
+        if ($run['roundType'] === 'qual') $driverData[$d]['qualRts'][] = $run['rt'];
+        if ($run['roundType'] === 'elim') $driverData[$d]['elimRts'][] = $run['rt'];
+        if ($run['ft60'] !== null) $driverData[$d]['ft60s'][] = $run['ft60'];
+    }
+
+    $calcMedian = function(array $arr): float {
+        if (!$arr) return 0.0;
+        sort($arr);
+        $n = count($arr); $m = (int)floor($n / 2);
+        return $n % 2 ? $arr[$m] : ($arr[$m-1] + $arr[$m]) / 2;
+    };
+    $calcMean = function(array $arr): float {
+        return $arr ? array_sum($arr) / count($arr) : 0.0;
+    };
+    $calcStddev = function(array $arr) use ($calcMean): float {
+        if (count($arr) < 2) return 0.0;
+        $avg = $calcMean($arr);
+        return sqrt(array_sum(array_map(fn($x) => ($x - $avg) ** 2, $arr)) / count($arr));
+    };
+
+    $minRuns = ($mode === 'season') ? 3 : 1;
+    $driverStats = [];
+
+    foreach ($driverData as $driver => $data) {
+        if (count($data['rts']) < $minRuns) continue;
+        $avgRT    = $calcMean($data['rts']);
+        $qualAvg  = $data['qualRts'] ? $calcMean($data['qualRts']) : null;
+        $elimAvg  = $data['elimRts'] ? $calcMean($data['elimRts']) : null;
+        $avgFt60  = $data['ft60s']   ? $calcMean($data['ft60s'])   : null;
+        $driverStats[$driver] = [
+            'driver'        => $driver,
+            'runCount'      => count($data['rts']),
+            'elimRounds'    => count($data['elimRts']),
+            'avgRT'         => round($avgRT, 4),
+            'medianRT'      => round($calcMedian($data['rts']), 4),
+            'stddevRT'      => round($calcStddev($data['rts']), 4),
+            'qualAvgRT'     => $qualAvg !== null ? round($qualAvg, 4) : null,
+            'elimAvgRT'     => $elimAvg !== null ? round($elimAvg, 4) : null,
+            'elimStepup'    => ($qualAvg !== null && $elimAvg !== null) ? round($elimAvg - $qualAvg, 4) : null,
+            'avgFt60'       => $avgFt60  !== null ? round($avgFt60, 4) : null,
+            'netLaunch'     => $avgFt60  !== null ? round($avgRT + $avgFt60, 4) : null,
+            'holeshotCount' => 0,
+            'radar'         => null,
+        ];
+    }
+
+    // Holeshot detection: pair elim runs by raceLookup+round, compare lanes
+    $holeshots = [];
+    $pairings  = [];
+    foreach ($runs as $run) {
+        if ($run['roundType'] !== 'elim' || $run['dqFlag']) continue;
+        $key = $run['raceLookup'] . '|' . $run['round'];
+        $pairings[$key][] = $run;
+    }
+    foreach ($pairings as $pair) {
+        $laneRuns = [];
+        foreach ($pair as $r) {
+            if ($r['lane'] === 'L' || $r['lane'] === 'R') $laneRuns[$r['lane']] = $r;
+        }
+        if (count($laneRuns) !== 2) continue;
+        $rtWinner = ($laneRuns['L']['rt'] <= $laneRuns['R']['rt']) ? $laneRuns['L'] : $laneRuns['R'];
+        $rtLoser  = ($laneRuns['L']['rt'] <= $laneRuns['R']['rt']) ? $laneRuns['R'] : $laneRuns['L'];
+        if ($rtWinner['winFlag'] && !$rtLoser['winFlag']) {
+            $holeshots[] = [
+                'round'      => $rtWinner['round'],
+                'raceLookup' => $rtWinner['raceLookup'],
+                'winner'     => $rtWinner['driver'],
+                'loser'      => $rtLoser['driver'],
+                'winnerRT'   => $rtWinner['rt'],
+                'loserRT'    => $rtLoser['rt'],
+            ];
+            if (isset($driverStats[$rtWinner['driver']])) {
+                $driverStats[$rtWinner['driver']]['holeshotCount']++;
+            }
+        }
+    }
+
+    // Radar normalization (0-1 scale, higher = better)
+    if (!empty($driverStats)) {
+        $drivers = array_values($driverStats);
+        $getCol  = fn(string $f) => array_filter(array_column($drivers, $f), fn($v) => $v !== null);
+        $norm    = function(array $all, float $v, bool $inv): float {
+            if (count($all) < 2) return 0.5;
+            $mn = min($all); $mx = max($all);
+            if ($mx <= $mn) return 0.5;
+            $n = ($v - $mn) / ($mx - $mn);
+            return $inv ? 1.0 - $n : $n;
+        };
+
+        $rtVals   = array_values($getCol('medianRT'));
+        $sdVals   = array_values($getCol('stddevRT'));
+        $ft60Vals = array_values($getCol('avgFt60'));
+        $stepVals = array_values($getCol('elimStepup'));
+        $nlVals   = array_values($getCol('netLaunch'));
+        $hsRates  = [];
+        foreach ($drivers as $d) {
+            $hsRates[$d['driver']] = $d['elimRounds'] > 0 ? $d['holeshotCount'] / $d['elimRounds'] : 0.0;
+        }
+        $hsRateVals = array_values($hsRates);
+
+        foreach ($driverStats as $driver => &$ds) {
+            $ds['radar'] = [
+                'rtQuickness'   => $ds['medianRT']   !== null ? $norm($rtVals,   $ds['medianRT'],   true)  : null,
+                'rtConsistency' => $ds['stddevRT']   !== null ? $norm($sdVals,   $ds['stddevRT'],   true)  : null,
+                'stagingDepth'  => $ds['avgFt60']    !== null ? $norm($ft60Vals, $ds['avgFt60'],    false) : null,
+                'elimStepup'    => $ds['elimStepup'] !== null ? $norm($stepVals, $ds['elimStepup'], true)  : null,
+                'netLaunch'     => $ds['netLaunch']  !== null ? $norm($nlVals,   $ds['netLaunch'],  true)  : null,
+                'holeshotRate'  => $norm($hsRateVals, $hsRates[$driver] ?? 0.0, false),
+            ];
+        }
+        unset($ds);
+    }
+
+    $sorted = array_values($driverStats);
+    usort($sorted, fn($a, $b) => $a['medianRT'] <=> $b['medianRT']);
+
+    rsa_jsonResponse([
+        'mode'        => $mode,
+        'category'    => $category,
+        'runs'        => $runs,
+        'driverStats' => $sorted,
+        'holeshots'   => $holeshots,
+    ]);
 }

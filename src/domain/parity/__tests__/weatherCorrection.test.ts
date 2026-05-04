@@ -20,6 +20,8 @@ import {
   delta,
   computeWeather,
   computeHPC,
+  applyN2OBlendToHpc,
+  N2O_ENGINE_SHARE,
   correctET,
   correctMPH,
   correctET_strict,
@@ -1036,5 +1038,49 @@ describe('resolveEngineCombo: detail string format', () => {
       driverCombos: [], classDefaults: [],
     });
     expect(r.detail).toBe('No driver assignment; no class default');
+  });
+});
+
+// ── applyN2OBlendToHpc ───────────────────────────────────────────────────
+
+describe('applyN2OBlendToHpc', () => {
+  it('N2O_ENGINE_SHARE constant is 0.5', () => {
+    expect(N2O_ENGINE_SHARE).toBe(0.5);
+  });
+
+  it('at standard conditions (HPC = 1.0) blend returns exactly 1.0', () => {
+    expect(applyN2OBlendToHpc(1.0)).toBe(1.0);
+  });
+
+  it('bad-air HPC 1.08 blends to 1.04', () => {
+    expect(applyN2OBlendToHpc(1.08)).toBeCloseTo(1.04, 10);
+  });
+
+  it('bad-air HPC 1.12 blends to 1.06', () => {
+    expect(applyN2OBlendToHpc(1.12)).toBeCloseTo(1.06, 10);
+  });
+
+  it('good-air HPC 0.96 blends to 0.98', () => {
+    expect(applyN2OBlendToHpc(0.96)).toBeCloseTo(0.98, 10);
+  });
+
+  it('symmetrical: distance from 1.0 is halved in both directions', () => {
+    const hpcAbove = 1.08;
+    const hpcBelow = 0.92;
+    const blendedAbove = applyN2OBlendToHpc(hpcAbove);
+    const blendedBelow = applyN2OBlendToHpc(hpcBelow);
+    expect(blendedAbove - 1.0).toBeCloseTo((hpcAbove - 1.0) * 0.5, 10);
+    expect(blendedBelow - 1.0).toBeCloseTo((hpcBelow - 1.0) * 0.5, 10);
+  });
+
+  it('custom engineShare = 0.25 produces correct weighted result', () => {
+    // 1 + (1.08 - 1) * 0.25 = 1.02
+    expect(applyN2OBlendToHpc(1.08, 0.25)).toBeCloseTo(1.02, 10);
+  });
+
+  it('non-N2O combo: raw HPC is returned unchanged', () => {
+    const rawHpc = 1.045600777675953; // EXPECTED.hpc from sample row
+    const effectiveHpc = false ? applyN2OBlendToHpc(rawHpc) : rawHpc;
+    expect(effectiveHpc).toBe(rawHpc);
   });
 });

@@ -17,6 +17,7 @@
 import {
   computeWeather,
   computeHPC,
+  applyN2OBlendToHpc,
   correctET,
   correctMPH,
   pct_to_frac,
@@ -54,6 +55,7 @@ export interface RunForCorrection {
 
 export interface CorrectedRunResult {
   hpc: number | null;
+  isN2OBlended: boolean;
   correctedET: number | null;
   correctedMPH: number | null;
   corrected60: number | null;
@@ -76,7 +78,7 @@ export function correctRunClientSide(
   ctx: CorrectionContext,
 ): CorrectedRunResult {
   const NULL_RESULT: CorrectedRunResult = {
-    hpc: null, correctedET: null, correctedMPH: null,
+    hpc: null, isN2OBlended: false, correctedET: null, correctedMPH: null,
     corrected60: null, corrected660: null, comboResolution: null,
   };
 
@@ -116,7 +118,7 @@ export function correctRunClientSide(
   const w = computeWeather(T, H, BP);
 
   // 6) Compute HPC
-  const hpc = computeHPC({
+  const rawHpc = computeHPC({
     engineCombo: combo.name,
     tPower: combo.t_power,
     dPower: combo.d_power,
@@ -125,13 +127,22 @@ export function correctRunClientSide(
     delta: w.delta,
   });
 
-  if (hpc === 0 || !isFinite(hpc)) {
+  if (rawHpc === 0 || !isFinite(rawHpc)) {
     return { ...NULL_RESULT, hpc: 0, comboResolution: resolution };
   }
 
-  // 7) Apply corrections
+  // 7) Apply N2O blend if enabled
+  // For large nitrous combinations, assume roughly 50% of total power is from
+  // the base gasoline engine and 50% is nitrous-assisted power. The nitrous-
+  // assisted portion is treated as approximately weather-independent, so only
+  // half of the gasoline weather correction is applied.
+  const isN2OBlended = !!combo.uses_n2o;
+  const hpc = isN2OBlended ? applyN2OBlendToHpc(rawHpc) : rawHpc;
+
+  // 8) Apply corrections
   return {
     hpc,
+    isN2OBlended,
     correctedET: run.ft1320 != null ? correctET(run.ft1320, hpc) : null,
     correctedMPH: run.mph1320 != null ? correctMPH(run.mph1320, hpc) : null,
     corrected60: run.ft60 != null ? correctET(run.ft60, hpc) : null,

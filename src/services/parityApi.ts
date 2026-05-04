@@ -757,6 +757,7 @@ export interface EngineComboRow {
   d_power: number;
   friction_factor: number;
   fuel_type: string;
+  uses_n2o: boolean;
   color_hex: string | null;
   created_at: string;
   updated_at: string;
@@ -988,6 +989,14 @@ export interface PerformancePredictionParams {
   useTrackHistory?: boolean;
 }
 
+export interface PerfTier {
+  baseET: number;
+  baseMPH: number;
+  sampleCount: number;
+  predictedET: number;
+  predictedMPH: number;
+}
+
 export interface PerformancePredictionResponse {
   category: string;
   trackId: number | null;
@@ -1018,6 +1027,108 @@ export interface PerformancePredictionResponse {
     averageMPH: number;
     sampleCount: number;
   } | null;
+  tiers?: {
+    great: PerfTier | null;
+    good: PerfTier | null;
+    average: PerfTier | null;
+  };
+  comboPredictions?: Array<{
+    comboId: number;
+    comboName: string;
+    baselineET: number;
+    baselineMPH: number;
+    predictedET: number;
+    predictedMPH: number;
+    bestDriver: string;
+  }>;
+  error?: string;
+}
+
+// ── Weather Forecast Types ──────────────────────────────────────────────────
+
+export interface ForecastTiers {
+  great:   { predictedET: number; predictedMPH: number; sampleCount: number } | null;
+  good:    { predictedET: number; predictedMPH: number; sampleCount: number } | null;
+  average: { predictedET: number; predictedMPH: number; sampleCount: number } | null;
+}
+
+export interface ForecastSlot {
+  offsetHours: number;
+  timeUtc: string;
+  temp_f: number | null;
+  rh_pct: number | null;
+  pressure_inhg: number | null;
+  da: number | null;
+  cf: number | null;
+  waterGrains: number | null;
+  tiers: ForecastTiers | null;
+}
+
+export interface WeatherForecastResponse {
+  eventId: number;
+  eventName: string;
+  trackName: string;
+  timezone: string;
+  category: string;
+  forecast: ForecastSlot[];
+  error?: string;
+  noCoords?: boolean;
+}
+
+// ── RT Analysis Types ───────────────────────────────────────────────────────
+
+export interface RtRun {
+  driver: string;
+  round: string;
+  roundType: 'qual' | 'elim' | 'other';
+  lane: string;
+  rt: number;
+  ft60: number | null;
+  winFlag: boolean;
+  dqFlag: boolean;
+  raceLookup: string;
+}
+
+export interface RtRadar {
+  rtQuickness:   number | null;
+  rtConsistency: number | null;
+  stagingDepth:  number | null;
+  elimStepup:    number | null;
+  netLaunch:     number | null;
+  holeshotRate:  number;
+}
+
+export interface RtDriverStat {
+  driver: string;
+  runCount: number;
+  elimRounds: number;
+  avgRT: number;
+  medianRT: number;
+  stddevRT: number;
+  qualAvgRT: number | null;
+  elimAvgRT: number | null;
+  elimStepup: number | null;
+  avgFt60: number | null;
+  netLaunch: number | null;
+  holeshotCount: number;
+  radar: RtRadar | null;
+}
+
+export interface RtHoleshot {
+  round: string;
+  raceLookup: string;
+  winner: string;
+  loser: string;
+  winnerRT: number;
+  loserRT: number;
+}
+
+export interface RtAnalysisResponse {
+  mode: 'event' | 'season';
+  category: string;
+  runs: RtRun[];
+  driverStats: RtDriverStat[];
+  holeshots: RtHoleshot[];
   error?: string;
 }
 
@@ -2406,7 +2517,7 @@ export const parityApi = {
     return parityRequest<EngineComboListResponse>('/parity.php?action=listEngineCombos');
   },
 
-  async upsertEngineCombo(params: { id?: number; name: string; category?: string; colorHex?: string; tPower: number; dPower: number; FF: number; fuelType: string }): Promise<{ ok: boolean; id: number }> {
+  async upsertEngineCombo(params: { id?: number; name: string; category?: string; colorHex?: string; tPower: number; dPower: number; FF: number; fuelType: string; usesN2o?: boolean }): Promise<{ ok: boolean; id: number }> {
     return parityRequest<{ ok: boolean; id: number }>('/parity.php?action=upsertEngineCombo', {
       method: 'POST',
       body: JSON.stringify(params),
@@ -3036,5 +3147,23 @@ export const parityApi = {
     if (params.trackId) qs.set('trackId', params.trackId.toString());
     if (params.useTrackHistory !== undefined) qs.set('useTrackHistory', params.useTrackHistory ? '1' : '0');
     return parityRequest<PerformancePredictionResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async weatherForecast(params: { eventId: number; category?: string; hours?: number }): Promise<WeatherForecastResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'weatherForecast');
+    qs.set('eventId', String(params.eventId));
+    if (params.category) qs.set('category', params.category);
+    if (params.hours) qs.set('hours', String(params.hours));
+    return parityRequest<WeatherForecastResponse>(`/parity.php?${qs.toString()}`);
+  },
+
+  async rtAnalysis(params: { eventId?: number; category: string; year?: number }): Promise<RtAnalysisResponse> {
+    const qs = new URLSearchParams();
+    qs.set('action', 'rtAnalysis');
+    qs.set('category', params.category);
+    if (params.eventId) qs.set('eventId', String(params.eventId));
+    if (params.year) qs.set('year', String(params.year));
+    return parityRequest<RtAnalysisResponse>(`/parity.php?${qs.toString()}`);
   },
 };

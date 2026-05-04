@@ -275,6 +275,25 @@ export function computeHPC(params: {
   return (1 + FF / 100) * (Math.pow(th, tPower) / Math.pow(dl, dPower)) - FF / 100;
 }
 
+// ── N2O Blend Helper ─────────────────────────────────────────────────────
+//
+// For large nitrous combinations, assume roughly 50% of total power is from
+// the base gasoline engine and 50% is nitrous-assisted power. The nitrous-
+// assisted portion is treated as approximately weather-independent, so only
+// half of the gasoline weather correction is applied.
+//
+// Formula: blendedHpc = 1 + (hpc - 1) * engineShare
+//
+// This is intentionally symmetrical:
+//   - bad-air HPC above 1.000 is reduced toward 1.000
+//   - good-air HPC below 1.000 is also reduced toward 1.000
+
+export const N2O_ENGINE_SHARE = 0.5;
+
+export function applyN2OBlendToHpc(hpc: number, engineShare: number = N2O_ENGINE_SHARE): number {
+  return 1 + (hpc - 1) * engineShare;
+}
+
 // ── Run Correction ──────────────────────────────────────────────────────
 
 export function correctET(actualET: number, hpc: number): number | null {
