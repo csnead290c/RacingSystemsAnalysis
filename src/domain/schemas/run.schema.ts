@@ -26,6 +26,7 @@ export const RunRecordSchema = z.object({
   runNumber: z.number().optional(),         // Run number for the day (1, 2, 3...)
   round: z.string().optional(),             // Round type (T1, E1, Final, etc.)
   lane: z.enum(['left', 'right']).optional(), // Lane choice
+  carNumber: z.string().optional(),          // My car number from scanned slip (preserves letters)
   trackName: z.string().optional(),         // Track name
   
   // Timing data
@@ -44,11 +45,19 @@ export const RunRecordSchema = z.object({
   // Opponent information (for MOV calculation)
   opponent: z.object({
     name: z.string().optional(),            // Opponent name/car number
+    carNumber: z.string().optional(),       // Opponent car # as string (may include letters)
+    runNumber: z.number().optional(),       // Opponent run number from slip
     dialIn: z.number().optional(),          // Opponent dial-in
     reactionTime: z.number().optional(),    // Opponent RT
-    et: z.number().optional(),              // Opponent ET
-    mph: z.number().optional(),             // Opponent MPH
+    sixtyFt: z.number().optional(),         // Opponent 60 ft
+    threeThirtyFt: z.number().optional(),   // Opponent 330 ft
+    eighthMileET: z.number().optional(),    // Opponent 1/8 ET
+    eighthMileMPH: z.number().optional(),   // Opponent 1/8 MPH
+    thousandFt: z.number().optional(),      // Opponent 1000 ft
+    et: z.number().optional(),              // Opponent final ET
+    mph: z.number().optional(),             // Opponent final MPH
     lane: z.enum(['left', 'right']).optional(),
+    notes: z.string().optional(),           // Notes about opponent
   }).optional(),
   
   // Margin of Victory calculation
@@ -68,6 +77,27 @@ export const RunRecordSchema = z.object({
     completedMPH: z.number().optional(),    // Calculated full-pass MPH
   }).optional(),
   
+  // Denormalized vehicle name for DB display (optional; UI also looks up by id)
+  vehicleName: z.string().optional(),
+
+  // ── Hybrid DB-first sync fields (optional, backward compatible) ──
+  /** Stable client-generated id for offline dedupe / idempotent upsert. */
+  clientId: z.string().optional(),
+  /** Local sync state. Absent or 'synced' = persisted to DB. */
+  syncStatus: z.enum(['pending', 'synced']).optional(),
+  /** Server updated_at (ms epoch) for last-write-wins. */
+  updatedAt: z.number().optional(),
+  /** 'logged' (real run) vs 'prediction' (saved prediction scenario). */
+  runKind: z.enum(['logged', 'prediction']).optional(),
+  /** ET corrected to RSA Standard Day (sea level, 29.92 inHg, 60F, 0% RH). */
+  correctedET: z.number().optional(),
+  /** Empirical correction factor applied to reach correctedET. */
+  correctionFactor: z.number().optional(),
+  /** Source of the weather used: manual | forecast_prefill | observed_station | imported. */
+  weatherSource: z
+    .enum(['manual', 'forecast_prefill', 'observed_station', 'imported'])
+    .optional(),
+
   prediction: z
     .object({ et_s: z.number(), mph: z.number() })
     .optional(),

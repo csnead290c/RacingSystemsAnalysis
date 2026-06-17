@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Page from '../shared/components/Page';
 import PeekCard from '../shared/components/PeekCard';
 import PredictionReportCard from '../shared/components/PredictionReportCard';
 import QuickRunEntry from '../shared/components/QuickRunEntry';
 import { storage } from '../state/storage';
+import { syncPendingRuns } from '../state/runSync';
 import { loadVehicles, type VehicleLite } from '../state/vehicles';
 import { hasFeature, CURRENT_TIER } from '../domain/config/entitlements';
 import { runsToCsv, downloadCsv } from '../shared/utils/csv';
@@ -438,6 +439,7 @@ function EditRunModal({ run, vehicleName, onClose, onSave }: EditRunModalProps) 
 type ViewMode = 'table' | 'logbook';
 
 function History() {
+  const navigate = useNavigate();
   const [runs, setRuns] = useState<RunRecordV1[]>([]);
   const [filteredRuns, setFilteredRuns] = useState<RunRecordV1[]>([]);
   const [loading, setLoading] = useState(true);
@@ -451,10 +453,22 @@ function History() {
   const [similarRunsTarget, setSimilarRunsTarget] = useState<RunRecordV1 | null>(null);
   const [showSplitAnalysis, setShowSplitAnalysis] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
+  // Saved prediction scenarios are hidden from the logbook by default.
+  const [showPredictions, setShowPredictions] = useState(false);
+
+  // Pre-populate search from URL ?search= param (e.g. links from Log Run opponent section)
+  const location = useLocation();
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const s = params.get('search');
+    if (s) setSearchText(s);
+  }, [location.search]);
 
   const loadRuns = async () => {
     setLoading(true);
     try {
+      // Flush any offline-queued runs before loading the latest from the server.
+      await syncPendingRuns();
       const loadedRuns = await storage.loadRuns();
       // Sort by createdAt descending (newest first)
       const sorted = loadedRuns.sort((a, b) => b.createdAt - a.createdAt);
@@ -481,29 +495,37 @@ function History() {
   }, [vehicles]);
 
   const getVehicleName = useCallback((vehicleId: string) => {
-    return vehicleNameMap[vehicleId] || vehicleId;
+    return vehicleNameMap[vehicleId] || 'Unknown Vehicle';
   }, [vehicleNameMap]);
 
   useEffect(() => {
     let filtered = runs;
+
+    // Exclude saved prediction scenarios unless the user opts in.
+    if (!showPredictions) {
+      filtered = filtered.filter((run) => (run.runKind ?? 'logged') !== 'prediction');
+    }
 
     // Filter by race length
     if (filterRaceLength !== 'ALL') {
       filtered = filtered.filter((run) => run.raceLength === filterRaceLength);
     }
 
-    // Filter by search text (vehicleId or notes)
+    // Filter by search text (vehicle name, notes, opponent name/car number)
     if (searchText.trim()) {
       const search = searchText.toLowerCase();
       filtered = filtered.filter(
         (run) =>
+          (vehicleNameMap[run.vehicleId] || '').toLowerCase().includes(search) ||
           run.vehicleId.toLowerCase().includes(search) ||
-          (run.notes && run.notes.toLowerCase().includes(search))
+          (run.notes && run.notes.toLowerCase().includes(search)) ||
+          (run.opponent?.name && run.opponent.name.toLowerCase().includes(search)) ||
+          (run.opponent?.carNumber && run.opponent.carNumber.toLowerCase().includes(search))
       );
     }
 
     setFilteredRuns(filtered);
-  }, [runs, filterRaceLength, searchText]);
+  }, [runs, filterRaceLength, searchText, showPredictions, vehicleNameMap]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this run?')) {
@@ -584,6 +606,7 @@ function History() {
     );
     
     return runs
+      .filter(r => (r.runKind ?? 'logged') !== 'prediction')
       .filter(r => r.id !== similarRunsTarget.id && r.vehicleId === similarRunsTarget.vehicleId && r.env)
       .map(r => {
         const da = calculateDensityAltitude(
@@ -705,7 +728,7 @@ function History() {
         <div className="grid grid-2 gap-4">
           <div>
             <label className="label" htmlFor="search">
-              Search (Vehicle ID or Notes)
+              Search (vehicle, notes, opponent)
             </label>
             <input
               id="search"
@@ -750,6 +773,17 @@ function History() {
                 Logbook
               </button>
             </div>
+          </div>
+          <div>
+            <label className="label">Predictions</label>
+            <label className="radio-label" style={{ marginTop: '0.5rem' }}>
+              <input
+                type="checkbox"
+                checked={showPredictions}
+                onChange={(e) => setShowPredictions(e.target.checked)}
+              />
+              <span>Show saved predictions</span>
+            </label>
           </div>
           {/* Print Button */}
           <button
@@ -962,6 +996,17 @@ function History() {
                             Similar
                           </button>
                         )}
+                        <button
+                          onClick={() => navigate('/predict-weather', { state: { baselineRunId: run.id } })}
+                          className="btn btn-secondary"
+                          style={{
+                            padding: 'var(--space-1) var(--space-2)',
+                            fontSize: '0.75rem',
+                          }}
+                          title="Predict ET for upcoming weather using this run as the baseline"
+                        >
+                          Predict
+                        </button>
                         <button
                           onClick={() => setEditingRun(run)}
                           className="btn btn-secondary"

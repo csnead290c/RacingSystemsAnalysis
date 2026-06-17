@@ -9,10 +9,15 @@ interface EnvironmentFormProps {
   onChange: (next: Env) => void;
   compact?: boolean;
   disabled?: boolean;
+  /**
+   * Whether the optional/advanced weather fields (track temp, traction, wind)
+   * start expanded. Defaults to true to preserve existing behavior.
+   */
+  defaultShowOptional?: boolean;
 }
 
-function EnvironmentForm({ value, onChange, compact = false, disabled = false }: EnvironmentFormProps) {
-  const [showOptional, setShowOptional] = useState(true); // Show track conditions by default
+function EnvironmentForm({ value, onChange, compact = false, disabled = false, defaultShowOptional = true }: EnvironmentFormProps) {
+  const [showOptional, setShowOptional] = useState(defaultShowOptional); // Show track conditions by default
   const [useElevation, setUseElevation] = useState(true); // Toggle between elevation and barometer input
   const { features } = useSubscription();
   

@@ -24,6 +24,7 @@ import { EngineSimDashboard } from '../pages/EngineSimDashboard';
 import Calculators from '../pages/Calculators';
 import Log from '../pages/Log';
 import History from '../pages/History';
+import PredictWeather from '../pages/PredictWeather';
 import Vehicles from '../pages/Vehicles';
 import About from '../pages/About';
 import Login from '../pages/Login';
@@ -176,7 +177,6 @@ function UserMenu() {
 function Navigation() {
   const location = useLocation();
   const { isAuthenticated, user } = useAuth();
-  const { can } = useCapabilities();
   const [menuOpen, setMenuOpen] = useState(false);
   const [, forceUpdate] = useState(0);
   const menuRef = useRef<HTMLElement>(null);
@@ -233,19 +233,20 @@ function Navigation() {
   const isDevOrOwner = isInternalUser(visCtxNav);
 
   // Check access for each nav item using capability system
-  // NHRA-only users have 'nhra.parity' but NOT 'data.vehicles', 'sim.et', etc.
+  const { can, plan } = useCapabilities();
   const canAccessVehiclesNav = isLoggedIn && can('data.vehicles');
   const canAccessETSim = isLoggedIn && can('sim.et');
   const canAccessEngineSim = isLoggedIn && can('sim.basic');
   const canAccessHistory = isLoggedIn && can('data.runLog');
   const canAccessTeam = isLoggedIn && can('team.enabled');
-  
+
   // NHRA-specific navigation
   const canAccessParity = isLoggedIn && can('nhra.parity');
   const canAccessTechMaster = isLoggedIn && can('nhra.tech.read');
 
-  // NHRA-only users have parity access but no general RSA tools (vehicles, sims, etc.)
-  const isNhraOnlyUser = canAccessParity && !canAccessVehiclesNav && !canAccessETSim && !canAccessEngineSim;
+  // NHRA-only users: identified by plan, not by capability exclusion
+  // (NHRA plan includes sim.basic which would break the old capability check)
+  const isNhraOnlyUser = isLoggedIn && plan === 'nhra';
 
   const close = useCallback(() => setMenuOpen(false), []);
 
@@ -254,9 +255,6 @@ function Navigation() {
     // NHRA users: Parity is the home — no general RSA nav
     <>
       <Link to="/parity" style={navLinkStyle(isActive('/parity'))} onClick={close}>Parity</Link>
-      {canAccessTechMaster && (
-        <Link to="/tech" style={navLinkStyle(isActive('/tech'))} onClick={close}>Tech Master</Link>
-      )}
     </>
   ) : (
     <>
@@ -279,11 +277,8 @@ function Navigation() {
 
   // ── Secondary links: hamburger menu only ──
   const secondaryLinks = isNhraOnlyUser ? (
-    // NHRA users: only parity-related links + help
+    // NHRA users: only parity + help
     <>
-      {canAccessTechMaster && (
-        <Link to="/tech" style={navLinkStyle(isActive('/tech'))} onClick={close}>Tech Master</Link>
-      )}
       <Link to="/help" style={navLinkStyle(isActive('/help'))} onClick={close}>Help</Link>
       {isDevOrOwner && (
         <>
@@ -295,8 +290,12 @@ function Navigation() {
   ) : (
     <>
       <Link to="/calculators" style={navLinkStyle(isActive('/calculators'))} onClick={close}>Calculators</Link>
-      {canAccessHistory && isDevOrOwner && (
-        <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={close}>History</Link>
+      {canAccessHistory && (
+        <>
+          <Link to="/log" style={navLinkStyle(isActive('/log'))} onClick={close}>Log Run</Link>
+          <Link to="/history" style={navLinkStyle(isActive('/history'))} onClick={close}>History</Link>
+          <Link to="/predict-weather" style={navLinkStyle(isActive('/predict-weather'))} onClick={close}>Weather Predict</Link>
+        </>
       )}
       {canAccessTeam && isDevOrOwner && (
         <Link to="/team" style={navLinkStyle(isActive('/team'))} onClick={close}>Team</Link>
@@ -456,13 +455,28 @@ function DevNavLink({ isActive, navLinkStyle }: { isActive: (path: string) => bo
 }
 
 function NhraHomeRedirect() {
-  const { isAuthenticated, user } = useAuth();
-  const { can } = useCapabilities();
-  // Redirect NHRA-only users (have parity but no general RSA tools) straight to /parity
-  if (isAuthenticated && user && can('nhra.parity') && !can('data.vehicles') && !can('sim.et') && !can('sim.basic')) {
+  const { isAuthenticated } = useAuth();
+  const { plan } = useCapabilities();
+  if (isAuthenticated && plan === 'nhra') {
     return <Navigate to="/parity" replace />;
   }
   return <Home />;
+}
+
+// Redirect NHRA-only users away from any page they shouldn't be on.
+const NHRA_ALLOWED_PREFIXES = ['/parity', '/account', '/login', '/help'];
+
+function NhraPageGuard({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const { plan } = useCapabilities();
+  if (isAuthenticated && plan === 'nhra') {
+    const ok = NHRA_ALLOWED_PREFIXES.some(
+      p => location.pathname === p || location.pathname.startsWith(p + '/'),
+    );
+    if (!ok) return <Navigate to="/parity" replace />;
+  }
+  return <>{children}</>;
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -504,7 +518,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main style={{ flex: 1 }}>{children}</main>
+      <main style={{ flex: 1 }}><NhraPageGuard>{children}</NhraPageGuard></main>
 
       <footer
         style={{
@@ -571,12 +585,17 @@ function App() {
             } />
             <Route path="/log" element={
               <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
-                <InternalRoute><Log /></InternalRoute>
+                <Log />
               </ProtectedRoute>
             } />
             <Route path="/history" element={
               <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
-                <InternalRoute><History /></InternalRoute>
+                <History />
+              </ProtectedRoute>
+            } />
+            <Route path="/predict-weather" element={
+              <ProtectedRoute requireFeature={RUN_LOGGING_FEATURE}>
+                <PredictWeather />
               </ProtectedRoute>
             } />
             <Route path="/dial-in" element={

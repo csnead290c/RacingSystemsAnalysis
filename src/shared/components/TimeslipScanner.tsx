@@ -21,6 +21,7 @@ interface TimeslipScannerProps {
   onClose: () => void;
   onImport: (data: {
     user: {
+      carNumber?: string;
       reactionTime?: number;
       sixtyFt?: number;
       threeThirtyFt?: number;
@@ -33,10 +34,17 @@ interface TimeslipScannerProps {
     };
     opponent: {
       name?: string;
+      carNumber?: string;
+      dialIn?: number;
       reactionTime?: number;
+      sixtyFt?: number;
+      threeThirtyFt?: number;
+      eighthMileET?: number;
+      eighthMileMPH?: number;
+      thousandFt?: number;
       et?: number;
       mph?: number;
-      dialIn?: number;
+      notes?: string;
     };
     raceInfo: {
       date?: string;
@@ -46,6 +54,11 @@ interface TimeslipScannerProps {
       runNumber?: number;
       userWon?: boolean | null;
       margin?: number;
+    };
+    weather: {
+      temperatureF?: number;
+      humidityPct?: number;
+      densityAltitude?: number;
     };
   }) => void;
 }
@@ -59,6 +72,13 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
   const [scannedData, setScannedData] = useState<TimeslipData | null>(null);
   const [selectedLane, setSelectedLane] = useState<LaneSelection>('left');
   const [error, setError] = useState<string | null>(null);
+  // Editable copies of the parsed values, populated when the user picks a lane.
+  // OCR is imperfect, so the review step lets the user correct any field before
+  // importing. Values are kept as strings to allow free editing; they are
+  // parsed back to numbers on import.
+  const [userEdits, setUserEdits] = useState<Record<string, string>>({});
+  const [oppEdits, setOppEdits] = useState<Record<string, string>>({});
+  const [weatherEdits, setWeatherEdits] = useState<Record<string, string>>({});
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +89,9 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
     setScanProgress(0);
     setScannedData(null);
     setSelectedLane('left');
+    setUserEdits({});
+    setOppEdits({});
+    setWeatherEdits({});
     setError(null);
   }, []);
   
@@ -122,34 +145,83 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
   
   const handleLaneSelect = useCallback((lane: LaneSelection) => {
     setSelectedLane(lane);
+    if (scannedData) {
+      const u = getUserData(scannedData, lane);
+      const o = getOpponentData(scannedData, lane);
+      const s = (n?: number) => (n === undefined || n === null ? '' : String(n));
+      setUserEdits({
+        carNumber: u.carNumber || '',
+        reactionTime: s(u.reactionTime),
+        sixtyFt: s(u.sixtyFt),
+        threeThirtyFt: s(u.threeThirtyFt),
+        eighthMileET: s(u.eighthMileET),
+        eighthMileMPH: s(u.eighthMileMPH),
+        thousandFt: s(u.thousandFt),
+        quarterMileET: s(u.quarterMileET),
+        quarterMileMPH: s(u.quarterMileMPH),
+        dialIn: s(u.dialIn),
+      });
+      setOppEdits({
+        name: '',
+        carNumber: o.carNumber || '',
+        dialIn: s(o.dialIn),
+        reactionTime: s(o.reactionTime),
+        sixtyFt: s(o.sixtyFt),
+        threeThirtyFt: s(o.threeThirtyFt),
+        eighthMileET: s(o.eighthMileET),
+        eighthMileMPH: s(o.eighthMileMPH),
+        thousandFt: s(o.thousandFt),
+        et: s(o.quarterMileET ?? o.eighthMileET),
+        mph: s(o.quarterMileMPH ?? o.eighthMileMPH),
+        notes: '',
+      });
+      setWeatherEdits({
+        temperatureF: s(scannedData.weather?.temperatureF),
+        humidityPct: s(scannedData.weather?.humidityPct),
+        densityAltitude: s(scannedData.weather?.densityAltitude),
+      });
+    }
     setStep('review');
-  }, []);
+  }, [scannedData]);
   
   const handleImport = useCallback(() => {
     if (!scannedData) return;
     
-    const userData = getUserData(scannedData, selectedLane);
-    const opponentData = getOpponentData(scannedData, selectedLane);
     const userWon = didUserWin(scannedData, selectedLane);
+    const num = (v?: string) => {
+      if (v === undefined) return undefined;
+      const t = v.trim();
+      if (t === '') return undefined;
+      const n = parseFloat(t);
+      return isNaN(n) ? undefined : n;
+    };
     
     onImport({
       user: {
-        reactionTime: userData.reactionTime,
-        sixtyFt: userData.sixtyFt,
-        threeThirtyFt: userData.threeThirtyFt,
-        eighthMileET: userData.eighthMileET,
-        eighthMileMPH: userData.eighthMileMPH,
-        thousandFt: userData.thousandFt,
-        quarterMileET: userData.quarterMileET,
-        quarterMileMPH: userData.quarterMileMPH,
-        dialIn: userData.dialIn,
+        carNumber: userEdits.carNumber?.trim() || undefined,
+        reactionTime: num(userEdits.reactionTime),
+        sixtyFt: num(userEdits.sixtyFt),
+        threeThirtyFt: num(userEdits.threeThirtyFt),
+        eighthMileET: num(userEdits.eighthMileET),
+        eighthMileMPH: num(userEdits.eighthMileMPH),
+        thousandFt: num(userEdits.thousandFt),
+        quarterMileET: num(userEdits.quarterMileET),
+        quarterMileMPH: num(userEdits.quarterMileMPH),
+        dialIn: num(userEdits.dialIn),
       },
       opponent: {
-        name: opponentData.carNumber ? `Car #${opponentData.carNumber}` : undefined,
-        reactionTime: opponentData.reactionTime,
-        et: opponentData.quarterMileET || opponentData.eighthMileET,
-        mph: opponentData.quarterMileMPH || opponentData.eighthMileMPH,
-        dialIn: opponentData.dialIn,
+        name: oppEdits.name?.trim() || undefined,
+        carNumber: oppEdits.carNumber?.trim() || undefined,
+        dialIn: num(oppEdits.dialIn),
+        reactionTime: num(oppEdits.reactionTime),
+        sixtyFt: num(oppEdits.sixtyFt),
+        threeThirtyFt: num(oppEdits.threeThirtyFt),
+        eighthMileET: num(oppEdits.eighthMileET),
+        eighthMileMPH: num(oppEdits.eighthMileMPH),
+        thousandFt: num(oppEdits.thousandFt),
+        et: num(oppEdits.et),
+        mph: num(oppEdits.mph),
+        notes: oppEdits.notes?.trim() || undefined,
       },
       raceInfo: {
         date: scannedData.date,
@@ -160,15 +232,52 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
         userWon,
         margin: scannedData.margin,
       },
+      weather: {
+        temperatureF: num(weatherEdits.temperatureF),
+        humidityPct: num(weatherEdits.humidityPct),
+        densityAltitude: num(weatherEdits.densityAltitude),
+      },
     });
     
     handleClose();
-  }, [scannedData, selectedLane, onImport, handleClose]);
+  }, [scannedData, selectedLane, userEdits, oppEdits, weatherEdits, onImport, handleClose]);
   
   if (!isOpen) return null;
   
-  const userData = scannedData ? getUserData(scannedData, selectedLane) : null;
-  const opponentData = scannedData ? getOpponentData(scannedData, selectedLane) : null;
+  const editInputStyle: React.CSSProperties = {
+    width: '96px',
+    fontFamily: 'monospace',
+    fontSize: '0.8rem',
+    padding: '2px 6px',
+    textAlign: 'right',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--color-bg)',
+    color: 'var(--color-text)',
+  };
+  const updField = (
+    setter: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    key: string,
+  ) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setter(prev => ({ ...prev, [key]: e.target.value }));
+  const editRow = (
+    label: string,
+    value: string,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    opts?: { bold?: boolean; color?: string },
+  ) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: opts?.bold ? 600 : undefined }}>
+      <span>{label}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={value ?? ''}
+        onChange={onChange}
+        placeholder="—"
+        style={{ ...editInputStyle, color: opts?.color ?? editInputStyle.color }}
+      />
+    </div>
+  );
   
   return (
     <div 
@@ -400,8 +509,11 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
         )}
         
         {/* Step: Review */}
-        {step === 'review' && scannedData && userData && opponentData && (
+        {step === 'review' && scannedData && (
           <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+              Review and correct any field below before importing.
+            </div>
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: '1fr 1fr', 
@@ -419,38 +531,16 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
                   Your Run ({selectedLane.toUpperCase()})
                 </div>
                 <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>R/T:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{userData.reactionTime?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>60':</span>
-                    <span style={{ fontFamily: 'monospace' }}>{userData.sixtyFt?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>330':</span>
-                    <span style={{ fontFamily: 'monospace' }}>{userData.threeThirtyFt?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>1/8 ET:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{userData.eighthMileET?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>1/8 MPH:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{userData.eighthMileMPH?.toFixed(2) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>1000':</span>
-                    <span style={{ fontFamily: 'monospace' }}>{userData.thousandFt?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span>1/4 ET:</span>
-                    <span style={{ fontFamily: 'monospace', color: '#10b981' }}>{userData.quarterMileET?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span>1/4 MPH:</span>
-                    <span style={{ fontFamily: 'monospace', color: '#10b981' }}>{userData.quarterMileMPH?.toFixed(2) || '—'}</span>
-                  </div>
+                  {editRow('Car #:', userEdits.carNumber, updField(setUserEdits, 'carNumber'))}
+                  {editRow('Dial:', userEdits.dialIn, updField(setUserEdits, 'dialIn'))}
+                  {editRow('R/T:', userEdits.reactionTime, updField(setUserEdits, 'reactionTime'))}
+                  {editRow("60':", userEdits.sixtyFt, updField(setUserEdits, 'sixtyFt'))}
+                  {editRow("330':", userEdits.threeThirtyFt, updField(setUserEdits, 'threeThirtyFt'))}
+                  {editRow('1/8 ET:', userEdits.eighthMileET, updField(setUserEdits, 'eighthMileET'))}
+                  {editRow('1/8 MPH:', userEdits.eighthMileMPH, updField(setUserEdits, 'eighthMileMPH'))}
+                  {editRow("1000':", userEdits.thousandFt, updField(setUserEdits, 'thousandFt'))}
+                  {editRow('1/4 ET:', userEdits.quarterMileET, updField(setUserEdits, 'quarterMileET'), { bold: true, color: '#10b981' })}
+                  {editRow('1/4 MPH:', userEdits.quarterMileMPH, updField(setUserEdits, 'quarterMileMPH'), { bold: true, color: '#10b981' })}
                 </div>
               </div>
               
@@ -465,36 +555,61 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
                   Opponent ({selectedLane === 'left' ? 'RIGHT' : 'LEFT'})
                 </div>
                 <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {opponentData.carNumber && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Car #:</span>
-                      <span>{opponentData.carNumber}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>R/T:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{opponentData.reactionTime?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>60':</span>
-                    <span style={{ fontFamily: 'monospace' }}>{opponentData.sixtyFt?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>1/8 ET:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{opponentData.eighthMileET?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span>1/4 ET:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{opponentData.quarterMileET?.toFixed(3) || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span>1/4 MPH:</span>
-                    <span style={{ fontFamily: 'monospace' }}>{opponentData.quarterMileMPH?.toFixed(2) || '—'}</span>
+                  {editRow('Name:', oppEdits.name, updField(setOppEdits, 'name'))}
+                  {editRow('Car #:', oppEdits.carNumber, updField(setOppEdits, 'carNumber'))}
+                  {editRow('Dial:', oppEdits.dialIn, updField(setOppEdits, 'dialIn'))}
+                  {editRow('R/T:', oppEdits.reactionTime, updField(setOppEdits, 'reactionTime'))}
+                  {editRow("60':", oppEdits.sixtyFt, updField(setOppEdits, 'sixtyFt'))}
+                  {editRow("330':", oppEdits.threeThirtyFt, updField(setOppEdits, 'threeThirtyFt'))}
+                  {editRow('1/8 ET:', oppEdits.eighthMileET, updField(setOppEdits, 'eighthMileET'))}
+                  {editRow('1/8 MPH:', oppEdits.eighthMileMPH, updField(setOppEdits, 'eighthMileMPH'))}
+                  {editRow("1000':", oppEdits.thousandFt, updField(setOppEdits, 'thousandFt'))}
+                  {editRow('ET:', oppEdits.et, updField(setOppEdits, 'et'), { bold: true })}
+                  {editRow('MPH:', oppEdits.mph, updField(setOppEdits, 'mph'), { bold: true })}
+                  <div style={{ marginTop: '4px' }}>
+                    <div style={{ marginBottom: '2px', color: 'var(--color-text-muted)' }}>Notes:</div>
+                    <textarea
+                      value={oppEdits.notes ?? ''}
+                      onChange={(e) => setOppEdits(prev => ({ ...prev, notes: e.target.value }))}
+                      placeholder="Car description, outcome, etc."
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        fontSize: '0.75rem',
+                        padding: '4px 6px',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--color-bg)',
+                        color: 'var(--color-text)',
+                        resize: 'vertical',
+                        fontFamily: 'inherit',
+                        boxSizing: 'border-box',
+                      }}
+                    />
                   </div>
                 </div>
               </div>
             </div>
             
+            {/* Weather (editable) */}
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'var(--color-surface)', 
+              borderRadius: 'var(--radius-md)',
+              marginBottom: '16px',
+              fontSize: '0.8rem',
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: '8px' }}>🌡️ Weather (from slip)</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {editRow('Temp (°F):', weatherEdits.temperatureF, updField(setWeatherEdits, 'temperatureF'))}
+                {editRow('Humidity (%):', weatherEdits.humidityPct, updField(setWeatherEdits, 'humidityPct'))}
+                {editRow('Density Alt (ft):', weatherEdits.densityAltitude, updField(setWeatherEdits, 'densityAltitude'))}
+              </div>
+              <div style={{ marginTop: '6px', color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                Barometer is back-calculated from these on import.
+              </div>
+            </div>
+
             {/* Race Info */}
             {(scannedData.winner || scannedData.margin || scannedData.trackName) && (
               <div style={{ 
@@ -533,27 +648,37 @@ export default function TimeslipScanner({ isOpen, onClose, onImport }: TimeslipS
               {scannedData.confidence < 0.5 && ' — Please verify the data above'}
             </div>
             
-            {/* Raw OCR Text (Debug) */}
-            <details style={{ marginBottom: '16px', fontSize: '0.7rem' }}>
-              <summary style={{ cursor: 'pointer', color: 'var(--color-text-muted)' }}>
-                Show raw OCR text (debug)
-              </summary>
-              <pre style={{ 
-                backgroundColor: 'var(--color-surface)', 
-                padding: '8px', 
-                borderRadius: 'var(--radius-sm)',
-                overflow: 'auto',
-                maxHeight: '150px',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                marginTop: '8px',
-              }}>
-                {scannedData.rawText || 'No text extracted'}
-              </pre>
-              <div style={{ marginTop: '4px', color: 'var(--color-text-muted)' }}>
-                Format detected: {scannedData.format || 'unknown'}
-              </div>
-            </details>
+            {/* Raw OCR Text (Debug) - DEV ONLY */}
+            {import.meta.env.DEV && (
+              <details style={{ marginBottom: '16px', fontSize: '0.7rem', border: '1px dashed var(--color-border)', padding: '8px', borderRadius: 'var(--radius-sm)' }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--color-accent)', fontWeight: 600 }}>
+                  🐛 Dev: Show raw OCR & parser diagnostics
+                </summary>
+                <pre style={{ 
+                  backgroundColor: 'var(--color-bg)', 
+                  padding: '8px', 
+                  borderRadius: 'var(--radius-sm)',
+                  overflow: 'auto',
+                  maxHeight: '200px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  marginTop: '8px',
+                  fontSize: '0.65rem',
+                  lineHeight: 1.4,
+                }}>
+                  {scannedData.rawText || 'No text extracted'}
+                </pre>
+                <div style={{ marginTop: '8px', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div>Format detected: {scannedData.format || 'unknown'}</div>
+                  <div>Best parser: {scannedData.bestParser || 'unknown'}</div>
+                  <div>Run#: {scannedData.runNumber ?? '—'}</div>
+                  <div>Round: {scannedData.round ?? '—'}</div>
+                  <div>Track: {scannedData.trackName ?? '—'}</div>
+                  <div>Left car: {scannedData.left.carNumber ?? '—'}</div>
+                  <div>Right car: {scannedData.right.carNumber ?? '—'}</div>
+                </div>
+              </details>
+            )}
             
             {/* Actions */}
             <div style={{ display: 'flex', gap: '8px' }}>

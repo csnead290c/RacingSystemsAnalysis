@@ -124,8 +124,10 @@ export default function QuickRunEntry({
 
       const run: RunRecordV1 = {
         id: `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        runKind: 'logged',
         createdAt: Date.now(),
         vehicleId,
+        vehicleName: vehicles.find(v => v.id === vehicleId)?.name,
         raceLength,
         env: {
           elevation: 0,

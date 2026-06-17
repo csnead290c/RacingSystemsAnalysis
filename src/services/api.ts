@@ -182,9 +182,38 @@ export const runsApi = {
     hp_adjust?: number;
     weight_adjust?: number;
     notes?: string;
+    // Rich-record / hybrid-sync fields (optional, backward compatible)
+    run_data?: unknown;
+    client_id?: string;
+    run_kind?: 'logged' | 'prediction';
+    corrected_et?: number | null;
+    correction_factor?: number | null;
+    weather_source?: string | null;
   }) {
     return apiRequest<{ success: boolean; run: ApiRun }>('/runs.php', {
       method: 'POST',
+      body: JSON.stringify(run),
+    });
+  },
+
+  async update(id: string, run: {
+    vehicle_id?: string;
+    vehicle_name?: string;
+    race_length?: string;
+    env?: unknown;
+    result_et?: number;
+    result_mph?: number;
+    hp_adjust?: number;
+    weight_adjust?: number;
+    notes?: string;
+    run_data?: unknown;
+    run_kind?: 'logged' | 'prediction';
+    corrected_et?: number | null;
+    correction_factor?: number | null;
+    weather_source?: string | null;
+  }) {
+    return apiRequest<{ success: boolean; run: ApiRun }>(`/runs.php?id=${id}`, {
+      method: 'PUT',
       body: JSON.stringify(run),
     });
   },
@@ -376,17 +405,24 @@ export const enginesApi = {
 
 export interface ApiRun {
   id: string;
+  client_id?: string | null;
   vehicle_id: string;
   vehicle_name: string;
   race_length: string;
+  run_kind?: 'logged' | 'prediction';
   env: any;
+  run_data?: unknown;
   result: {
     et_s: number;
     mph: number;
   };
+  corrected_et?: number | null;
+  correction_factor?: number | null;
+  weather_source?: string | null;
   hp_adjust: number;
   weight_adjust: number;
   notes?: string;
   timestamp: number;
   created_at: string;
+  updated_at?: string;
 }

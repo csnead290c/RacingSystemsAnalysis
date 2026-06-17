@@ -30,6 +30,15 @@ export interface TimeslipLaneData {
   offDial?: number;
 }
 
+export interface TimeslipWeather {
+  /** Air temperature in °F (e.g. 59.2). */
+  temperatureF?: number;
+  /** Relative humidity in % (e.g. 77). */
+  humidityPct?: number;
+  /** Density altitude in ft (e.g. 391). Informational; not stored in Env. */
+  densityAltitude?: number;
+}
+
 export interface TimeslipData {
   trackName?: string;
   date?: string;
@@ -40,9 +49,13 @@ export interface TimeslipData {
   right: TimeslipLaneData;
   winner?: 'left' | 'right' | 'bye';
   margin?: number;
+  /** Weather summary row found on many slips (temp / humidity / density altitude). */
+  weather?: TimeslipWeather;
   rawText: string;
   confidence: number;
   format?: 'compulink' | 'accutime' | 'unknown';
+  /** Which parser extracted the most fields (dev diagnostics). */
+  bestParser?: 'accutime' | 'compulink' | 'center';
 }
 
 export type LaneSelection = 'left' | 'right';
@@ -246,9 +259,147 @@ function parseCompulinkFormat(lines: string[]): { left: TimeslipLaneData; right:
 }
 
 /**
+ * Ordered label patterns for the "center label" layout. Order matters: more
+ * specific labels (1/8 ET, 1/8 MPH) must be tested before generic ones
+ * (E.T., MPH) so a quarter-mile row isn't mistaken for an eighth-mile row.
+ */
+const CENTER_LABEL_PATTERNS: Array<{
+  re: RegExp;
+  field: keyof TimeslipLaneData | 'run';
+}> = [
+  { re: /DIAL\s*-?\s*IN|DIALIN|DIAL/i, field: 'dialIn' },
+  { re: /R\s*\/?\s*T\b|REACTION|\bRAT\b/i, field: 'reactionTime' },
+  { re: /1\s*\/\s*8\s*E\.?\s*T/i, field: 'eighthMileET' },
+  { re: /1\s*\/\s*8\s*MPH/i, field: 'eighthMileMPH' },
+  { re: /1000\s*'?/i, field: 'thousandFt' },
+  { re: /330\s*'?/i, field: 'threeThirtyFt' },
+  { re: /60\s*'?/i, field: 'sixtyFt' },
+  { re: /\bMPH\b/i, field: 'quarterMileMPH' },
+  { re: /\bE\.?\s*T\.?\b/i, field: 'quarterMileET' },
+  { re: /RUN\s*#?/i, field: 'run' },
+];
+
+/** Extract numeric values (handles leading-dot decimals, ignores dash runs). */
+function numbersIn(text: string): number[] {
+  const matches = text.match(/-?\d+\.\d+|-?\.\d+|-?\d+/g) || [];
+  return matches.map((m) => parseFloat(m)).filter((n) => !isNaN(n));
+}
+
+/**
+ * When OCR drops the decimal point (e.g. "5794" instead of "5.794"), timing
+ * values end up as implausibly large integers. For split-time fields the valid
+ * range is 0–30 s; for MPH it is 50–350. Divide by 1000 (or 10 for MPH) to
+ * recover the intended value.
+ */
+function normalizeTimingField(val: number, field: keyof TimeslipLaneData): number {
+  const isMph = field === 'eighthMileMPH' || field === 'quarterMileMPH';
+  if (isMph) {
+    if (val > 3500) return Math.round(val / 10) / 10;
+    if (val > 350) return val / 10;
+    return val;
+  }
+  // Split-time fields: valid range 0–30 s, so anything ≥ 100 lost its decimal
+  if (val >= 1000) return val / 1000;
+  if (val >= 100) return val / 100;
+  return val;
+}
+
+/**
+ * Parse the "center label" layout used by DER RED / Compulink phone displays:
+ *   leftValue   LABEL   rightValue
+ * e.g. "0.506  R/T  0.340" or "8.752  1/8 E.T.  7.870".
+ *
+ * The label sits between the two lane values, so we locate the label keyword
+ * and read the number(s) to its left (left lane) and right (right lane).
+ */
+function parseCenterLabelFormat(lines: string[]): {
+  left: TimeslipLaneData;
+  right: TimeslipLaneData;
+  runNumber?: number;
+} {
+  const left: TimeslipLaneData = {};
+  const right: TimeslipLaneData = {};
+  let runNumber: number | undefined;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Find the first matching label and its position in the line.
+    let matched: { field: keyof TimeslipLaneData | 'run'; start: number; end: number } | null = null;
+    for (const { re, field } of CENTER_LABEL_PATTERNS) {
+      const m = re.exec(line);
+      if (m) {
+        matched = { field, start: m.index, end: m.index + m[0].length };
+        break;
+      }
+    }
+    if (!matched) continue;
+
+    const beforeNums = numbersIn(line.slice(0, matched.start));
+    const afterNums = numbersIn(line.slice(matched.end));
+
+    // Left lane = the number immediately before the label; right lane = the
+    // number immediately after. Either side may legitimately be absent.
+    const leftVal = beforeNums.length ? beforeNums[beforeNums.length - 1] : undefined;
+    const rightVal = afterNums.length ? afterNums[0] : undefined;
+
+    if (matched.field === 'run') {
+      runNumber = leftVal ?? rightVal;
+      continue;
+    }
+
+    const field = matched.field;
+    if (leftVal !== undefined) left[field] = normalizeTimingField(leftVal, field) as never;
+    if (rightVal !== undefined) right[field] = normalizeTimingField(rightVal, field) as never;
+  }
+
+  return { left, right, runNumber };
+}
+
+/**
+ * Extract the weather summary row found on many slips, e.g. the DER RED /
+ * Compulink footer: "59.2°F   77%   391 ft" (temperature / humidity / density
+ * altitude). OCR commonly mangles the degree symbol, so we accept an optional
+ * separator before the trailing F.
+ */
+export function parseWeather(text: string): TimeslipWeather | undefined {
+  const weather: TimeslipWeather = {};
+
+  // Temperature: 2-3 digits with optional decimal, followed by an optional
+  // degree-like glyph and an F. e.g. "59.2°F", "70.5 F", "63.3oF".
+  const tempMatch = text.match(/(-?\d{1,3}(?:\.\d+)?)\s*[°*ºo]?\s*F\b/i);
+  if (tempMatch) {
+    const t = parseFloat(tempMatch[1]);
+    if (!isNaN(t) && t > -60 && t < 160) weather.temperatureF = t;
+  }
+
+  // Humidity: 1-3 digits with optional decimal, followed by %.
+  const humidityMatch = text.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
+  if (humidityMatch) {
+    const h = parseFloat(humidityMatch[1]);
+    if (!isNaN(h) && h >= 0 && h <= 100) weather.humidityPct = h;
+  }
+
+  // Density altitude: integer feet followed by "ft" (distinct from the 60'/330'
+  // labels which use an apostrophe, not "ft").
+  const daMatch = text.match(/(-?\d{1,5})\s*ft\b/i);
+  if (daMatch) {
+    const da = parseInt(daMatch[1], 10);
+    if (!isNaN(da)) weather.densityAltitude = da;
+  }
+
+  return weather.temperatureF !== undefined ||
+    weather.humidityPct !== undefined ||
+    weather.densityAltitude !== undefined
+    ? weather
+    : undefined;
+}
+
+/**
  * Extract time slip data from raw OCR text
  */
-function parseTimeslipText(text: string): TimeslipData {
+export function parseTimeslipText(text: string): TimeslipData {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const fullText = lines.join(' ');
   const format = detectFormat(text);
@@ -265,11 +416,18 @@ function parseTimeslipText(text: string): TimeslipData {
   const trackLine = lines.find(l => /Motorsports|Dragway|Raceway|NHRA|Park|Valley|Speedway/i.test(l));
   if (trackLine) result.trackName = trackLine.replace(/[*]+/g, '').trim();
   
-  // Extract date/time
-  const dateMatch = fullText.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-  if (dateMatch) result.date = dateMatch[1];
-  const timeMatch = fullText.match(/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
-  if (timeMatch) result.time = timeMatch[1];
+  // Extract date/time — prefer pulling both from the same line (e.g. "10/03/2025 20:36:39")
+  // to avoid mismatching time-like patterns elsewhere in the OCR (e.g. 8:752 from a garbled ET).
+  const dateTimeMatch = fullText.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)/);
+  if (dateTimeMatch) {
+    result.date = dateTimeMatch[1];
+    result.time = dateTimeMatch[2];
+  } else {
+    const dateMatch = fullText.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    if (dateMatch) result.date = dateMatch[1];
+    const timeMatch = fullText.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:AM|PM)?/i);
+    if (timeMatch) result.time = timeMatch[1].trim();
+  }
   
   // Round/run info
   const roundMatch = fullText.match(/(?:ELIM\s*)?(?:RD#?|Round)\s*:?\s*(\d+)/i);
@@ -277,25 +435,57 @@ function parseTimeslipText(text: string): TimeslipData {
   const runMatch = fullText.match(/RUN\s*:?\s*(\d+)/i);
   if (runMatch) result.runNumber = parseInt(runMatch[1]);
   
-  // Car numbers "LEFT:2 ... RIGHT:162"
-  const laneMatch = fullText.match(/LEFT\s*:?\s*(\d+).*RIGHT\s*:?\s*(\d+)/i);
+  // Car numbers "LEFT:211 ... RIGHT:234" — preserve alphanumeric (e.g. A211, 211X)
+  const laneMatch = fullText.match(/LEFT\s*:?\s*([A-Za-z0-9/\-]{1,10}).*RIGHT\s*:?\s*([A-Za-z0-9/\-]{1,10})/i);
   if (laneMatch) { result.left.carNumber = laneMatch[1]; result.right.carNumber = laneMatch[2]; }
+
+  // DER RED / Compulink phone display: header line "211 234 234", "A211 X234", etc.
+  // Tokens are alphanumeric (letters+digits), at least one digit required in left+right
+  // to avoid matching plain-text header lines like "MOV WIN".
+  if (!result.left.carNumber && !result.right.carNumber) {
+    for (const line of lines.slice(0, 10)) {
+      const m3 = line.match(/^([A-Za-z0-9]{1,8})\s+([A-Za-z0-9]{1,8})\s+([A-Za-z0-9]{1,8})$/);
+      if (m3 && /\d/.test(m3[1] + m3[3])) { result.left.carNumber = m3[1]; result.right.carNumber = m3[3]; break; }
+      const m2 = line.match(/^([A-Za-z0-9]{1,8})\s+([A-Za-z0-9]{1,8})$/);
+      if (m2 && /\d/.test(m2[1] + m2[2])) { result.left.carNumber = m2[1]; result.right.carNumber = m2[2]; break; }
+    }
+  }
+
+  // Weather summary row (temp / humidity / density altitude)
+  result.weather = parseWeather(fullText);
   
-  // Parse timing data based on format
-  let timingData: { left: TimeslipLaneData; right: TimeslipLaneData };
-  if (format === 'accutime') {
-    timingData = parseAccutimeFormat(lines);
-  } else if (format === 'compulink') {
-    timingData = parseCompulinkFormat(lines);
-  } else {
-    // Try both, use the one with more data
-    const accuData = parseAccutimeFormat(lines);
-    const compuData = parseCompulinkFormat(lines);
-    const accuCount = Object.values(accuData.left).filter(v => v !== undefined).length +
-                      Object.values(accuData.right).filter(v => v !== undefined).length;
-    const compuCount = Object.values(compuData.left).filter(v => v !== undefined).length +
-                       Object.values(compuData.right).filter(v => v !== undefined).length;
-    timingData = accuCount >= compuCount ? accuData : compuData;
+  // Parse timing data. Run every parser and keep whichever extracted the most
+  // fields. The DER RED / phone-display "center label" layout (label between
+  // the two lane values) is common and was previously unparseable because both
+  // older parsers assume the label is at the start of the line, so most rows
+  // were dropped and R/T values were wrongly negated. Best-of-N is robust and
+  // avoids brittle format detection.
+  const fieldCount = (d: { left: TimeslipLaneData; right: TimeslipLaneData }) =>
+    Object.values(d.left).filter(v => v !== undefined).length +
+    Object.values(d.right).filter(v => v !== undefined).length;
+
+  const accuData = parseAccutimeFormat(lines);
+  const compuData = parseCompulinkFormat(lines);
+  const centerData = parseCenterLabelFormat(lines);
+
+  const candidates: Array<{ data: { left: TimeslipLaneData; right: TimeslipLaneData }; count: number; name: 'accutime' | 'compulink' | 'center' }> = [
+    { data: accuData, count: fieldCount(accuData), name: 'accutime' },
+    { data: compuData, count: fieldCount(compuData), name: 'compulink' },
+    { data: centerData, count: fieldCount(centerData), name: 'center' },
+  ];
+  // Prefer the parser matching the detected format on ties.
+  const preferred = format === 'accutime' ? accuData : format === 'compulink' ? compuData : null;
+  let best = candidates[0];
+  for (const c of candidates) {
+    if (c.count > best.count || (c.count === best.count && c.data === preferred)) {
+      best = c;
+    }
+  }
+  result.bestParser = best.name;
+  const timingData = best.data;
+
+  if (centerData.runNumber !== undefined && result.runNumber === undefined) {
+    result.runNumber = centerData.runNumber;
   }
   result.left = { ...result.left, ...timingData.left };
   result.right = { ...result.right, ...timingData.right };

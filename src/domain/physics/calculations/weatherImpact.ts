@@ -79,6 +79,116 @@ export function calculateDensityAltitude(
   return Math.round(densityAlt + elevationFt);
 }
 
+export interface BarometerSolveOptions {
+  /** Lower bound for barometer search (inHg). */
+  minInHg?: number;
+  /** Upper bound for barometer search (inHg). */
+  maxInHg?: number;
+  /** Acceptable DA error to declare convergence (ft). */
+  toleranceFt?: number;
+  /** Maximum bisection iterations. */
+  maxIterations?: number;
+}
+
+export interface BarometerSolveResult {
+  /** Solved barometer rounded to 0.01 inHg. */
+  barometerInHg: number;
+  /** DA produced by the solved barometer (using calculateDensityAltitude). */
+  densityAltitude: number;
+  /** Whether the solver reached the target DA within tolerance. */
+  converged: boolean;
+  iterations: number;
+}
+
+/**
+ * Invert {@link calculateDensityAltitude}: given a target density altitude plus
+ * temperature, humidity and elevation, solve for the barometer (inHg) that
+ * reproduces that DA under the app's own DA math.
+ *
+ * DA is strictly monotonic in barometer (higher pressure => lower DA), so a
+ * simple bounded bisection is reliable and uses the exact same assumptions as
+ * the rest of the app.
+ */
+export function solveBarometerForDensityAltitude(
+  targetDensityAltitudeFt: number,
+  tempF: number,
+  humidityPct: number,
+  elevationFt: number = 0,
+  options: BarometerSolveOptions = {}
+): BarometerSolveResult {
+  const minInHg = options.minInHg ?? 24.0;
+  const maxInHg = options.maxInHg ?? 31.5;
+  const toleranceFt = options.toleranceFt ?? 10;
+  const maxIterations = options.maxIterations ?? 100;
+
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+  const daAt = (baro: number) =>
+    calculateDensityAltitude(tempF, baro, humidityPct, elevationFt);
+
+  // DA decreases as barometer increases.
+  const daAtMin = daAt(minInHg); // highest achievable DA (lowest pressure)
+  const daAtMax = daAt(maxInHg); // lowest achievable DA (highest pressure)
+
+  // Target outside the achievable range: clamp to nearest bound, not converged.
+  if (
+    targetDensityAltitudeFt > daAtMin + toleranceFt ||
+    targetDensityAltitudeFt < daAtMax - toleranceFt
+  ) {
+    const baro =
+      Math.abs(daAtMin - targetDensityAltitudeFt) <
+      Math.abs(daAtMax - targetDensityAltitudeFt)
+        ? minInHg
+        : maxInHg;
+    const rounded = round2(baro);
+    return {
+      barometerInHg: rounded,
+      densityAltitude: daAt(rounded),
+      converged: false,
+      iterations: 0,
+    };
+  }
+
+  let lo = minInHg;
+  let hi = maxInHg;
+  let mid = (lo + hi) / 2;
+  let iterations = 0;
+
+  // Bisect to high precision on the continuous barometer value. DA changes by
+  // ~11 ft per 0.01 inHg, so we resolve the barometer tightly first and only
+  // then round, otherwise rounding alone could exceed the DA tolerance.
+  for (; iterations < maxIterations; iterations++) {
+    mid = (lo + hi) / 2;
+    if (hi - lo < 1e-4) break;
+    const err = daAt(mid) - targetDensityAltitudeFt;
+    // DA decreasing in barometer: DA too high => need more pressure.
+    if (err > 0) lo = mid;
+    else hi = mid;
+  }
+
+  // Pick the 0.01 inHg value whose DA is closest to the target.
+  const candidates = [
+    Math.floor(mid * 100) / 100,
+    Math.ceil(mid * 100) / 100,
+    round2(mid),
+  ];
+  let best = candidates[0];
+  let bestErr = Infinity;
+  for (const c of candidates) {
+    const e = Math.abs(daAt(c) - targetDensityAltitudeFt);
+    if (e < bestErr) {
+      bestErr = e;
+      best = c;
+    }
+  }
+
+  return {
+    barometerInHg: best,
+    densityAltitude: daAt(best),
+    converged: bestErr <= toleranceFt,
+    iterations,
+  };
+}
+
 /**
  * Calculate air correction factor (HP correction)
  */

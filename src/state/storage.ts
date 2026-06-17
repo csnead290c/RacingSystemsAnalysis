@@ -1,4 +1,5 @@
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
+import { runsStore } from './runs';
 
 /**
  * Storage interface for run records.
@@ -7,6 +8,14 @@ export interface IStorage {
   loadRuns(): Promise<RunRecordV1[]>;
   saveRun(run: RunRecordV1): Promise<void>;
   deleteRun(id: string): Promise<void>;
+}
+
+/**
+ * Stats and similar-run analysis should only consider real logged runs, not
+ * saved prediction scenarios. Helper to filter those out by default.
+ */
+function isLoggedRun(r: RunRecordV1): boolean {
+  return (r.runKind ?? 'logged') !== 'prediction';
 }
 
 /**
@@ -20,7 +29,7 @@ export async function getAverage60ft(vehicleId: string): Promise<{
   worst: number | null;
 }> {
   const runs = await storage.loadRuns();
-  const vehicleRuns = runs.filter(r => r.vehicleId === vehicleId && r.sixtyFt && r.sixtyFt > 0);
+  const vehicleRuns = runs.filter(r => isLoggedRun(r) && r.vehicleId === vehicleId && r.sixtyFt && r.sixtyFt > 0);
   
   if (vehicleRuns.length === 0) {
     return { average: null, count: 0, best: null, worst: null };
@@ -52,7 +61,7 @@ export async function getVehicleRunStats(vehicleId: string): Promise<{
   bestMPH: number | null;
 }> {
   const runs = await storage.loadRuns();
-  const vehicleRuns = runs.filter(r => r.vehicleId === vehicleId);
+  const vehicleRuns = runs.filter(r => isLoggedRun(r) && r.vehicleId === vehicleId);
   
   if (vehicleRuns.length === 0) {
     return { totalRuns: 0, avg60ft: null, avgET: null, avgMPH: null, bestET: null, bestMPH: null };
@@ -133,5 +142,9 @@ export class LocalStorageStorage implements IStorage {
 
 /**
  * Default storage instance.
+ *
+ * Hybrid DB-first store (see `runs.ts`): persists to the server when online and
+ * authenticated, with an offline localStorage pending queue. The legacy
+ * `LocalStorageStorage` class above is retained for reference/tests only.
  */
-export const storage = new LocalStorageStorage();
+export const storage = runsStore;

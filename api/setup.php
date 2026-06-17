@@ -93,19 +93,28 @@ try {
         CREATE TABLE IF NOT EXISTS run_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             uuid VARCHAR(36) UNIQUE NOT NULL,
+            client_id VARCHAR(64) NULL,
             user_id INT NOT NULL,
             vehicle_uuid VARCHAR(36) NOT NULL,
             vehicle_name VARCHAR(255) NOT NULL,
             race_length VARCHAR(50) NOT NULL,
+            run_kind VARCHAR(16) NOT NULL DEFAULT 'logged',
             env_data JSON NOT NULL,
+            run_data JSON NULL,
             result_et DECIMAL(10,4) NOT NULL,
             result_mph DECIMAL(10,2) NOT NULL,
+            corrected_et DECIMAL(10,4) NULL,
+            correction_factor DECIMAL(10,5) NULL,
+            weather_source VARCHAR(32) NULL,
             hp_adjust INT DEFAULT 0,
             weight_adjust INT DEFAULT 0,
             notes TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            INDEX idx_user_id (user_id)
+            INDEX idx_user_id (user_id),
+            INDEX idx_rh_kind (user_id, run_kind),
+            UNIQUE INDEX uniq_user_client (user_id, client_id)
         )
     ");
     echo "   SUCCESS!\n\n";
