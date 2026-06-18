@@ -53,6 +53,22 @@ define('TEMPEST_API_KEY', '');              // WeatherFlow personal access token
 define('TEMPEST_BUCKET_MINUTES', 30);       // Observation bucketing interval (default 30)
 
 // =============================================================================
+// Apple WeatherKit (RSA Weather ET Predictor)
+// Register a Service identifier in your Apple Developer account and create
+// an AuthKey_XXXXXXXXXX.p8 file.
+// https://developer.apple.com/account/resources/authkeys/list
+// =============================================================================
+define('APPLE_WEATHER_KEY_ID',              '');   // 10-char key ID  (e.g. 'ABCDE12345')
+define('APPLE_WEATHER_TEAM_ID',             '');   // 10-char team ID (e.g. 'XY98765432')
+define('APPLE_WEATHER_SERVICE_BUNDLE_ID',   '');   // Service ID      (e.g. 'com.yourapp.weatherkit-client')
+// Paste the full PEM content of the .p8 file (multiline string):
+define('APPLE_WEATHER_PRIVATE_KEY_PEM', <<<'PEM'
+-----BEGIN PRIVATE KEY-----
+<paste your AuthKey .p8 content here>
+-----END PRIVATE KEY-----
+PEM);
+
+// =============================================================================
 // Bootstrap Tools (CLI-only recovery tool)
 // Enable only when needed, disable after use.
 // =============================================================================

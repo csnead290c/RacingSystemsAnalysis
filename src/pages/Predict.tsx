@@ -107,7 +107,7 @@ function Predict() {
   
   // Track and weather state - suppressed (incomplete feature)
   
-  // Average 60ft from database (CCP-style feature)
+  // Average 60ft from database
   const [avg60ftStats, setAvg60ftStats] = useState<{
     average: number | null;
     count: number;
@@ -1022,7 +1022,7 @@ function Predict() {
                   <span className="et-slip-label">60'</span>
                   <span className="et-slip-value">{(timeslip.find(s => s.d_ft === 60)?.t_s ?? 0).toFixed(flags.etDecimals)}</span>
                 </div>
-                {/* Average 60ft from database - CCP feature */}
+                {/* Average 60ft from database */}
                 {avg60ftStats && avg60ftStats.average && (
                   <div style={{ 
                     fontSize: '7px', 

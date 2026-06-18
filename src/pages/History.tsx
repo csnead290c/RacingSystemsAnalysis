@@ -844,7 +844,7 @@ function History() {
           </p>
         </div>
       ) : viewMode === 'logbook' ? (
-        /* Event Logbook Spreadsheet View - CCP Style */
+        /* Event Logbook Spreadsheet View */
         <div className="card" style={{ padding: '16px', overflowX: 'auto' }}>
           <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '12px', color: 'var(--color-accent)' }}>
             Event Logbook - {filteredRuns.length} Runs

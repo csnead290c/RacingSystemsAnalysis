@@ -1,7 +1,22 @@
 /**
  * Weather Impact Calculator
- * Shows exactly how each weather factor affects ET
- * Similar to Crew Chief Pro's ET Change breakdown
+ * Shows how each weather factor affects ET using the RSA/QTRPERF correction method.
+ *
+ * Pressure convention (RSA internal):
+ *   All barometer values are corrected/sea-level equivalent barometric pressure
+ *   expressed in inches of mercury (inHg).  This matches the value shown on a
+ *   standard weather station barometer at any elevation.
+ *
+ *   WeatherKit (Apple Weather) provides sea-level pressure in hPa/mbar.
+ *   Station/absolute pressure from a sensor at altitude is LOWER than sea-level
+ *   pressure and must NOT be used directly as barometerInHg.
+ *
+ *   Conversion: 1 inHg = 33.8639 hPa  (exact, NIST)
+ *     hPaToInHg(hPa)  = hPa  / 33.8639
+ *     inHgToHPa(inHg) = inHg * 33.8639
+ *
+ *   If a provider gives station pressure, convert to sea-level equivalent
+ *   using the hypsometric formula before passing to RSA functions.
  */
 
 export interface WeatherConditions {
@@ -28,9 +43,231 @@ export interface WeatherImpactSummary {
   densityAltitudeChange: number;
   airCorrectionChange: number;
   predictedET: number;
+  /**
+   * Set when wind data was present but excluded from correction.
+   * Display this note in the UI whenever it is non-undefined.
+   */
+  windNote?: string;
 }
 
-// Standard factors for gasoline engines (from Crew Chief Pro reference)
+// ─────────────────────────────────────────────────────────────────────────────
+// RSA HP Correction Factor — exact TypeScript port of the Weather() subroutine
+// in QTRPERF.BAS (QCommon library), by Patrick Hale, Racing Systems Analysis.
+//
+// Source reference:
+//   /Reference Files/OtherRefFiles/QPro Family 1_18_2023/QCommon/QTRPERF.BAS
+//   Public Sub Weather(rho As Single, hpc As Single), lines 1290-1377
+//
+// ET prediction formula derived from TIMESLIP.FRM line 882:
+//   hpmax ∝ HP_input / hpc
+//   ET = K * (hpmax / W)^(-1/3)  →  ET ∝ hpc^(1/3)
+//   ET_pred = ET_base × (hpc_target / hpc_base)^(1/3)
+//
+// This is EXACTLY REVERSIBLE:
+//   A → Std: ET_std = ET_A × (1 / hpc_A)^(1/3)   [hpc_standard = 1.0]
+//   Std → A: ET_A   = ET_std × hpc_A^(1/3)
+//   Round-trip: ET_A × (1/hpc_A)^(1/3) × hpc_A^(1/3) = ET_A ✓
+//
+// ⚠  Gap: DENSITY's exact binary source is in a .CAB file (not readable).
+//   The 1/3 exponent is confirmed in TIMESLIP.FRM and is the standard
+//   drag-racing power-to-ET relationship used throughout RSA's code.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** RSA standard constants — same as QTRPERF.BAS. */
+const RSA_TSTD  = 519.67;    // Standard temperature (°R = 60°F + 459.67)
+const RSA_PSTD  = 14.696;    // Standard pressure (psia)
+const RSA_BSTD  = 29.92;     // Standard barometer (inHg)
+const RSA_WTAIR = 28.9669;   // Molecular weight of dry air
+const RSA_WTH20 = 18.016;    // Molecular weight of water
+const RSA_RSTD  = 1545.32;   // Universal gas constant (ft·lbf / lbmol·°R)
+
+/**
+ * Saturation vapor pressure polynomial coefficients (T in °F → psi).
+ * From QTRPERF.BAS lines 1317-1319.  Matches steam tables to <0.01% over
+ * the 35–120°F range used in drag racing.
+ */
+const RSA_VPCPS = [
+  0.0205558,
+  0.00118163,
+  0.0000154988,
+  0.00000040245,
+  0.000000000434856,
+  0.00000000002096,
+] as const;
+
+/** Fuel-specific exponents from QTRPERF.BAS lines 1356-1360. */
+const RSA_FUEL_PARAMS: Record<string, { px: number; tx: number; mech: number }> = {
+  gasoline: { px: 1.0, tx: 0.6, mech: 0.15 },  // Case 1: ifuel=1, icarb=1
+  alcohol:  { px: 1.0, tx: 0.3, mech: 0.13 },  // Case 3: ifuel=2, icarb=1
+};
+
+/**
+ * Compute the RSA HP Correction Factor (hpc) for given weather conditions.
+ *
+ * Direct TypeScript port of `Public Sub Weather(rho, hpc)` in QTRPERF.BAS.
+ * No algorithm changes from the VB6 original.
+ *
+ * Convention (matches RSA DENSITY manual §5-2):
+ *   hpc = 1.0  at RSA Standard Day (29.92 inHg, 60°F, 0% RH, 0 ft)
+ *   hpc > 1.0  conditions WORSE than standard (engine makes LESS power)
+ *   hpc < 1.0  conditions BETTER than standard (engine makes MORE power)
+ *
+ * @param weather  Conditions; barometer MUST be sea-level-corrected inHg.
+ * @param fuelType 'gasoline' (default) or 'alcohol'.
+ * @returns Dimensionless RSA HP correction factor.
+ */
+export function computeRsaHpc(
+  weather: WeatherConditions,
+  fuelType: 'gasoline' | 'alcohol' = 'gasoline'
+): number {
+  const T    = weather.temperatureF;
+  const baro = weather.barometerInHg;
+  const rh   = weather.humidityPct;
+  const elev = weather.elevation ?? 0;
+
+  // Saturation vapor pressure at dry-bulb temperature (psi)
+  const T2 = T * T;
+  const psdry =
+    RSA_VPCPS[0] +
+    RSA_VPCPS[1] * T +
+    RSA_VPCPS[2] * T2 +
+    RSA_VPCPS[3] * T2 * T +
+    RSA_VPCPS[4] * T2 * T2 +
+    RSA_VPCPS[5] * T2 * T2 * T;
+
+  // Partial pressure of water vapor (psi)
+  const PWV = (rh / 100) * psdry;
+
+  // Ambient pressure at elevation from sea-level barometer reading (psi)
+  const pamb =
+    (RSA_PSTD * baro / RSA_BSTD) *
+    Math.pow((RSA_TSTD - 0.00356616 * elev) / RSA_TSTD, 5.25588);
+
+  // Dry air pressure (psi)
+  const pair = pamb - PWV;
+
+  // Dry air pressure ratio (δ)
+  const delta = pair / RSA_PSTD;
+
+  // Water-air ratio by molecular weight
+  const WAR = (PWV * RSA_WTH20) / (pair * RSA_WTAIR);
+
+  // Temperature ratio (θ)
+  const theta = (T + 459.67) / RSA_TSTD;
+
+  // Specific gas constant of humid air
+  const RGAS = RSA_RSTD * ((1 / RSA_WTAIR) + (WAR / RSA_WTH20)) / (1 + WAR);
+  const rgrs = RGAS / (RSA_RSTD / RSA_WTAIR);
+
+  // Humidity correction to thermal efficiency (Taylor Vol.1 p.431, fr=1.0)
+  const kwar = 1 + 2.48 * Math.pow(WAR, 1.5);
+
+  const { px, tx, mech } = RSA_FUEL_PARAMS[fuelType] ?? RSA_FUEL_PARAMS.gasoline;
+
+  let hpc = Math.pow(delta, px) / (Math.sqrt(rgrs) * Math.pow(theta, tx));
+  hpc = (1 + mech) * kwar / hpc - mech;
+
+  return hpc;
+}
+
+/**
+ * Calculate ET correction using the RSA HP Correction Factor method.
+ *
+ * ET_pred = ET_base × (hpc_to / hpc_from)^(1/3)
+ *
+ * Per-factor breakdown is APPROXIMATE (each factor isolated while others
+ * held at 'from' values).  The `predictedET` total is always the accurate
+ * full-HPC result.  Individual rows will not sum to exactly totalETChange
+ * due to nonlinear factor interactions — this is expected and disclosed
+ * in the UI.
+ *
+ * Wind: not included in RSA weather correction.
+ * QTRPERF.BAS Weather() has no wind input. If wind data is present it is
+ * recorded in `windNote` on the result for display only.
+ */
+export function calculateRsaWeatherImpact(
+  from: WeatherConditions,
+  to: WeatherConditions,
+  baseET: number,
+  fuelType: 'gasoline' | 'alcohol' = 'gasoline'
+): WeatherImpactSummary {
+  const hpcFrom = computeRsaHpc(from, fuelType);
+  const hpcTo   = computeRsaHpc(to,   fuelType);
+
+  // Accurate total: full HPC ratio
+  const predictedET   = Math.round(baseET * Math.pow(hpcTo / hpcFrom, 1 / 3) * 1000) / 1000;
+  const totalETChange = Math.round((predictedET - baseET) * 1000) / 1000;
+
+  // Approximate per-factor contributions (hold all other factors at 'from')
+  const elev = to.elevation ?? from.elevation ?? 0;
+  const etTempOnly  = baseET * Math.pow(computeRsaHpc({ ...from, temperatureF:  to.temperatureF  }, fuelType) / hpcFrom, 1 / 3);
+  const etBaroOnly  = baseET * Math.pow(computeRsaHpc({ ...from, barometerInHg: to.barometerInHg, elevation: elev }, fuelType) / hpcFrom, 1 / 3);
+  const etHumOnly   = baseET * Math.pow(computeRsaHpc({ ...from, humidityPct:   to.humidityPct   }, fuelType) / hpcFrom, 1 / 3);
+
+  const tempChg  = Math.round((etTempOnly  - baseET) * 1000) / 1000;
+  const baroChg  = Math.round((etBaroOnly  - baseET) * 1000) / 1000;
+  const humChg   = Math.round((etHumOnly   - baseET) * 1000) / 1000;
+
+  const dir = (v: number): 'faster' | 'slower' | 'neutral' =>
+    v > 0.0005 ? 'slower' : v < -0.0005 ? 'faster' : 'neutral';
+
+  const impacts: WeatherImpact[] = [
+    {
+      factor: 'Temperature',
+      baselineValue: from.temperatureF,
+      currentValue: to.temperatureF,
+      difference: to.temperatureF - from.temperatureF,
+      etChange: tempChg,
+      direction: dir(tempChg),
+    },
+    {
+      factor: 'Barometer',
+      baselineValue: from.barometerInHg,
+      currentValue: to.barometerInHg,
+      difference: to.barometerInHg - from.barometerInHg,
+      etChange: baroChg,
+      direction: dir(baroChg),
+    },
+    {
+      factor: 'Humidity',
+      baselineValue: from.humidityPct,
+      currentValue: to.humidityPct,
+      difference: to.humidityPct - from.humidityPct,
+      etChange: humChg,
+      direction: dir(humChg),
+    },
+  ];
+
+  // Wind is not included in RSA/QTRPERF weather correction.
+  // The HPC formula (QTRPERF.BAS Weather()) has no wind input.
+  // Record a note for the UI if wind data was provided.
+  const windNote: string | undefined =
+    (to.windMph !== undefined && to.windMph !== 0)
+      ? 'Wind is not included in RSA weather correction.'
+      : undefined;
+
+  const baselineDA = calculateDensityAltitude(from.temperatureF, from.barometerInHg, from.humidityPct, from.elevation);
+  const currentDA  = calculateDensityAltitude(to.temperatureF,   to.barometerInHg,   to.humidityPct,   to.elevation);
+  const baselineAC = calculateAirCorrection(from.temperatureF, from.barometerInHg, from.humidityPct);
+  const currentAC  = calculateAirCorrection(to.temperatureF,   to.barometerInHg,   to.humidityPct);
+
+  return {
+    impacts,
+    totalETChange,
+    densityAltitudeChange: currentDA - baselineDA,
+    airCorrectionChange: Math.round((currentAC - baselineAC) * 10000) / 10000,
+    predictedET,
+    windNote,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy empirical weather factors (internal reference only).
+// These are NOT RSA-owned math and are NOT used in the default RSA prediction
+// path. They exist here only to support the legacy calculateWeatherImpact
+// function below, which is kept for internal comparison purposes.
+// ─────────────────────────────────────────────────────────────────────────────
+
 const GASOLINE_FACTORS = {
   temperature: 0.00415,      // ET change per degree F
   humidity: 0.001197,        // ET change per % humidity (11.97 / 10000)
@@ -187,6 +424,50 @@ export function solveBarometerForDensityAltitude(
     converged: bestErr <= toleranceFt,
     iterations,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pressure unit conversions
+// 1 inHg = 33.8639 hPa (NIST)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convert hPa (millibar) to inches of mercury (inHg). */
+export function hPaToInHg(hPa: number): number {
+  return hPa / 33.8639;
+}
+
+/** Convert inHg to hPa (millibar). */
+export function inHgToHPa(inHg: number): number {
+  return inHg * 33.8639;
+}
+
+/** Convert kPa to inHg. */
+export function kPaToInHg(kPa: number): number {
+  return hPaToInHg(kPa * 10);
+}
+
+/**
+ * Convert station (absolute) pressure to sea-level equivalent barometric
+ * pressure using the simplified hypsometric formula.
+ *
+ * Use this when a weather sensor reports station pressure at altitude.
+ * Apple WeatherKit reports sea-level pressure directly — no conversion needed.
+ *
+ * @param stationPressureInHg  Absolute pressure at the station elevation.
+ * @param elevationFt          Station elevation above sea level (ft).
+ * @param tempF                Temperature at station (°F).
+ * @returns Sea-level equivalent barometric pressure (inHg).
+ */
+export function stationToSeaLevelInHg(
+  stationPressureInHg: number,
+  elevationFt: number,
+  tempF: number
+): number {
+  const elevationM = elevationFt * 0.3048;
+  const tempK = (tempF - 32) * 5 / 9 + 273.15;
+  // Standard atmosphere scale height correction
+  const factor = Math.exp((9.80665 * elevationM) / (287.058 * tempK));
+  return stationPressureInHg * factor;
 }
 
 /**

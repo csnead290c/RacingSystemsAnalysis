@@ -20,7 +20,7 @@ export const RunRecordSchema = z.object({
   raceLength: z.custom<RaceLength>(),
   env: EnvSchema,
   
-  // Run context (like Crew Chief)
+  // Run context
   runDate: z.string().optional(),           // Date of run (YYYY-MM-DD)
   runTime: z.string().optional(),           // Time of run (HH:MM)
   runNumber: z.number().optional(),         // Run number for the day (1, 2, 3...)
@@ -91,12 +91,30 @@ export const RunRecordSchema = z.object({
   runKind: z.enum(['logged', 'prediction']).optional(),
   /** ET corrected to RSA Standard Day (sea level, 29.92 inHg, 60F, 0% RH). */
   correctedET: z.number().optional(),
-  /** Empirical correction factor applied to reach correctedET. */
+  /** RSA HP correction factor applied to reach correctedET. */
   correctionFactor: z.number().optional(),
-  /** Source of the weather used: manual | forecast_prefill | observed_station | imported. */
+  /** Source of the weather used for this run. */
   weatherSource: z
-    .enum(['manual', 'forecast_prefill', 'observed_station', 'imported'])
+    .enum(['manual', 'timeslip', 'apple_weather', 'forecast_prefill', 'observed_station', 'imported'])
     .optional(),
+  /** Weather provider name (e.g. 'Apple WeatherKit'). */
+  weatherProvider: z.string().optional(),
+  /** ISO timestamp of the weather observation used (for Apple Weather / forecast). */
+  weatherTimestamp: z.string().optional(),
+  /** For timeslip source: the density altitude read from the slip (ft). */
+  sourceDensityAltitudeFt: z.number().optional(),
+  /** True when barometerInHg was back-solved from DA rather than directly measured. */
+  barometerEstimated: z.boolean().optional(),
+  /** Track identifier (matches dragTracks.ts id). */
+  trackId: z.string().optional(),
+  /** Track latitude (for Apple Weather lookup). */
+  trackLat: z.number().optional(),
+  /** Track longitude (for Apple Weather lookup). */
+  trackLon: z.number().optional(),
+  /** Track elevation in feet (used for station pressure conversion if needed). */
+  trackElevationFt: z.number().optional(),
+  /** Arbitrary provider-specific metadata (debug only; not exposed in UI). */
+  weatherMeta: z.record(z.unknown()).optional(),
 
   prediction: z
     .object({ et_s: z.number(), mph: z.number() })

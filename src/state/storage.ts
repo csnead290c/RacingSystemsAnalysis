@@ -20,7 +20,6 @@ function isLoggedRun(r: RunRecordV1): boolean {
 
 /**
  * Calculate average 60ft time from historical runs for a vehicle
- * This is a CCP-style feature that uses historical data for predictions
  */
 export async function getAverage60ft(vehicleId: string): Promise<{
   average: number | null;

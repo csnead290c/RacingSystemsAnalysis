@@ -22,10 +22,16 @@ import { DEFAULT_ENV, type Env } from '../domain/schemas/env.schema';
 import type { RunRecordV1 } from '../domain/schemas/run.schema';
 import {
   predictET,
-  RSA_STANDARD_DAY_LABEL,
   type FuelType,
   type WeatherInput,
 } from '../domain/physics/calculations/runCorrection';
+import type { WeatherImpact } from '../domain/physics/calculations/weatherImpact';
+import {
+  computeSensitivities,
+  DEFAULT_SENSITIVITY_CONFIG,
+  type SensitivityConfig,
+  type SensitivityResult,
+} from '../domain/physics/calculations/sensitivityAnalysis';
 
 interface LocationState {
   baselineRunId?: string;
@@ -75,6 +81,11 @@ function PredictWeather() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [manualFuelType, setManualFuelType] = useState<FuelType>('gasoline');
+  const [mathExpanded, setMathExpanded] = useState(false);
+  const [sensExpanded, setSensExpanded] = useState(false);
+  const [sensConfig, setSensConfig] = useState<SensitivityConfig>(DEFAULT_SENSITIVITY_CONFIG);
+  const [sensWeightLb, setSensWeightLb] = useState<string>('');
+  const [sensMPH, setSensMPH] = useState<string>('');
 
   // Load vehicles + runs once.
   useEffect(() => {
@@ -150,6 +161,24 @@ function PredictWeather() {
       fuelType: effectiveFuelType,
     });
   }, [baselineRun, baselineActualET, upcomingEnv, effectiveFuelType]);
+
+  const sensitivities = useMemo<SensitivityResult | null>(() => {
+    if (!prediction || !baselineRun?.env) return null;
+    const baseWeather: WeatherInput = {
+      temperatureF: (baselineRun.env as Env).temperatureF,
+      humidityPct:  (baselineRun.env as Env).humidityPct,
+      barometerInHg: (baselineRun.env as Env).barometerInHg,
+      elevation: (baselineRun.env as Env).elevation ?? 0,
+    };
+    const wLb = sensWeightLb !== '' ? parseFloat(sensWeightLb) : undefined;
+    const mph = sensMPH !== '' ? parseFloat(sensMPH) : undefined;
+    return computeSensitivities(
+      baseWeather,
+      prediction.baselineActualET,
+      sensConfig,
+      { fuelType: effectiveFuelType, baseWeightLb: wLb && wLb > 0 ? wLb : undefined, baseMPH: mph && mph > 0 ? mph : undefined }
+    );
+  }, [prediction, baselineRun, sensConfig, sensWeightLb, sensMPH, effectiveFuelType]);
 
   /**
    * Deferred forecast stub. Manual entry remains the source of truth; this only
@@ -315,17 +344,25 @@ function PredictWeather() {
       {/* Step 4: Prediction */}
       {prediction && (
         <div className="card mb-6">
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '4px' }}>4) Predicted ET</h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '16px', marginTop: 0 }}>
-            Weather-only prediction based on selected baseline run's actual ET.
-            Vehicle power, weight, and induction are not used — only temperature, humidity, barometer, and wind.{' '}
-            <strong>Correction type: {effectiveFuelType === 'gasoline' ? 'Gasoline' : 'Alcohol'}.</strong>
-            {!vehicleHasFuelType && ' (manually selected — set fuel type on vehicle to persist)'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>4) Predicted ET</h2>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#d97706', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '4px', padding: '2px 7px', letterSpacing: '0.04em' }}>BETA</span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#d97706', background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '4px', padding: '5px 10px', marginBottom: '10px', marginTop: '4px' }}>
+            <strong>BETA:</strong> RSA weather prediction under validation. Values are close but not yet certified.
           </p>
+          <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '12px', marginTop: '0' }}>
+            Baseline is corrected to RSA Standard Day, then projected to target weather.{' '}
+            Weather-only — vehicle power/weight/induction not used.{' '}
+            <strong>Correction type: {effectiveFuelType === 'gasoline' ? 'Gasoline' : 'Alcohol'}.</strong>
+            {!vehicleHasFuelType && ' (manually selected — set on vehicle to persist)'}
+          </p>
+
+          {/* Main stats row */}
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
             <Stat label="Baseline ET" value={`${prediction.baselineActualET.toFixed(3)} s`} />
-            <Stat label={`Corrected (${RSA_STANDARD_DAY_LABEL})`} value={`${prediction.correctedBaselineET.toFixed(3)} s`} />
-            <Stat label="Predicted ET" value={`${prediction.predictedET.toFixed(3)} s`} strong />
+            <Stat label={`Step 1: RSA Standard Day`} value={`${prediction.standardET.toFixed(3)} s`} />
+            <Stat label="Step 2: Predicted ET" value={`${prediction.predictedET.toFixed(3)} s`} strong />
             <Stat
               label="Δ vs Baseline"
               value={`${prediction.deltaFromBaseline >= 0 ? '+' : ''}${prediction.deltaFromBaseline.toFixed(3)} s`}
@@ -333,27 +370,84 @@ function PredictWeather() {
             />
           </div>
 
-          <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
-            <Stat label="Baseline Density Alt" value={`${prediction.baselineDensityAltitude.toLocaleString()} ft`} />
-            <Stat label="Upcoming Density Alt" value={`${prediction.upcomingDensityAltitude.toLocaleString()} ft`} />
+          {/* Per-step factor chips */}
+          <div style={{ display: 'flex', gap: '16px', marginTop: '10px', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+            <span>Step 1 factor: <strong style={{ color: 'var(--color-text)' }}>{prediction.factorToStandard.toFixed(5)}</strong></span>
+            <span>Step 2 factor: <strong style={{ color: 'var(--color-text)' }}>{prediction.factorToTarget.toFixed(5)}</strong></span>
+            <span>Net factor: <strong style={{ color: 'var(--color-text)' }}>{prediction.netFactor.toFixed(5)}</strong></span>
           </div>
 
-          {/* Per-variable breakdown driving the prediction: baseline -> upcoming */}
-          <div className="mt-4">
-            <h3 className="label" style={{ marginBottom: 'var(--space-2)' }}>
-              Weather effect (Baseline → Upcoming)
-            </h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
-              {prediction.breakdownBaselineToUpcoming.map(b => (
-                <div key={b.factor} style={{ fontSize: '0.85rem' }}>
-                  <span className="text-muted">{b.factor}: </span>
-                  <span style={{ color: b.direction === 'slower' ? '#ef4444' : b.direction === 'faster' ? '#10b981' : undefined }}>
-                    {b.etChange >= 0 ? '+' : ''}{b.etChange.toFixed(3)} s
-                  </span>
+          {/* Math Details collapsible */}
+          <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+            <button
+              type="button"
+              onClick={() => setMathExpanded(e => !e)}
+              style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-accent)', display: 'flex', justifyContent: 'space-between' }}
+            >
+              Math Details (two-step RSA path)
+              <span>{mathExpanded ? '▲' : '▼'}</span>
+            </button>
+            {mathExpanded && (
+              <div style={{ padding: '12px', borderTop: '1px solid var(--color-border)', fontSize: '0.8rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 16px', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-muted)' }}>Baseline Weather</div>
+                    {baselineRun?.env && (
+                      <WeatherSummary env={baselineRun.env as Env} />
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-muted)' }}>RSA Standard Day</div>
+                    <WeatherSummary env={{ temperatureF: 60, humidityPct: 0, barometerInHg: 29.92, elevation: 0, windMph: 0, windAngleDeg: 0 } as Env} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-muted)' }}>Target Weather</div>
+                    <WeatherSummary env={upcomingEnv} />
+                  </div>
                 </div>
-              ))}
-            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  <BreakdownTable label={`Step 1: Baseline → RSA Std Day (factor ${prediction.factorToStandard.toFixed(5)})`} items={prediction.breakdownToStandard} />
+                  <BreakdownTable label={`Step 2: RSA Std Day → Target (factor ${prediction.factorToTarget.toFixed(5)})`} items={prediction.breakdownToTarget} />
+                </div>
+                <div style={{ marginTop: '10px', display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                  <span className="text-muted">Baseline DA: <strong>{prediction.baselineDensityAltitude.toLocaleString()} ft</strong></span>
+                  <span className="text-muted">Target DA: <strong>{prediction.targetDensityAltitude.toLocaleString()} ft</strong></span>
+                  <span className="text-muted" style={{ fontSize: '0.75rem' }}>DA is display-only; correction uses temp/humidity/barometer/elevation directly.</span>
+                </div>
+                {prediction.windNote && (
+                  <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                    ⚠ {prediction.windNote}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Run Data Analysis Sensitivities */}
+          {sensitivities && (
+            <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+              <button
+                type="button"
+                onClick={() => setSensExpanded(e => !e)}
+                style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-accent)', display: 'flex', justifyContent: 'space-between' }}
+              >
+                Run Data Analysis Sensitivities
+                <span>{sensExpanded ? '▲' : '▼'}</span>
+              </button>
+              {sensExpanded && (
+                <div style={{ padding: '12px', borderTop: '1px solid var(--color-border)' }}>
+                  <SensitivityPanel
+                    result={sensitivities}
+                    weightLb={sensWeightLb}
+                    mph={sensMPH}
+                    onWeightChange={setSensWeightLb}
+                    onMPHChange={setSensMPH}
+                    onConfigChange={setSensConfig}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-4 mt-4">
             <button className="btn" onClick={handleSaveScenario} disabled={saving}>
@@ -377,6 +471,194 @@ function Stat({ label, value, strong, color }: { label: string; value: string; s
     <div>
       <div className="text-muted" style={{ fontSize: '0.8rem' }}>{label}</div>
       <div style={{ fontSize: strong ? '1.5rem' : '1.05rem', fontWeight: strong ? 'bold' : 600, color }}>{value}</div>
+    </div>
+  );
+}
+
+function WeatherSummary({ env }: { env: Env }) {
+  return (
+    <div style={{ lineHeight: 1.6 }}>
+      <div>{env.temperatureF}°F</div>
+      <div>{env.humidityPct}% RH</div>
+      <div>{env.barometerInHg} inHg</div>
+      {(env.elevation ?? 0) > 0 && <div>{(env.elevation ?? 0).toLocaleString()} ft elev</div>}
+    </div>
+  );
+}
+
+function BreakdownTable({ label, items }: { label: string; items: WeatherImpact[] }) {
+  return (
+    <div>
+      <div style={{ fontWeight: 600, marginBottom: '5px', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>{label}</div>
+      {items.map(b => (
+        <div key={b.factor} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '2px 0', borderBottom: '1px solid var(--color-border)' }}>
+          <span style={{ color: 'var(--color-text-muted)' }}>{b.factor}</span>
+          <span style={{ fontWeight: 600, color: b.direction === 'slower' ? '#ef4444' : b.direction === 'faster' ? '#10b981' : undefined }}>
+            {b.etChange >= 0 ? '+' : ''}{b.etChange.toFixed(3)} s
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Sensitivity Panel ───────────────────────────────────────────────────────
+
+function SensitivityPanel({
+  result,
+  weightLb,
+  mph,
+  onWeightChange,
+  onMPHChange,
+  onConfigChange,
+}: {
+  result: SensitivityResult;
+  weightLb: string;
+  mph: string;
+  onWeightChange: (v: string) => void;
+  onMPHChange: (v: string) => void;
+  onConfigChange: (c: SensitivityConfig) => void;
+}) {
+  const cfg = result.config;
+
+  function setChange(key: keyof SensitivityConfig, raw: string) {
+    const val = parseFloat(raw);
+    if (!isNaN(val)) onConfigChange({ ...cfg, [key]: val });
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '72px', textAlign: 'right', padding: '2px 4px',
+    fontSize: '0.78rem', border: '1px solid var(--color-border)',
+    borderRadius: '4px', background: 'var(--color-surface)',
+    color: 'var(--color-text)',
+  };
+
+  const cfgKeys: Array<{ key: keyof SensitivityConfig; idx: number }> = [
+    { key: 'barometerChangeInHg',      idx: 0 },
+    { key: 'temperatureChangeF',       idx: 1 },
+    { key: 'humidityChangePct',        idx: 2 },
+    { key: 'hpCorrectionFactorChange', idx: 3 },
+    { key: 'weightChangeLb',           idx: 4 },
+  ];
+
+  return (
+    <div style={{ fontSize: '0.8rem' }}>
+      <p style={{ margin: '0 0 6px', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+        Shows the independent ET/MPH effect of changing one parameter at a time, similar to the original
+        RSA Run Data Analysis. Edit <strong>Change</strong> values below. Supply trap MPH and
+        vehicle weight to enable those columns.
+      </p>
+      <div style={{ marginBottom: '10px' }}>
+        <button
+          type="button"
+          onClick={() => onConfigChange(DEFAULT_SENSITIVITY_CONFIG)}
+          style={{ fontSize: '0.75rem', color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}
+        >
+          Reset to RSA defaults
+        </button>
+      </div>
+
+      {/* Optional MPH + Weight inputs */}
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+          Trap MPH (optional)
+          <input
+            type="number"
+            value={mph}
+            onChange={e => onMPHChange(e.target.value)}
+            placeholder="e.g. 145"
+            style={{ ...inputStyle, width: '80px' }}
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+          Vehicle Weight lb (optional)
+          <input
+            type="number"
+            value={weightLb}
+            onChange={e => onWeightChange(e.target.value)}
+            placeholder="e.g. 2800"
+            style={{ ...inputStyle, width: '80px' }}
+          />
+        </label>
+      </div>
+
+      {/* Table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
+              <th style={{ textAlign: 'left',  padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Variable</th>
+              <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Base Value</th>
+              <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Change</th>
+              <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Δ ET (s)</th>
+              {result.hasMPH && (
+                <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Δ MPH</th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {result.rows.map((row, i) => {
+              const { key } = cfgKeys[i];
+              const isWeightRow = row.variable === 'Vehicle Weight';
+              const showMissingHint = isWeightRow && !result.hasWeightRow;
+              const etColor = row.predictedETChange > 0.001
+                ? '#ef4444'
+                : row.predictedETChange < -0.001
+                  ? '#10b981'
+                  : undefined;
+              const mphColor = (row.predictedMPHChange ?? 0) < -0.01
+                ? '#ef4444'
+                : (row.predictedMPHChange ?? 0) > 0.01
+                  ? '#10b981'
+                  : undefined;
+              return (
+                <tr key={row.variable} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <td style={{ padding: '5px 8px', color: 'var(--color-text)' }}>
+                    {row.variable}
+                    {row.unit ? <span style={{ color: 'var(--color-text-muted)', marginLeft: '4px' }}>({row.unit})</span> : null}
+                  </td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--color-text-muted)' }}>
+                    {row.variable === 'HP Correction Factor'
+                      ? row.baseValue.toFixed(4)
+                      : row.baseValue.toFixed(row.unit === 'lb' ? 0 : 1)}
+                  </td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step={key === 'barometerChangeInHg' ? '0.01'
+                           : key === 'hpCorrectionFactorChange' ? '0.001'
+                           : '1'}
+                      value={cfg[key]}
+                      onChange={e => setChange(key, e.target.value)}
+                      style={inputStyle}
+                    />
+                  </td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: etColor }}>
+                    {showMissingHint
+                      ? <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>enter weight ↑</span>
+                      : `${row.predictedETChange >= 0 ? '+' : ''}${row.predictedETChange.toFixed(3)}`
+                    }
+                  </td>
+                  {result.hasMPH && (
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: mphColor }}>
+                      {row.predictedMPHChange !== null
+                        ? `${row.predictedMPHChange >= 0 ? '+' : ''}${row.predictedMPHChange.toFixed(2)}`
+                        : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>enter weight ↑</span>
+                      }
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: '8px', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+        Base HPC: <strong>{result.baseHpc.toFixed(4)}</strong> (1.0000 = RSA Standard Day).
+        Weather rows use RSA HPC method. Weight row uses Patrick Hale ET formula (A = 1.825).
+        Each row is independent — effects are not additive.
+      </div>
     </div>
   );
 }

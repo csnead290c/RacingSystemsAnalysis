@@ -149,7 +149,7 @@ export default function RaceDay() {
   const [manualWeather, setManualWeather] = useState(false);
   const [lastSimResult, setLastSimResult] = useState<SimResult | null>(null);
   
-  // Average 60ft from database (CCP-style feature)
+  // Average 60ft from database
   const [avg60ftStats, setAvg60ftStats] = useState<{
     average: number | null;
     count: number;

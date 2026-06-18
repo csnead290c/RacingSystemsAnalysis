@@ -143,6 +143,8 @@ function Log() {
 
   // Section 3: Weather
   const [env, setEnv] = useState<Env>(DEFAULT_ENV);
+  const [weatherSource, setWeatherSource] = useState<'manual' | 'timeslip' | 'apple_weather'>('manual');
+  const [barometerEstimated, setBarometerEstimated] = useState(false);
 
   // Quick/All detail toggle
   const [mode, setMode] = useState<'quick' | 'all'>('quick');
@@ -315,6 +317,7 @@ function Log() {
     // of just stashing DA in a note.
     if (data.weather) {
       const { temperatureF, humidityPct, densityAltitude } = data.weather;
+      let baroWasEstimated = false;
       setEnv(prev => {
         const tempF = temperatureF ?? prev.temperatureF;
         const humidity = humidityPct ?? prev.humidityPct;
@@ -327,6 +330,7 @@ function Log() {
             prev.elevation,
           );
           barometerInHg = solved.barometerInHg;
+          baroWasEstimated = true;
         }
         return {
           ...prev,
@@ -335,6 +339,10 @@ function Log() {
           barometerInHg,
         };
       });
+      if (data.weather.temperatureF || data.weather.humidityPct || data.weather.densityAltitude) {
+        setWeatherSource('timeslip');
+        setBarometerEstimated(baroWasEstimated);
+      }
       if (densityAltitude !== undefined) {
         setNotes(prev => {
           const tag = `Slip DA: ${densityAltitude} ft (barometer back-calculated)`;
@@ -486,7 +494,8 @@ function Log() {
         vehicleName: selectedVehicle?.name,
         raceLength,
         env,
-        weatherSource: 'manual',
+        weatherSource,
+        barometerEstimated: barometerEstimated || undefined,
         runDate,
         runTime,
         round,
@@ -793,6 +802,35 @@ function Log() {
               </LogSection>
 
               <LogSection title="Weather" open={showWeather} onToggle={() => setShowWeather(o => !o)}>
+                {/* Weather source selector */}
+                <div style={{ display: 'flex', gap: '2px', marginBottom: '10px', marginTop: '2px' }}>
+                  {(['timeslip', 'manual', 'apple_weather'] as const).map(src => (
+                    <button
+                      key={src}
+                      type="button"
+                      onClick={() => setWeatherSource(src)}
+                      style={{
+                        flex: 1, padding: '5px 4px', fontSize: '0.75rem', fontWeight: 600,
+                        border: '1px solid var(--color-border)', cursor: 'pointer',
+                        borderRadius: src === 'timeslip' ? 'var(--radius-sm) 0 0 var(--radius-sm)' : src === 'apple_weather' ? '0 var(--radius-sm) var(--radius-sm) 0' : '0',
+                        background: weatherSource === src ? 'var(--color-accent)' : 'var(--color-bg)',
+                        color: weatherSource === src ? '#fff' : 'var(--color-text-muted)',
+                      }}
+                    >
+                      {src === 'timeslip' ? 'Timeslip' : src === 'manual' ? 'Manual' : 'Apple \u2600\ufe0f'}
+                    </button>
+                  ))}
+                </div>
+                {weatherSource === 'apple_weather' && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '8px', padding: '6px 8px', background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    Apple WeatherKit requires backend setup. Use the Fetch Forecast feature from the Weather ET Predictor, or enter weather manually.
+                  </div>
+                )}
+                {barometerEstimated && weatherSource === 'timeslip' && (
+                  <div style={{ fontSize: '0.75rem', color: '#d97706', marginBottom: '6px' }}>
+                    ⚠ Barometer back-calculated from timeslip DA. Verify or override below.
+                  </div>
+                )}
                 <EnvironmentForm value={env} onChange={setEnv} defaultShowOptional={false} />
               </LogSection>
 
