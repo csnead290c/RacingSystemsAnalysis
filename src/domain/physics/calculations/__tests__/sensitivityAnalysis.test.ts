@@ -18,22 +18,21 @@ import { describe, it, expect } from 'vitest';
 import {
   computeSensitivities,
   DEFAULT_SENSITIVITY_CONFIG,
+  DEFAULT_SENSITIVITY_BASE_VALUES,
   DENSITY_ET_INTERCEPT,
   type SensitivityConfig,
-  type WeatherInput,
 } from '../sensitivityAnalysis';
 
-// ─── DENSITY screenshot base conditions ──────────────────────────────────────
-const STANDARD: WeatherInput = {
-  temperatureF: 60,
-  humidityPct: 0,
-  barometerInHg: 29.92,
-  elevation: 0,
-};
-
+// ─── DENSITY screenshot calibration constants ─────────────────────────────────
 const DENSITY_BASE_ET  = 5.3;   // seconds — gives ~0.023 delta for +10°F
 const DENSITY_BASE_MPH = 87.5;  // mph — consistent: MPH/(ET−1.825) = 25
 const DENSITY_BASE_W   = 1460;  // lb — consistent: ΔET≈0.016 for +20 lb
+
+// Config with calibration weight for screenshot regression tests
+const FIXTURE_CONFIG: SensitivityConfig = {
+  ...DEFAULT_SENSITIVITY_CONFIG,
+  base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, weightLb: DENSITY_BASE_W },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 0. Module sanity
@@ -44,7 +43,15 @@ describe('sensitivityAnalysis — module sanity', () => {
     expect(DENSITY_ET_INTERCEPT).toBeCloseTo(1.825, 3);
   });
 
-  it('DEFAULT_SENSITIVITY_CONFIG has all five fields', () => {
+  it('DEFAULT_SENSITIVITY_CONFIG has RSA standard day base values', () => {
+    expect(DEFAULT_SENSITIVITY_CONFIG.base.barometerInHg).toBe(29.92);
+    expect(DEFAULT_SENSITIVITY_CONFIG.base.temperatureF).toBe(60.0);
+    expect(DEFAULT_SENSITIVITY_CONFIG.base.humidityPct).toBe(0.0);
+    expect(DEFAULT_SENSITIVITY_CONFIG.base.hpCorrectionFactor).toBe(1.000);
+    expect(DEFAULT_SENSITIVITY_CONFIG.base.weightLb).toBe(2150);
+  });
+
+  it('DEFAULT_SENSITIVITY_CONFIG has all five change fields', () => {
     expect(DEFAULT_SENSITIVITY_CONFIG.barometerChangeInHg).toBe(-0.10);
     expect(DEFAULT_SENSITIVITY_CONFIG.temperatureChangeF).toBe(10.0);
     expect(DEFAULT_SENSITIVITY_CONFIG.humidityChangePct).toBe(10.0);
@@ -53,33 +60,40 @@ describe('sensitivityAnalysis — module sanity', () => {
   });
 
   it('returns five rows', () => {
-    const result = computeSensitivities(STANDARD, DENSITY_BASE_ET);
+    const result = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET);
     expect(result.rows).toHaveLength(5);
   });
 
   it('hasMPH is false when baseMPH is not supplied', () => {
-    const result = computeSensitivities(STANDARD, DENSITY_BASE_ET);
+    const result = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET);
     expect(result.hasMPH).toBe(false);
     expect(result.rows[0].predictedMPHChange).toBeNull();
   });
 
   it('hasMPH is true when baseMPH is supplied', () => {
-    const result = computeSensitivities(STANDARD, DENSITY_BASE_ET, DEFAULT_SENSITIVITY_CONFIG, {
+    const result = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET, {
       baseMPH: DENSITY_BASE_MPH,
     });
     expect(result.hasMPH).toBe(true);
     expect(result.rows[0].predictedMPHChange).not.toBeNull();
   });
 
-  it('hasWeightRow is true when baseWeightLb is supplied', () => {
-    const result = computeSensitivities(STANDARD, DENSITY_BASE_ET, DEFAULT_SENSITIVITY_CONFIG, {
-      baseWeightLb: DENSITY_BASE_W,
-    });
+  it('hasWeightRow is true when config.base.weightLb > 0 (default 2150)', () => {
+    const result = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET);
     expect(result.hasWeightRow).toBe(true);
   });
 
-  it('baseHpc is 1.0 at standard day', () => {
-    const result = computeSensitivities(STANDARD, DENSITY_BASE_ET);
+  it('hasWeightRow is false when config.base.weightLb is 0', () => {
+    const cfg: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, weightLb: 0 },
+    };
+    const result = computeSensitivities(cfg, DENSITY_BASE_ET);
+    expect(result.hasWeightRow).toBe(false);
+  });
+
+  it('baseHpc is 1.0 at standard day base conditions', () => {
+    const result = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET);
     expect(result.baseHpc).toBeCloseTo(1.0, 3);
   });
 });
@@ -89,7 +103,7 @@ describe('sensitivityAnalysis — module sanity', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('sensitivity directions — each variable worsens conditions → slower ET', () => {
-  const result = computeSensitivities(STANDARD, DENSITY_BASE_ET);
+  const result = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET);
 
   const baro = result.rows.find(r => r.variable === 'Barometer')!;
   const temp = result.rows.find(r => r.variable === 'Temperature')!;
@@ -115,15 +129,14 @@ describe('sensitivity directions — each variable worsens conditions → slower
 
 describe('sensitivity directions — each variable improves conditions → faster ET', () => {
   const cfg: SensitivityConfig = {
-    barometerChangeInHg: +0.10,     // higher baro = better
-    temperatureChangeF: -10.0,      // cooler = better
-    humidityChangePct: -10.0,       // drier = better (capped at 0% min)
-    hpCorrectionFactorChange: -0.010, // lower HPC = better
+    base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, weightLb: DENSITY_BASE_W },
+    barometerChangeInHg: +0.10,
+    temperatureChangeF: -10.0,
+    humidityChangePct: -10.0,
+    hpCorrectionFactorChange: -0.010,
     weightChangeLb: -20,
   };
-  const result = computeSensitivities(STANDARD, DENSITY_BASE_ET, cfg, {
-    baseWeightLb: DENSITY_BASE_W,
-  });
+  const result = computeSensitivities(cfg, DENSITY_BASE_ET);
 
   it('+0.10 inHg barometer (higher pressure) → faster (negative ΔET)', () => {
     const baro = result.rows.find(r => r.variable === 'Barometer')!;
@@ -152,10 +165,9 @@ describe('sensitivity directions — each variable improves conditions → faste
 
 describe('DENSITY screenshot ET magnitude (5.3 s base, standard day)', () => {
   const result = computeSensitivities(
-    STANDARD,
+    FIXTURE_CONFIG,
     DENSITY_BASE_ET,
-    DEFAULT_SENSITIVITY_CONFIG,
-    { baseMPH: DENSITY_BASE_MPH, baseWeightLb: DENSITY_BASE_W }
+    { baseMPH: DENSITY_BASE_MPH }
   );
 
   const baro = result.rows.find(r => r.variable === 'Barometer')!;
@@ -192,10 +204,9 @@ describe('DENSITY screenshot ET magnitude (5.3 s base, standard day)', () => {
 
 describe('DENSITY screenshot MPH magnitude (5.3 s / 87.5 mph base)', () => {
   const result = computeSensitivities(
-    STANDARD,
+    FIXTURE_CONFIG,
     DENSITY_BASE_ET,
-    DEFAULT_SENSITIVITY_CONFIG,
-    { baseMPH: DENSITY_BASE_MPH, baseWeightLb: DENSITY_BASE_W }
+    { baseMPH: DENSITY_BASE_MPH }
   );
 
   const baro = result.rows.find(r => r.variable === 'Barometer')!;
@@ -232,20 +243,19 @@ describe('DENSITY screenshot MPH magnitude (5.3 s / 87.5 mph base)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('symmetry — equal magnitude for equal-and-opposite weather changes', () => {
-  const base = STANDARD;
   const ET = 9.0;
 
   it('−0.10 baro and +0.10 baro are equal magnitude', () => {
-    const down = computeSensitivities(base, ET, { ...DEFAULT_SENSITIVITY_CONFIG, barometerChangeInHg: -0.10 });
-    const up   = computeSensitivities(base, ET, { ...DEFAULT_SENSITIVITY_CONFIG, barometerChangeInHg: +0.10 });
+    const down = computeSensitivities({ ...DEFAULT_SENSITIVITY_CONFIG, barometerChangeInHg: -0.10 }, ET);
+    const up   = computeSensitivities({ ...DEFAULT_SENSITIVITY_CONFIG, barometerChangeInHg: +0.10 }, ET);
     const dET = down.rows.find(r => r.variable === 'Barometer')!.predictedETChange;
     const uET = up.rows.find(r => r.variable === 'Barometer')!.predictedETChange;
     expect(Math.abs(dET)).toBeCloseTo(Math.abs(uET), 3);
   });
 
   it('+10°F and −10°F are equal magnitude', () => {
-    const hot  = computeSensitivities(base, ET, { ...DEFAULT_SENSITIVITY_CONFIG, temperatureChangeF: +10 });
-    const cool = computeSensitivities(base, ET, { ...DEFAULT_SENSITIVITY_CONFIG, temperatureChangeF: -10 });
+    const hot  = computeSensitivities({ ...DEFAULT_SENSITIVITY_CONFIG, temperatureChangeF: +10 }, ET);
+    const cool = computeSensitivities({ ...DEFAULT_SENSITIVITY_CONFIG, temperatureChangeF: -10 }, ET);
     const hET = hot.rows.find(r => r.variable === 'Temperature')!.predictedETChange;
     const cET = cool.rows.find(r => r.variable === 'Temperature')!.predictedETChange;
     expect(Math.abs(hET)).toBeCloseTo(Math.abs(cET), 3);
@@ -257,18 +267,24 @@ describe('symmetry — equal magnitude for equal-and-opposite weather changes', 
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('HPC base value at standard day', () => {
-  it('base HPC is 1.0 at standard day conditions', () => {
-    const r = computeSensitivities(STANDARD, 9.0);
+  it('baseHpc (weather-derived) is 1.0 at standard day base conditions', () => {
+    const r = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, 9.0);
+    expect(r.baseHpc).toBeCloseTo(1.0, 3);
+  });
+
+  it('HPC row baseValue reflects config.base.hpCorrectionFactor (default 1.0)', () => {
+    const r = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, 9.0);
     const hpcRow = r.rows.find(row => row.variable === 'HP Correction Factor')!;
     expect(hpcRow.baseValue).toBeCloseTo(1.0, 3);
   });
 
-  it('base HPC > 1.0 at hot/humid/low-pressure conditions', () => {
-    const hot: WeatherInput = { temperatureF: 90, humidityPct: 70, barometerInHg: 29.5, elevation: 0 };
-    const r = computeSensitivities(hot, 9.5);
+  it('baseHpc (weather-derived) > 1.0 at hot/humid/low-pressure base conditions', () => {
+    const hotConfig: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, temperatureF: 90, humidityPct: 70, barometerInHg: 29.5 },
+    };
+    const r = computeSensitivities(hotConfig, 9.5);
     expect(r.baseHpc).toBeGreaterThan(1.0);
-    const hpcRow = r.rows.find(row => row.variable === 'HP Correction Factor')!;
-    expect(hpcRow.baseValue).toBeGreaterThan(1.0);
   });
 });
 
@@ -278,8 +294,8 @@ describe('HPC base value at standard day', () => {
 
 describe('proportionality — ΔET scales with ET_base for weather rows', () => {
   it('+10°F ΔET at 10.6 s is twice the ΔET at 5.3 s (RSA HPC is multiplicative)', () => {
-    const r53  = computeSensitivities(STANDARD, 5.3);
-    const r106 = computeSensitivities(STANDARD, 10.6);
+    const r53  = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, 5.3);
+    const r106 = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, 10.6);
     const dET53  = r53.rows.find(r => r.variable === 'Temperature')!.predictedETChange;
     const dET106 = r106.rows.find(r => r.variable === 'Temperature')!.predictedETChange;
     expect(dET106).toBeCloseTo(2 * dET53, 2);
@@ -291,31 +307,143 @@ describe('proportionality — ΔET scales with ET_base for weather rows', () => 
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('edge cases', () => {
-  it('weight row ET change is 0 when no baseWeightLb is supplied', () => {
-    const r = computeSensitivities(STANDARD, 9.0);
+  it('weight row ET change is 0 when config.base.weightLb is 0', () => {
+    const cfg: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, weightLb: 0 },
+    };
+    const r = computeSensitivities(cfg, 9.0);
     const w = r.rows.find(row => row.variable === 'Vehicle Weight')!;
     expect(w.predictedETChange).toBe(0);
     expect(w.predictedMPHChange).toBeNull();
   });
 
   it('humidity capped at 100%: 90% base + 10% change does not exceed 100%', () => {
-    const humid: WeatherInput = { ...STANDARD, humidityPct: 90 };
-    expect(() => computeSensitivities(humid, 9.0)).not.toThrow();
+    const humidConfig: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, humidityPct: 90 },
+    };
+    expect(() => computeSensitivities(humidConfig, 9.0)).not.toThrow();
   });
 
   it('custom config overrides defaults', () => {
     const cfg: SensitivityConfig = {
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, weightLb: 1500 },
       barometerChangeInHg: -0.20,
       temperatureChangeF: 5.0,
       humidityChangePct: 5.0,
       hpCorrectionFactorChange: 0.005,
       weightChangeLb: 50,
     };
-    const r = computeSensitivities(STANDARD, 9.0, cfg, { baseWeightLb: 1500 });
+    const r = computeSensitivities(cfg, 9.0);
     expect(r.config.barometerChangeInHg).toBe(-0.20);
+    expect(r.config.base.weightLb).toBe(1500);
     expect(r.config.weightChangeLb).toBe(50);
     const w = r.rows.find(row => row.variable === 'Vehicle Weight')!;
     expect(w.change).toBe(50);
+    expect(w.baseValue).toBe(1500);
     expect(w.predictedETChange).toBeGreaterThan(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Custom base values
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('custom base values', () => {
+  it('using non-standard base weather changes the weather-derived baseHpc', () => {
+    const hotBaseConfig: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, temperatureF: 90, humidityPct: 70, barometerInHg: 29.5 },
+    };
+    const stdResult = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET);
+    const hotResult = computeSensitivities(hotBaseConfig, DENSITY_BASE_ET);
+    expect(hotResult.baseHpc).toBeGreaterThan(stdResult.baseHpc);
+  });
+
+  it('weight base value is reflected in the weight row baseValue field', () => {
+    const cfg: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, weightLb: 3200 },
+    };
+    const r = computeSensitivities(cfg, 9.0);
+    const w = r.rows.find(row => row.variable === 'Vehicle Weight')!;
+    expect(w.baseValue).toBe(3200);
+    expect(w.predictedETChange).toBeGreaterThan(0);
+  });
+
+  it('HPC row baseValue reflects config.base.hpCorrectionFactor independently of weather', () => {
+    const cfg: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, hpCorrectionFactor: 1.121 },
+    };
+    const r = computeSensitivities(cfg, DENSITY_BASE_ET);
+    const hpcRow = r.rows.find(row => row.variable === 'HP Correction Factor')!;
+    expect(hpcRow.baseValue).toBeCloseTo(1.121, 3);
+  });
+
+  it('baro row baseValue reflects config.base.barometerInHg', () => {
+    const cfg: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { ...DEFAULT_SENSITIVITY_BASE_VALUES, barometerInHg: 29.22 },
+    };
+    const r = computeSensitivities(cfg, DENSITY_BASE_ET);
+    const baroRow = r.rows.find(row => row.variable === 'Barometer')!;
+    expect(baroRow.baseValue).toBeCloseTo(29.22, 2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. "Use Base Run Values" pattern — set base from a logged actual run
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('"use base run values" pattern', () => {
+  it('setting base values from a hot race day run correctly reflects base conditions', () => {
+    const baseRunConfig: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: {
+        barometerInHg: 29.22,
+        temperatureF: 86,
+        humidityPct: 76,
+        hpCorrectionFactor: 1.121,
+        weightLb: 2150,
+      },
+    };
+    const stdResult = computeSensitivities(DEFAULT_SENSITIVITY_CONFIG, DENSITY_BASE_ET, { baseMPH: DENSITY_BASE_MPH });
+    const runResult = computeSensitivities(baseRunConfig, DENSITY_BASE_ET, { baseMPH: DENSITY_BASE_MPH });
+    const runBaro = runResult.rows.find(r => r.variable === 'Barometer')!;
+    // base baro is correctly stored in row
+    expect(runBaro.baseValue).toBeCloseTo(29.22, 2);
+    // baro sensitivity remains positive (lower baro → slower ET for -0.10 change)
+    expect(runBaro.predictedETChange).toBeGreaterThan(0);
+    // hot/humid/low-pressure base → higher overall HPC than standard day
+    expect(runResult.baseHpc).toBeGreaterThan(stdResult.baseHpc);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. "Reset to RSA defaults" — DEFAULT_SENSITIVITY_CONFIG is the canonical target
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('"reset to RSA defaults" pattern', () => {
+  it('DEFAULT_SENSITIVITY_BASE_VALUES matches RSA standard analysis reference', () => {
+    expect(DEFAULT_SENSITIVITY_BASE_VALUES.barometerInHg).toBe(29.92);
+    expect(DEFAULT_SENSITIVITY_BASE_VALUES.temperatureF).toBe(60.0);
+    expect(DEFAULT_SENSITIVITY_BASE_VALUES.humidityPct).toBe(0.0);
+    expect(DEFAULT_SENSITIVITY_BASE_VALUES.hpCorrectionFactor).toBe(1.000);
+    expect(DEFAULT_SENSITIVITY_BASE_VALUES.weightLb).toBe(2150);
+  });
+
+  it('spreading DEFAULT_SENSITIVITY_CONFIG over a modified config restores all RSA defaults', () => {
+    const modified: SensitivityConfig = {
+      ...DEFAULT_SENSITIVITY_CONFIG,
+      base: { barometerInHg: 29.22, temperatureF: 86, humidityPct: 76, hpCorrectionFactor: 1.121, weightLb: 2500 },
+      temperatureChangeF: 5.0,
+    };
+    const reset = { ...DEFAULT_SENSITIVITY_CONFIG };
+    expect(reset.base.barometerInHg).toBe(29.92);
+    expect(reset.base.temperatureF).toBe(60.0);
+    expect(reset.temperatureChangeF).toBe(10.0);
+    expect(modified.base.barometerInHg).toBe(29.22);
   });
 });

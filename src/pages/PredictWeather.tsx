@@ -25,10 +25,11 @@ import {
   type FuelType,
   type WeatherInput,
 } from '../domain/physics/calculations/runCorrection';
-import type { WeatherImpact } from '../domain/physics/calculations/weatherImpact';
+import { computeRsaHpc, type WeatherImpact } from '../domain/physics/calculations/weatherImpact';
 import {
   computeSensitivities,
   DEFAULT_SENSITIVITY_CONFIG,
+  type SensitivityBaseValues,
   type SensitivityConfig,
   type SensitivityResult,
 } from '../domain/physics/calculations/sensitivityAnalysis';
@@ -84,7 +85,6 @@ function PredictWeather() {
   const [mathExpanded, setMathExpanded] = useState(false);
   const [sensExpanded, setSensExpanded] = useState(false);
   const [sensConfig, setSensConfig] = useState<SensitivityConfig>(DEFAULT_SENSITIVITY_CONFIG);
-  const [sensWeightLb, setSensWeightLb] = useState<string>('');
   const [sensMPH, setSensMPH] = useState<string>('');
 
   // Load vehicles + runs once.
@@ -163,22 +163,14 @@ function PredictWeather() {
   }, [baselineRun, baselineActualET, upcomingEnv, effectiveFuelType]);
 
   const sensitivities = useMemo<SensitivityResult | null>(() => {
-    if (!prediction || !baselineRun?.env) return null;
-    const baseWeather: WeatherInput = {
-      temperatureF: (baselineRun.env as Env).temperatureF,
-      humidityPct:  (baselineRun.env as Env).humidityPct,
-      barometerInHg: (baselineRun.env as Env).barometerInHg,
-      elevation: (baselineRun.env as Env).elevation ?? 0,
-    };
-    const wLb = sensWeightLb !== '' ? parseFloat(sensWeightLb) : undefined;
+    if (!prediction) return null;
     const mph = sensMPH !== '' ? parseFloat(sensMPH) : undefined;
     return computeSensitivities(
-      baseWeather,
-      prediction.baselineActualET,
       sensConfig,
-      { fuelType: effectiveFuelType, baseWeightLb: wLb && wLb > 0 ? wLb : undefined, baseMPH: mph && mph > 0 ? mph : undefined }
+      prediction.baselineActualET,
+      { fuelType: effectiveFuelType, baseMPH: mph && mph > 0 ? mph : undefined }
     );
-  }, [prediction, baselineRun, sensConfig, sensWeightLb, sensMPH, effectiveFuelType]);
+  }, [prediction, sensConfig, sensMPH, effectiveFuelType]);
 
   /**
    * Deferred forecast stub. Manual entry remains the source of truth; this only
@@ -186,6 +178,22 @@ function PredictWeather() {
    */
   const handleFetchForecast = () => {
     setForecastNote('Forecast unavailable — enter weather manually.');
+  };
+
+  const handleUseBaseRunValues = () => {
+    if (!baselineRun?.env) return;
+    const env = baselineRun.env as Env;
+    const hpc = computeRsaHpc(envToWeather(env), effectiveFuelType);
+    setSensConfig(prev => ({
+      ...prev,
+      base: {
+        barometerInHg: env.barometerInHg,
+        temperatureF: env.temperatureF,
+        humidityPct: env.humidityPct,
+        hpCorrectionFactor: Math.round(hpc * 10000) / 10000,
+        weightLb: prev.base.weightLb,
+      },
+    }));
   };
 
   const handleSaveScenario = async () => {
@@ -438,11 +446,11 @@ function PredictWeather() {
                 <div style={{ padding: '12px', borderTop: '1px solid var(--color-border)' }}>
                   <SensitivityPanel
                     result={sensitivities}
-                    weightLb={sensWeightLb}
                     mph={sensMPH}
-                    onWeightChange={setSensWeightLb}
                     onMPHChange={setSensMPH}
                     onConfigChange={setSensConfig}
+                    onUseBaseRunValues={handleUseBaseRunValues}
+                    hasBaseRun={!!baselineRun?.env}
                   />
                 </div>
               )}
@@ -506,25 +514,30 @@ function BreakdownTable({ label, items }: { label: string; items: WeatherImpact[
 
 function SensitivityPanel({
   result,
-  weightLb,
   mph,
-  onWeightChange,
   onMPHChange,
   onConfigChange,
+  onUseBaseRunValues,
+  hasBaseRun,
 }: {
   result: SensitivityResult;
-  weightLb: string;
   mph: string;
-  onWeightChange: (v: string) => void;
   onMPHChange: (v: string) => void;
   onConfigChange: (c: SensitivityConfig) => void;
+  onUseBaseRunValues: () => void;
+  hasBaseRun: boolean;
 }) {
   const cfg = result.config;
 
-  function setChange(key: keyof SensitivityConfig, raw: string) {
-    const val = parseFloat(raw);
-    if (!isNaN(val)) onConfigChange({ ...cfg, [key]: val });
-  }
+  const BASE_KEYS: Array<keyof SensitivityBaseValues> = [
+    'barometerInHg', 'temperatureF', 'humidityPct', 'hpCorrectionFactor', 'weightLb',
+  ];
+  const CHANGE_KEYS: Array<keyof Omit<SensitivityConfig, 'base'>> = [
+    'barometerChangeInHg', 'temperatureChangeF', 'humidityChangePct',
+    'hpCorrectionFactorChange', 'weightChangeLb',
+  ];
+  const BASE_STEPS   = ['0.01', '1', '1', '0.001', '1'];
+  const CHANGE_STEPS = ['0.01', '1', '1', '0.001', '1'];
 
   const inputStyle: React.CSSProperties = {
     width: '72px', textAlign: 'right', padding: '2px 4px',
@@ -533,22 +546,26 @@ function SensitivityPanel({
     color: 'var(--color-text)',
   };
 
-  const cfgKeys: Array<{ key: keyof SensitivityConfig; idx: number }> = [
-    { key: 'barometerChangeInHg',      idx: 0 },
-    { key: 'temperatureChangeF',       idx: 1 },
-    { key: 'humidityChangePct',        idx: 2 },
-    { key: 'hpCorrectionFactorChange', idx: 3 },
-    { key: 'weightChangeLb',           idx: 4 },
-  ];
+  function setBase(idx: number, raw: string) {
+    const key = BASE_KEYS[idx];
+    const val = parseFloat(raw);
+    if (!isNaN(val)) onConfigChange({ ...cfg, base: { ...cfg.base, [key]: val } });
+  }
+
+  function setChange(idx: number, raw: string) {
+    const key = CHANGE_KEYS[idx];
+    const val = parseFloat(raw);
+    if (!isNaN(val)) onConfigChange({ ...cfg, [key]: val });
+  }
 
   return (
     <div style={{ fontSize: '0.8rem' }}>
       <p style={{ margin: '0 0 6px', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-        Shows the independent ET/MPH effect of changing one parameter at a time, similar to the original
-        RSA Run Data Analysis. Edit <strong>Change</strong> values below. Supply trap MPH and
-        vehicle weight to enable those columns.
+        Shows the independent ET/MPH effect of changing one parameter at a time.
+        Edit <strong>Base Value</strong> and <strong>Change</strong> values below.
+        Defaults match the original RSA Run Data Analysis reference (standard day).
       </p>
-      <div style={{ marginBottom: '10px' }}>
+      <div style={{ marginBottom: '10px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           type="button"
           onClick={() => onConfigChange(DEFAULT_SENSITIVITY_CONFIG)}
@@ -556,9 +573,18 @@ function SensitivityPanel({
         >
           Reset to RSA defaults
         </button>
+        {hasBaseRun && (
+          <button
+            type="button"
+            onClick={onUseBaseRunValues}
+            style={{ fontSize: '0.75rem', color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}
+          >
+            Use Base Run values
+          </button>
+        )}
       </div>
 
-      {/* Optional MPH + Weight inputs */}
+      {/* Optional MPH input */}
       <div style={{ display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
           Trap MPH (optional)
@@ -567,16 +593,6 @@ function SensitivityPanel({
             value={mph}
             onChange={e => onMPHChange(e.target.value)}
             placeholder="e.g. 145"
-            style={{ ...inputStyle, width: '80px' }}
-          />
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
-          Vehicle Weight lb (optional)
-          <input
-            type="number"
-            value={weightLb}
-            onChange={e => onWeightChange(e.target.value)}
-            placeholder="e.g. 2800"
             style={{ ...inputStyle, width: '80px' }}
           />
         </label>
@@ -598,9 +614,6 @@ function SensitivityPanel({
           </thead>
           <tbody>
             {result.rows.map((row, i) => {
-              const { key } = cfgKeys[i];
-              const isWeightRow = row.variable === 'Vehicle Weight';
-              const showMissingHint = isWeightRow && !result.hasWeightRow;
               const etColor = row.predictedETChange > 0.001
                 ? '#ef4444'
                 : row.predictedETChange < -0.001
@@ -617,25 +630,27 @@ function SensitivityPanel({
                     {row.variable}
                     {row.unit ? <span style={{ color: 'var(--color-text-muted)', marginLeft: '4px' }}>({row.unit})</span> : null}
                   </td>
-                  <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--color-text-muted)' }}>
-                    {row.variable === 'HP Correction Factor'
-                      ? row.baseValue.toFixed(4)
-                      : row.baseValue.toFixed(row.unit === 'lb' ? 0 : 1)}
+                  <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step={BASE_STEPS[i]}
+                      value={cfg.base[BASE_KEYS[i]]}
+                      onChange={e => setBase(i, e.target.value)}
+                      style={inputStyle}
+                    />
                   </td>
                   <td style={{ padding: '5px 8px', textAlign: 'right' }}>
                     <input
                       type="number"
-                      step={key === 'barometerChangeInHg' ? '0.01'
-                           : key === 'hpCorrectionFactorChange' ? '0.001'
-                           : '1'}
-                      value={cfg[key]}
-                      onChange={e => setChange(key, e.target.value)}
+                      step={CHANGE_STEPS[i]}
+                      value={row.change}
+                      onChange={e => setChange(i, e.target.value)}
                       style={inputStyle}
                     />
                   </td>
                   <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: etColor }}>
-                    {showMissingHint
-                      ? <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>enter weight ↑</span>
+                    {!result.hasWeightRow && row.variable === 'Vehicle Weight'
+                      ? <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>set weight ↑</span>
                       : `${row.predictedETChange >= 0 ? '+' : ''}${row.predictedETChange.toFixed(3)}`
                     }
                   </td>
@@ -643,7 +658,7 @@ function SensitivityPanel({
                     <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: mphColor }}>
                       {row.predictedMPHChange !== null
                         ? `${row.predictedMPHChange >= 0 ? '+' : ''}${row.predictedMPHChange.toFixed(2)}`
-                        : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>enter weight ↑</span>
+                        : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>—</span>
                       }
                     </td>
                   )}
@@ -655,8 +670,8 @@ function SensitivityPanel({
       </div>
 
       <div style={{ marginTop: '8px', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-        Base HPC: <strong>{result.baseHpc.toFixed(4)}</strong> (1.0000 = RSA Standard Day).
-        Weather rows use RSA HPC method. Weight row uses Patrick Hale ET formula (A = 1.825).
+        Base HPC (weather-derived): <strong>{result.baseHpc.toFixed(4)}</strong> (1.0000 = RSA Standard Day).
+        Weather rows use RSA HPC method. Weight row uses Patrick Hale ET formula (A&nbsp;=&nbsp;1.825).
         Each row is independent — effects are not additive.
       </div>
     </div>

@@ -62,8 +62,41 @@ export const DENSITY_ET_INTERCEPT = 1.825;
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Editable "change" amounts for each sensitivity row. */
+/**
+ * User-editable base values for the sensitivity calculator.
+ * Defaults match the original RSA Run Data Analysis reference screenshot:
+ *   Standard day: 29.92 inHg / 60°F / 0% RH / HPC 1.000, weight 2150 lb
+ * Use "Use Base Run Values" to fill from an actual logged run.
+ */
+export interface SensitivityBaseValues {
+  /** Barometer base (inHg). Default: 29.92 (RSA standard day). */
+  barometerInHg: number;
+  /** Temperature base (°F). Default: 60.0 (RSA standard day). */
+  temperatureF: number;
+  /** Relative humidity base (%). Default: 0.0 (RSA standard day). */
+  humidityPct: number;
+  /**
+   * HP Correction Factor base. Default: 1.000 (RSA standard day).
+   * Independently editable — does not have to match weather-derived HPC.
+   * Use "Use Base Run Values" to sync this to a run's computed HPC.
+   */
+  hpCorrectionFactor: number;
+  /** Vehicle weight base (lb). Default: 2150. */
+  weightLb: number;
+}
+
+export const DEFAULT_SENSITIVITY_BASE_VALUES: SensitivityBaseValues = {
+  barometerInHg: 29.92,
+  temperatureF: 60.0,
+  humidityPct: 0.0,
+  hpCorrectionFactor: 1.000,
+  weightLb: 2150,
+};
+
+/** Editable "change" amounts for each sensitivity row, plus base reference values. */
 export interface SensitivityConfig {
+  /** Reference base values used as the starting point for each row's calculation. */
+  base: SensitivityBaseValues;
   /** Change in barometer (inHg). Default: −0.10 (lower = worse air). */
   barometerChangeInHg: number;
   /** Change in temperature (°F). Default: +10.0 (hotter = worse). */
@@ -77,6 +110,7 @@ export interface SensitivityConfig {
 }
 
 export const DEFAULT_SENSITIVITY_CONFIG: SensitivityConfig = {
+  base: DEFAULT_SENSITIVITY_BASE_VALUES,
   barometerChangeInHg: -0.10,
   temperatureChangeF: +10.0,
   humidityChangePct: +10.0,
@@ -127,35 +161,41 @@ export interface SensitivityResult {
 /**
  * Compute DENSITY-style per-variable sensitivity rows.
  *
- * @param baseWeather  Current/baseline weather conditions.
- * @param baseET       Baseline ET (seconds). Must be > DENSITY_ET_INTERCEPT for weight/MPH rows.
- * @param config       Change amounts (defaults match DENSITY screenshot values).
- * @param options.fuelType      'gasoline' (default) or 'alcohol'.
- * @param options.baseMPH       Trap speed at baseET — enables MPH sensitivity column.
- * @param options.baseWeightLb  Vehicle weight at baseline — enables weight sensitivity row.
+ * @param config   Base values + change amounts. Defaults match RSA standard day reference.
+ *                 Use DEFAULT_SENSITIVITY_CONFIG for RSA reference screenshot behavior.
+ * @param baseET   Baseline ET (seconds) from the actual/base run.
+ * @param options.fuelType  'gasoline' (default) or 'alcohol'.
+ * @param options.baseMPH   Trap speed — enables MPH sensitivity column.
  */
 export function computeSensitivities(
-  baseWeather: WeatherInput,
-  baseET: number,
   config: SensitivityConfig = DEFAULT_SENSITIVITY_CONFIG,
+  baseET: number,
   options: {
     fuelType?: FuelType;
     baseMPH?: number;
-    baseWeightLb?: number;
   } = {}
 ): SensitivityResult {
   const fuelType = options.fuelType ?? 'gasoline';
   const baseMPH = options.baseMPH;
-  const baseWeightLb = options.baseWeightLb;
 
-  const baro = baseWeather.barometerInHg;
-  const temp = baseWeather.temperatureF;
-  const hum  = baseWeather.humidityPct;
+  const baro = config.base.barometerInHg;
+  const temp = config.base.temperatureF;
+  const hum  = config.base.humidityPct;
 
-  const hpcBase = computeRsaHpc(baseWeather, fuelType);
+  // ── Build WeatherInput from base values for weather-row HPC calculations ──
+  const baseWeatherForHPC: WeatherInput = {
+    temperatureF: temp,
+    humidityPct: hum,
+    barometerInHg: baro,
+    elevation: 0,
+  };
+  const hpcBase = computeRsaHpc(baseWeatherForHPC, fuelType);
+
+  // ── For HPC row: use config.base.hpCorrectionFactor directly ─────────────
+  // This lets the user independently set the HPC reference without changing weather.
+  const hpcBaseForHpcRow = config.base.hpCorrectionFactor;
 
   // ── MPH derivative: dMPH/dET = -baseMPH / (baseET - DENSITY_ET_INTERCEPT) ─
-  // Valid only when baseET > DENSITY_ET_INTERCEPT (guard below).
   const etOverIntercept = baseET - DENSITY_ET_INTERCEPT;
   const mphSensitivity = (baseMPH !== undefined && etOverIntercept > 0)
     ? -(baseMPH / etOverIntercept)
@@ -171,34 +211,35 @@ export function computeSensitivities(
 
   // ── Row: Barometer ─────────────────────────────────────────────────────────
   const hpcBaro = computeRsaHpc(
-    { ...baseWeather, barometerInHg: baro + config.barometerChangeInHg },
+    { ...baseWeatherForHPC, barometerInHg: baro + config.barometerChangeInHg },
     fuelType
   );
   const dET_baro = etDelta(hpcBaro);
 
   // ── Row: Temperature ───────────────────────────────────────────────────────
   const hpcTemp = computeRsaHpc(
-    { ...baseWeather, temperatureF: temp + config.temperatureChangeF },
+    { ...baseWeatherForHPC, temperatureF: temp + config.temperatureChangeF },
     fuelType
   );
   const dET_temp = etDelta(hpcTemp);
 
   // ── Row: Humidity ──────────────────────────────────────────────────────────
   const hpcHum = computeRsaHpc(
-    { ...baseWeather, humidityPct: Math.min(100, hum + config.humidityChangePct) },
+    { ...baseWeatherForHPC, humidityPct: Math.min(100, hum + config.humidityChangePct) },
     fuelType
   );
   const dET_hum = etDelta(hpcHum);
 
   // ── Row: HP Correction Factor ──────────────────────────────────────────────
-  // Treat hpc as a direct independent variable.
-  const hpcNew = hpcBase + config.hpCorrectionFactorChange;
-  const dET_hpc = baseET * (Math.pow(hpcNew / hpcBase, 1 / 3) - 1);
+  // Direct independent variable — does not go through weather → HPC path.
+  const hpcNewForHpcRow = hpcBaseForHpcRow + config.hpCorrectionFactorChange;
+  const dET_hpc = baseET * (Math.pow(hpcNewForHpcRow / hpcBaseForHpcRow, 1 / 3) - 1);
 
   // ── Row: Vehicle Weight ────────────────────────────────────────────────────
   // Uses ΔET = (ET - A) × ((1 + ΔW/W)^(1/3) - 1)  from the Hale ET formula.
+  const baseWeightLb = config.base.weightLb;
   let dET_weight: number | null = null;
-  if (baseWeightLb !== undefined && baseWeightLb > 0 && etOverIntercept > 0) {
+  if (baseWeightLb > 0 && etOverIntercept > 0) {
     const wRatio = 1 + config.weightChangeLb / baseWeightLb;
     dET_weight = etOverIntercept * (Math.pow(wRatio, 1 / 3) - 1);
   }
@@ -232,7 +273,7 @@ export function computeSensitivities(
     {
       variable: 'HP Correction Factor',
       unit: '',
-      baseValue: round4(hpcBase),
+      baseValue: round4(hpcBaseForHpcRow),
       change: config.hpCorrectionFactorChange,
       predictedETChange: round3(dET_hpc),
       predictedMPHChange: mphDelta(dET_hpc) !== null ? round2(mphDelta(dET_hpc)!) : null,
@@ -240,7 +281,7 @@ export function computeSensitivities(
     {
       variable: 'Vehicle Weight',
       unit: 'lb',
-      baseValue: baseWeightLb ?? 0,
+      baseValue: baseWeightLb,
       change: config.weightChangeLb,
       predictedETChange: dET_weight !== null ? round3(dET_weight) : 0,
       predictedMPHChange: (dET_weight !== null && mphDelta(dET_weight) !== null)
@@ -253,7 +294,7 @@ export function computeSensitivities(
     baseHpc: round4(hpcBase),
     config,
     rows,
-    hasWeightRow: baseWeightLb !== undefined,
+    hasWeightRow: baseWeightLb > 0,
     hasMPH: baseMPH !== undefined,
   };
 }
